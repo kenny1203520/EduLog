@@ -64,14 +64,22 @@ test('overview leads with the weekly to-do and renders every section exceptions-
   assert.equal(s.doc.querySelector('#page-body > .content').firstElementChild, root)
   assert.equal(section(s.doc, 'reports').getAttribute('aria-busy'), 'true')
   await view.todo.ready
-  assert.equal(texts(s.doc, 'reports', '.edulog-todo-main strong').join('|'), '學生丙|學生甲|學生乙')
+  // Reports are grouped by class (from each fill link), overdue groups first.
+  assert.equal(texts(s.doc, 'reports', '.edulog-todo-group-head strong').join('|'), '測試班級 B|測試班級 A')
+  assert.equal(texts(s.doc, 'reports', '.edulog-todo-group-head .edulog-todo-meta').join('|'), '逾期 1|待補填 2')
+  assert.equal(texts(s.doc, 'reports', '.edulog-todo-name').join('|'), '學生丙|學生甲|學生乙')
   assert.equal(texts(s.doc, 'reports', '.edulog-badge').join('|'), '逾期未填|待補填|待補填')
   assert.equal(section(s.doc, 'reports').querySelector('.edulog-todo-count').textContent, '3')
-  assert.equal(section(s.doc, 'reports').querySelector('.edulog-todo-action').getAttribute('href'), '/courses/dt/102/lesson_reports?student_id=309')
+  assert.equal(section(s.doc, 'reports').querySelector('.edulog-todo-group-head .edulog-todo-action').getAttribute('href'), '/courses/dt/102/lesson_reports')
+  assert.equal(section(s.doc, 'reports').querySelector('.edulog-todo-fill').getAttribute('href'), '/courses/dt/102/lesson_reports?student_id=309')
   assert.equal(texts(s.doc, 'schedule', '.edulog-todo-main strong').join('|'), '10/04 (Sun.) 10:00')
   assert.equal(texts(s.doc, 'schedule', '.edulog-todo-meta').join('|'), '測試班級 A · 測試教室')
-  assert.equal(texts(s.doc, 'attendance', '.edulog-todo-main strong').join('|'), '測試學生 B|測試學生 A')
+  assert.equal(section(s.doc, 'attendance').querySelector('h3 span').textContent, '本週點名與出席')
+  assert.equal(texts(s.doc, 'attendance', '.edulog-todo-group-head strong').join('|'), '測試班級 A')
+  assert.equal(texts(s.doc, 'attendance', '.edulog-todo-group-head .edulog-todo-meta').join('|'), '待點名 1 · 缺席 1')
+  assert.equal(texts(s.doc, 'attendance', '.edulog-todo-name').join('|'), '測試學生 B|測試學生 A')
   assert.equal(texts(s.doc, 'attendance', '.edulog-badge').join('|'), '缺席|待確認出席')
+  assert.equal(section(s.doc, 'attendance').querySelectorAll('.edulog-todo-action').length, 1, 'one link per class, not per student')
   assert.match(section(s.doc, 'hours').textContent, /2026年 9月 1 筆鐘點紀錄/)
   assert.match(s.doc.querySelector('.edulog-todo-updated').textContent, /^更新於 \d\d:\d\d$/)
   assert.equal(root.querySelectorAll('table').length, 0)
@@ -89,7 +97,7 @@ test('sections fail independently and retry without reloading the others', async
   const { view } = s.enhance()
   await view.todo.ready
   assert.match(section(s.doc, 'schedule').textContent, /讀取失敗/)
-  assert.equal(texts(s.doc, 'reports', '.edulog-todo-main strong').length, 3)
+  assert.equal(texts(s.doc, 'reports', '.edulog-todo-name').length, 3)
   responses['/calendar'] = read('fixtures/calendar.html')
   const before = s.requests.length
   section(s.doc, 'schedule').querySelector('button').click()
@@ -104,7 +112,7 @@ test('empty weeks show positive states and cached data renders without new reque
   const first = s.enhance()
   await first.view.todo.ready
   assert.match(section(s.doc, 'reports').textContent, /本週報告都填完了/)
-  assert.match(section(s.doc, 'attendance').textContent, /本週沒有缺席或待確認出席/)
+  assert.match(section(s.doc, 'attendance').textContent, /已上課的班級都點完名，也沒有缺席/)
   first.result.restore()
   const count = s.requests.length
   const second = s.enhance()
@@ -133,4 +141,63 @@ test('attendance exceptions are read from the real icon-based session markup', (
   assert.equal(result.week, '本週(10/17)')
   assert.equal(JSON.stringify(result.items.map(item => [item.student, item.status, item.label])), JSON.stringify([['學生甲', 'pending', '尚未點名'], ['學生丙', 'absent', '缺席']]))
   dom.window.close()
+})
+
+// Many classes in two branches (de-identified, generated): one taught today with 7 students
+// waiting for attendance, one later this week, one earlier with an absence, the rest on Sunday (not started).
+const sessionCell = (id, tone) => `<td class="this_week">第 3 週(L3)<turbo-frame id="report_status_${id}"><div class="d-grid gap-2"><a class="btn btn-xs btn-block ${tone === 'secondary' ? 'btn-default' : 'btn-success'}" href="/dt_admissions/${id}/reports/${id}/edit">課堂記錄</a></div><span class="text-${tone}"><i class="fa fa-user"></i></span>&nbsp;<span class="text-success"><i class="fa fa-pencil"></i></span>&nbsp;<span class="text-success"><i class="fa fa-question-circle"></i></span>&nbsp;<span class="text-success"><i class="fa fa-commenting"></i></span></turbo-frame></td>`
+function classReports(date, tones) {
+  const rows = tones.map((tone, index) => `<tr><td><span>學生${index + 1}</span><a class="admission-comment" data-admission-id="${9000 + index}" href="/admissions/comments/${9000 + index}/edit_teacher"><div class="admission-comment-box"> </div></a></td><td><span>測試課程</span></td><td>1/0/0</td>${sessionCell(7000 + index, tone)}</tr>`).join('')
+  return `<!doctype html><body><div id="page-body"><div class="content"><table id="reports"><thead><tr><th>學生</th><th>課程</th><th>出席統計</th><th>本週<br>(${date})</th></tr></thead><tbody>${rows}</tbody></table></div></div></body>`
+}
+function manyClasses() {
+  const classes = [[401, '樹林_文理_201教室', '週四', '10:00'], [402, '樹林_文理_202教室', '週六', '10:00'], [403, '板橋_文理_201教室', '週二', '10:00']]
+  for (let id = 404; id <= 422; id++) classes.push([id, '樹林_文理_301教室', '週日', '16:00'])
+  const links = classes.map(([id, place, day, time]) => `<a href="/courses/dt/${id}">${place} - ${day} 第 1 時段 (${time} ~ 18:00)</a>`).join('')
+  const html = read('fixtures/overview.html').replace(/<div class="dropdown-menu teach-menu">.*?<\/div>/, `<div class="dropdown-menu teach-menu">${links}</div>`)
+  const responses = pages({
+    '/courses/dt/401/lesson_reports': classReports('10/15', Array(7).fill('secondary')),
+    '/courses/dt/402/lesson_reports': classReports('10/17', ['secondary', 'secondary', 'secondary']),
+    '/courses/dt/403/lesson_reports': classReports('10/13', ['danger', 'success']),
+  })
+  for (let id = 404; id <= 422; id++) responses[`/courses/dt/${id}/lesson_reports`] = classReports('10/18', ['success'])
+  const dom = new JSDOM(html, { url: 'https://corp.orangeapple.co/', runScripts: 'outside-only', pretendToBeVisual: true })
+  const w = dom.window, requests = []
+  // Thursday 2026-10-15 12:00: the Thursday class has started, the Saturday class has not.
+  w.eval("{ const Real = Date; globalThis.Date = class extends Real { constructor(...a) { super(...(a.length ? a : ['2026-10-15T12:00:00+08:00'])) } static now() { return new Real('2026-10-15T12:00:00+08:00').getTime() } } }")
+  w.fetch = async url => { const path = new URL(url).pathname; requests.push(path); const body = responses[path]; return body === undefined ? { ok: false, headers: { get: () => 'text/html' }, text: async () => '' } : { ok: true, headers: { get: () => 'text/html' }, text: async () => body } }
+  for (const file of ['lexicon', 'model', 'todo', 'session-cards', 'navigation', 'workflows']) w.eval(read(`../adapters/orange-apple-${file}.js`))
+  w.eval(read('../adapters/orange-apple.js'))
+  w.edulogSiteTodo.clearCache()
+  return { dom, w, doc: w.document, requests }
+}
+
+test('many classes: grouped by class, only started sessions count, today first, reads capped at 20', async () => {
+  const s = manyClasses()
+  const view = {}
+  s.w.edulogSiteAdapter.enhancePage(s.doc, view)
+  await view.todo.ready
+  const attendance = section(s.doc, 'attendance')
+  assert.equal(texts(s.doc, 'attendance', '.edulog-todo-group-head strong').join('|'), '週四 10:00–18:00|週二 10:00–18:00')
+  assert.equal(texts(s.doc, 'attendance', '.edulog-todo-group-head .edulog-todo-meta').join('|'), '樹林 文理 · 201教室 · 待點名 7|板橋 文理 · 201教室 · 缺席 1')
+  assert.ok(attendance.querySelector('.edulog-todo-group[data-today]'))
+  const first = attendance.querySelector('.edulog-todo-group')
+  assert.equal([...first.querySelectorAll('.edulog-todo-group-item')].filter(row => !row.hidden).length, 5)
+  const more = first.querySelector('.edulog-todo-more')
+  assert.equal(more.textContent, '顯示其餘 2 位')
+  more.click()
+  assert.equal([...first.querySelectorAll('.edulog-todo-group-item')].filter(row => !row.hidden).length, 7)
+  assert.equal(more.getAttribute('aria-expanded'), 'true')
+  assert.equal(attendance.querySelector('.edulog-todo-count').textContent, '8')
+  assert.equal(texts(s.doc, 'attendance', '.edulog-todo-note').join('|'), '只檢查了 20 / 22 個班。|18 個班本週還沒上課，開始上課後才會列入。')
+  // Today and earlier-this-week classes are read first; the last two calm classes are skipped.
+  const classReads = s.requests.filter(path => path.startsWith('/courses/dt/')).map(path => path.split('/')[3])
+  assert.equal(classReads.slice(0, 2).join(','), '401,403')
+  assert.equal(classReads.length, 20)
+  assert.equal(classReads.includes('422'), false)
+  // The navigation shows the same counts; the class that has not started counts as nothing due.
+  assert.equal(s.w.edulogClassPending.get('/courses/dt/401'), 7)
+  assert.equal(s.w.edulogClassPending.get('/courses/dt/402'), 0)
+  assert.equal(s.doc.querySelector('.edulog-nav a[href="/courses/dt/401"] .edulog-nav-count').textContent, '7')
+  s.dom.window.close()
 })

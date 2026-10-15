@@ -563,3 +563,16 @@ html[data-edulog-ui="on"] .edulog-nav-day > ul { margin:0; padding:0; list-style
 html[data-edulog-ui="on"] .edulog-nav-day-heading { margin:4px 12px; font-size:13px; font-weight:600; color:var(--edulog-text-muted); }
 html[data-edulog-ui="on"] .edulog-nav-marks[hidden] { display:none; }
 @media (min-width:992px) { html[data-edulog-ui="on"] #page-body > .sidebar:has(.edulog-nav) { overflow-y:auto; overscroll-behavior:contain; } }
+/* Overview class groups: the class once in the heading, then compact name rows. */
+html[data-edulog-ui="on"] .edulog-todo-groups { display:grid; gap:12px; margin:0; padding:0; list-style:none; }
+html[data-edulog-ui="on"] .edulog-todo-group { padding:12px; border:1px solid var(--edulog-border); border-radius:var(--edulog-radius); background:var(--edulog-surface); }
+html[data-edulog-ui="on"] .edulog-todo-group[data-today] { border-color:var(--edulog-primary-border); }
+html[data-edulog-ui="on"] .edulog-todo-group[data-today] .edulog-todo-group-head strong { color:var(--edulog-primary); }
+html[data-edulog-ui="on"] .edulog-todo-group-head { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; }
+html[data-edulog-ui="on"] .edulog-todo-group-items { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr)); gap:6px 16px; margin:10px 0 0; padding:10px 0 0; border-top:1px solid var(--edulog-border-soft); list-style:none; }
+html[data-edulog-ui="on"] .edulog-todo-group-item { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; min-height:44px; }
+html[data-edulog-ui="on"] .edulog-todo-group-item[hidden] { display:none; }
+html[data-edulog-ui="on"] .edulog-todo-name { font-size:16px; color:var(--edulog-text); overflow-wrap:anywhere; }
+html[data-edulog-ui="on"] .edulog-todo-fill { display:inline-flex; align-items:center; min-height:44px; padding:0 8px; color:var(--edulog-primary); text-decoration:underline; text-underline-offset:3px; }
+html[data-edulog-ui="on"] .edulog-todo-card .edulog-todo-more { margin-top:6px; border-color:transparent; background:transparent; color:var(--edulog-primary); }
+html[data-edulog-ui="on"] .edulog-todo-card .edulog-todo-more:hover { background:var(--edulog-primary-soft); }

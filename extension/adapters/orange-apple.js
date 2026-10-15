@@ -171,6 +171,7 @@
       count.remove() // the filter chips carry the counts
       const cardsApi = globalThis.edulogSiteSessionCards
       const roster = cardsApi ? cardsApi.readRoster(doc) : new Map()
+      const classStart = globalThis.edulogSiteNavigation?.currentClass(doc)?.start || ''
       // The provider's "請先點名…" alert and its show-this-week/all toggles are replaced by the chips.
       for (const alert of content.querySelectorAll(lexicon.selectors.reportAlert)) if (alert.querySelector(lexicon.selectors.reportAlertToggle)) mark(alert, 'data-edulog-replaced', '')
       input.dataset.edulogSearch = 'reports'
@@ -230,7 +231,7 @@
         mark(reportScrollRegion,'data-edulog-report-mode',view.reportMode||'single')
         const isCompare=(view.reportMode||'single')==='compare'
         const week=weeks.find(item=>item.index===activeWeek)||selected
-        const session=cardsApi&&week?cardsApi.readSession(reports,week,roster):{label:'',upcoming:false,students:[]}
+        const session=cardsApi&&week?cardsApi.readSession(reports,week,roster,{notStarted:model.sessionStarted(week.label,classStart)===false}):{label:'',upcoming:false,students:[]}
         const byRow=new Map(session.students.map(student=>[student.row,student]))
         const counts=cardsApi?cardsApi.countChips(session.students):{}
         // Until the teacher picks a chip, show what needs action, or everyone once nothing does.
@@ -254,7 +255,7 @@
         chips?.update(counts,view.reportFilter)
         // Share this class's pending count with the navigation bar (no extra reads elsewhere).
         const classPath=(doc.location.pathname.match(/^\/courses\/dt\/\d+/)||[])[0]
-        if(classPath&&cardsApi)(globalThis.edulogClassPending||(globalThis.edulogClassPending=new Map())).set(classPath,counts.pending||0)
+        if(classPath&&cardsApi){(globalThis.edulogClassPending||(globalThis.edulogClassPending=new Map())).set(classPath,counts.pending||0);globalThis.edulogSiteNavigation?.announcePending(doc)}
         cards?.render({session,visible,chip:view.reportFilter,counts,hidden:isCompare})
         mark(reportScrollRegion,'data-edulog-cards',cards&&!isCompare?'on':null)
         if(typeof view.updateClassHistoryAvailability==='function')view.updateClassHistoryAvailability()

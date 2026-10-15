@@ -67,12 +67,13 @@
       lastTeaching: row.querySelector('.edulog-last-teaching-toggle'),
     }
   }
-  function readSession(table, week, roster = new Map()) {
-    const upcoming = words.nextWeek.test(week.label)
+  // A session that has not started yet (later this week) is treated like next week's: nothing is due.
+  function readSession(table, week, roster = new Map(), { notStarted = false } = {}) {
+    const upcoming = words.nextWeek.test(week.label) || notStarted
     const students = [...table.tBodies].flatMap(body => [...body.rows])
       .filter(row => !row.hasAttribute('data-edulog-last-teaching-row') && row.cells[week.index])
       .map(row => readStudent(row, week, roster, upcoming))
-    return { label: week.label, upcoming, students }
+    return { label: week.label, upcoming, notStarted, students }
   }
   function matchesChip(student, chip) {
     if (chip === 'other') return student.other
@@ -268,7 +269,8 @@
         list.replaceChildren(...items)
         void syncNotes(session.students, onChange)
         const notes = []
-        if (session.upcoming) notes.push('下週課次尚未開始，只列出課程到期與堂數提醒。')
+        if (session.notStarted) notes.push('本堂還沒開始上課，開始後才會列出點名與紀錄；目前只列出課程到期與堂數提醒。')
+        else if (session.upcoming) notes.push('下週課次尚未開始，只列出課程到期與堂數提醒。')
         else if (!counts.pending && counts.all) notes.push(counts.attention ? `本堂沒有待補填的事項；${counts.attention} 位學生需關注。` : '本堂學生都已點名，資料也已填齊。')
         if (!items.length) notes.push(chip === 'other' && !counts.other ? '此課次沒有非本堂學生。' : '沒有符合篩選的學生。')
         status.replaceChildren()
