@@ -1,5 +1,5 @@
 import { apiDataClient } from '@/services/api/ApiDataClient'
-import { Student, type StudentDTO } from '@/models/Student'
+import { Student, type StudentDTO, type StudentSchoolCreate, type StudentSchoolUpdate } from '@/models/Student'
 import { EnrollmentService } from '../enrollment/EnrollmentService'
 import { DateUtils } from '@/utils/DateUtils'
 import { createTextEditorContent } from '@/components/common/text-editor/content'
@@ -125,21 +125,32 @@ export class StudentCommandService {
     }
 
     // --- Schools ---
-    static async addSchool(school: any) {
-        const timeZone = DateUtils.isValidTimeZone(school.time_zone) ? school.time_zone : DateUtils.getDefaultTimeZone()
-        if (getApiV1Mode() === 'v1') return (await apiResourceClient.create<any>('student-schools', { ...school, time_zone: timeZone }, 'v1')).data
+    private static normalizeSchool(school: StudentSchoolUpdate): StudentSchoolUpdate {
+        const payload: StudentSchoolUpdate = {}
+        const fields = ['student_id', 'name', 'status', 'grade', 'class', 'school_student_id', 'start_date', 'end_date', 'time_zone'] as const
+        for (const field of fields) {
+            if (school[field] === undefined) continue
+            const value = school[field]
+            Object.assign(payload, { [field]: (field === 'start_date' || field === 'end_date') && value === '' ? null : value })
+        }
+        if (school.time_zone !== undefined) {
+            payload.time_zone = DateUtils.isValidTimeZone(school.time_zone ?? undefined) ? school.time_zone : DateUtils.getDefaultTimeZone()
+        }
+        return payload
+    }
+
+    static async addSchool(school: StudentSchoolCreate) {
+        const payload = this.normalizeSchool({ ...school, time_zone: school.time_zone ?? DateUtils.getDefaultTimeZone() })
+        if (getApiV1Mode() === 'v1') return (await apiResourceClient.create<any>('student-schools', payload, 'v1')).data
         const { data: { user } } = await apiDataClient.auth.getUser()
         if (!user) throw new Error('User not authenticated')
-        const { data, error } = await apiDataClient.from('student_schools').insert({ ...school, time_zone: timeZone }).select().single()
+        const { data, error } = await apiDataClient.from('student_schools').insert(payload).select().single()
         if (error) throw new Error(error.message)
         return data
     }
 
-    static async updateSchool(id: string, school: any) {
-        const updates = {
-            ...school,
-            time_zone: DateUtils.isValidTimeZone(school.time_zone) ? school.time_zone : DateUtils.getDefaultTimeZone()
-        }
+    static async updateSchool(id: string, school: StudentSchoolUpdate) {
+        const updates = this.normalizeSchool(school)
         if (getApiV1Mode() === 'v1') return (await apiResourceClient.update<any>('student-schools', id, updates, 'v1')).data
         const { data, error } = await apiDataClient.from('student_schools').update(updates).eq('id', id).select().single()
         if (error) throw new Error(error.message)

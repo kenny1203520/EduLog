@@ -132,6 +132,10 @@ for (const [route, fields] of Object.entries(filterableFieldsByResource)) {
 }
 
 const optionalText = z.string().max(10000).nullable().optional()
+const optionalEmail = z.preprocess(
+  (value) => typeof value === 'string' ? value.trim() || null : value,
+  z.string().email().nullable().optional(),
+)
 const optionalDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional()
 const optionalUrl = z.preprocess(
   (value) => typeof value === 'string' && value.trim() === '' ? null : value,
@@ -159,8 +163,8 @@ export const resourceSchemas: Record<string, { createSchema?: z.ZodType<Record<s
     updateSchema: z.object({ course_id: z.string().uuid().optional(), title: z.string().trim().min(1).max(200).optional(), sequence: z.number().int().min(0).optional() }).strict(),
   },
   students: {
-    createSchema: z.object({ name: z.string().trim().min(1).max(200), notes: optionalText, notes_document: z.record(z.string(), z.unknown()).nullable().optional(), gov_id: optionalText, email: z.string().email().nullable().optional(), phone: optionalText, residence_address: optionalText, mailing_address: optionalText, birthday: optionalDate, external_link: optionalUrl }).strict(),
-    updateSchema: z.object({ name: z.string().trim().min(1).max(200).optional(), notes: optionalText, notes_document: z.record(z.string(), z.unknown()).nullable().optional(), gov_id: optionalText, email: z.string().email().nullable().optional(), phone: optionalText, residence_address: optionalText, mailing_address: optionalText, birthday: optionalDate, external_link: optionalUrl }).strict(),
+    createSchema: z.object({ name: z.string().trim().min(1).max(200), notes: optionalText, notes_document: z.record(z.string(), z.unknown()).nullable().optional(), gov_id: optionalText, email: optionalEmail, phone: optionalText, residence_address: optionalText, mailing_address: optionalText, birthday: optionalDate, external_link: optionalUrl }).strict(),
+    updateSchema: z.object({ name: z.string().trim().min(1).max(200).optional(), notes: optionalText, notes_document: z.record(z.string(), z.unknown()).nullable().optional(), gov_id: optionalText, email: optionalEmail, phone: optionalText, residence_address: optionalText, mailing_address: optionalText, birthday: optionalDate, external_link: optionalUrl }).strict(),
   },
   teachers: {
     createSchema: z.object({ name: z.string().trim().min(1).max(200), email: z.string().email().nullable().optional(), phone: optionalText, address: optionalText, mailing_address: optionalText, birthday: optionalDate, bio: optionalText, bio_document: z.record(z.string(), z.unknown()).nullable().optional(), gov_id: optionalText, user_id: z.string().uuid().nullable().optional() }).strict(),
@@ -185,8 +189,8 @@ export const resourceSchemas: Record<string, { createSchema?: z.ZodType<Record<s
     updateSchema: z.object({ entity_type: z.string().trim().min(1).max(100).optional(), entity_id: z.string().uuid().optional(), is_hidden: z.boolean().optional() }).strict(),
   },
   'student-contacts': {
-    createSchema: z.object({ student_id: z.string().uuid(), name: z.string().trim().min(1).max(200), relation: optionalText, phone: optionalText, email: z.string().email().nullable().optional() }).strict(),
-    updateSchema: z.object({ student_id: z.string().uuid().optional(), name: z.string().trim().min(1).max(200).optional(), relation: optionalText, phone: optionalText, email: z.string().email().nullable().optional() }).strict(),
+    createSchema: z.object({ student_id: z.string().uuid(), name: z.string().trim().min(1).max(200), relation: optionalText, phone: optionalText, email: optionalEmail }).strict(),
+    updateSchema: z.object({ student_id: z.string().uuid().optional(), name: z.string().trim().min(1).max(200).optional(), relation: optionalText, phone: optionalText, email: optionalEmail }).strict(),
   },
   'student-schools': {
     createSchema: z.object({ student_id: z.string().uuid(), name: z.string().trim().min(1).max(200), status: optionalText, grade: optionalText, school_student_id: optionalText, start_date: optionalDate, end_date: optionalDate, time_zone: z.string().max(100).nullable().optional(), class: optionalText }).strict(),

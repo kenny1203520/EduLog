@@ -49,6 +49,12 @@ function runtimeSchema(def: typeof resources[keyof typeof resources], action: 'c
 function mutationSchema(def: typeof resources[keyof typeof resources], action: 'create' | 'update') {
   const document = runtimeSchema(def, action) as { properties?: Record<string, unknown>; additionalProperties?: unknown }
   const properties = { ...(document.properties ?? {}) }
+  if (['students', 'student-contacts'].includes(def.route) && properties.email) {
+    properties.email = {
+      ...(properties.email as Record<string, unknown>),
+      description: 'Valid email or null. Surrounding whitespace is trimmed; a blank string is normalized to null to clear the email. Omit the field on PATCH to preserve the current value.',
+    }
+  }
   if (properties.external_link && typeof properties.external_link === 'object') {
     properties.external_link = {
       ...(properties.external_link as Record<string, unknown>),

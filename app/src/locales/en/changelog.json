@@ -1,6 +1,32 @@
 {
     "entries": [
         {
+            "version": "2.0.0-alpha.1",
+            "date": "2026-10-04",
+            "changes": {
+                "added": [
+                    "Introduced the Express authentication/API backend and same-origin cookie sessions.",
+                    "Added system administration, audit logs, and scoped teaching role assignments with inheritance and exclusions.",
+                    "Added course progress gap hints and effective occurrence rosters, including makeup students."
+                ],
+                "changed": [
+                    "Routed frontend data and collaboration through the API backend; production uses API v1.",
+                    "Improved scoped enrollment visibility, page read models, and report collaboration recovery."
+                ],
+                "fixed": [
+                    "Fixed the Nginx bootstrap API proxy configuration so the frontend container starts correctly.",
+                    "Fixed school history edits sending read-only IDs and timestamps.",
+                    "Fixed enrolled school history creation and date clearing by converting blank dates to null.",
+                    "Fixed occurrence report roster consistency, committed report state, and upstream WebSocket teardown."
+                ],
+                "deployment": [
+                    "Alpha prerelease for evaluation; OAuth and a Storage proxy remain unavailable.",
+                    "Use matching frontend and API images tagged 2.0.0-alpha.1. Alpha does not update stable image tags.",
+                    "Apply every unapplied migration in filename order through 1000115 before running this version. Back up the database first; do not assume image rollback reverses schema changes."
+                ]
+            }
+        },
+        {
             "version": "1.8.1",
             "date": "2026-09-05",
             "changes": {

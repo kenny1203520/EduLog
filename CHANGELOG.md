@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [2.0.0-alpha.1] - 2026-10-04
+
+### Added
+- Introduced the Express authentication/API backend with same-origin cookie sessions and server-only Supabase credentials.
+- Added system administration, audit logs, and scoped teaching role assignments with inheritance and exclusions.
+- Added course progress gap hints and effective occurrence rosters, including makeup students.
+
+### Changed
+- Routed frontend data and collaboration through the API backend; production configuration uses API v1.
+- Improved scoped enrollment visibility, page read models, and collaboration reconnection.
+- Published the currently available 2.0 functionality as an alpha prerelease; subsequent functionality will arrive in numbered alpha releases.
+
+### Fixed
+- Fixed school history edits sending read-only IDs and timestamps, causing `UNKNOWN_FIELD` errors.
+- Fixed school history creation with a blank end date and clearing existing dates by sending `null`; unspecified PATCH dates remain unchanged.
+- Fixed the Nginx bootstrap emitting a literal `api_location` directive instead of the API proxy configuration, preventing frontend container startup.
+- Fixed occurrence report roster consistency, committed report state, and upstream WebSocket teardown.
+
+### Tests
+- Added school history form, writable-payload, nullable-date, and strict API validation regression coverage.
+- Kept frontend/API tests and builds and migration/RLS/security gates required before image publication.
+
+### Deployment Notes
+- Publish matching frontend and API images tagged `2.0.0-alpha.1`; do not update stable image aliases for alpha releases.
+- No production deployment is included. OAuth callbacks and a Storage proxy remain unavailable.
+- Back up an existing database and apply all unapplied migrations in filename order through `1000115_report_occurrence_authoritative_roster.sql` before using this version. An image downgrade does not reverse schema changes.
+- See `.github/releases/v2.0.0-alpha.1.md` and `docs/deployment/alpha-roadmap.md` for prerequisites, limitations, and stable promotion criteria.
+
 ## [1.8.1] - 2026-09-05
 
 ### Fixed
