@@ -28,7 +28,10 @@
     // Session cells mark state with Font Awesome icons (<i> server-side, <svg> after
     // the provider's script runs) wrapped in a span coloured text-success/danger/secondary.
     attendanceIcon: '.fa-user',
-    recordIcon: '.fa-pencil',
+    // Order in the cell: attendance, completion, internal record, learning performance.
+    completionIcon: '.fa-pencil',
+    internalIcon: '.fa-circle-question, .fa-question-circle',
+    performanceIcon: '.fa-comment-dots, .fa-commenting',
     recordLink: 'a[href*="/reports/"][href$="/edit"]',
     admissionId: '[data-admission-id]',
     noteLink: 'a.admission-comment',

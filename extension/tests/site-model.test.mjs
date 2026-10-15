@@ -74,3 +74,19 @@ test('health check reports denied pages and missing provider structure', () => {
   assert.deepEqual([...empty.model.checkPage(empty.doc, 'classes').missing], ['#page-body > .content'])
   empty.dom.window.close()
 })
+
+test('session icons map to attendance, completion, internal record and performance in either icon form', () => {
+  const svg = (name, tone) => `<span class="text-${tone}"><svg class="svg-inline--fa fa-${name}"></svg></span>`
+  const { model, doc, dom } = load(`<!doctype html><table><tr>
+    <td id="a">第 3 週(L3)${svg('user', 'success')}${svg('pencil', 'warning')}${svg('circle-question', 'danger')}${svg('comment-dots', 'secondary')}</td>
+    <td id="b">L4<span class="text-secondary"><i class="fa fa-user"></i></span><span class="text-secondary"><i class="fa fa-pencil"></i></span><span class="text-secondary"><i class="fa fa-question-circle"></i></span><span class="text-secondary"><i class="fa fa-commenting"></i></span></td>
+    <td id="c">${svg('user', 'danger')}${svg('pencil', 'secondary')}${svg('circle-question', 'secondary')}${svg('comment-dots', 'secondary')}</td>
+  </tr></table>`)
+  const a = model.readSessionCell(doc.getElementById('a'))
+  assert.equal(JSON.stringify([a.attendanceMark, a.completionMark, a.internalMark, a.performanceMark, a.behind, [...a.missing].join(','), a.report]), JSON.stringify(['present', 'check', 'behind', 'empty', true, 'completionCheck,performanceEmpty', '資料未齊']))
+  const upcoming = model.readSessionCell(doc.getElementById('b'), { upcoming: true })
+  assert.equal(JSON.stringify([upcoming.attendancePending, upcoming.reportPending, upcoming.missing.length]), JSON.stringify([false, false, 0]))
+  const absent = model.readSessionCell(doc.getElementById('c'))
+  assert.equal(JSON.stringify([absent.attendanceMark, absent.reportPending, absent.missing.length, absent.behind]), JSON.stringify(['absent', false, 0, false]))
+  dom.window.close()
+})

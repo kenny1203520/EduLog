@@ -462,3 +462,15 @@ html[data-edulog-ui="on"] .edulog-badge[data-tone="neutral"] { background:var(--
   html[data-edulog-ui="on"] .edulog-card-actions { justify-content:flex-end; }
   html[data-edulog-ui="on"] .edulog-card-more[open] .edulog-card-menu { justify-content:flex-end; }
 }
+/* Card four-cell status row: attendance | completion | internal record | performance. */
+html[data-edulog-ui="on"] .edulog-card-status { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; grid-column:1 / -1; margin:0; padding:0; list-style:none; }
+html[data-edulog-ui="on"] .edulog-card-status li { display:grid; grid-template-columns:16px minmax(0,1fr); column-gap:8px; align-items:center; min-height:44px; padding:4px 10px; border:1px solid var(--edulog-border); border-radius:var(--edulog-radius-sm); background:var(--edulog-surface); font-size:14px; }
+html[data-edulog-ui="on"] .edulog-card-status li > svg { grid-row:span 2; }
+html[data-edulog-ui="on"] .edulog-card-status-label { color:var(--edulog-text-muted); line-height:1.3; }
+html[data-edulog-ui="on"] .edulog-card-status-value { font-weight:600; line-height:1.3; overflow-wrap:anywhere; }
+html[data-edulog-ui="on"] .edulog-card-status li[data-tone="ok"] { color:var(--edulog-status-ok-text); }
+html[data-edulog-ui="on"] .edulog-card-status li[data-tone="warn"] { color:var(--edulog-status-warn-text); background:var(--edulog-status-warn-soft); border-color:var(--edulog-status-warn); }
+html[data-edulog-ui="on"] .edulog-card-status li[data-tone="danger"] { color:var(--edulog-status-danger-text); background:var(--edulog-status-danger-soft); border-color:var(--edulog-status-danger); }
+html[data-edulog-ui="on"] .edulog-card-status li[data-tone="neutral"] { color:var(--edulog-text-subtle); background:var(--edulog-surface-subtle); }
+html[data-edulog-ui="on"] .edulog-card-status[data-calm="true"] li { border-color:var(--edulog-border-soft); background:var(--edulog-surface-subtle); }
+@media (min-width:768px) { html[data-edulog-ui="on"] .edulog-card-status { grid-template-columns:repeat(4,minmax(0,1fr)); } }

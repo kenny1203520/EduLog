@@ -33,33 +33,50 @@
       enabledLesson: words.enabledLesson.exec(raw)?.[1] || (words.enabled.test(raw) ? '已啟用' : null),
     }
   }
+  // Tones the provider uses on the span around each icon. Yellow is assumed to be
+  // text-warning (to verify on the live site).
   const iconTone = (cell, selector) => {
     const host = cell?.querySelector(selector)?.closest('span')
-    return host ? ['success', 'danger', 'secondary'].find(tone => host.classList.contains(`text-${tone}`)) || null : null
+    return host ? ['success', 'warning', 'danger', 'secondary'].find(tone => host.classList.contains(`text-${tone}`)) || null : null
   }
-  // Text plus icon state for one session cell. Icon meanings (confirmed with teachers):
-  // person green = attended, red = absent, grey = not marked; pencil green = record
-  // written, grey = not written; a green record button only means attendance was taken.
-  // An upcoming session (next week) is never pending yet.
+  // Text plus icon state for one session cell. Icon meanings (confirmed with teachers),
+  // in cell order:
+  //   person   attendance     green attended, red absent, grey not marked
+  //   pencil   completion     green 完整完成, yellow 尚未完成 or 章節未填 (indistinguishable), grey not filled
+  //   question internal note  green 能跟上進度, red 跟不上 (太難／分心), grey not chosen
+  //   comment  performance    green 學習紀錄／課堂評量／學習報告 done, grey not done
+  // A green record button only means attendance was taken. Absent students and upcoming
+  // (next-week) sessions never have pending items.
   function readSessionCell(cell, { upcoming = false } = {}) {
     const state = classifySession(sessionText(cell))
-    const attendanceTone = iconTone(cell, selectors.attendanceIcon), recordTone = iconTone(cell, selectors.recordIcon)
+    const tone = selector => iconTone(cell, selector)
+    const attendanceTone = tone(selectors.attendanceIcon), completionTone = tone(selectors.completionIcon), internalTone = tone(selectors.internalIcon), performanceTone = tone(selectors.performanceIcon)
     const attendanceMark = attendanceTone === 'success' ? 'present' : attendanceTone === 'danger' ? 'absent' : attendanceTone === 'secondary' ? 'unmarked' : null
-    const recordMark = recordTone === 'success' ? 'written' : recordTone ? 'unwritten' : null
+    const completionMark = completionTone === 'success' ? 'done' : completionTone === 'warning' || completionTone === 'danger' ? 'check' : completionTone ? 'empty' : null
+    const internalMark = internalTone === 'success' ? 'ok' : internalTone === 'danger' ? 'behind' : internalTone ? 'empty' : null
+    const performanceMark = performanceTone === 'success' ? 'done' : performanceTone ? 'empty' : null
     const link = cell?.querySelector(selectors.recordLink)
     const active = !state.otherSession && !upcoming
+    const present = attendanceMark === 'present'
+    // What the teacher still has to fill in for an attended session.
+    const missing = active && present ? [
+      completionMark === 'check' && 'completionCheck', completionMark === 'empty' && 'completionEmpty',
+      internalMark === 'empty' && 'internalEmpty', performanceMark === 'empty' && 'performanceEmpty',
+    ].filter(Boolean) : []
+    const complete = present && completionMark === 'done' && internalMark && internalMark !== 'empty' && performanceMark === 'done'
     return {
       ...state,
-      attendanceMark, recordMark,
+      attendanceMark, completionMark, internalMark, performanceMark, missing,
+      behind: active && present && internalMark === 'behind',
       recordPath: link ? link.getAttribute('href') : null,
       recordCreated: Boolean(link?.classList.contains('btn-success')),
       attendanceKnown: state.attendanceKnown || attendanceMark === 'present' || attendanceMark === 'absent',
       attendancePending: state.attendancePending || (active && attendanceMark === 'unmarked'),
-      reportKnown: state.reportKnown || recordMark === 'written',
-      reportPending: state.reportPending || (active && attendanceMark === 'present' && recordMark === 'unwritten'),
-      statusKnown: state.statusKnown || Boolean(attendanceMark || recordMark),
+      reportKnown: state.reportKnown || Boolean(complete),
+      reportPending: state.reportPending || missing.length > 0,
+      statusKnown: state.statusKnown || Boolean(attendanceMark || completionMark || internalMark || performanceMark),
       attendance: state.attendance || (attendanceMark === 'present' ? '出席' : attendanceMark === 'absent' ? '缺席' : attendanceMark === 'unmarked' ? (upcoming ? '尚未上課' : '尚未點名') : null),
-      report: state.report || (recordMark === 'written' ? '已填寫' : recordMark === 'unwritten' && !upcoming ? '未填寫' : null),
+      report: state.report || (complete ? '已完成' : missing.length ? '資料未齊' : null),
     }
   }
   function readWeekColumns(headerCells) {

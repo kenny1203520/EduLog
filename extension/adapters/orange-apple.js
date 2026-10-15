@@ -228,7 +228,7 @@
         const byRow=new Map(session.students.map(student=>[student.row,student]))
         const counts=cardsApi?cardsApi.countChips(session.students):{}
         // Until the teacher picks a chip, show what needs action, or everyone once nothing does.
-        if(!view.reportFilterChosen||!cardsApi?.CHIPS.some(([chip])=>chip===view.reportFilter))view.reportFilter=counts.pending?'pending':'all'
+        if(!view.reportFilterChosen||!cardsApi?.CHIPS.some(([chip])=>chip===view.reportFilter))view.reportFilter=cardsApi?cardsApi.defaultChip(counts):'all'
         const query=input.value.trim().toLocaleLowerCase(),visible=new Set()
         for (const row of rows) {
           const student=byRow.get(row)
