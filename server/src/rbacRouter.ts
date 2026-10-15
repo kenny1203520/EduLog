@@ -6,7 +6,7 @@ import { complete, idempotency } from './resourceRouter.js'
 import { setAuditContext } from './http/context.js'
 import { requireAuthorizationDecision } from './auth/authorization.js'
 import { clearUserValidation } from './infra/supabase.js'
-import { hasOverlappingSystemRoleAssignment } from './systemRoleAssignmentPolicy.js'
+import { hasOverlappingSystemRoleAssignment } from './domain/systemRoleAssignmentPolicy.js'
 
 const uuid = z.string().uuid()
 const nullableUuid = uuid.nullable().optional()
