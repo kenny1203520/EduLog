@@ -2,7 +2,7 @@ import { assertStringIncludes } from 'https://deno.land/std@0.177.1/testing/asse
 
 const migration = await Deno.readTextFile(new URL('../migrations/1000110_teaching_role_sources_and_enrollment_visibility.sql', import.meta.url))
 const qualificationFix = await Deno.readTextFile(new URL('../migrations/1000111_qualify_effective_teaching_role_columns.sql', import.meta.url))
-const rbacRouter = await Deno.readTextFile(new URL('../../server/src/rbacRouter.ts', import.meta.url))
+const rbacRouter = await Deno.readTextFile(new URL('../../server/src/routes/rest/rbacRouter.ts', import.meta.url))
 
 Deno.test('teacher assignments create reversible source-scoped teaching grants', () => {
   assertStringIncludes(migration, 'class_session_teacher_role_grants')
