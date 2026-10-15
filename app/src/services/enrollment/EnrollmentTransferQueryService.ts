@@ -4,6 +4,7 @@ import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import { apiV1Client } from '@/services/api/ApiV1Client'
 import { apiResourceClient } from '@/services/api/ApiResourceClient'
 import { getApiV1Mode } from '@/services/api/ApiModeClient'
+import { normalizeEnrollmentReportRelations } from '@/services/report/ReportQueryService'
 
 export interface TransferConflictDisplayContext {
     occurrenceId: string
@@ -48,10 +49,12 @@ export type SingleLessonTransferReportRow = {
     enrollment_id: string
     class_occurrence_id: string
     version?: number
-    class_occurrence: Array<{
-        occurrence_date: string
-        class_session_id: string
-    }>
+    class_occurrence: TransferReportOccurrence | TransferReportOccurrence[] | null
+}
+
+type TransferReportOccurrence = {
+    occurrence_date: string
+    class_session_id: string
 }
 
 export interface SingleLessonTransferHistoryItem {
@@ -195,7 +198,11 @@ export class EnrollmentTransferQueryService {
                 sort: 'created_at',
                 mode: 'v1'
             })
-            return response.data || []
+            // The relation filter only narrows the embedded occurrence, not the
+            // report rows, so keep only reports whose occurrence is on that date.
+            return (response.data || [])
+                .map((row) => normalizeEnrollmentReportRelations(row) as SingleLessonTransferReportRow)
+                .filter((row) => !Array.isArray(row.class_occurrence) && row.class_occurrence?.occurrence_date === originalDate)
         }
         const { data, error } = await apiDataClient
             .from('occurrence_reports')
@@ -225,7 +232,7 @@ export class EnrollmentTransferQueryService {
             })
             const report = response.data?.[0]
             if (!report) throw new Error('Failed to fetch report for transfer: not found')
-            return report
+            return normalizeEnrollmentReportRelations(report) as SingleLessonTransferReportRow
         }
         const { data, error } = await apiDataClient
             .from('occurrence_reports')

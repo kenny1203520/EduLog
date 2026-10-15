@@ -164,6 +164,33 @@ describe('EnrollmentTransferService single-lesson transfers', () => {
         expect(EnrollmentTransferToolService.syncSessionPair).not.toHaveBeenCalled()
     })
 
+    it('opens the conflict tool for v1 reports that embed class_occurrences (plural)', async () => {
+        vi.mocked(EnrollmentTransferQueryService.getReportTransferInfo).mockResolvedValue({
+            id: 'source-report',
+            enrollment_id: 'enrollment-1',
+            class_occurrence_id: 'source-occurrence',
+            class_occurrences: { occurrence_date: '2026-10-03', class_session_id: 'source-session' }
+        } as any)
+        vi.mocked(EnrollmentTransferQueryService.getExistingReportForOccurrence)
+            .mockReset()
+            .mockResolvedValue({ id: 'target-report' } as any)
+        vi.mocked(EnrollmentTransferQueryService.getReportForOccurrence)
+            .mockResolvedValueOnce({
+                id: 'source-report', enrollment_id: 'enrollment-1', class_occurrence_id: 'source-occurrence', content: 'source', version: 1
+            })
+            .mockResolvedValueOnce({
+                id: 'target-report', enrollment_id: 'enrollment-1', class_occurrence_id: 'target-occurrence', content: 'target', version: 1
+            })
+        vi.mocked(EnrollmentTransferQueryService.getTransferConflictDisplayContext)
+            .mockResolvedValueOnce({ occurrenceId: 'source-occurrence', occurrenceDate: '2026-10-03', sessionId: 'source-session' })
+            .mockResolvedValueOnce({ occurrenceId: 'target-occurrence', occurrenceDate: '2026-10-03', sessionId: 'target-session' })
+
+        const result = await EnrollmentTransferService.transferSingleLessonReport('source-report', 'target-session', '2026-10-03')
+
+        expect(result.status).toBe('conflict')
+        expect(rpcMock).not.toHaveBeenCalledWith('transfer_single_lesson', expect.anything())
+    })
+
     it('cancels a transfer through the atomic reverse RPC', async () => {
         await EnrollmentTransferService.cancelSingleLessonTransfer('transfer-1')
 

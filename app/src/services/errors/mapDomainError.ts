@@ -12,8 +12,8 @@ export interface MappedError {
  * message, which is what happened everywhere this table was previously
  * duplicated ad hoc per component.
  *
- * ORIGINAL_REPORT_NOT_FOUND is deliberately absent: nothing in the codebase
- * throws it (it was a dead branch in TransferModal.vue).
+ * Transfer RPC codes reach the client as `ApiV1Error.reason` (the server's
+ * `error.details.reason`); `domainErrorCode` prefers it over the message.
  */
 const DOMAIN_ERROR_KEYS: Record<string, string> = {
     TARGET_DATE_NOT_CLASS_DAY: 'errors.domain.TARGET_DATE_NOT_CLASS_DAY',
@@ -28,6 +28,15 @@ const DOMAIN_ERROR_KEYS: Record<string, string> = {
     COURSE_REQUIRED_FOR_SESSION: 'errors.domain.COURSE_REQUIRED_FOR_SESSION',
     ROLE_NAME_REQUIRED: 'errors.domain.ROLE_NAME_REQUIRED',
     TRANSFER_CONFLICT_STALE: 'errors.domain.TRANSFER_CONFLICT_STALE',
+    SOURCE_OCCURRENCE_NOT_EFFECTIVE: 'errors.domain.SOURCE_OCCURRENCE_NOT_EFFECTIVE',
+    TARGET_OCCURRENCE_ALREADY_EFFECTIVE: 'errors.domain.TARGET_OCCURRENCE_ALREADY_EFFECTIVE',
+    TARGET_OCCURRENCE_NOT_EFFECTIVE: 'errors.domain.TARGET_OCCURRENCE_NOT_EFFECTIVE',
+    SOURCE_AND_TARGET_OCCURRENCES_MATCH: 'errors.domain.SOURCE_AND_TARGET_OCCURRENCES_MATCH',
+    SINGLE_LESSON_TRANSFER_FORBIDDEN: 'errors.domain.SINGLE_LESSON_TRANSFER_FORBIDDEN',
+    SINGLE_LESSON_TRANSFER_ALREADY_EXISTS: 'errors.domain.SINGLE_LESSON_TRANSFER_ALREADY_EXISTS',
+    SINGLE_LESSON_TRANSFER_NOT_FOUND: 'errors.domain.SINGLE_LESSON_TRANSFER_NOT_FOUND',
+    SOURCE_REPORT_ALREADY_EXISTS: 'errors.domain.SOURCE_REPORT_ALREADY_EXISTS',
+    ORIGINAL_REPORT_NOT_FOUND: 'errors.domain.ORIGINAL_REPORT_NOT_FOUND',
     REPORT_ALREADY_EXISTS: 'errors.domain.REPORT_ALREADY_EXISTS'
 }
 
@@ -38,4 +47,22 @@ export function mapDomainError(message: string | undefined | null): MappedError 
         if (message.includes(code)) return { i18nKey: DOMAIN_ERROR_KEYS[code] }
     }
     return null
+}
+
+/** Returns the business-rule code carried by an error: the API reason when present, otherwise its message. */
+export function domainErrorCode(error: unknown): string | undefined {
+    if (!error) return undefined
+    if (typeof error === 'string') return error
+    if (typeof error === 'object') {
+        const reason = (error as { reason?: unknown }).reason
+        if (typeof reason === 'string' && reason) return reason
+        const message = (error as { message?: unknown }).message
+        if (typeof message === 'string') return message
+    }
+    return undefined
+}
+
+/** True when the error carries the given business-rule code. */
+export function hasDomainErrorCode(error: unknown, code: string): boolean {
+    return domainErrorCode(error)?.includes(code) ?? false
 }

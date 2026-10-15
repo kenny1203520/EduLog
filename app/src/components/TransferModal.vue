@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import { useFeedback } from '@/composables/useFeedback'
+import { domainErrorCode, hasDomainErrorCode } from '@/services/errors/mapDomainError'
 import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
 import { SessionService } from '@/services/session/SessionService'
 import { ClassroomService } from '@/services/classroom/ClassroomService'
@@ -359,7 +360,7 @@ async function submitTransfer() {
         emit('close')
     } catch (e: any) {
         console.error(e)
-        const message = e.message || ''
+        const message = domainErrorCode(e) || ''
 
         // Codes with friendlier, context-specific wording than the generic
         // errors.domain.* mapper keep it; everything else -- including codes
@@ -404,8 +405,7 @@ async function resolveTransferConflict(selections: TransferReportFieldSelections
         }
     } catch (e: any) {
         console.error(e)
-        const message = e?.message || ''
-        if (message.includes('TRANSFER_CONFLICT_STALE')) {
+        if (hasDomainErrorCode(e, 'TRANSFER_CONFLICT_STALE')) {
             errorKey('student.transfer_conflict.stale')
         } else {
             reportError(e)

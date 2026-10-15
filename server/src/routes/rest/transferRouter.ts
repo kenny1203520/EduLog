@@ -44,13 +44,38 @@ function wrap(handler: (req: Request, res: Response) => Promise<unknown>) {
   return (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res)).catch(next)
 }
 
-function transferRpcError(error: { code?: string; message?: string } | null | undefined): ApiError {
+// Every business code the transfer RPCs raise. The matched code is returned as
+// `details.reason` so the client can explain which rule blocked the transfer.
+const transferReasons: Array<[reason: string, status: number, code: string, message: string]> = [
+  ['AUTHENTICATION_REQUIRED', 401, 'AUTH_INVALID', 'Authentication is required'],
+  ['SINGLE_LESSON_TRANSFER_FORBIDDEN', 403, 'PERMISSION_DENIED', 'You do not have permission to perform this transfer'],
+  ['ENROLLMENT_NOT_FOUND', 404, 'NOT_FOUND', 'The transfer resource was not found'],
+  ['TRANSFER_OCCURRENCE_NOT_FOUND', 404, 'NOT_FOUND', 'The transfer resource was not found'],
+  ['ORIGINAL_REPORT_NOT_FOUND', 404, 'NOT_FOUND', 'The transfer resource was not found'],
+  ['SINGLE_LESSON_TRANSFER_NOT_FOUND', 404, 'NOT_FOUND', 'The transfer resource was not found'],
+  ['TARGET_REPORT_ALREADY_EXISTS', 409, 'TRANSFER_CONFLICT', 'The transfer conflicts with an existing report or transfer'],
+  ['SOURCE_REPORT_ALREADY_EXISTS', 409, 'TRANSFER_CONFLICT', 'The transfer conflicts with an existing report or transfer'],
+  ['SINGLE_LESSON_TRANSFER_ALREADY_EXISTS', 409, 'TRANSFER_CONFLICT', 'The transfer conflicts with an existing report or transfer'],
+  ['TARGET_OCCURRENCE_ALREADY_EFFECTIVE', 409, 'TRANSFER_CONFLICT', 'The transfer conflicts with an existing report or transfer'],
+  ['TRANSFER_CONFLICT_STALE', 409, 'TRANSFER_CONFLICT', 'The transfer conflicts with an existing report or transfer'],
+  ['VERSION_CONFLICT', 409, 'TRANSFER_CONFLICT', 'The transfer conflicts with an existing report or transfer'],
+  ['SOURCE_OCCURRENCE_NOT_EFFECTIVE', 422, 'TRANSFER_INVALID', 'The transfer violates a business rule'],
+  ['TARGET_OCCURRENCE_NOT_EFFECTIVE', 422, 'TRANSFER_INVALID', 'The transfer violates a business rule'],
+  ['SOURCE_AND_TARGET_OCCURRENCES_MATCH', 422, 'TRANSFER_INVALID', 'The transfer violates a business rule'],
+  ['TARGET_SESSION_COURSE_MISMATCH', 422, 'TRANSFER_INVALID', 'The transfer violates a business rule'],
+  ['ORIGINAL_OCCURRENCE_NOT_IN_ENROLLMENT_SESSION', 422, 'TRANSFER_INVALID', 'The transfer violates a business rule'],
+  ['INVALID_TRANSFER_FIELD_SELECTIONS', 422, 'TRANSFER_INVALID', 'The transfer violates a business rule'],
+  ['DATE_NOT_CLASS_DAY', 422, 'TRANSFER_INVALID', 'The transfer violates a business rule'],
+]
+
+export function transferRpcError(error: { code?: string; message?: string } | null | undefined): ApiError {
   const message = error?.message ?? ''
-  if (message.includes('AUTHENTICATION_REQUIRED')) return new ApiError(401, 'AUTH_INVALID', 'Authentication is required')
+  const match = transferReasons.find(([reason]) => message.includes(reason))
+  if (match) {
+    const [reason, status, code, text] = match
+    return new ApiError(status, code, text, undefined, undefined, undefined, { reason })
+  }
   if (message.includes('FORBIDDEN')) return new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to perform this transfer')
-  if (message.includes('NOT_FOUND') || message.includes('ENROLLMENT_NOT_FOUND') || message.includes('OCCURRENCE_NOT_FOUND')) return new ApiError(404, 'NOT_FOUND', 'The transfer resource was not found')
-  if (message.includes('ALREADY_EXISTS') || message.includes('SOURCE_REPORT_ALREADY_EXISTS') || message.includes('REPORT_ALREADY_EXISTS')) return new ApiError(409, 'TRANSFER_CONFLICT', 'The transfer conflicts with an existing report or transfer')
-  if (message.includes('DATE_NOT_CLASS_DAY') || message.includes('TARGET_OCCURRENCE_NOT_EFFECTIVE') || message.includes('OCCURRENCES_MATCH') || message.includes('COURSE_MISMATCH')) return new ApiError(422, 'TRANSFER_INVALID', 'The transfer violates a business rule')
   return mapDatabaseError(error)
 }
 
