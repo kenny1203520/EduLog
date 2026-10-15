@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildOpenApi } from '../../openapi.js'
+import { buildOpenApi } from '../../openapi/openapi.js'
 
 describe('RBAC API contract', () => {
   it('publishes capability and scoped policy operations in OpenAPI', () => {

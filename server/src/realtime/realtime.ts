@@ -3,9 +3,9 @@ import type { IncomingMessage, Server } from 'node:http'
 import type { Socket } from 'node:net'
 import { createHash, randomUUID } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { ApiConfig } from './config/config.js'
-import { createUserClient, validateAccessToken } from './infra/supabase.js'
-import { resolveAllowedOrigins } from './app.js'
+import type { ApiConfig } from '../config/config.js'
+import { createUserClient, validateAccessToken } from '../infra/supabase.js'
+import { resolveAllowedOrigins } from '../app.js'
 import { monitorRealtimeSocket } from './realtimeHeartbeat.js'
 
 function cookieValue(header: string | undefined, name: string) {

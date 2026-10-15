@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { permissionForResource } from './auth/authorization.js'
+import { permissionForResource } from '../auth/authorization.js'
 import { buildOpenApi } from './openapi.js'
-import { resources } from './routes/rest/resources.js'
-import { allowedRpcs } from './routes/rest/rpcContract.js'
-import { isAllowedRpc as routerAllowsRpc } from './routes/rest/rpcRouter.js'
+import { resources } from '../routes/rest/resources.js'
+import { allowedRpcs } from '../routes/rest/rpcContract.js'
+import { isAllowedRpc as routerAllowsRpc } from '../routes/rest/rpcRouter.js'
 
 describe('generated API contract', () => {
   it('documents blank email clearing for student and contact mutations', () => {

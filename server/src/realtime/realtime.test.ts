@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { buildOpenApi } from './openapi.js'
+import { buildOpenApi } from '../openapi/openapi.js'
 import { classifyRealtimeClientCloseReason, decodeUpstreamTextFrame, normalizeClientMessage, resolveRealtimeUrl } from './realtime.js'
 
 describe('realtime proxy security contract', () => {
