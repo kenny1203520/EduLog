@@ -25,6 +25,7 @@ declare global {
       }
       user?: { id: string; email?: string; role?: string; app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> }
       accessToken?: string
+      extensionPrincipal?: { tokenId: string; userId: string; extensionOrigin: string; connection: { installation_id: string | null; device_name: string | null; browser_name: string | null; platform_name: string | null; extension_version: string | null } }
       db?: import('@supabase/supabase-js').SupabaseClient
       adminDb?: import('@supabase/supabase-js').SupabaseClient
       performancePhases?: Record<string, number>

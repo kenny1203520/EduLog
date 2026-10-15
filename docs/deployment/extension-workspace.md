@@ -1,0 +1,196 @@
+# EduLog 0.1.0 整合工作分頁
+
+## 最新介面：原站教學、工作台同步
+
+最新側載包為 `extension/dist/EduLog-Teaching-Tools-0.1.0-toolbar-lifecycle-fix.zip`。本輪修正網站工具列移除與重建時的觀察器、事件及非同步回呼清理，沿用既有 API 與資料庫契約，不新增 migration。218 項擴充功能自動測試通過，測試期間未預期 JSDOM 非同步錯誤為 0；Chrome／Edge 真實側載仍待驗收。更新前先保存原站草稿，再重新載入擴充套件與來源分頁，清除舊錯誤紀錄後重現操作。本側載包包含既有 migration 檔案，但不會執行資料庫變更。
+
+工作台依實際核對與交易進度呈現「讀取與核對 → 處理例外 → 摘要並同步 → 結果」。共用設定集中收合、左右差異與逐段 diff、已提交與待處理分開統計。已有未完成工作可繼續；功能與中英切換保留草稿及選取。工作紀錄依可靠 job ID 合併並提供狀態篩選，單側讀取失敗不抹除另一側資料。
+
+側載更新後，先保存來源草稿，重新載入擴充套件、來源分頁與工作台，再檢查配對。教學表單仍由老師確認並人工送出。自動、已安裝瀏覽器離線樣本與真實側載分開記錄，詳見 `extension/tests/ACCEPTANCE-workflow-redesign.md`；原生 200% 縮放與真實站讀寫尚待驗收。
+
+跨批次歷史預覽依賴需先套用 `1000130_import_preview_dependencies_and_diagnostics.sql` 並更新 API。部署與驗收狀態見 `extension/tests/ACCEPTANCE-1000130-preview-dependencies.md`。未完成前，舊伺服器會安全阻擋相依預覽，不放寬參照驗證。
+
+## 既有資料能力：1000127 共用映射與同步欄位偏好
+
+部署至 **1000127**，並一起更新 API、主站與側載擴充套件。新增跨課程共用語意映射、帳號同步欄位偏好及歷史綁定欄位遮罩；教材仍限定已確認的課程。最新流程與驗收見 `extension/tests/ACCEPTANCE-1000127.md`。歷史報告資料保留和逐課次生命週期沿用 [完整歷史同步部署](extension-enrollment-history.md)。
+
+老師確認摘要後，合法課次逐堂綁定，其餘先存歷史；不改寫報名關係、調課或自動送出原站表單。
+
+## 1000124：介面精修、欄位映射與完整歷史擷取
+
+已部署至 1000123 的資料庫只需補上 **1000124_extension_field_mappings.sql**，再更新並重啟 API。這次沒有修改或套用既有部署的 migration。重新載入側載擴充套件，先保存原站草稿再刷新來源分頁；在 popup 強制重新檢查連線，確認 `/me` 的 `field_mapping_memory` 為 true。舊伺服器仍可使用已驗證的語意建議，跨裝置記憶會提示升級。
+
+### 欄位映射
+
+- 匯入、工作台預填與原站助手共用教學語意：`present`／出席、`absent`／未出席等使用繁中文案。未填、`false`、`0` 與半星值保持不同；一致內容保留原站，不要求覆寫。
+- 在「欄位映射：查看／修改記憶」內，人工選擇原站選項及 EduLog 意義，再按「確認並記住映射」。記憶由伺服器保存，綁定實例、帳號、來源網站、adapter、欄位及課程；教材必須屬於該課程。另一裝置配對同帳號後可以沿用。
+- 正向匯入與反向預填各自驗證。多個來源選項映射到同一意義時，不自動選擇其中一個反向選項。選項、教材或課程改變後重新確認；可清除失效選項，清除不修改既有報告。
+- `POST /api/extension/v1/field-mappings/resolve` 及 `/confirm` 每次最多 50 筆；確認／修改／清除帶 `expected_revision`。版本衝突需重讀；回應中斷時先重新核對，不能盲目重送。表與 RPC 僅供受信任後端使用，從有效 token 取得使用者，交易內檢查讀取權限；內容腳本沒有憑證。
+
+### 歷史讀取與結果
+
+「讀取目前班級學生的既有學習紀錄」會依報名讀取 `/dt_admissions/:id`，再逐份讀取符合來源報名及報告 ID 的 `/edit` 頁面。離線文件使用實際請求路徑核對原生 form action；不執行頁面腳本、不保存整份 HTML、登入值或額外個資。列表與編輯頁證據合併，編輯頁的允許欄位具有優先權；空評語、未完成、零分仍保留。完整日期在範圍外時不讀取全文。
+
+報名及逐份報告保存本機檢查點。來源關閉、導覽或腳本過期時暫停；重啟後可續讀，單筆失敗不阻止其他資料。待處理區提供原文、原站入口、逐筆重試、完整日期及「補上報告編輯連結」；必須讀取並驗證該連結與原生表單，不能猜測 ID。人工日期答案標記為 `user_confirmed`。未解決資料不匯入；明確略過後可繼續，成果標示部分完成。
+
+原文、欄位選擇與擷取檢查點只保存在受信任 IndexedDB，最多七天；完成／取消時清除來源內容。它們不混入匯入 API 的 canonical payload。教材候選按需查詢及分頁，不預載整個目錄。
+
+### 版面與驗收
+
+助手結構與清晰主題視覺分離。1200px 以上原站／助手約 56／44 並排，兩區獨立捲動；較窄視窗預設原站表單，顯示助手狀態摘要與切換入口。收合後還原原站容器；展開、RWD、主題切換、重查保留節點、草稿、游標與捲動。套用依原生連動順序重新檢查實際選項；部分套用會顯示已變更欄位並要求核對，不自動重試或送出。
+
+最新側載包：`extension/dist/EduLog-Teaching-Tools-0.1.0-field-mappings-history.zip`。包含 runtime、文件及 1000118–1000124，封裝時檢查 manifest 與本地 JS／HTML 相依檔。API 程式碼須隨專案部署，側載包不會執行 SQL。驗收細節見 `extension/tests/ACCEPTANCE.md`；隔離自動測試與真實側載分開記錄。
+
+## 啟用
+
+1. 依專案既有部署流程依序套用 `1000116`、`1000117`、`1000118_web_extension_workspace.sql`、`1000119_extension_catalog.sql`、`1000120_extension_mapping_memory.sql`、`1000121_extension_reconciliation.sql`、`1000122_extension_import_verification.sql` 、`1000123_extension_report_candidates.sql` 與 **`1000124_extension_field_mappings.sql`**。不修改已部署 migration；新增 migration 不會自動套用到現有資料庫。
+2. 更新並重新啟動 API。`API_EXTENSION_ALLOWED_ORIGINS` 必須包含目前擴充套件的精確 origin；`EDULOG_WEB_BASE_URL` 必須填瀏覽器可開啟的前端位址，可包含自訂端口與路徑前綴。
+3. 更新原有側載資料夾並在 Chrome／Edge 重新載入。先儲存網站草稿，再重新整理已開啟的來源分頁。
+4. 在 popup 重新檢查連線。從 popup 或網站工具列開啟「教學資料匯入」「報告預填」；完整操作在擴充套件工作分頁進行。
+
+只連接使用者指定的自架 EduLog。缺少 1000118 時匯入／預填能力未就緒；缺少 1000119 時目錄服務未就緒；缺少 1000120 時工作台會要求升級智慧對應服務；缺少 1000121 時不提供學生跨班核對，也不允許省略核對直接建立既有學生的新報名。清晰主題不受影響。
+
+## 工作台載入行為
+
+開啟工作台時只驗證連線與能力、列出可用來源分頁並辨識目前來源，不會預載全部學生、課程、班級、課次或報告。選定教室與班級後，工作台才逐項查詢目標候選與必要權限。候選清單使用搜尋及游標分頁，每頁最多 50 筆；已選項目會保留在清單中。1000119 的報告摘要支援搜尋、課程／日期條件及分頁，選定報告後才查完整內容。
+
+載入狀態會指出目前操作；未知總量使用不定進度，等待超過 10 秒會提示仍在載入。唯讀查詢可取消或重試。429 顯示伺服器提供的重試時間，不自動重試。取消查詢不會取消已提交的匯入批次；暫停或取消匯入會等目前批次結束，已寫入內容保留。
+
+匯入寫入遇到逾時或連線中斷時，狀態為「結果尚未確認」。再次續傳會用既有工作與冪等鍵查詢檢查點，先核對該批是否已提交，不建立新工作或直接以新鍵重送。工作紀錄中的伺服器狀態以中文呈現。
+
+工作分頁的連線驗證可合併同時發生的檢查，成功結果最多重用 30 秒；手動重新檢查會強制驗證。更換伺服器、憑證或使用者時會清除快取。每個 API 請求仍由伺服器重新驗證授權，快取不取代資料寫入權限檢查。
+
+## 目前班級匯入
+
+選擇來源班級分頁及日期範圍，按擷取才會讀取來源。歷史紀錄逐頁擷取並保存檢查點，限已驗證的目前班級／報告頁與該班級擷取到的報名紀錄路徑。
+
+先選教室及班級，集中確認各門來源課程，再逐筆確認學生、課程、報名、課次及報告。同一來源班級對應一個 EduLog 班級，每筆報名有自己的課程。有效的已確認記憶自動帶入；唯一且可存取的原站連結可識別既有目標，姓名／課程名稱比對只顯示候選，不自動合併。
+
+可靠課程 ID 保存正式來源對應；只有課程名稱時保存獨立的人工課程規則，限本班完全相符時沿用，跨班僅提供建議。新課程沒有來源 ID 時使用工作內部識別，與名稱規則同交易提交，不寫成正式來源 ID。缺少學生 ID 的報名可指定既有學生並保存該報名關係，不推定其他報名也是同一學生；新建學生仍需可靠學生 ID。
+
+「確認並記住」可在完成匯入前保存既有目標。記憶綁定實例、憑證使用者與来源網站，重新使用時檢查目標權限、學生識別、課程身份及既有報名關係。過時確認回 409，使用「重新檢查對應記憶」後再核對。教室、班級、學生 ID、課程規則與報名記憶可分別修改／清除，清除記憶不刪除 EduLog 資料。新班級仍須人工提供可靠時間與日期。
+
+新學生與完整新報名同批處理。既有班級缺少所選課程時，先顯示追加可上課程的差異，具備班級修改權限並明確勾選後才追加；保留原有課程及排程；既有報名不能移轉學生、班級或課程。既有課次／報告自然鍵重複時要求配對現有資料。
+
+差異顯示新增、更新、無變更、衝突與需處理項目。衝突預設保留 EduLog；選擇覆寫後必須更新差異。每批至多 50 筆，且依 `API_BODY_LIMIT` 再拆分。確認後逐批套用，來源對應、寫入與檢查點同交易提交。過時版本必須重新預覽；重送已完成批次只回傳原結果。
+
+可暫停、續傳或取消剩餘批次。取消保留已提交內容；來源缺漏不會刪除 EduLog 記錄。關閉來源分頁可繼續處理已收集資料；來源導覽到其他頁面會停止原工作。
+
+歷史讀取會先查報名紀錄，再逐份讀取已驗證的 `/edit` 頁面，匯入允許的出席、完成、評量、進度、評語與聯絡欄。教材及未知選項須核對映射；缺少可靠身份、日期或編輯連結仍列為需處理，不宣稱完整匯入。空評語、未完成和零分不排除整份報告。不擷取個人聯絡、地址、證件、鐘點或薪資。
+
+## 單份報告預填
+
+1. 在來源網站以原生「記錄」操作開啟報告編輯表單。
+2. 在工作分頁讀取目標，核對学生、日期、課程及來源報名／報告 ID。
+3. 選擇 EduLog 報告，檢查完整性、課程完成狀況及欄位對照。
+4. 明確選擇欄位與原站選項，再套用至原站；返回網站檢查並人工送出。
+
+`is_completed` 表示課程完成狀況；報告完整性沿用 `reportMissingFlags`。原站非空內容預設保留，覆寫須逐欄確認。內部紀錄預設不選，僅限已驗證的內部欄位。富文字轉為保留段落的純文字，不注入 HTML。
+
+套用前重新核對 EduLog 報告版本、原生表單節點、目標識別與欄位指紋。使用原生欄位並觸發 input/change；未知選項、停用欄位及連動造成的目標變更會要求人工處理。不勾選原站確認欄，不觸發 submit。
+
+套用後只建立「待人工送出／待確認」紀錄。回寫失敗可從工作紀錄重試，重試不會再次套用或送出網站表單。原站套用回應中斷時要求人工檢查，不自動重複套用。
+
+## 資料與授權邊界
+
+- API token 只在擴充套件背景程序使用；內容腳本不取得 token。
+- 工作分頁訊息驗證 extension sender、實例／使用者綁定及來源分頁。預填與歷史擷取還須符合已保存工作。
+- 續傳來源資料存於擴充套件受信任來源的 IndexedDB，期限最多七天。完成／取消清除來源 payload；待確認清除原生表單 payload。更換伺服器或撤銷連線停止不相符工作。
+- 後端 `/api/extension/v1` 驗證 origin 與有效憑證；整合 RPC 僅授權 service role 呼叫，在交易內重新驗證憑證並設定使用者的 authenticated claims，再執行既有教學權限與報告生命週期。
+- 伺服器保存來源 ID 對應、來源指紋、目標版本與完成計數，不持久保存原始來源內容或差異全文。
+
+## 發布門檻與驗收
+
+| 能力 | 目前狀態 | 後續驗收 |
+|---|---|---|
+| 目前班級匯入 | 工作分頁、人工對應、差異及續傳已實作 | 指定測試資料的實站讀寫；缺少可靠 ID／日期時維持需處理 |
+| 單份報告預填 | 已驗證欄位與現有選項可預填 | 補齊完整選項、實站原生連動與內容保留驗收 |
+| 全部可見班級匯入 | 未啟用 | 跨班級唯讀來源、分頁與可見帳號範圍樣本 |
+| 送出成功確認 | 未啟用，僅待確認 | 成功訊號、目標識別及報告網址一致的可靠樣本 |
+
+自動測試使用去識別化樣本、隔離資料庫和 mock API，不會向實站提交任何報告、個人資料或簽到。資料庫測試執行新增 migration 與原生報告生命週期，但未取代完整 migration chain／正式 RBAC／真實部署驗收。不要只改 capability flag 就宣稱未驗證能力可用。
+
+測試指令：
+
+```text
+npm test --prefix extension
+npm test --prefix server
+npm run typecheck --prefix server
+npm run test:extension-db --prefix server
+node extension/tests/workspace-browser-check.mjs <playwright/index.mjs>
+node extension/tests/mapping-memory-browser-check.mjs <playwright/index.mjs>
+```
+
+PGlite 已加入 server 的開發依賴與 lockfile。`web_extension_workspace.mjs` 實際執行 1000118–1000122，涵蓋 SQL 編譯、授權、版本、冪等、有效名單、完成核驗、原生報告生命週期及交易回滾；測試不會修改正式資料庫。此次已通過隔離執行。正式啟用前須在目標資料庫依序套用 migration，確認 `catalog_v1`、`multi_course_import`、`mapping_memory`、`student_enrollment_catalog` 與 `enrollment_reconciliation` 為 true。
+
+瀏覽器測試涵蓋 Chrome／Edge 的 360、390、768、1024、1440px、人工對應／恢復、差異、預填保留、待確認紀錄、整頁溢出與原生 IndexedDB。桌面實際 200% 縮放、完整鍵盤焦點流程及真實側載讀寫仍須另行驗收。
+
+## 1000120 API 相容性
+
+### 先前清單式工作台更新（0.1.0，1000120）
+
+重新載入擴充套件，保存原站草稿後再刷新來源頁；關閉並重新開啟工作台，以載入新的清單／單筆編輯模組。既有工作與對應可續用。本次不新增 API、migration 或權限，沿用部署至 1000120 的伺服器。
+
+來源原文預設收合，僅保存允許的教學欄位、來源路徑／表格／列位置及擷取時間，不傳入匯入 API。舊工作可用「補讀來源資料」更新相同來源 ID；身份改變時重新確認。完成、取消或七天後依既有規則清除。
+
+保存結果尚未確認時，先按「重新檢查對應記憶」核對伺服器，不直接重複確認。EduLog 查看連結由 `settings_url` 推導前端基底；請設定實際前端位址，包含必要端口與路徑前綴，無法取得時重新檢查連線。
+
+本次側載包：`EduLog-Teaching-Tools-0.1.0-mapping-workbench.zip`。包含 runtime、README 與部署文件，排除測試、來源 HTML 與憑證。
+
+- 新工作使用 `course_ids`（最多 10 門），每筆報名使用自己的 `course_id`。單門 `course_id` 舊契約與既有批次檢查點保留；舊工作仍可續傳。
+- `/catalog/resolve` 支援 source refs、target refs 及 memory refs，各最多 50 筆，回傳完整來源身份、有效性、記憶 revision、目標 version 及受權限限制的關係。
+- `/catalog/confirm` 批次保存／修改／清除明確確認的對應，各批最多 50 筆。帶入 `expected_revision` 與目標 `versions`；一筆失敗會回滾整批。
+- 報告摘要可依報名、學生及課程縮小範圍。既有 ID 查詢及 `/context` 保留；不改變人工送出及待確認的規則。
+- 側載包：`EduLog-Teaching-Tools-0.1.0-mapping-memory.zip`，包含 runtime、本文件及 1000118–1000120，排除測試、來源 HTML、瀏覽器資料及憑證。
+
+## 1000121 報名核對與班級時段
+
+- 班級名單依表頭讀取姓名、年級、課程與報名日期。付款狀態不作為報名狀態，預計開課日期不作為報名日期。每筆來源報名保留自己的學生／課程；同名、同年級不會共享身份。
+- 舊工作請使用「補讀來源資料」。既有選擇、原文及捲動位置保留；身份改變或可靠 ID 消失後須重新確認，既有记憶與 EduLog 資料不刪除。
+- `/catalog?resource=enrollments&student_id=...` 可查學生所有可讀報名；仍支援班級／課程篩選與至多 50 筆游標。至少指定學生或班級，逐筆檢查報名讀取權限。
+- `GET /api/extension/v1/enrollments/:id/reconciliation` 回傳目前報名、可讀單次調課紀錄、日期、有效目標及分頁。整合憑證沒有轉班、調課或搬移報告的寫入端點；沒有調課紀錄不代表沒有轉班。
+- 工作台先排列符合的既有報名，也顯示其他班級／課程與時段差異。前往 EduLog 既有報名頁處理後，返回並按「重新核對此筆」。單筆差異不改變整個工作的目標班級。
+- 新建須先查完此學生報名並勾選獨立報名確認；存在符合的既有報名時不能重複新建。可「保留 EduLog 並略過此筆」，其他報名仍能繼續，略過項目的相關報告不寫入。
+- 選擇既有報名的報告後，預覽會重新讀取相關調課紀錄；已調出的來源課次、非有效目標、缺少可靠日期或核對失敗的報告保留待處理。
+- 班級目錄與解析包含 `schedule_mode`、`schedule_rules`、`time_zone`；顯示週六、週日 `0`、多組、每月及指定日期排程。匯入寫入沿用既有完整週間排程契約，不推算其他排程或覆寫既有設定。
+
+目前側載包：`EduLog-Teaching-Tools-0.1.0-import-verification.zip`。包含 `extension/` runtime、部署與驗收文件、1000118–1000122；API 原始碼須由專案一併部署。現有資料庫只需依已套用版本補上後續 migration，不重跑舊 migration。更新 API、重新載入擴充套件並強制重新檢查連線，才能取得新能力。
+
+本輪驗收詳見 `extension/tests/ACCEPTANCE.md`：合成資料的瀏覽器與 PGlite 檢查已通過；實際 Chrome／Edge 側載、桌面原生 200% 縮放及指定測試資料的讀寫仍待驗收。實站報告不自動提交。
+
+## 1000122 匯入結果、有效名單與報告預填
+
+舊的 `PATCH /imports/:id {status: "complete"}` 僅變更工作狀態，不能證明名單已同步。新版擴充套件改用 `POST /imports/:id/complete` 核驗預期批次的冪等檢查點，再由 `GET /imports/:id` 讀取完成狀態、分類結果和有效名單；工作台按學生、報名、課次、報告分列新增、更新、無變更、略過、待處理和失敗。完成請求只在預期批次都已套用時成功，舊工作的狀態仍可讀但會標示核驗完整程度。不同或未確認的名單關係不會被強制改寫，也不會刪除 EduLog 既有報名。
+
+班級有效名單核對使用所選日期與班級時區。報告只在存在已驗證教學欄位及可靠的學生、報名、課次、日期關係時寫入；可信的來源 `/edit` 連結存到報告連結欄位。欄位衝突與不同既有連結須在匯入差異頁明確確認。
+
+已辨識的原站報告編輯器內會出現隔離樣式面板。它先依記憶中的報名和日期查詢唯一報告，提供預覽；沒有唯一結果時可搜尋可存取報告作為範本。逐欄保留非空原站值，覆寫和內部紀錄都需分別明確確認。套用前重新核對原生表單指紋與 EduLog 報告版本，保留原站欄位與事件，不點擊確認欄或提交按鈕。送出仍由教師在原站人工完成。
+
+本機工作紀錄與伺服器紀錄獨立載入；其中一方故障時，另一方仍可顯示。IndexedDB 關閉或版本變更時清除失效連線快取，交易開始前最多重新開啟一次；已開始的寫入不重播。更新時重新載入側載擴充套件，刷新既有來源分頁前先保存原站草稿，再重新驗證配對。
+
+PGlite 已隔離執行 1000118–1000122，覆蓋完整批次核驗、權限、有效名單、冪等及 rollback。Chrome／Edge 的匯入與工作紀錄 mock 流程於 360–1440px 通過。Chrome 內嵌面板已確認自動查詢唯一報告並呈現欄位預設；完整逐欄套用、送出防護及 Edge 編輯器嵌入流程尚未完成自動瀏覽器驗收。跨瀏覽器側載及指定測試資料的實站操作仍待驗收；設計上由教師在原站人工送出。
+
+## 1000123 日期補問與雙欄報告助手（0.1.0）
+
+已部署至 1000122 的資料庫只須補上 **1000123_extension_report_candidates.sql**，再更新並重啟 API。重新載入擴充套件、保存原站草稿後刷新分頁，並在 popup 強制重新檢查連線。確認 `/me` 能力 `nearest_report_candidates` 為 true。旧伺服器仍可使用原有報告搜尋；新版日期候選會顯示升級提示。
+
+日期工具嚴格驗證年月日，接受連字號、斜線、點、中文年月日及一位數月日；不使用瀏覽器模糊日期解析。省略年份時，只使用原生記錄入口、可靠課程期間或**相同來源報告 ID** 的歷史日期。不能唯一決定年份、日期無效或證據矛盾時，助手要求完整日期；矛盾需另外確認。仍能查看及編輯範本草稿，但不能略過日期核對直接套用。
+
+教師補充的日期與當次學生／報名選擇標示「使用者確認」，保存在內容腳本記憶體中，限當次文件及來源報告。相同證據下重開視窗會保留答案；刷新後須重新確認。來源證據改變時失效，切換 EduLog 實例／使用者後不沿用當次報名。這些答案不修改網站、不新增來源 ID，也不寫入永久對應；永久對應仍透過工作台的「確認並記住」。教材、評量及其他未知選項在相關欄位要求人工選擇已存在的原站選項。
+
+報告候選分為「當天相符」「同學生、同課程的其他報告」「同學生、其他課程」。當天沒有匹配時自動讀取同課程候選，跨課程於展開時才查詢；各組支援重試與載入更多。唯一符合已記住報名及完整日期的報告才自動預覽，其他候選須教師選取。同課程查詢包含不同報名，不以目前報名排除其他可讀取報告。未確認目標日期時，明示暫以來源網站台北時區的今天排序。
+
+`GET /api/extension/v1/reports` 新增 `sort=nearest`、`anchor_date=YYYY-MM-DD`、`exclude_course_id`。nearest 必須有有效 anchor；依絕對日差、較早日期及穩定 ID 排序後才分頁，每頁最多 50 筆。游標綁定使用者、日期及搜尋條件，不能跨条件沿用。摘要包含可讀取的班級／教材名稱與有正負號的 `date_difference`；內容仍只在選定報告後讀取。舊排序及 ID 詳情契約保留，所有報告逐筆檢查讀取權限。
+
+寬度至少 1200px 時，原生表單／助手約 56／44 並排，視窗最大 1440px，兩區分別捲動；原生關閉控制與目標摘要保留於頁首。較窄視窗使用「EduLog 預填／原站表單」切換既有節點，保留草稿、各區捲動與原生表單事件。助手可收合回原站版面。欄位依出席、進度、評量、評語／聯絡及內部紀錄分組，逐欄顯示目前／預計內容及實際套用結果；非空內容覆寫、跨日期／報名範本及內部紀錄均需明確確認。沒有任何自動勾選原站確認欄或送出行為。
+
+本次側載包：`extension/dist/EduLog-Teaching-Tools-0.1.0-report-assistant.zip`，包含 runtime、部署／驗收文件及 1000118–1000123。只補尚未部署的 migration；API 程式碼由專案一併更新，不從側載包執行。
+
+測試：`node extension/tests/editor-date-browser-check.mjs <playwright/index.mjs>`。此測試在 Chrome／Edge 的 360、390、768、1024、1200、1440、1920px 使用隔離合成原站表單與 mock broker，涵蓋補問、版面幾何、欄位套用、草稿／焦點／游標、遲到回應及 Turbo 還原。PGlite 實際執行 1000118–1000123，包含超過 50 筆候選、最近日期排序、等距排序、游標範圍及權限。實際網站側載、原生 200% 縮放、軟鍵盤及指定測試資料仍是人工發布驗收項目；未向實站提交教學紀錄。
+# Latest extension update (0.1.0): skipped report review and lesson ordering
+
+Package: `extension/dist/EduLog-Teaching-Tools-0.1.0-skip-review-reconfirm.zip`. Apply migration `1000132_extension_report_skip_decisions.sql` after 1000131 and deploy the matching API to enable cross-device skip memory. Successful source rereads recheck prior skip decisions; changed content or target context, legacy decisions without fingerprints, and decisions older than 30 days return to review. Teachers can restore review or explicitly continue skipping selected reports. Unresolved reports are excluded from writes. Lesson options use numeric sequence order and preserve lesson IDs. See [deployment details](extension-skip-review.md) and [acceptance record](../../extension/tests/ACCEPTANCE-skip-review-reconfirm.md). Real Chrome/Edge side-loading and source-site write verification remain pending; source teaching reports were not submitted.
+
+## 0.1.0 preview request recovery
+
+Import batches keep server preview fingerprints in the local draft, but preview and apply requests project only the strict API fields (`key`, `rows`, and optional `dependencies`). This preserves dependency checks and existing batch checkpoints without sending local metadata. Failed preview checks invalidate the previous summary and keep sync disabled until a successful recheck. No API or database migration is required. See [acceptance record](../../extension/tests/ACCEPTANCE-preview-request-recovery.md); Chrome/Edge real sideload and live API verification remain pending.

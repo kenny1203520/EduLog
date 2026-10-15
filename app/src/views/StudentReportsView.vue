@@ -1,5 +1,6 @@
 <template>
     <div class="student-reports-view p-6 max-w-7xl mx-auto">
+        <EnrollmentHistoryPanel v-if="route.params.enrollmentId" :enrollment-id="String(route.params.enrollmentId)" />
         <!-- Header with Back Button and Actions -->
         <div class="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
@@ -528,6 +529,7 @@
 </template>
 
 <script setup lang="ts">
+import EnrollmentHistoryPanel from '@/components/reports/EnrollmentHistoryPanel.vue'
 import { computed, ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'

@@ -7,6 +7,7 @@
     "node": ">=26"
   },
   "scripts": {
+    "test:extension-db": "node ../supabase/tests/web_extension_workspace.mjs",
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
@@ -25,6 +26,7 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.3",
     "@types/node": "^22.15.30",

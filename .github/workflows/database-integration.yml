@@ -68,7 +68,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/tests/postgres_bootstrap.sql
           for migration in supabase/migrations/*.sql; do
             case "$migration" in
-            *1000081*|*1000082*|*1000083*|*100009[2-9]*|*100010*|*100011*|*100012*) continue ;;
+            *1000081*|*1000082*|*1000083*|*100009[2-9]*|*/10001[0-9][0-9]_*) continue ;;
             esac
             psql -v ON_ERROR_STOP=1 -f "$migration"
           done
@@ -98,7 +98,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/tests/postgres_bootstrap.sql
           for migration in supabase/migrations/*.sql; do
             case "$migration" in
-              *100004[0-9]*|*100005*|*100006*|*100007*|*100008*|*100009*|*100010*|*100011*|*100012*) continue ;;
+              *100004[0-9]*|*100005*|*100006*|*100007*|*100008*|*100009*|*/10001[0-9][0-9]_*) continue ;;
             esac
             psql -v ON_ERROR_STOP=1 -f "$migration"
           done
@@ -115,7 +115,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/tests/security_lint_remediation_integration.sql
           # Advance through the remaining current migrations before testing
           # student creation against the latest role/profile shape.
-          for migration in supabase/migrations/100010[2-9]*.sql supabase/migrations/100011*.sql supabase/migrations/100012*.sql; do
+          for migration in supabase/migrations/100010[2-9]*.sql supabase/migrations/10001[1-9]*.sql; do
             psql -v ON_ERROR_STOP=1 -f "$migration"
           done
           psql -v ON_ERROR_STOP=1 -f supabase/tests/student_create_permission_integration.sql
@@ -128,7 +128,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/tests/postgres_bootstrap.sql
           for migration in supabase/migrations/*.sql; do
             case "$migration" in
-              *1000062*|*1000063*|*1000064*|*1000065*|*1000066*|*1000067*|*1000068*|*1000069*|*1000070*|*1000071*|*1000072*|*1000073*|*1000074*|*1000075*|*1000076*|*1000077*|*1000078*|*1000079*|*1000080*|*1000081*|*1000082*|*1000083*|*1000084*|*1000085*|*1000086*|*1000087*|*1000088*|*1000089*|*1000090*|*1000091*|*100009[2-9]*|*100010*|*100011*|*100012*) continue ;;
+              *1000062*|*1000063*|*1000064*|*1000065*|*1000066*|*1000067*|*1000068*|*1000069*|*1000070*|*1000071*|*1000072*|*1000073*|*1000074*|*1000075*|*1000076*|*1000077*|*1000078*|*1000079*|*1000080*|*1000081*|*1000082*|*1000083*|*1000084*|*1000085*|*1000086*|*1000087*|*1000088*|*1000089*|*1000090*|*1000091*|*100009[2-9]*|*/10001[0-9][0-9]_*) continue ;;
             esac
             psql -v ON_ERROR_STOP=1 -f "$migration"
           done

@@ -7,6 +7,7 @@ dist-ssr
 .env
 ssl
 ssl/*
+extension/tests/artifacts/
 
 # Supabase
 supabase_docker/.env

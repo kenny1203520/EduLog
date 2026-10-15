@@ -1,0 +1,75 @@
+{
+  "manifest_version": 3,
+  "name": "EduLog Teaching Tools",
+  "description": "Improve teaching system workflows with EduLog.",
+  "version": "0.1.0",
+  "minimum_chrome_version": "116",
+  "action": {
+    "default_title": "EduLog",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  },
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://corp.orangeapple.co/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "http://[::1]/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://corp.orangeapple.co/*"
+      ],
+      "js": [
+        "runtime-bridge.js",
+        "adapters/orange-apple-lexicon.js",
+        "adapters/orange-apple-model.js",
+        "adapters/orange-apple.js",
+        "bootstrap.js"
+      ],
+      "css": [
+        "edulog-tokens.css",
+        "adapters/orange-apple.css"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://corp.orangeapple.co/*"
+      ],
+      "js": [
+        "ui-core.js",
+        "ui-messages.js",
+        "source-date.js",
+        "field-mappings.js",
+        "field-mapping-ui.js",
+        "connection-ui.js",
+        "integration-ui.js",
+        "adapters/orange-apple-todo.js",
+        "adapters/orange-apple-session-cards.js",
+        "adapters/orange-apple-accounts.js",
+        "adapters/orange-apple-navigation.js",
+        "adapters/orange-apple-report-editor.js",
+        "adapters/orange-apple-roster.js",
+        "adapters/orange-apple-workflows.js",
+        "adapters/orange-apple-integration.js",
+        "editor-prefill.js",
+        "content.js"
+      ],
+      "css": [
+        "dialog-layout.css",
+        "editor-prefill.css"
+      ],
+      "run_at": "document_end"
+    }
+  ]
+}
