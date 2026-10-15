@@ -121,7 +121,7 @@
   }
 
   // ---- Rendering -------------------------------------------------------------
-  const ICONS = { alert: ['M12 8v5', 'M12 16.5h.01', 'circle'], clock: ['M12 7v5l3 2', 'circle'], check: ['M7 12.5l3.2 3.2L17 9'], pencil: ['M4 20h4l10-10-4-4L4 16z', 'M13.5 6.5l4 4'], pause: ['M10 8v8', 'M14 8v8', 'circle'], note: ['M5 4h14v12H9l-4 4z'], cross: ['M8 8l8 8', 'M16 8l-8 8'], dash: ['M7 12h10'], triangle: ['M12 4l9 16H3z', 'M12 10v4'] }
+  const ICONS = { alert: ['M12 8v5', 'M12 16.5h.01', 'circle'], clock: ['M12 7v5l3 2', 'circle'], check: ['M7 12.5l3.2 3.2L17 9'], pencil: ['M4 20h4l10-10-4-4L4 16z', 'M13.5 6.5l4 4'], pause: ['M10 8v8', 'M14 8v8', 'circle'], note: ['M6 3h9l3 3v15H6z', 'M9 11h6', 'M9 15h6'], cross: ['M8 8l8 8', 'M16 8l-8 8'], dash: ['M7 12h10'], triangle: ['M12 4l9 16H3z', 'M12 10v4'] }
   function icon(doc, name) {
     const ns = 'http://www.w3.org/2000/svg', svg = doc.createElementNS(ns, 'svg')
     svg.setAttribute('data-edulog-owned', ''); svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true'); svg.setAttribute('focusable', 'false'); svg.setAttribute('class', 'edulog-icon')

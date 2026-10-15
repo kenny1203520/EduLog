@@ -44,3 +44,8 @@ html[data-edulog-ui="on"] #lesson-report-modal .edulog-submit-check:has(.edulog-
   html[data-edulog-ui="on"] #lesson-report-modal .edulog-form-section:has(.edulog-phrases) .edulog-phrases { margin-top:0; }
   html[data-edulog-ui="on"] #lesson-report-modal .admission_lesson_report_feedback textarea { min-height:240px; }
 }
+/* Hover feedback for editor controls (colour only, no layout shift). */
+html[data-edulog-ui="on"] #lesson-report-modal :is(.edulog-phrase-tabs [role=tab], .edulog-rating-clear, .edulog-submit-check button) { transition:background-color var(--edulog-duration), border-color var(--edulog-duration); }
+html[data-edulog-ui="on"] #lesson-report-modal :is(.edulog-phrase-tabs [role=tab]:not([aria-selected=true]), .edulog-rating-clear):hover { border-color:var(--edulog-primary); background:var(--edulog-primary-soft); }
+html[data-edulog-ui="on"] #lesson-report-modal .edulog-submit-check button:hover { background:var(--edulog-status-warn-soft); }
+html[data-edulog-ui="on"] #lesson-report-modal .edulog-staff-only > summary:hover { color:var(--edulog-primary); }

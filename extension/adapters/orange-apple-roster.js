@@ -84,7 +84,7 @@
   }
 
   // ---- Rendering -------------------------------------------------------------
-  const ICONS = { alert: ['M12 8v5', 'M12 16.5h.01', 'circle'], clock: ['M12 7v5l3 2', 'circle'], pause: ['M10 8v8', 'M14 8v8', 'circle'], note: ['M5 4h14v12H9l-4 4z'], tag: ['M4 4h7l9 9-7 7-9-9z', 'M8.5 8.5h.01'] }
+  const ICONS = { alert: ['M12 8v5', 'M12 16.5h.01', 'circle'], clock: ['M12 7v5l3 2', 'circle'], pause: ['M10 8v8', 'M14 8v8', 'circle'], note: ['M6 3h9l3 3v15H6z', 'M9 11h6', 'M9 15h6'], tag: ['M4 4h7l9 9-7 7-9-9z', 'M8.5 8.5h.01'] }
   function icon(doc, name) {
     const ns = 'http://www.w3.org/2000/svg', svg = doc.createElementNS(ns, 'svg')
     svg.setAttribute('data-edulog-owned', ''); svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true'); svg.setAttribute('focusable', 'false'); svg.setAttribute('class', 'edulog-icon')

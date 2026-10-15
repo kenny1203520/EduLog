@@ -550,3 +550,9 @@ html[data-edulog-ui="on"] .edulog-roster-laptop .dropdown > i { display:inline-f
   html[data-edulog-ui="on"] .edulog-roster-card .edulog-card-face { grid-template-columns:minmax(180px,1.3fr) minmax(150px,0.8fr) minmax(140px,1fr) 200px; }
   html[data-edulog-ui="on"] .edulog-roster-card .edulog-card-actions { justify-content:flex-end; }
 }
+/* Hover feedback for card disclosures and roster selection (colour only, no layout shift). */
+html[data-edulog-ui="on"] .edulog-card-more > summary { transition:background-color var(--edulog-duration); }
+html[data-edulog-ui="on"] .edulog-card-more > summary:hover { background:var(--edulog-surface-muted); color:var(--edulog-primary); }
+html[data-edulog-ui="on"] :is(.edulog-roster-select,.edulog-roster-select-all) { transition:border-color var(--edulog-duration), background-color var(--edulog-duration); }
+html[data-edulog-ui="on"] :is(.edulog-roster-select,.edulog-roster-select-all):hover { border-color:var(--edulog-primary); background:var(--edulog-primary-soft); }
+html[data-edulog-ui="on"] :is(.edulog-roster-select,.edulog-roster-select-all):has(input:checked) { border-color:var(--edulog-primary); color:var(--edulog-primary); }
