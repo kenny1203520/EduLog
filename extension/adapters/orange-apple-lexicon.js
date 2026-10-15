@@ -42,6 +42,18 @@
     reportAlertToggle: '.reports_show',
     calendarDayPane: '.tab-pane[id*="-weekday-"]',
   })
+  // Student learning-account modal (/students/:id/accounts, opened in remote_modal).
+  const accounts = Object.freeze({
+    modal: '#accounts-modal',
+    siteField: 'input[name="student_account[site]"]',
+    usernameField: 'input[name="student_account[username]"]',
+    passwordField: 'input[name="student_account[password]"]',
+    addButton: 'button[onclick*="remove_hidden"]',
+    sites: Object.freeze({ koding_school: '橘子蘋果學苑', app_inventor: 'APP', roblox: 'Roblox', minecraft: '麥塊', anydesk: 'AnyDesk', exam: '測驗平台' }),
+    usernameLabel: Object.freeze({ exam: '網址', anydesk: '帳號' }),
+    // The provider's email pattern lost its backslashes (^w+…), so real addresses fail.
+    brokenEmailPattern: /^\^w\+/,
+  })
   // Same-origin pages the overview to-do view may read. Read-only, never submitted.
   const sources = Object.freeze({
     unfilledCurrent: '/admissions/unfilled_report',
@@ -88,5 +100,5 @@
     '*': [selectors.content],
     reports: [selectors.reportsTable],
   })
-  globalThis.edulogSiteLexicon = Object.freeze({ routes, selectors, paths, sources, text, probes })
+  globalThis.edulogSiteLexicon = Object.freeze({ routes, selectors, paths, sources, accounts, text, probes })
 })()

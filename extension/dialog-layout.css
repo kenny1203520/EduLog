@@ -12,3 +12,6 @@ html[data-edulog-ui="on"] #lesson-report-modal[data-edulog-dialog] .modal-conten
 .modal[data-edulog-prefill] .modal-header :is(.close,.btn-close){position:relative!important;z-index:2;flex:0 0 44px;display:block!important}
 @media(max-width:767px){html[data-edulog-ui="on"] [data-edulog-dialog="compact"] .modal-dialog{width:calc(100% - 16px);margin:8px auto}}
 @media(max-width:600px){html[data-edulog-ui="on"] #lesson-report-modal[data-edulog-dialog] .modal-dialog{width:100%;margin:0;max-width:none}html[data-edulog-ui="on"] #lesson-report-modal[data-edulog-dialog] .modal-content{border-radius:0}}
+html[data-edulog-ui="on"] [data-edulog-dialog="accounts"] .modal-dialog { width:calc(100% - 32px); max-width:640px; margin:24px auto; }
+html[data-edulog-ui="on"] [data-edulog-dialog="accounts"] .modal-content { box-sizing:border-box; border-radius:16px; border:1px solid var(--edulog-border); }
+@media(max-width:767px){html[data-edulog-ui="on"] [data-edulog-dialog="accounts"] .modal-dialog{width:calc(100% - 16px);margin:8px auto}}

@@ -690,7 +690,10 @@
       note.className = 'edulog-dialog-context'; field.before(note)
       entries.push({ root:modal, form:field.closest('form') || field, restore:scope.restore })
     }
-    return { roots:entries.map(e=>e.root), isCurrent:()=>entries.every(e=>e.root.isConnected && (e.root.querySelector('form') || e.root.querySelector('textarea')) === e.form) && doc.querySelectorAll('#lesson-report-modal form,#edit-teacher-comment-modal textarea,#teachers-comment-modal textarea').length === entries.length, restore(){ for (const e of entries) e.restore() } }
+    // Student learning-account modal: platform list, masked credentials, native forms.
+    const accounts = globalThis.edulogSiteAccounts && doc.querySelector(globalThis.edulogSiteLexicon.accounts.modal)
+    if (accounts) { const scope = createScope(doc); const enhancement = globalThis.edulogSiteAccounts.enhance(doc, accounts, scope); if (enhancement) entries.push(enhancement) }
+    return { roots:entries.map(e=>e.root), isCurrent:()=>entries.every(e=>e.root.isConnected && (e.root.querySelector('form') || e.root.querySelector('textarea')) === e.form) && doc.querySelectorAll('#lesson-report-modal form,#edit-teacher-comment-modal textarea,#teachers-comment-modal textarea').length + (globalThis.edulogSiteAccounts ? doc.querySelectorAll('#accounts-modal .modal-body').length : 0) === entries.length, restore(){ for (const e of entries) e.restore() } }
   }
   globalThis.edulogSiteWorkflows = Object.freeze({ enhancePage, enhanceDialog, enhanceDialogs })
 })()

@@ -69,6 +69,7 @@ for (const [browserName, executablePath] of executables) {
       for (const file of ['lexicon', 'model']) await page.addScriptTag({ content: read(`../adapters/orange-apple-${file}.js`) })
       await page.addScriptTag({ content: read('../adapters/orange-apple-todo.js') })
       await page.addScriptTag({ content: read('../adapters/orange-apple-session-cards.js') })
+      await page.addScriptTag({ content: read('../adapters/orange-apple-accounts.js') })
       await page.addScriptTag({ content: read('../adapters/orange-apple-workflows.js') })
       await page.addScriptTag({ content: read('../adapters/orange-apple.js') })
       await page.addScriptTag({ content: read('../runtime-bridge.js') });await page.addScriptTag({ content: read('../ui-core.js') });await page.addScriptTag({ content: read('../ui-messages.js') })

@@ -474,3 +474,26 @@ html[data-edulog-ui="on"] .edulog-card-status li[data-tone="danger"] { color:var
 html[data-edulog-ui="on"] .edulog-card-status li[data-tone="neutral"] { color:var(--edulog-text-subtle); background:var(--edulog-surface-subtle); }
 html[data-edulog-ui="on"] .edulog-card-status[data-calm="true"] li { border-color:var(--edulog-border-soft); background:var(--edulog-surface-subtle); }
 @media (min-width:768px) { html[data-edulog-ui="on"] .edulog-card-status { grid-template-columns:repeat(4,minmax(0,1fr)); } }
+/* Student learning-account modal: platform list with masked credentials. */
+html[data-edulog-ui="on"] [data-edulog-account-section="closed"] { display:none !important; }
+html[data-edulog-ui="on"] [data-edulog-account-section="open"] { display:block !important; margin:12px 0; padding:12px; border:1px solid var(--edulog-primary-border); border-radius:var(--edulog-radius); background:var(--edulog-surface-subtle); }
+html[data-edulog-ui="on"] [data-edulog-account-section] .form-control { min-height:44px; font-size:16px; }
+html[data-edulog-ui="on"] [data-edulog-account-section] input[type="submit"] { min-height:44px; padding:8px 20px; font-size:16px; }
+html[data-edulog-ui="on"] .edulog-accounts { display:grid; gap:12px; margin-bottom:12px; }
+html[data-edulog-ui="on"] .edulog-account-list { display:grid; gap:10px; margin:0; padding:0; list-style:none; }
+html[data-edulog-ui="on"] .edulog-account { padding:12px 14px; border:1px solid var(--edulog-border); border-radius:var(--edulog-radius-lg); background:var(--edulog-surface); }
+html[data-edulog-ui="on"] .edulog-account-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+html[data-edulog-ui="on"] .edulog-account-head strong { font-size:17px; color:var(--edulog-text); }
+html[data-edulog-ui="on"] .edulog-account-fields { display:grid; gap:6px; margin:8px 0 0; }
+html[data-edulog-ui="on"] .edulog-account-fields > div { display:grid; grid-template-columns:4em minmax(0,1fr); align-items:center; gap:8px; }
+html[data-edulog-ui="on"] .edulog-account-fields dt { color:var(--edulog-text-muted); font-weight:400; font-size:14px; }
+html[data-edulog-ui="on"] .edulog-account-fields dd { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:0; min-width:0; }
+html[data-edulog-ui="on"] .edulog-account-fields code { min-width:0; padding:4px 8px; border-radius:var(--edulog-radius-sm); background:var(--edulog-surface-muted); color:var(--edulog-text); font-size:15px; overflow-wrap:anywhere; }
+html[data-edulog-ui="on"] .edulog-account-action { display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:6px 12px; border:1px solid var(--edulog-border-strong); border-radius:var(--edulog-radius-sm); background:var(--edulog-surface); color:var(--edulog-primary); font:inherit; font-size:15px; text-decoration:none; cursor:pointer; transition:background-color var(--edulog-duration), border-color var(--edulog-duration); }
+html[data-edulog-ui="on"] .edulog-account-action:hover { border-color:var(--edulog-primary); background:var(--edulog-primary-soft); }
+html[data-edulog-ui="on"] .edulog-accounts .edulog-account-primary { background:var(--edulog-primary); border-color:var(--edulog-primary); color:var(--edulog-surface); }
+html[data-edulog-ui="on"] :is(.edulog-accounts,[data-edulog-account-section]) :is(a,button,select,input):focus-visible { outline:3px solid var(--edulog-focus-ring); outline-offset:2px; }
+html[data-edulog-ui="on"] .edulog-account-add { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding-top:4px; }
+html[data-edulog-ui="on"] .edulog-account-add label { display:flex; flex-wrap:wrap; align-items:center; gap:8px; color:var(--edulog-text-secondary); }
+html[data-edulog-ui="on"] .edulog-account-add select { min-height:44px; padding:6px 10px; border:1px solid var(--edulog-border-input); border-radius:var(--edulog-radius-sm); font:inherit; }
+html[data-edulog-ui="on"] .edulog-account-empty { margin:0; color:var(--edulog-text-muted); }
