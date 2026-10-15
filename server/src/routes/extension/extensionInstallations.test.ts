@@ -3,14 +3,14 @@ import request from 'supertest'
 import crypto from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 import { createExtensionIntegrationRouter } from './extensionIntegrationRouter.js'
-import { loadConfig } from './config/config.js'
-import type { SupabaseClients } from './infra/supabase.js'
+import { loadConfig } from '../../config/config.js'
+import type { SupabaseClients } from '../../infra/supabase.js'
 
 const user = '11111111-1111-4111-8111-111111111111'
 const id = '22222222-2222-4222-8222-222222222222'
 const installation = { installation_id: '33333333-3333-4333-8333-333333333333', device_name: 'Teaching laptop', browser_name: 'Chrome', platform_name: 'Windows', extension_version: '0.1.0' }
 const origin = 'chrome-extension://' + 'a'.repeat(32)
-vi.mock('./auth/auth.js', () => ({
+vi.mock('../../auth/auth.js', () => ({
   csrfProtection: (_req: Request, _res: Response, next: NextFunction) => next(),
   requireAuth: () => (req: Request, _res: Response, next: NextFunction) => { req.user = { id: '11111111-1111-4111-8111-111111111111' } as Request['user']; next() },
 }))

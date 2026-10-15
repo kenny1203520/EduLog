@@ -26,7 +26,7 @@ import { createAggregateRouter } from './routes/pages/aggregateRouter.js'
 import { createTeacherAssignmentRouter } from './routes/rest/teacherAssignmentRouter.js'
 import { createTeacherAccountLinkRouter } from './routes/rest/teacherAccountLinkRouter.js'
 import { createDomainRouter } from './routes/rest/domainRouter.js'
-import { createExtensionIntegrationRouter } from './extensionIntegrationRouter.js'
+import { createExtensionIntegrationRouter } from './routes/extension/extensionIntegrationRouter.js'
 
 const LOCAL_DEVELOPMENT_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://[::1]:5173']
 

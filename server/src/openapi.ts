@@ -10,8 +10,8 @@ import { teacherAssignmentCreateSchema, teacherAssignmentUpdateSchema } from './
 import { conflictBody, transferBody, repairBody, cancelBody } from './routes/rest/transferRouter.js'
 import { permissionForResource } from './auth/authorization.js'
 import { allowedRpcs } from './routes/rest/rpcContract.js'
-import { installationBody, pairStartBody, pairClaimBody, connectionNameBody } from './extensionIntegrationRouter.js'
-import { importBatch, importJob, pendingPush, sourceMapping, jobStatus, catalogQuery, catalogResolve, memoryConfirmation, fieldMappingResolve, fieldMappingConfirm } from './extensionWorkspaceRouter.js'
+import { installationBody, pairStartBody, pairClaimBody, connectionNameBody } from './routes/extension/extensionIntegrationRouter.js'
+import { importBatch, importJob, pendingPush, sourceMapping, jobStatus, catalogQuery, catalogResolve, memoryConfirmation, fieldMappingResolve, fieldMappingConfirm } from './routes/extension/extensionWorkspaceRouter.js'
 
 const errorResponses = {
   '400': { $ref: '#/components/responses/BadRequest' },
