@@ -164,3 +164,18 @@ test('teaching-note fingerprints are validated, bounded and only stored as hashe
   for (let id = 1; id <= 505; id++) await w.send({ type: 'note-seen', id: String(id), hash }, w.site)
   assert.equal(Object.keys(w.storage.edulogNotesSeen).length, 500)
 })
+
+test('card density is stored per list, only when compact, and survives other preference changes', async () => {
+  const w = worker()
+  assert.equal(JSON.stringify(await w.send({ type: 'get-density' }, w.site)), '{"density":{}}')
+  assert.equal(JSON.stringify(await w.send({ type: 'set-density', list: 'roster', density: 'compact' }, w.site)), '{"density":{"roster":"compact"}}')
+  await w.send({ type: 'set-ui-preferences', page: 'reports', pageMode: 'original' }, w.site)
+  assert.equal(JSON.stringify(w.storage.edulogUiPreferences['orange-apple'].density), '{"roster":"compact"}')
+  assert.equal((await w.send({ type: 'set-density', list: 'admin', density: 'compact' }, w.site)).error, 'INVALID_DENSITY')
+  assert.equal((await w.send({ type: 'set-density', list: 'reports', density: 'tiny' }, w.site)).error, 'INVALID_DENSITY')
+  assert.equal(JSON.stringify(await w.send({ type: 'set-density', list: 'roster', density: 'comfortable' }, w.site)), '{"density":{}}')
+  assert.equal('density' in w.storage.edulogUiPreferences['orange-apple'], false)
+  let responded = false
+  assert.equal(w.listener({ type: 'set-density', list: 'roster', density: 'compact' }, { id: 'x', url: 'https://untrusted.example/' }, () => { responded = true }), undefined)
+  assert.equal(responded, false)
+})

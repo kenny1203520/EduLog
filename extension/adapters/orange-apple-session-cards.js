@@ -154,6 +154,30 @@
       },
     }
   }
+  // 精簡列 (from 1024px): one line per student. Remembered per list in extension storage.
+  function createDensityToggle({ scope, key, target, view }) {
+    const { element, listen } = scope
+    const button = element('button', '精簡列'); button.type = 'button'; button.className = 'edulog-density-toggle'
+    const apply = compact => { button.setAttribute('aria-pressed', String(compact)); if (compact) target.dataset.edulogDensity = 'compact'; else delete target.dataset.edulogDensity; view.density = { ...view.density, [key]: compact } }
+    apply(Boolean(view.density?.[key]))
+    listen(button, 'click', () => {
+      const compact = button.getAttribute('aria-pressed') !== 'true'
+      apply(compact)
+      void globalThis.edulogRuntime?.send({ type: 'set-density', list: key, density: compact ? 'compact' : 'comfortable' })?.catch(() => {})
+    })
+    if (view.density?.[key] === undefined) void globalThis.edulogRuntime?.send({ type: 'get-density' })?.then(result => { if (result?.density && target.isConnected) apply(result.density[key] === 'compact') }).catch(() => {})
+    return button
+  }
+  // In 全部, students with nothing to act on fold into one 「其他 N 位狀態正常」 row.
+  function calmGroup(scope, label) {
+    const { element } = scope
+    const li = element('li'); li.className = 'edulog-calm-group'
+    const details = element('details'), summary = element('summary'), list = element('ul')
+    list.className = 'edulog-card-list'
+    details.append(summary, list); li.append(details)
+    return { li, update(cards) { summary.textContent = label(cards.length); list.replaceChildren(...cards) } }
+  }
+
   function mountCards({ doc, scope, anchor, onChange }) {
     const { element, listen } = scope
     const section = scope.add(element('section'))
@@ -163,6 +187,7 @@
     section.append(status, list)
     anchor.before(section)
     const cards = new Map()
+    const calm = calmGroup(scope, count => `其他 ${count} 位狀態正常`)
     const dataText = (tag, value, className) => { const node = element(tag); node.textContent = value; if (className) node.className = className; return node }
     const badge = (tone, iconName, label) => { const node = element('span'); node.className = 'edulog-badge'; node.dataset.tone = tone; node.append(icon(doc, iconName), dataText('span', label)); return node }
     const proxy = (label, target, className, aria) => {
@@ -266,7 +291,19 @@
           if (open.has(card.li)) card.face.querySelector('.edulog-card-more').open = true
           return card.li
         })
-        list.replaceChildren(...items)
+        // Fold the calm students only when someone else needs attention.
+        const folded = chip === 'all' && shown.some(student => student.group !== 'ok') ? new Set(shown.filter(student => student.group === 'ok').map(student => cards.get(student.row).li)) : new Set()
+        const visibleItems = []
+        for (const item of items) {
+          if (!folded.has(item)) visibleItems.push(item)
+          else if (!visibleItems.includes(calm.li)) visibleItems.push(calm.li)
+        }
+        calm.update(items.filter(item => folded.has(item)))
+        // Cards filtered out stay in the list, hidden, so moved provider panels can be restored.
+        const rest = [...cards.values()].map(card => card.li).filter(li => !items.includes(li))
+        for (const li of items) li.hidden = false
+        for (const li of rest) li.hidden = true
+        list.replaceChildren(...visibleItems, ...rest)
         void syncNotes(session.students, onChange)
         const notes = []
         if (session.notStarted) notes.push('本堂還沒開始上課，開始後才會列出點名與紀錄；目前只列出課程到期與堂數提醒。')
@@ -280,5 +317,5 @@
       },
     }
   }
-  globalThis.edulogSiteSessionCards = Object.freeze({ CHIPS, defaultChip, readRoster, readSession, matchesChip, countChips, sortStudents, createChips, mountCards })
+  globalThis.edulogSiteSessionCards = Object.freeze({ CHIPS, defaultChip, readRoster, readSession, matchesChip, countChips, sortStudents, createChips, mountCards, createDensityToggle, calmGroup })
 })()

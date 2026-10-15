@@ -17,7 +17,7 @@ function classPage() {
   const result = w.edulogSiteAdapter.enhancePage(w.document, view)
   return { dom, w, doc: w.document, view, result, original }
 }
-const cards = doc => [...doc.querySelectorAll('.edulog-session-card')]
+const cards = doc => [...doc.querySelectorAll('.edulog-session-card:not([hidden])')]
 const names = doc => cards(doc).map(card => card.querySelector('.edulog-card-main strong').textContent)
 const card = (doc, name) => cards(doc).find(item => item.querySelector('.edulog-card-main strong').textContent === name)
 const chip = (doc, key) => doc.querySelector(`[data-chip="${key}"]`)
@@ -175,4 +175,17 @@ test('a teaching note with unseen content shows a reminder until it is opened', 
   changed.result.restore()
   assert.equal(changed.doc.querySelector('.edulog-note-alert'), null)
   changed.dom.window.close()
+})
+
+test('in 全部 calm students fold into one row only while someone else needs attention', () => {
+  const s = classPage()
+  chip(s.doc, 'all').click()
+  const calm = s.doc.querySelector('.edulog-session-cards .edulog-calm-group')
+  assert.ok(calm, 'calm group shown')
+  assert.match(calm.querySelector('summary').textContent, /^其他 \d+ 位狀態正常$/)
+  for (const card of calm.querySelectorAll('.edulog-session-card')) assert.equal(card.dataset.group, 'ok')
+  assert.equal(s.doc.querySelector('.edulog-session-cards > .edulog-card-list > .edulog-session-card[data-group="ok"]'), null)
+  chip(s.doc, 'pending').click()
+  assert.equal(s.doc.querySelector('.edulog-session-cards .edulog-calm-group'), null)
+  s.dom.window.close()
 })

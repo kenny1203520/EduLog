@@ -576,3 +576,23 @@ html[data-edulog-ui="on"] .edulog-todo-name { font-size:16px; color:var(--edulog
 html[data-edulog-ui="on"] .edulog-todo-fill { display:inline-flex; align-items:center; min-height:44px; padding:0 8px; color:var(--edulog-primary); text-decoration:underline; text-underline-offset:3px; }
 html[data-edulog-ui="on"] .edulog-todo-card .edulog-todo-more { margin-top:6px; border-color:transparent; background:transparent; color:var(--edulog-primary); }
 html[data-edulog-ui="on"] .edulog-todo-card .edulog-todo-more:hover { background:var(--edulog-primary-soft); }
+/* Filtered cards stay in the list (they may hold moved provider controls) but are not shown. */
+html[data-edulog-ui="on"] :is(.edulog-session-card,.edulog-roster-card)[hidden] { display:none; }
+/* 全部: students with nothing to act on fold into one row. */
+html[data-edulog-ui="on"] .edulog-calm-group > details > summary { display:flex; align-items:center; min-height:44px; padding:8px 14px; border:1px dashed var(--edulog-border-strong); border-radius:var(--edulog-radius-lg); color:var(--edulog-text-secondary); cursor:pointer; transition:background-color var(--edulog-duration); }
+html[data-edulog-ui="on"] .edulog-calm-group > details > summary:hover { background:var(--edulog-surface-muted); color:var(--edulog-primary); }
+html[data-edulog-ui="on"] .edulog-calm-group > details[open] > summary { margin-bottom:12px; }
+html[data-edulog-ui="on"] .edulog-calm-group { list-style:none; }
+/* 精簡列: from 1024px one line per student; below that the toggle is not offered. */
+html[data-edulog-ui="on"] .edulog-density-toggle { display:none; }
+@media (min-width:1024px) {
+  html[data-edulog-ui="on"] .edulog-table-tools .edulog-density-toggle { display:inline-flex; align-items:center; min-height:44px; padding:6px 14px; border:1px solid var(--edulog-border-strong); border-radius:999px; background:var(--edulog-surface); color:var(--edulog-text-secondary); font:inherit; font-size:15px; cursor:pointer; transition:background-color var(--edulog-duration), border-color var(--edulog-duration); }
+  html[data-edulog-ui="on"] .edulog-table-tools .edulog-density-toggle:hover { border-color:var(--edulog-primary); }
+  html[data-edulog-ui="on"] .edulog-table-tools .edulog-density-toggle[aria-pressed="true"] { background:var(--edulog-primary); border-color:var(--edulog-primary); color:var(--edulog-surface); }
+  html[data-edulog-ui="on"] [data-edulog-density="compact"] .edulog-card-list { gap:6px; }
+  html[data-edulog-ui="on"] [data-edulog-density="compact"] :is(.edulog-session-card,.edulog-roster-card) { padding:6px 12px; }
+  html[data-edulog-ui="on"] [data-edulog-density="compact"] .edulog-todo-meta, html[data-edulog-ui="on"] [data-edulog-density="compact"] .edulog-roster-bar { display:none; }
+  html[data-edulog-ui="on"] [data-edulog-density="compact"] .edulog-session-card .edulog-card-face { grid-template-columns:minmax(140px,1fr) minmax(320px,2.2fr) auto auto; }
+  html[data-edulog-ui="on"] [data-edulog-density="compact"] .edulog-session-card .edulog-card-status { grid-column:auto; grid-row:1; grid-column-start:2; }
+  html[data-edulog-ui="on"] [data-edulog-density="compact"] .edulog-card-status li { min-height:36px; padding:2px 8px; }
+}

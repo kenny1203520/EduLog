@@ -150,6 +150,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     })().then(sendResponse, () => sendResponse({ error: 'NOTES_UNAVAILABLE' }))
     return true
   }
+  // Card density per list ('reports', 'roster'); only 'compact' is stored, comfortable is the default.
+  if (isTeachingPage(sender.url) && ['get-density', 'set-density'].includes(message?.type)) {
+    void (async () => {
+      const key = 'edulogUiPreferences', id = globalThis.edulogSiteAdapter.id
+      const stored = (await chrome.storage.local.get(key))[key] || {}
+      const current = stored[id] || {}
+      if (message.type === 'set-density') {
+        if (!['reports', 'roster'].includes(message.list) || !['compact', 'comfortable'].includes(message.density)) return { error: 'INVALID_DENSITY' }
+        const { [message.list]: _previous, ...density } = current.density || {}
+        if (message.density === 'compact') density[message.list] = 'compact'
+        const { density: _old, ...rest } = current
+        stored[id] = { ...rest, ...(Object.keys(density).length ? { density } : {}) }
+        await chrome.storage.local.set({ [key]: stored })
+      }
+      return { density: stored[id]?.density || {} }
+    })().then(sendResponse, () => sendResponse({ error: 'PREFERENCES_UNAVAILABLE' }))
+    return true
+  }
   if ((fromPopup || isTeachingPage(sender.url)) && ['get-ui-preferences', 'set-ui-preferences'].includes(message?.type)) {
     void (async () => {
       const key = 'edulogUiPreferences'
@@ -165,7 +183,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const { [pageKind]: _previous, ...pages } = current.pages || {}
         if (pageKind && message.pageMode === 'original') pages[pageKind] = 'original'
         const nextPages = pageKind ? pages : current.pages || {}
-        stored[id] = { enabled: typeof message.enabled === 'boolean' ? message.enabled : current.enabled !== false, ...(Object.keys(nextPages).length ? { pages: nextPages } : {}) }
+        stored[id] = { enabled: typeof message.enabled === 'boolean' ? message.enabled : current.enabled !== false, ...(Object.keys(nextPages).length ? { pages: nextPages } : {}), ...(current.density ? { density: current.density } : {}) }
         await chrome.storage.local.set({ [key]: stored })
         const tabs = await chrome.tabs.query({})
         await Promise.allSettled(tabs.filter(tab => isTeachingPage(tab.url)).map(tab => chrome.tabs.sendMessage(tab.id, { type: 'ui-preferences-changed', enabled: stored[id].enabled, pages: stored[id].pages || {} })))

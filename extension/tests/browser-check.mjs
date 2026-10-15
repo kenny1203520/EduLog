@@ -131,8 +131,16 @@ for (const [browserName, executablePath] of executables) {
         const smallRoster = await page.locator('.edulog-roster-cards button:visible, .edulog-roster-cards summary:visible, .edulog-roster-select:visible, .edulog-roster-select-all:visible').evaluateAll(els => els.filter(el => el.getBoundingClientRect().height < 44).length)
         assert.equal(smallRoster, 0, `${browserName} ${name} ${width}: roster targets are at least 44px`)
         await page.locator('.edulog-roster-cards').screenshot({ path: join(output, `${browserName}-roster-${width}.png`) })
+        if (width >= 1024) {
+          // 精簡列: one line per enrolment, still inside the viewport.
+          await page.locator('.edulog-table-tools .edulog-density-toggle').first().click()
+          assert.equal(await page.locator('.edulog-roster-cards').getAttribute('data-edulog-density'), 'compact')
+          assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${browserName} ${name} ${width}: compact roster must not overflow`)
+          await page.locator('.edulog-roster-cards').screenshot({ path: join(output, `${browserName}-roster-compact-${width}.png`) })
+          await page.locator('.edulog-table-tools .edulog-density-toggle').first().click()
+        }
         await page.getByRole('button', { name: /剩餘少/ }).click()
-        assert.equal(await page.locator('.edulog-roster-card').count(), 2)
+        assert.equal(await page.locator('.edulog-roster-card:visible').count(), 2)
         await page.getByRole('button', { name: /^全部/ }).first().click()
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${browserName} ${name} ${width}: roster must not overflow the page`)
         await page.evaluate(() => { for (const pane of document.querySelectorAll('.tab-pane')) pane.classList.toggle('active', pane.id === 'lesson-reports'), pane.classList.toggle('show', pane.id === 'lesson-reports') })

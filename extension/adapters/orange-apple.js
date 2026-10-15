@@ -224,6 +224,7 @@
       if (chips) box.append(chips.element)
       // Single-session mode shows extension cards; the native table stays in the DOM, hidden.
       const cards = cardsApi?.mountCards({ doc, scope, anchor: reportScrollRegion, onChange: () => { if (cards?.element.isConnected) refreshReports() } })
+      if (cards) box.append(cardsApi.createDensityToggle({ scope, key: 'reports', target: cards.element, view }))
       refreshReports = () => {
         const rows = [...reports.rows].filter(row => row.hasAttribute('data-edulog-report-row'))
         const activeWeek=view.week??selected?.index

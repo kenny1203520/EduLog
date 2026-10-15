@@ -135,6 +135,10 @@
     const region = table.closest('.table-responsive, [data-edulog-scroll]') || table
     region.before(section)
     mark(region, 'data-edulog-cards', 'on')
+    const shared = globalThis.edulogSiteSessionCards
+    const density = shared?.createDensityToggle({ scope, key: 'roster', target: section, view })
+    if (density) box.append(density)
+    const calm = shared?.calmGroup(scope, count => `其他 ${count} 位沒有特別狀態`)
 
     const cards = new Map(items.map(item => {
       const li = element('li'); li.className = 'edulog-roster-card'
@@ -193,7 +197,15 @@
         const counts = countChips(items)
         for (const [key, { button, count }] of chipButtons) { count.textContent = String(counts[key]); button.setAttribute('aria-pressed', String(key === chip)); button.dataset.empty = String(!counts[key]) }
         const shown = sortEnrolments(items.filter(item => visible.has(item.row) && matchesChip(item, chip)))
-        list.replaceChildren(...shown.map(item => cards.get(item.row)))
+        // In 全部, enrolments without any badge fold into one row after the ones that have one.
+        const folded = calm && chip === 'all' && shown.some(item => badgesFor(item).length) ? shown.filter(item => !badgesFor(item).length) : []
+        calm?.update(folded.map(item => cards.get(item.row)))
+        // Filtered cards stay in the list, hidden: they hold moved provider controls (laptop frames)
+        // that restore must be able to put back.
+        const rest = items.filter(item => !shown.includes(item)).map(item => cards.get(item.row))
+        for (const item of shown) cards.get(item.row).hidden = false
+        for (const card of rest) card.hidden = true
+        list.replaceChildren(...shown.filter(item => !folded.includes(item)).map(item => cards.get(item.row)), ...(folded.length ? [calm.li] : []), ...rest)
         syncBoxes()
         status.textContent = shown.length ? '' : '沒有符合篩選的學生。'
         status.hidden = Boolean(shown.length)

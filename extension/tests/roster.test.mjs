@@ -16,7 +16,7 @@ function classPage() {
   const result = w.edulogSiteAdapter.enhancePage(w.document, view)
   return { dom, w, doc: w.document, view, result, original }
 }
-const cards = doc => [...doc.querySelectorAll('.edulog-roster-card')]
+const cards = doc => [...doc.querySelectorAll('.edulog-roster-card:not([hidden])')]
 const names = doc => cards(doc).map(card => card.querySelector('.edulog-card-main strong').textContent)
 const card = (doc, name, index = 0) => cards(doc).filter(item => item.querySelector('.edulog-card-main strong').textContent === name)[index]
 const badges = item => [...item.querySelectorAll('.edulog-badge')].map(badge => `${badge.dataset.tone}:${badge.textContent}`).join('|')
@@ -27,7 +27,7 @@ const rosterRow = (doc, admission) => doc.querySelector(`#students-table [data-a
 test('every enrolment becomes a card, fewest lessons left first, and the native table is hidden', () => {
   const s = classPage()
   assert.equal(cards(s.doc).length, 9)
-  assert.equal(names(s.doc).join('|'), '學生戊|學生庚|學生甲|學生乙|學生丙|學生丁|學生己|學生辛|學生乙')
+  assert.equal(names(s.doc).join('|'), '學生戊|學生庚|學生甲|學生乙|學生丙|學生丁|學生乙|學生己|學生辛')
   assert.equal(s.doc.querySelector('#students-table').closest('.table-responsive').getAttribute('data-edulog-cards'), 'on')
   assert.equal(s.doc.querySelector('.color-labels').hasAttribute('data-edulog-replaced'), true)
   // The legend shares its .row with the roster column on the live page; nothing of the roster may be hidden.
@@ -108,6 +108,27 @@ test('the card checkbox, teaching note and laptop loan use the provider\'s own c
 test('restore returns the exact original page, including the moved laptop frames', () => {
   const s = classPage()
   card(s.doc, '學生丙').querySelector('.edulog-card-more').open = true
+  s.result.restore()
+  assert.equal(s.doc.body.outerHTML, s.original)
+  s.dom.window.close()
+})
+
+test('in 全部 enrolments without badges fold into one row, and 精簡列 is remembered per list', async () => {
+  const s = classPage()
+  const calm = s.doc.querySelector('.edulog-roster-cards .edulog-calm-group')
+  assert.equal(calm.querySelector('summary').textContent, '其他 2 位沒有特別狀態')
+  assert.equal(calm.querySelector('details').open, false)
+  assert.equal([...calm.querySelectorAll('.edulog-roster-card strong')].map(node => node.textContent).join('|'), '學生己|學生辛')
+  chip(s.doc, 'low').click()
+  assert.equal(s.doc.querySelector('.edulog-roster-cards .edulog-calm-group'), null, 'other chips list cards directly')
+  const sent = []
+  s.w.edulogRuntime = { send: async message => { sent.push(message); return { density: {} } } }
+  const toggle = s.doc.querySelector('.edulog-table-tools .edulog-density-toggle')
+  toggle.click()
+  assert.equal(toggle.getAttribute('aria-pressed'), 'true')
+  assert.equal(s.doc.querySelector('.edulog-roster-cards').dataset.edulogDensity, 'compact')
+  assert.equal(JSON.stringify(sent), JSON.stringify([{ type: 'set-density', list: 'roster', density: 'compact' }]))
+  assert.equal(s.view.density.roster, true)
   s.result.restore()
   assert.equal(s.doc.body.outerHTML, s.original)
   s.dom.window.close()
