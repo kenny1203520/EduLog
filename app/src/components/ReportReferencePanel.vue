@@ -378,6 +378,7 @@ import { useI18n } from 'vue-i18n'
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
 import RichTextViewer from '@/components/common/text-editor/RichTextViewer.vue'
 import { useFeedback } from '@/composables/useFeedback'
+import { DateUtils } from '@/utils/DateUtils'
 
 const { t, locale } = useI18n()
 const { reportError } = useFeedback()
@@ -631,9 +632,12 @@ function nextPage() {
 }
 
 function formatDate(report: any) {
-    const d = report.class_occurrences?.occurrence_date || report.updated_at
-    if (!d) return '-'
-    return new Date(d).toLocaleDateString(locale.value)
+    const occurrence = Array.isArray(report.class_occurrences) ? report.class_occurrences[0] : report.class_occurrences
+    // occurrence_date is a calendar day; new Date('YYYY-MM-DD') would parse it as UTC midnight.
+    const date = occurrence?.occurrence_date
+        ? DateUtils.parseLocalDate(occurrence.occurrence_date)
+        : report.updated_at ? new Date(report.updated_at) : undefined
+    return date ? date.toLocaleDateString(locale.value) : '-'
 }
 
 function getReportProgress(report: any) {

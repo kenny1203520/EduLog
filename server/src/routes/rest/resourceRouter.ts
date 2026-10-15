@@ -5,6 +5,7 @@ import { sendData } from '../../http/response.js'
 import { listQuerySchema, resources, type ResourceDefinition } from './resources.js'
 import { authorizeCollection, authorizeResource, permissionForResource } from '../../auth/authorization.js'
 import { setAuditContext } from '../../http/context.js'
+import { applyListOrder } from './relationOrder.js'
 
 const mutationMethods = ['POST', 'PATCH', 'DELETE']
 const serviceOnlyViews = new Set(['users', 'teachers'])
@@ -159,10 +160,7 @@ async function list(req: Request, res: Response, def: ResourceDefinition) {
     if (!values.length || values.some((value) => !z.string().uuid().safeParse(value).success)) throw new ApiError(400, 'INVALID_FILTER', 'The entity_ids filter is invalid')
     builder = builder.in('entity_id', values)
   }
-  const relationSort = /^([A-Za-z_][A-Za-z0-9_]*)\(([A-Za-z_][A-Za-z0-9_]*)\)$/.exec(sortName)
-  const ordered = relationSort
-    ? builder.order(relationSort[2], { ascending: !descending, foreignTable: relationSort[1] })
-    : builder.order(sortName, { ascending: !descending })
+  const ordered = applyListOrder(builder, sortName, !descending)
   const { data, error, count } = await ordered.range(query.offset, query.offset + query.limit - 1)
   if (error) throw mapDatabaseError(error)
   let includeSensitive = false

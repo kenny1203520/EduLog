@@ -2,10 +2,11 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod'
 import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { sendData } from '../../http/response.js'
-import { isTeacherPresent } from '../../domain/reportSemantics.js'
+import { DASHBOARD_SCHEDULE_ALL_PERMISSIONS, filterOccurrencesByAssignments, type TeacherSessionAssignment } from '../../domain/dashboardSchedule.js'
 import { measureRequestPhase, recordDatabaseCall, setAuditContext } from '../../http/context.js'
 import { authorizeCollection, authorizeResource, requireAuthorizationDecision } from '../../auth/authorization.js'
 import { resources } from '../rest/resources.js'
+import { orderByRelation } from '../rest/relationOrder.js'
 import { attachTeacherProfile, complete, idempotency } from '../rest/resourceRouter.js'
 
 const wrap = (handler: (req: Request, res: Response) => Promise<unknown>) => (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res)).catch(next)
@@ -119,7 +120,7 @@ async function studentReportsPage(req: Request, res: Response) {
   const descending = query.sort.startsWith('-')
   const sortField = query.sort.replace(/^-/, '')
   reportsQuery = sortField === 'occurrence_date'
-    ? reportsQuery.order('occurrence_date', { foreignTable: 'class_occurrences', ascending: !descending })
+    ? orderByRelation(reportsQuery, 'class_occurrences', 'occurrence_date', !descending)
     : reportsQuery.order(sortField, { ascending: !descending })
   const reports = await reportsQuery.range(query.offset, query.offset + query.limit - 1)
   if (enrollment.error) throw mapDatabaseError(enrollment.error); if (reports.error) throw mapDatabaseError(reports.error)
@@ -232,14 +233,41 @@ async function loadDashboardCounts(req: Request) {
   return (result.data ?? {}) as { totalStudents?: number; activeCourses?: number }
 }
 
+async function hasDashboardScheduleAll(req: Request) {
+  const db = requireDb(req)
+  const checks = await Promise.all(DASHBOARD_SCHEDULE_ALL_PERMISSIONS.map((permission) => database(req, () => db.rpc('has_api_permission', {
+    p_user_id: req.user!.id,
+    p_permission_key: permission,
+    p_classroom_id: null,
+    p_class_session_id: null,
+  }))))
+  for (const check of checks) if (check.error) throwDatabaseError(req, 'dashboard.schedule_permission', check.error)
+  return checks.some((check) => check.data === true)
+}
+
+async function loadTeacherSessionAssignments(req: Request, teacherId: string, start: string, end: string): Promise<TeacherSessionAssignment[]> {
+  const db = requireDb(req)
+  const result = await database(req, () => db.from('class_session_teachers').select('class_session_id,effective_from,effective_to').eq('teacher_id', teacherId).lte('effective_from', end).or(`effective_to.is.null,effective_to.gte.${start}`))
+  if (result.error) throwDatabaseError(req, 'dashboard.teacher_assignments', result.error)
+  return (result.data ?? []) as TeacherSessionAssignment[]
+}
+
 async function loadDashboardOccurrences(req: Request, start: string | undefined, end: string | undefined, teacher: TeacherScope) {
   if (!start || !end) return []
   const db = requireDb(req)
-  const result = await database(req, () => db.from('class_occurrences').select(dashboardOccurrenceFields).eq('is_conducted', true).gte('occurrence_date', start).lte('occurrence_date', end).order('occurrence_date', { ascending: true }).order('id', { ascending: true }).range(0, 99))
+  const seeAll = await hasDashboardScheduleAll(req)
+  let assignments: TeacherSessionAssignment[] = []
+  if (!seeAll) {
+    if (!teacher) return []
+    assignments = await loadTeacherSessionAssignments(req, teacher.id, start, end)
+    if (!assignments.length) return []
+  }
+  let occurrenceQuery = db.from('class_occurrences').select(dashboardOccurrenceFields).not('status', 'in', '(cancelled,rescheduled)').gte('occurrence_date', start).lte('occurrence_date', end)
+  if (!seeAll) occurrenceQuery = occurrenceQuery.in('class_session_id', [...new Set(assignments.map((assignment) => assignment.class_session_id))])
+  const result = await database(req, () => occurrenceQuery.order('occurrence_date', { ascending: true }).order('id', { ascending: true }).range(0, 99))
   if (result.error) throwDatabaseError(req, 'dashboard.occurrences', result.error)
-  const rows = result.data ?? []
-  if (!teacher) return rows
-  return rows.filter((row: any) => isTeacherPresent(teacher.id, req.user!.id, row.teacher_ids ?? [], row.teacher_attendance ?? {}))
+  const rows = (result.data ?? []) as any[]
+  return seeAll ? rows : filterOccurrencesByAssignments(rows, assignments)
 }
 
 async function dashboard(req: Request, res: Response) {

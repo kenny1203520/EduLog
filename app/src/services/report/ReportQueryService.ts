@@ -670,7 +670,7 @@ export class ReportQueryService {
                 filters,
                 mode: 'v1'
             })
-            return { data: response.data || [], count: Number(response.meta?.total || 0) }
+            return { data: this.sortByOccurrenceDateTime(response.data || [], sortBy), count: Number(response.meta?.total || 0) }
         }
         const from = (page - 1) * pageSize
         const to = from + pageSize - 1
@@ -761,7 +761,7 @@ export class ReportQueryService {
                 filters,
                 mode: 'v1'
             })
-            return { data: response.data || [], count: Number(response.meta?.total || 0) }
+            return { data: this.sortByOccurrenceDateTime(response.data || [], sortBy), count: Number(response.meta?.total || 0) }
         }
         const from = (page - 1) * pageSize
         const to = from + pageSize - 1

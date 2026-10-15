@@ -186,3 +186,7 @@ Do not consolidate, rename, delete, or rewrite existing migrations `1000040`–`
 `1000136_import_preview_diagnostics_and_work_rounds.sql` adds safe, allowlisted `PREVIEW_STALE` diagnostics and account-scoped links from one stable local work record to successive server import jobs. Apply it after `1000135_extension_mapping_conflict_diagnostics.sql`. The migration does not store source report text or change import/apply permissions; stale batches remain blocked until the teacher reviews a fresh preview.
 
 `1000139_precise_preview_stale_diagnostics.sql` replaces rollback-time stale checks with diagnostics emitted at the actual preview, target-version, and history-to-occurrence version checks. Apply after `1000138_paused_import_repreview.sql`; keep the existing version and transaction checks unchanged. Only checks marked `version_check` may produce allowlisted `error.fields`; the API logs sanitized identity and version metadata without report contents.
+
+## Dashboard schedule visibility (1000142)
+
+`1000142_dashboard_schedule_visibility_permission.sql` adds `teaching.dashboard.schedule.all` (allowed for `teaching_owner` and `teaching_manager`) and `system.dashboard.schedule.all` (allowed for `system_owner` and `system_admin`). The dashboard API shows every scheduled, non-cancelled occurrence visible through RLS to users holding either permission, and only class sessions with an effective `class_session_teachers` assignment to everyone else. Apply after `1000141_import_lifecycle_effect_receipts.sql`.

@@ -111,6 +111,23 @@
         "no_policy": "No configured policy",
         "legacy_fallback": "Legacy attendance fallback"
     },
+    "dashboard_schedule": {
+        "title": "Today's Schedule Visibility",
+        "description": "Choose which teaching roles see every class in the dashboard's today's schedule. Other users see only the classes they are assigned to teach that day.",
+        "system_roles_hint": "System Owner and System Administrator see the full schedule by default; adjust them under System role permissions (Dashboard › View all of today's schedule).",
+        "inheritance_hint": "This setting applies system-wide. A deny on any of a user's teaching roles takes priority.",
+        "saved": "Schedule visibility saved",
+        "system": "System-wide",
+        "classroom": "Specific classroom",
+        "class_session": "Specific class",
+        "allow": "All classes",
+        "deny": "Assigned classes only",
+        "inherit": "Inherit",
+        "effective": "Effective result",
+        "inherited": "Inherited result",
+        "no_policy": "Assigned classes only (default)",
+        "legacy_fallback": "Assigned classes only (default)"
+    },
     "extension": {
         "title": "Browser extension connections",
         "description": "Manage EduLog access for each browser installation. Different computers or browser profiles have separate connections. An extension ID identifies the product, not a device.",
