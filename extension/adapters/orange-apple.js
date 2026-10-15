@@ -246,6 +246,9 @@
           for(const button of weekButtons.querySelectorAll('[data-week]'))button.setAttribute('aria-pressed',String(Number(button.dataset.week)===activeWeek))
         }
         chips?.update(counts,view.reportFilter)
+        // Share this class's pending count with the navigation bar (no extra reads elsewhere).
+        const classPath=(doc.location.pathname.match(/^\/courses\/dt\/\d+/)||[])[0]
+        if(classPath&&cardsApi)(globalThis.edulogClassPending||(globalThis.edulogClassPending=new Map())).set(classPath,counts.pending||0)
         cards?.render({session,visible,chip:view.reportFilter,counts,hidden:isCompare})
         mark(reportScrollRegion,'data-edulog-cards',cards&&!isCompare?'on':null)
         if(typeof view.updateClassHistoryAvailability==='function')view.updateClassHistoryAvailability()
@@ -291,6 +294,8 @@
       // per-session actions into the selected cell before the table is shown.
       if(selected)selectWeek(selected.index,true)
     }
+    // One left navigation bar built from the provider sidebar (after readers above used it).
+    view.navigation = globalThis.edulogSiteNavigation?.mount({ doc, scope }) || null
     const sourceTables = [...content.querySelectorAll('table')]
     const shape = sourceTables.map(table => ({ table, rows: table.rows.length }))
     return {

@@ -50,7 +50,7 @@ for (const [browserName, executablePath] of executables) {
       await page.close()
     }
     // 720 CSS px at DPR 2 is a layout surrogate; native browser 200% zoom remains pending.
-    for (const width of [360, 390, 768, 1024, 1200, 1440, 1920, 720]) for (const [name, path] of [['hours','/my/hour'],['profile','/my'],['profile-edit','/my/101/edit'],['overview', '/'], ['class', '/courses/dt/101'], ['real-class', '/courses/dt/101'], ['reports', '/courses/dt/101/lesson_reports'], ['classes','/courses/dt'], ['history','/dt_admissions/301'], ['calendar','/calendar'], ['unfilled','/admissions/month_unfilled_report'], ['unfilled-current','/admissions/unfilled_report'], ['report-editor','/dt_admissions/301/reports/401/edit']]) {
+    for (const width of [360, 390, 768, 1024, 1200, 1440, 1920, 720]) for (const [name, path] of [['hours','/my/hour'],['profile','/my'],['profile-edit','/my/101/edit'],['overview', '/'], ['class', '/courses/dt/101'], ['real-class', '/courses/dt/101'], ['real-sidebar', '/courses/dt/101'], ['reports', '/courses/dt/101/lesson_reports'], ['classes','/courses/dt'], ['history','/dt_admissions/301'], ['calendar','/calendar'], ['unfilled','/admissions/month_unfilled_report'], ['unfilled-current','/admissions/unfilled_report'], ['report-editor','/dt_admissions/301/reports/401/edit']]) {
       const page = await browser.newPage({ locale:'zh-TW', viewport: { width, height: width === 720 ? 500 : 1000 }, deviceScaleFactor: width === 720 ? 2 : 1 })
       let fixture = read(`fixtures/${name}.html`)
       if (name === 'calendar') fixture = fixture.replace('<form method="get">','<div class="row"><div class="col-sm-2"><a class="btn" href="/calendar?date=2026-09-21">前一週</a></div><div class="col-sm-8"><form method="get"><div class="row"><div class="col-sm-7">').replace('<input type="submit"','</div><div class="col-sm-3"><input type="submit"').replace('</form>','</div></div></form></div><div class="col-sm-2"><a class="btn" href="/calendar?date=2026-10-05">下一週</a></div></div>')
@@ -70,6 +70,7 @@ for (const [browserName, executablePath] of executables) {
       await page.addScriptTag({ content: read('../adapters/orange-apple-todo.js') })
       await page.addScriptTag({ content: read('../adapters/orange-apple-session-cards.js') })
       await page.addScriptTag({ content: read('../adapters/orange-apple-accounts.js') })
+      await page.addScriptTag({ content: read('../adapters/orange-apple-navigation.js') })
       await page.addScriptTag({ content: read('../adapters/orange-apple-workflows.js') })
       await page.addScriptTag({ content: read('../adapters/orange-apple.js') })
       await page.addScriptTag({ content: read('../runtime-bridge.js') });await page.addScriptTag({ content: read('../ui-core.js') });await page.addScriptTag({ content: read('../ui-messages.js') })

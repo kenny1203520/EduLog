@@ -54,6 +54,22 @@
     // The provider's email pattern lost its backslashes (^w+…), so real addresses fail.
     brokenEmailPattern: /^\^w\+/,
   })
+  // Teacher sidebar: class switcher, menu, search, profile, logout and language.
+  const navigation = Object.freeze({
+    sidebar: '#page-body > .sidebar',
+    classLinks: '.teach-menu a[href]',
+    classSwitcher: '.btn-group',
+    nav: '#nav-teacher',
+    menuLinks: '#main-menu .navbar-nav a[href]',
+    moduleGroups: '#main-menu .navbar-nav li.dropdown, #main-menu .navbar-nav li.nav-item.dropdown',
+    search: '#search_students',
+    profile: 'a[href="/my"]',
+    logout: 'a[data-method="delete"]',
+    locales: '.locale-selector a[href]',
+    // "樹林_非凡文理_201教室（菁英） - 週六 第 1 時段 (10:00 ~ 12:00)"
+    className: /^(.*?)\s*-\s*(週[一二三四五六日])\s*第\s*\d+\s*時段\s*\(\s*(\d{1,2}:\d{2})\s*~\s*(\d{1,2}:\d{2})\s*\)\s*$/,
+    weekdays: Object.freeze(['週日', '週一', '週二', '週三', '週四', '週五', '週六']),
+  })
   // Same-origin pages the overview to-do view may read. Read-only, never submitted.
   const sources = Object.freeze({
     unfilledCurrent: '/admissions/unfilled_report',
@@ -100,5 +116,5 @@
     '*': [selectors.content],
     reports: [selectors.reportsTable],
   })
-  globalThis.edulogSiteLexicon = Object.freeze({ routes, selectors, paths, sources, accounts, text, probes })
+  globalThis.edulogSiteLexicon = Object.freeze({ routes, selectors, paths, sources, accounts, navigation, text, probes })
 })()

@@ -116,7 +116,9 @@
       @media(max-width:480px){.brand{display:none}.bar{flex-wrap:wrap}.title{flex-basis:calc(100% - 70px)}.panel{right:8px;width:min(400px,calc(100vw - 16px));max-width:400px;max-height:calc(100dvh - 152px)}}
     </style><div class="bar"><button class="menu" type="button" aria-label="切換網站導覽" aria-expanded="false">導覽</button><strong class="brand">EduLog</strong><span class="title"></span><button class="page-mode" type="button" hidden></button><button class="integration" type="button" aria-expanded="false">EduLog 功能</button></div>
     <section class="panel" aria-label="EduLog 整合功能" hidden><div class="panel-heading"><strong>EduLog 連線與整合</strong><button class="panel-close" type="button" aria-label="關閉 EduLog 整合面板">×</button></div><p class="status" role="status" aria-live="polite"></p><p class="note">清晰主題不需要配對。下方可查看教學整合的規劃流程；原站的報告操作可照常使用。</p><button class="settings" type="button">開啟整合設定</button></section>`
-    root.querySelector('.title').textContent = page.title
+    // On class pages the title carries the short class name from the navigation bar.
+    const currentClass = globalThis.edulogSiteNavigation?.currentClass(document)
+    root.querySelector('.title').textContent = currentClass ? `${page.title} · ${currentClass.primary}` : page.title
     const preferences=document.createElement('details');preferences.className='preferences'
     const preferenceTitle=document.createElement('summary');preferenceTitle.textContent='設定';preferences.append(preferenceTitle)
     const themeToggle=document.createElement('button');themeToggle.type='button';themeToggle.className='toggle';preferences.append(themeToggle);root.querySelector('.panel').append(preferences)
@@ -165,6 +167,7 @@
     root.querySelector('.menu').addEventListener('click', event => {
       const open = document.documentElement.toggleAttribute('data-edulog-nav-open')
       event.currentTarget.setAttribute('aria-expanded', String(open))
+      if (open) document.querySelector('#edulog-nav a, #edulog-nav button:not(.edulog-nav-close)')?.focus()
     })
     const panel = root.querySelector('.panel'), integration = root.querySelector('.integration')
     panel.style.overflowWrap = 'anywhere'
