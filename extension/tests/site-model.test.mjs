@@ -90,3 +90,18 @@ test('session icons map to attendance, completion, internal record and performan
   assert.equal(JSON.stringify([absent.attendanceMark, absent.reportPending, absent.missing.length, absent.behind]), JSON.stringify(['absent', false, 0, false]))
   dom.window.close()
 })
+
+test('class schedule and session start come from the class name and the week header', () => {
+  const { model, dom } = load()
+  const schedule = model.classSchedule('樹林_非凡文理_201教室（菁英） - 週六 第 2 時段 (9:30 ~ 11:30)')
+  assert.equal(JSON.stringify(schedule), JSON.stringify({ weekday: 6, weekdayLabel: '週六', start: '09:30', end: '11:30', branch: '樹林 非凡文理', room: '201教室（菁英）' }))
+  assert.equal(model.classSchedule('特殊班級名稱'), null)
+  const at = text => new Date(text)
+  assert.equal(model.sessionStarted('本週(10/17)', '09:30', at('2026-10-15T12:00:00')), false, 'Thursday before a Saturday class')
+  assert.equal(model.sessionStarted('本週(10/17)', '09:30', at('2026-10-17T09:29:00')), false, 'one minute before the start')
+  assert.equal(model.sessionStarted('本週(10/17)', '09:30', at('2026-10-17T09:30:00')), true, 'at the start time')
+  assert.equal(model.sessionStarted('上週(10/10)', '09:30', at('2026-10-15T12:00:00')), true)
+  assert.equal(model.weekDate('本週(1/2)', at('2026-12-30T12:00:00')).getFullYear(), 2027, 'the year closest to now')
+  assert.equal(model.sessionStarted('本週', '09:30', at('2026-10-15T12:00:00')), null, 'unknown date')
+  dom.window.close()
+})

@@ -11,12 +11,17 @@
   // Pending counts other views already computed (lesson report cards); never fetched for this.
   const pending = globalThis.edulogClassPending || (globalThis.edulogClassPending = new Map())
 
+  const GROUP_BY_WEEKDAY = 6
   // "樹林_非凡文理_201教室（菁英） - 週六 第 1 時段 (10:00 ~ 12:00)" → 週六 10:00–12:00 · 201教室（菁英）
   function parseClassName(name) {
-    const text = collapse(name), match = config.className.exec(text)
-    if (!match) return { primary: text, secondary: '', weekday: 7, start: '99:99', full: text }
-    const place = match[1].split('_').filter(Boolean)
-    return { primary: `${match[2]} ${match[3]}–${match[4]}`, secondary: place.at(-1) || match[1], weekday: config.weekdays.indexOf(match[2]), start: match[3].padStart(5, '0'), full: text }
+    const text = collapse(name), schedule = globalThis.edulogSiteModel?.classSchedule(text)
+    if (!schedule) return { primary: text, secondary: '', branch: '', weekday: 7, start: '99:99', full: text }
+    return { primary: `${schedule.weekdayLabel} ${schedule.start.replace(/^0/, '')}–${schedule.end.replace(/^0/, '')}`, secondary: schedule.room, branch: schedule.branch, weekday: schedule.weekday, start: schedule.start, full: text }
+  }
+  // The branch is only shown when the teacher's classes are in more than one branch.
+  function placeLabels(classes) {
+    const branches = new Set(classes.map(item => item.branch).filter(Boolean))
+    return branches.size > 1 ? classes.map(item => ({ ...item, secondary: [item.branch, item.secondary].filter(Boolean).join(' · ') })) : classes
   }
   // Monday first, Sunday last, then by start time.
   const weekOrder = weekday => weekday === 0 ? 7 : weekday
@@ -24,13 +29,14 @@
     const here = pathOf(doc.location.pathname)
     const today = new Date().getDay()
     const seen = new Set()
-    return [...sidebar.querySelectorAll(config.classLinks)].map(link => {
+    const items = [...sidebar.querySelectorAll(config.classLinks)].map(link => {
       const path = pathOf(link.getAttribute('href'))
       if (!path || seen.has(path)) return null
       seen.add(path)
       const info = parseClassName(link.textContent)
       return { ...info, path, link, today: info.weekday === today, current: here === path || here.startsWith(`${path}/`), pending: pending.get(path) }
     }).filter(Boolean).sort((a, b) => weekOrder(a.weekday) - weekOrder(b.weekday) || a.start.localeCompare(b.start))
+    return placeLabels(items)
   }
   function currentClass(doc) {
     const sidebar = doc.querySelector(config.sidebar)
@@ -54,9 +60,26 @@
     listen(close, 'click', () => setOpen(false))
     nav.append(close)
 
+    const counts = new Map()
+    const showCount = (marks, path) => {
+      marks.querySelector('.edulog-nav-count')?.remove()
+      const value = pending.get(path)
+      if (value) { const count = dataText('span', String(value), 'edulog-nav-count'); count.setAttribute('aria-label', `${value} 位待處理`); marks.append(count) }
+      marks.hidden = !marks.childNodes.length
+    }
     if (classes.length) {
       const list = section('我的班級')
-      for (const item of classes) {
+      // Many classes: one group per weekday, today's group first.
+      const grouped = classes.length > GROUP_BY_WEEKDAY
+      const order = grouped ? [...classes].sort((a, b) => Number(b.today) - Number(a.today)) : classes
+      let groupList = list, groupDay = null
+      for (const item of order) {
+        if (grouped && item.weekday !== groupDay) {
+          groupDay = item.weekday
+          const group = element('li'); group.className = 'edulog-nav-day'
+          group.append(dataText('h3', item.weekday === 7 ? '其他' : `${config.weekdays[item.weekday]}${item.today ? '（今天）' : ''}`, 'edulog-nav-day-heading'))
+          groupList = element('ul'); group.append(groupList); list.append(group)
+        }
         const entry = element('li'), anchor = element('a')
         anchor.href = item.path; anchor.title = item.full; anchor.className = 'edulog-nav-class'
         if (item.current) anchor.setAttribute('aria-current', 'page')
@@ -64,12 +87,13 @@
         text.append(dataText('strong', item.primary)); if (item.secondary) text.append(dataText('span', item.secondary, 'edulog-nav-class-place'))
         anchor.append(text)
         const marks = element('span'); marks.className = 'edulog-nav-marks'
-        if (item.today) marks.append(dataText('span', '今天', 'edulog-nav-today'))
-        if (item.pending) { const count = dataText('span', String(item.pending), 'edulog-nav-count'); count.setAttribute('aria-label', `${item.pending} 位待處理`); marks.append(count) }
-        if (marks.childNodes.length) anchor.append(marks)
-        entry.append(anchor); list.append(entry)
+        if (item.today && !grouped) marks.append(dataText('span', '今天', 'edulog-nav-today'))
+        anchor.append(marks); showCount(marks, item.path); counts.set(item.path, marks)
+        entry.append(anchor); groupList.append(entry)
       }
     }
+    // Counts arrive later from views that already read the class pages (no fetch here).
+    listen(doc, 'edulog:class-pending', () => { for (const [path, marks] of counts) showCount(marks, path) })
     const seenLinks = new Set(), workLinks = []
     for (const native of sidebar.querySelectorAll(config.menuLinks)) {
       const href = native.getAttribute('href') || ''
@@ -131,5 +155,7 @@
     })
     return { nav, setOpen, current: classes.find(item => item.current) || null }
   }
-  globalThis.edulogSiteNavigation = Object.freeze({ parseClassName, readClasses, currentClass, mount })
+  // Views call this after updating globalThis.edulogClassPending so the bar refreshes its counts.
+  const announcePending = doc => doc.dispatchEvent(new doc.defaultView.CustomEvent('edulog:class-pending'))
+  globalThis.edulogSiteNavigation = Object.freeze({ parseClassName, placeLabels, readClasses, currentClass, mount, announcePending })
 })()

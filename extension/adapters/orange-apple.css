@@ -556,3 +556,10 @@ html[data-edulog-ui="on"] .edulog-card-more > summary:hover { background:var(--e
 html[data-edulog-ui="on"] :is(.edulog-roster-select,.edulog-roster-select-all) { transition:border-color var(--edulog-duration), background-color var(--edulog-duration); }
 html[data-edulog-ui="on"] :is(.edulog-roster-select,.edulog-roster-select-all):hover { border-color:var(--edulog-primary); background:var(--edulog-primary-soft); }
 html[data-edulog-ui="on"] :is(.edulog-roster-select,.edulog-roster-select-all):has(input:checked) { border-color:var(--edulog-primary); color:var(--edulog-primary); }
+/* Navigation: weekday groups when a teacher has many classes; the bar scrolls on its own. */
+html[data-edulog-ui="on"] .edulog-nav-day { list-style:none; }
+html[data-edulog-ui="on"] .edulog-nav-day + .edulog-nav-day { margin-top:8px; }
+html[data-edulog-ui="on"] .edulog-nav-day > ul { margin:0; padding:0; list-style:none; }
+html[data-edulog-ui="on"] .edulog-nav-day-heading { margin:4px 12px; font-size:13px; font-weight:600; color:var(--edulog-text-muted); }
+html[data-edulog-ui="on"] .edulog-nav-marks[hidden] { display:none; }
+@media (min-width:992px) { html[data-edulog-ui="on"] #page-body > .sidebar:has(.edulog-nav) { overflow-y:auto; overscroll-behavior:contain; } }
