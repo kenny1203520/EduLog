@@ -84,8 +84,9 @@
     if (chip === 'incomplete') return student.state.reportPending
     return true
   }
-  // Until the teacher picks a chip: what they must do first, then student concerns, then everyone.
-  const defaultChip = counts => counts.pending ? 'pending' : counts.attention ? 'attention' : 'all'
+  // The lesson report page opens on the whole class (exceptions sorted first); the chip
+  // counts show how many need attention, and a chip narrows the list when wanted.
+  const defaultChip = () => 'all'
   const countChips = students => Object.fromEntries(CHIPS.map(([chip]) => [chip, students.filter(student => matchesChip(student, chip)).length]))
   const sortStudents = students => students.map((student, index) => ({ student, index })).sort((a, b) => GROUP_RANK[a.student.group] - GROUP_RANK[b.student.group] || a.index - b.index).map(item => item.student)
 
@@ -168,7 +169,7 @@
     if (view.density?.[key] === undefined) void globalThis.edulogRuntime?.send({ type: 'get-density' })?.then(result => { if (result?.density && target.isConnected) apply(result.density[key] === 'compact') }).catch(() => {})
     return button
   }
-  // In 全部, students with nothing to act on fold into one 「其他 N 位狀態正常」 row.
+  // Folds cards with nothing to act on into one row (used by the class roster).
   function calmGroup(scope, label) {
     const { element } = scope
     const li = element('li'); li.className = 'edulog-calm-group'
@@ -187,7 +188,6 @@
     section.append(status, list)
     anchor.before(section)
     const cards = new Map()
-    const calm = calmGroup(scope, count => `其他 ${count} 位狀態正常`)
     const dataText = (tag, value, className) => { const node = element(tag); node.textContent = value; if (className) node.className = className; return node }
     const badge = (tone, iconName, label) => { const node = element('span'); node.className = 'edulog-badge'; node.dataset.tone = tone; node.append(icon(doc, iconName), dataText('span', label)); return node }
     const proxy = (label, target, className, aria) => {
@@ -291,19 +291,12 @@
           if (open.has(card.li)) card.face.querySelector('.edulog-card-more').open = true
           return card.li
         })
-        // Fold the calm students only when someone else needs attention.
-        const folded = chip === 'all' && shown.some(student => student.group !== 'ok') ? new Set(shown.filter(student => student.group === 'ok').map(student => cards.get(student.row).li)) : new Set()
-        const visibleItems = []
-        for (const item of items) {
-          if (!folded.has(item)) visibleItems.push(item)
-          else if (!visibleItems.includes(calm.li)) visibleItems.push(calm.li)
-        }
-        calm.update(items.filter(item => folded.has(item)))
+        // Every student stays listed here: teachers work through the whole class on this page.
         // Cards filtered out stay in the list, hidden, so moved provider panels can be restored.
         const rest = [...cards.values()].map(card => card.li).filter(li => !items.includes(li))
         for (const li of items) li.hidden = false
         for (const li of rest) li.hidden = true
-        list.replaceChildren(...visibleItems, ...rest)
+        list.replaceChildren(...items, ...rest)
         void syncNotes(session.students, onChange)
         const notes = []
         if (session.notStarted) notes.push('本堂還沒開始上課，開始後才會列出點名與紀錄；目前只列出課程到期與堂數提醒。')

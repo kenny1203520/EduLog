@@ -26,13 +26,15 @@ const rowFor = (doc, name) => [...doc.querySelectorAll('#reports tbody tr')].fin
 
 const statusOf = (doc, name) => [...card(doc, name).querySelectorAll('.edulog-card-status li')].map(item => `${item.dataset.tone}:${item.querySelector('.edulog-card-status-value').textContent}`).join(' ')
 
-test('single-session mode shows cards for what needs action and hides the native table and alert', () => {
+test('single-session mode opens on the whole class, exceptions first, and hides the native table and alert', () => {
   const s = classPage()
   assert.equal(s.doc.querySelector('.edulog-session-cards').hidden, false)
   assert.equal(s.doc.querySelector('[data-edulog-report-region]').getAttribute('data-edulog-cards'), 'on')
   assert.equal(s.doc.querySelector('.alert').hasAttribute('data-edulog-replaced'), true)
   assert.equal(JSON.stringify(chipCounts(s.doc)), JSON.stringify({ pending: '4', attention: '3', unmarked: '1', incomplete: '2', all: '7', other: '1' }))
-  assert.equal(chip(s.doc, 'pending').getAttribute('aria-pressed'), 'true')
+  assert.equal(chip(s.doc, 'all').getAttribute('aria-pressed'), 'true')
+  assert.equal(names(s.doc).join('|'), '學生丙|學生戊|學生庚|學生甲|學生乙|學生辛|學生丁')
+  chip(s.doc, 'pending').click()
   assert.equal(names(s.doc).join('|'), '學生庚|學生甲|學生乙|學生辛')
   assert.equal(card(s.doc, '學生庚').dataset.group, 'danger')
   assert.equal(s.doc.querySelector('.edulog-session-cards').querySelectorAll('table').length, 0)
@@ -113,9 +115,9 @@ test('next week and compare mode: upcoming sessions are not pending; compare sho
   const s = classPage()
   s.doc.querySelector('.edulog-week-tools [data-week="5"]').click()
   assert.equal(JSON.stringify(chipCounts(s.doc)), JSON.stringify({ pending: '0', attention: '1', unmarked: '0', incomplete: '0', all: '6', other: '2' }))
-  assert.equal(chip(s.doc, 'attention').getAttribute('aria-pressed'), 'true')
+  assert.equal(chip(s.doc, 'all').getAttribute('aria-pressed'), 'true')
   assert.match(s.doc.querySelector('.edulog-cards-status').textContent, /下週課次尚未開始/)
-  assert.equal(card(s.doc, '學生甲'), undefined)
+  assert.ok(card(s.doc, '學生甲'), 'the whole class is listed for next week too')
   s.doc.querySelector('[data-report-mode="compare"]').click()
   assert.equal(s.doc.querySelector('.edulog-session-cards').hidden, true)
   assert.equal(s.doc.querySelector('[data-edulog-report-region]').hasAttribute('data-edulog-cards'), false)
@@ -177,15 +179,11 @@ test('a teaching note with unseen content shows a reminder until it is opened', 
   changed.dom.window.close()
 })
 
-test('in 全部 calm students fold into one row only while someone else needs attention', () => {
+test('the lesson report page lists every student: no folded 狀態正常 row', () => {
   const s = classPage()
-  chip(s.doc, 'all').click()
-  const calm = s.doc.querySelector('.edulog-session-cards .edulog-calm-group')
-  assert.ok(calm, 'calm group shown')
-  assert.match(calm.querySelector('summary').textContent, /^其他 \d+ 位狀態正常$/)
-  for (const card of calm.querySelectorAll('.edulog-session-card')) assert.equal(card.dataset.group, 'ok')
-  assert.equal(s.doc.querySelector('.edulog-session-cards > .edulog-card-list > .edulog-session-card[data-group="ok"]'), null)
-  chip(s.doc, 'pending').click()
   assert.equal(s.doc.querySelector('.edulog-session-cards .edulog-calm-group'), null)
+  const calm = cards(s.doc).filter(item => item.dataset.group === 'ok')
+  assert.ok(calm.length > 0, 'calm students are shown as cards')
+  for (const item of calm) assert.equal(item.parentElement, s.doc.querySelector('.edulog-session-cards > .edulog-card-list'))
   s.dom.window.close()
 })
