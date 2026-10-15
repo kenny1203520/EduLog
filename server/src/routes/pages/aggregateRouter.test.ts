@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-const source = readFileSync(resolve(process.cwd(), 'src/aggregateRouter.ts'), 'utf8')
+const source = readFileSync(resolve(process.cwd(), 'src/routes/pages/aggregateRouter.ts'), 'utf8')
 
 describe('aggregate API contract', () => {
   it('uses the authenticated Supabase client and explicit fields', () => {
