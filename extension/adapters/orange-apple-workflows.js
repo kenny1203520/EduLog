@@ -668,6 +668,8 @@
       })
       for (const radio of radios) listen(radio, 'change', sync)
     }
+    // Status row, absent-only mode, phrase library, staff-only block and pre-submit checklist.
+    globalThis.edulogSiteReportEditor?.enhance({ doc, modal, form, scope, sections })
     const heading = modal.querySelector('.modal-title,h4')
     if (heading) { if (!heading.id) mark(heading, 'id', 'edulog-report-title'); mark(modal, 'aria-labelledby', heading.id) }
     mark(modal, 'role', 'dialog'); mark(modal, 'aria-modal', 'true')

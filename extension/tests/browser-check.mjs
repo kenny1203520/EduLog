@@ -71,6 +71,7 @@ for (const [browserName, executablePath] of executables) {
       await page.addScriptTag({ content: read('../adapters/orange-apple-session-cards.js') })
       await page.addScriptTag({ content: read('../adapters/orange-apple-accounts.js') })
       await page.addScriptTag({ content: read('../adapters/orange-apple-navigation.js') })
+      await page.addScriptTag({ content: read('../adapters/orange-apple-report-editor.js') })
       await page.addScriptTag({ content: read('../adapters/orange-apple-workflows.js') })
       await page.addScriptTag({ content: read('../adapters/orange-apple.js') })
       await page.addScriptTag({ content: read('../runtime-bridge.js') });await page.addScriptTag({ content: read('../ui-core.js') });await page.addScriptTag({ content: read('../ui-messages.js') })

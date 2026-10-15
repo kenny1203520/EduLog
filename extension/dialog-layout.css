@@ -15,3 +15,32 @@ html[data-edulog-ui="on"] #lesson-report-modal[data-edulog-dialog] .modal-conten
 html[data-edulog-ui="on"] [data-edulog-dialog="accounts"] .modal-dialog { width:calc(100% - 32px); max-width:640px; margin:24px auto; }
 html[data-edulog-ui="on"] [data-edulog-dialog="accounts"] .modal-content { box-sizing:border-box; border-radius:16px; border:1px solid var(--edulog-border); }
 @media(max-width:767px){html[data-edulog-ui="on"] [data-edulog-dialog="accounts"] .modal-dialog{width:calc(100% - 16px);margin:8px auto}}
+/* Lesson report editor (M7): status row, absent mode, phrases, ratings, staff block, checklist. */
+html[data-edulog-ui="on"] #lesson-report-modal .edulog-editor-status { margin:0 0 12px; }
+html[data-edulog-ui="on"] #lesson-report-modal [data-edulog-not-applicable] { display:none !important; }
+html[data-edulog-ui="on"] #lesson-report-modal .edulog-editor-note { margin:8px 0 0; padding:8px 12px; border-radius:var(--edulog-radius-sm); background:var(--edulog-surface-muted); color:var(--edulog-text-secondary); font-size:14px; }
+html[data-edulog-ui="on"] #lesson-report-modal .edulog-phrases { margin:8px 0 12px; padding:12px; border:1px solid var(--edulog-border); border-radius:var(--edulog-radius); background:var(--edulog-surface-subtle); }
+html[data-edulog-ui="on"] #lesson-report-modal .edulog-phrases h4 { margin:0 0 8px; font-size:15px; color:var(--edulog-text-secondary); }
+html[data-edulog-ui="on"] #lesson-report-modal .edulog-phrase-tabs { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
+html[data-edulog-ui="on"] #lesson-report-modal .edulog-phrase-tabs [role=tab] { min-height:44px; padding:6px 12px; border:1px solid var(--edulog-border-strong); border-radius:999px; background:var(--edulog-surface); color:var(--edulog-text-secondary); font:inherit; font-size:14px; cursor:pointer; }
+html[data-edulog-ui="on"] #lesson-report-modal .edulog-phrase-tabs [aria-selected=true] { background:var(--edulog-primary); border-color:var(--edulog-primary); color:var(--edulog-surface); }
+html[data-edulog-ui="on"] #lesson-report-modal .edulog-phrase-panel { display:grid; gap:10px; max-height:320px; overflow:auto; overscroll-behavior:contain; }
+html[data-edulog-ui="on"] #lesson-report-modal .edulog-phrase-level-title { margin:0 0 4px; font-size:13px; font-weight:600; color:var(--edulog-text-subtle); }
+html[data-edulog-ui="on"] #lesson-report-modal .edulog-phrase-list { display:grid; gap:6px; }
+html[data-edulog-ui="on"] #lesson-report-modal .edulog-phrase { min-height:44px; padding:8px 12px; border:1px solid var(--edulog-border); border-radius:var(--edulog-radius-sm); background:var(--edulog-surface); color:var(--edulog-text); font:inherit; font-size:15px; line-height:1.5; text-align:left; cursor:pointer; transition:background-color var(--edulog-duration), border-color var(--edulog-duration); }
+html[data-edulog-ui="on"] #lesson-report-modal .edulog-phrase:hover { border-color:var(--edulog-primary); background:var(--edulog-primary-soft); }
+html[data-edulog-ui="on"] #lesson-report-modal [data-edulog-rating-stars] { font-size:1.6em; }
+html[data-edulog-ui="on"] #lesson-report-modal .edulog-rating-clear { min-height:44px; margin-left:8px; padding:6px 12px; border:1px solid var(--edulog-border-strong); border-radius:var(--edulog-radius-sm); background:var(--edulog-surface); color:var(--edulog-text-secondary); font:inherit; font-size:14px; cursor:pointer; }
+html[data-edulog-ui="on"] #lesson-report-modal .edulog-staff-only { margin-top:12px; }
+html[data-edulog-ui="on"] #lesson-report-modal .edulog-staff-only > summary { min-height:44px; display:flex; align-items:center; color:var(--edulog-text-muted); cursor:pointer; }
+html[data-edulog-ui="on"] #lesson-report-modal .edulog-submit-check { margin:0 0 12px; padding:10px 12px; border-radius:var(--edulog-radius-sm); background:var(--edulog-status-warn-soft); color:var(--edulog-status-warn-text); font-size:14px; }
+html[data-edulog-ui="on"] #lesson-report-modal .edulog-submit-check p { margin:0; }
+html[data-edulog-ui="on"] #lesson-report-modal .edulog-submit-check ul { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 0; padding:0; list-style:none; }
+html[data-edulog-ui="on"] #lesson-report-modal .edulog-submit-check button { min-height:44px; padding:6px 12px; border:1px solid var(--edulog-status-warn); border-radius:var(--edulog-radius-sm); background:var(--edulog-surface); color:var(--edulog-status-warn-text); font:inherit; font-size:14px; cursor:pointer; }
+html[data-edulog-ui="on"] #lesson-report-modal .edulog-submit-check:has(.edulog-submit-check-done) { background:var(--edulog-status-ok-soft); color:var(--edulog-status-ok-text); }
+@media (min-width:1024px) {
+  html[data-edulog-ui="on"] #lesson-report-modal .edulog-form-section:has(.edulog-phrases) { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); column-gap:16px; align-items:start; }
+  html[data-edulog-ui="on"] #lesson-report-modal .edulog-form-section:has(.edulog-phrases) > :not(.admission_lesson_report_feedback):not(.edulog-phrases) { grid-column:1 / -1; }
+  html[data-edulog-ui="on"] #lesson-report-modal .edulog-form-section:has(.edulog-phrases) .edulog-phrases { margin-top:0; }
+  html[data-edulog-ui="on"] #lesson-report-modal .admission_lesson_report_feedback textarea { min-height:240px; }
+}
