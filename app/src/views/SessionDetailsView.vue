@@ -33,6 +33,8 @@ import ReportEditor from '@/components/ReportEditor.vue'
 import OccurrenceCalendar from '@/components/OccurrenceCalendar.vue'
 import QuickAttendancePanel, { type QuickAttendanceStatus } from '@/components/classroom/QuickAttendancePanel.vue'
 import StudentRosterPanel, { type StudentRosterItem } from '@/components/classroom/StudentRosterPanel.vue'
+import TransferredOutStudents from '@/components/classroom/TransferredOutStudents.vue'
+import type { OccurrenceLessonTransfer } from '@/services/enrollment/EnrollmentTransferQueryService'
 import type { ProgressGapHintLesson } from '@/components/classroom/CourseProgressGapHint.vue'
 import ConflictModal from '@/components/ConflictModal.vue'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
@@ -61,7 +63,7 @@ type ReportEditorExpose = {
 
 const { t } = useI18n()
 const toast = useToast()
-const { errorKey } = useFeedback()
+const { errorKey, reportError } = useFeedback()
 
 function isReportAuthorizationError(error: any): boolean {
     const code = error?.code
@@ -733,6 +735,59 @@ async function loadReportsForCurrentOccurrence(options: { createMissing?: boolea
     reportMap.value = nextReportMap
 }
 
+const occurrenceTransfers = ref<OccurrenceLessonTransfer[]>([])
+const pendingTransferCancel = ref<OccurrenceLessonTransfer | null>(null)
+const cancellingTransferId = ref<string | null>(null)
+const transferredOutStudents = computed(() => occurrenceTransfers.value.filter(transfer => transfer.direction === 'out'))
+const transferInLabels = computed(() => new Map(occurrenceTransfers.value
+    .filter(transfer => transfer.direction === 'in')
+    .map(transfer => [transfer.enrollment_id, t('classroom.lesson_transfer.transferred_in', {
+        date: DateUtils.displayDateWithWeekday(transfer.other_occurrence_date, preferences.locale),
+        time: transfer.other_start_time?.slice(0, 5) || ''
+    })])))
+
+async function loadOccurrenceTransfers() {
+    const occurrenceId = todayOccurrence.value?.id
+    if (!occurrenceId) {
+        occurrenceTransfers.value = []
+        return
+    }
+    try {
+        const transfers = await EnrollmentService.getOccurrenceLessonTransfers(occurrenceId)
+        if (todayOccurrence.value?.id === occurrenceId) occurrenceTransfers.value = transfers
+    } catch (error) {
+        // The transfer notes are informational; the roster stays usable without them.
+        console.error('Failed to load lesson transfers:', error)
+        if (todayOccurrence.value?.id === occurrenceId) occurrenceTransfers.value = []
+    }
+}
+
+function openTransferTarget(transfer: OccurrenceLessonTransfer) {
+    void router.push({ name: 'session-details', params: { id: transfer.other_session_id }, query: { date: transfer.other_occurrence_date } })
+}
+
+async function confirmTransferCancel() {
+    const transfer = pendingTransferCancel.value
+    if (!transfer || cancellingTransferId.value) return
+    cancellingTransferId.value = transfer.transfer_id
+    try {
+        const result = await EnrollmentService.cancelSingleLessonTransfer(transfer.transfer_id)
+        toast.success(t(result.targetReportRetained
+            ? 'student.transfer_history.cancelled_target_retained'
+            : 'student.transfer_history.cancelled'))
+        pendingTransferCancel.value = null
+        if (todayOccurrence.value?.occurrenceDate) {
+            await loadWorkspaceRoster(todayOccurrence.value.occurrenceDate, true)
+            await loadReportsForCurrentOccurrence({ createMissing: false })
+        }
+    } catch (error) {
+        pendingTransferCancel.value = null
+        reportError(error, 'student.transfer_history.cancel_error')
+    } finally {
+        cancellingTransferId.value = null
+    }
+}
+
 async function loadWorkspaceRoster(occurrenceDate: Date, force = false): Promise<void> {
     const date = DateUtils.formatLocalDate(occurrenceDate)
     if (!force && workspaceRosterDate === date) return
@@ -747,6 +802,7 @@ async function loadWorkspaceRoster(occurrenceDate: Date, force = false): Promise
 
     enrollments.value = workspace.enrollments.map(enrollment => new Enrollment(enrollment))
     workspaceRosterDate = date
+    void loadOccurrenceTransfers()
     if (session.value) {
         const rawSession = workspace.session as any
         session.value = {
@@ -814,6 +870,7 @@ async function setCurrentOccurrence(occurrence: ClassOccurrence | null) {
             teacherLeaveById.value = {}
             selectedTeacherIds.value = new Set()
             workspaceRosterDate = null
+            occurrenceTransfers.value = []
             previousOccurrence.value = null
             nextOccurrence.value = null
             return
@@ -1371,6 +1428,7 @@ const studentRosterItems = computed<StudentRosterItem[]>(() => filteredEnrollmen
         enrollmentStatus: t('student.internal_courses.status_' + enrollment.status),
         enrollmentTone: enrollment.status === 'regular' ? 'regular' : enrollment.status === 'trial' ? 'trial' : 'inactive',
         isGuest: Boolean((enrollment as any).isGuest),
+        transferInLabel: transferInLabels.value.get(enrollment.id!) ?? null,
         attendanceStatus,
         attendanceLabel: t('attendance.' + attendanceStatus),
         absenceReason,
@@ -2591,6 +2649,11 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                         @quick-edit="toggleSplitView"
                         @koding-check="openStudentKodingCheck"
                         @clear-filters="clearStudentFilters" />
+                    <TransferredOutStudents
+                        :transfers="transferredOutStudents"
+                        :cancelling-transfer-id="cancellingTransferId"
+                        @open="openTransferTarget"
+                        @cancel="pendingTransferCancel = $event" />
                 </div>
 
                 <!-- RIGHT COLUMN: Report Editor -->
@@ -2687,6 +2750,18 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
             :local-report="conflictLocalReport!" :available-lessons="courseLessons" @close="closeConflictModal"
             @resolve="resolveConflict" />
 
+        <ConfirmModal :is-open="pendingTransferCancel !== null"
+            :title="$t('student.transfer_history.cancel_confirm_title')"
+            :message="pendingTransferCancel ? $t('classroom.lesson_transfer.cancel_confirm_message', {
+                student: pendingTransferCancel.student_name,
+                target: DateUtils.displayDateWithWeekday(pendingTransferCancel.other_occurrence_date, preferences.locale)
+            }) : ''"
+            :confirm-text="$t('student.transfer_history.cancel_transfer')"
+            :cancel-text="$t('student.transfer_history.keep_transfer')"
+            :is-dangerous="true"
+            :is-loading="cancellingTransferId !== null"
+            @confirm="confirmTransferCancel"
+            @close="pendingTransferCancel = null" />
         <ConfirmModal v-if="showRefreshConfirm" :is-open="showRefreshConfirm" :title="$t('classroom.refresh_schedule')"
             :message="$t('classroom.refresh_confirm')" :confirm-text="$t('common.refresh')" confirm-type="warning"
             :is-loading="isRefreshing" @confirm="handleConfirmRefresh" @close="showRefreshConfirm = false" />

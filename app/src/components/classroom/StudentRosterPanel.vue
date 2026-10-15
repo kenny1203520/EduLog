@@ -17,6 +17,8 @@ export interface StudentRosterItem {
     enrollmentStatus: string
     enrollmentTone: 'regular' | 'trial' | 'inactive'
     isGuest: boolean
+    /** Set when this student was moved into this lesson by a single-lesson transfer. */
+    transferInLabel?: string | null
     attendanceStatus: QuickAttendanceStatus
     attendanceLabel: string
     absenceReason?: string | null
@@ -141,7 +143,10 @@ function requestAttendance(item: StudentRosterItem) {
                             <span class="rounded-full border px-2 py-0.5 text-[10px] font-black" :class="enrollmentToneClasses(item.enrollmentTone)">
                                 {{ item.enrollmentStatus }}
                             </span>
-                            <span v-if="item.isGuest" class="rounded-full border border-purple-100 bg-purple-50 px-2 py-0.5 text-[10px] font-black text-purple-700">
+                            <span v-if="item.transferInLabel" class="rounded-full border border-purple-100 bg-purple-50 px-2 py-0.5 text-[10px] font-black text-purple-700">
+                                {{ item.transferInLabel }}
+                            </span>
+                            <span v-else-if="item.isGuest" class="rounded-full border border-purple-100 bg-purple-50 px-2 py-0.5 text-[10px] font-black text-purple-700">
                                 {{ t('common.rescheduled') }}
                             </span>
                     </div>
@@ -249,6 +254,7 @@ function requestAttendance(item: StudentRosterItem) {
                                     <div class="flex flex-wrap items-center gap-1.5">
                                         <p class="break-words font-black text-slate-900">{{ item.name }}</p>
                                         <span class="rounded-full border px-2 py-0.5 text-[9px] font-black" :class="enrollmentToneClasses(item.enrollmentTone)">{{ item.enrollmentStatus }}</span>
+                                        <span v-if="item.transferInLabel" class="rounded-full border border-purple-100 bg-purple-50 px-2 py-0.5 text-[9px] font-black text-purple-700">{{ item.transferInLabel }}</span>
                                     </div>
                                     <p class="mt-1 line-clamp-2 text-xs font-bold leading-5 text-slate-500">{{ item.currentCourse }}</p>
                                 </div>

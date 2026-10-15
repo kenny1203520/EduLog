@@ -34,6 +34,8 @@
         "SINGLE_LESSON_TRANSFER_NOT_FOUND": "This transfer was not found; it may already be cancelled.",
         "SOURCE_REPORT_ALREADY_EXISTS": "The original lesson already has a report for this student, so the transfer can't be cancelled.",
         "ORIGINAL_REPORT_NOT_FOUND": "The original lesson's report was not found. Refresh and try again.",
+        "SOURCE_REPORT_HAS_CONTENT": "The original date already has a report with content for this student, so the transfer can't be cancelled. Resolve that report first.",
+        "TRANSFER_CHAIN_HAS_MERGED_REPORT": "A later transfer of this lesson merged reports. Cancel the latest transfer first.",
         "REPORT_ALREADY_EXISTS": "A report already exists for this lesson."
     }
 }

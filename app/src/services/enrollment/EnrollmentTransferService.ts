@@ -15,6 +15,13 @@ import { apiV1Client } from '@/services/api/ApiV1Client'
 import { getApiV1Mode } from '@/services/api/ApiModeClient'
 import { hasDomainErrorCode } from '@/services/errors/mapDomainError'
 
+export interface SingleLessonTransferCancelResult {
+    transferId: string
+    restoredReportId: string | null
+    /** True when a conflict-tool merge was undone and the target report stayed on the target lesson. */
+    targetReportRetained: boolean
+}
+
 export class EnrollmentTransferService {
     private static getOccurrenceInfo(row: { class_occurrence?: any; class_occurrences?: any }): any {
         const occurrence = row.class_occurrence ?? row.class_occurrences
@@ -391,16 +398,19 @@ export class EnrollmentTransferService {
         return SingleLessonTransferConflictService.resolve(conflict, fieldSources)
     }
 
-    /** Cancels one active single-lesson transfer and moves its report back atomically. */
-    static async cancelSingleLessonTransfer(transferId: string): Promise<void> {
-        if (getApiV1Mode() === 'v1') {
-            await apiV1Client.post('/enrollment-transfers/cancel', { transfer_id: transferId })
-            return
+    /**
+     * Cancels an active single-lesson transfer (and any onward transfers of the
+     * same lesson) and moves the report back to the original occurrence.
+     */
+    static async cancelSingleLessonTransfer(transferId: string): Promise<SingleLessonTransferCancelResult> {
+        const response = await apiV1Client.post<{ restored_report_id?: string | null; target_report_retained?: boolean }>(
+            '/enrollment-transfers/cancel',
+            { transfer_id: transferId }
+        )
+        return {
+            transferId,
+            restoredReportId: response.data?.restored_report_id ?? null,
+            targetReportRetained: response.data?.target_report_retained === true
         }
-        const { error } = await apiDataClient.rpc('cancel_single_lesson_transfer', {
-            p_transfer_id: transferId
-        })
-
-        if (error) throw new Error(error.message)
     }
 }

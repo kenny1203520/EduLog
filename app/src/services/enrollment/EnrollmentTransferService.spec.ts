@@ -5,9 +5,13 @@ import { EnrollmentTransferToolService } from './EnrollmentTransferToolService'
 import { OccurrenceService } from '../occurrence/OccurrenceService'
 import { SessionService } from '../session/SessionService'
 
-const { rpcMock } = vi.hoisted(() => ({ rpcMock: vi.fn() }))
+const { rpcMock, postMock } = vi.hoisted(() => ({ rpcMock: vi.fn(), postMock: vi.fn() }))
 
 vi.mock('@/services/api/ApiDataClient', () => ({ apiDataClient: { from: vi.fn(), rpc: rpcMock } }))
+vi.mock('@/services/api/ApiV1Client', async importOriginal => ({
+    ...await importOriginal<typeof import('@/services/api/ApiV1Client')>(),
+    apiV1Client: { post: postMock, get: vi.fn() }
+}))
 vi.mock('./EnrollmentTransferQueryService', () => ({
     EnrollmentTransferQueryService: {
         getEnrollmentSessionInfo: vi.fn(),
@@ -191,11 +195,12 @@ describe('EnrollmentTransferService single-lesson transfers', () => {
         expect(rpcMock).not.toHaveBeenCalledWith('transfer_single_lesson', expect.anything())
     })
 
-    it('cancels a transfer through the atomic reverse RPC', async () => {
-        await EnrollmentTransferService.cancelSingleLessonTransfer('transfer-1')
+    it('cancels a transfer through the API and reports a retained target report', async () => {
+        postMock.mockResolvedValue({ data: { cancelled: true, restored_report_id: 'report-1', target_report_retained: true } })
 
-        expect(rpcMock).toHaveBeenCalledWith('cancel_single_lesson_transfer', {
-            p_transfer_id: 'transfer-1'
-        })
+        const result = await EnrollmentTransferService.cancelSingleLessonTransfer('transfer-1')
+
+        expect(postMock).toHaveBeenCalledWith('/enrollment-transfers/cancel', { transfer_id: 'transfer-1' })
+        expect(result).toEqual({ transferId: 'transfer-1', restoredReportId: 'report-1', targetReportRetained: true })
     })
 })

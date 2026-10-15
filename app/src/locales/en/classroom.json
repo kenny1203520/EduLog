@@ -377,5 +377,12 @@
     "student_filter_result": "Students shown",
     "live_updates_connecting": "Establishing the live connection…",
     "live_updates_subscribing": "Connected. Joining the live update channel…",
-    "live_update_detail": "Connection detail:"
+    "live_update_detail": "Connection detail:",
+    "lesson_transfer": {
+        "title": "Transferred to another lesson",
+        "transferred_out": "(transferred to {date} {session} {time})",
+        "transferred_in": "From the {date} {time} class",
+        "open_target": "Open",
+        "cancel_confirm_message": "{student}'s report moves from {target} back to this lesson."
+    }
 }

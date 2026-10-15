@@ -377,5 +377,12 @@
     "student_filter_result": "顯示學生",
     "live_updates_connecting": "正在建立即時連線…",
     "live_updates_subscribing": "連線已建立，正在加入更新頻道…",
-    "live_update_detail": "連線資訊："
+    "live_update_detail": "連線資訊：",
+    "lesson_transfer": {
+        "title": "已調課到其他課次",
+        "transferred_out": "（已調課到 {date} {session} {time}）",
+        "transferred_in": "調入自 {date} {time} 班",
+        "open_target": "前往",
+        "cancel_confirm_message": "{student} 的報告會從 {target} 移回這一堂課。"
+    }
 }

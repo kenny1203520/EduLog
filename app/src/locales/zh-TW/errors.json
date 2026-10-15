@@ -34,6 +34,8 @@
         "SINGLE_LESSON_TRANSFER_NOT_FOUND": "找不到這筆調課，可能已被取消。",
         "SOURCE_REPORT_ALREADY_EXISTS": "原始課次已經有這位學生的報告，無法取消調課。",
         "ORIGINAL_REPORT_NOT_FOUND": "找不到原始課次的報告，請重新整理後再試。",
+        "SOURCE_REPORT_HAS_CONTENT": "原日期已經有這位學生寫了內容的報告，無法取消調課。請先處理那份報告。",
+        "TRANSFER_CHAIN_HAS_MERGED_REPORT": "這堂課之後的調課曾合併過報告，請先取消最後一筆調課。",
         "REPORT_ALREADY_EXISTS": "此課次已存在報告。"
     }
 }

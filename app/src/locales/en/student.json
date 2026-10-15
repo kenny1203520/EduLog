@@ -261,7 +261,14 @@
         "report_missing": "Report missing",
         "repair_report": "Regenerate report",
         "repairing": "Regenerating…",
-        "repair_error": "Unable to regenerate the transferred report. Please try again."
+        "repair_error": "Unable to regenerate the transferred report. Please try again.",
+        "cancel_transfer": "Cancel transfer",
+        "keep_transfer": "Keep transfer",
+        "cancel_confirm_title": "Cancel this transfer?",
+        "cancel_confirm_message": "The report moves from {target} back to {source}. Any later transfers of this lesson are cancelled too.",
+        "cancelled": "Transfer cancelled. The report is back on the original date.",
+        "cancelled_target_retained": "Transfer cancelled and the original report restored. The report that already existed on the target lesson was kept; delete it manually if it is not needed.",
+        "cancel_error": "Couldn't cancel the transfer."
     },
     "activate_trial_modal": {
         "title": "Convert to Regular",
