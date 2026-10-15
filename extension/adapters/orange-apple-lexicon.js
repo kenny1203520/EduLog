@@ -20,6 +20,8 @@
     sidebar: '#page-body > .sidebar',
     studentsTable: '#students-table',
     studentPicker: '#student_id-selectized',
+    rosterLegend: '.color-labels',
+    laptopFrame: 'turbo-frame[id^="laptop_"]',
     reportsTable: '#reports',
     reportModal: '#lesson-report-modal',
     remoteModal: '#remote_modal',
@@ -109,6 +111,7 @@
     nextWeek: /下週/,
     courseExpired: /課程已在\s*[\d-]+\s*到期/,
     remainingLessons: /剩餘堂數/,
+    plannedStart: /預計開課日期/,
   })
   // Structural facts a page needs before it may be enhanced. A missing probe means
   // the provider markup changed: the page stays original and the toolbar says so.

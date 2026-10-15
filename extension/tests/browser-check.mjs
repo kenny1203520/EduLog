@@ -72,6 +72,7 @@ for (const [browserName, executablePath] of executables) {
       await page.addScriptTag({ content: read('../adapters/orange-apple-accounts.js') })
       await page.addScriptTag({ content: read('../adapters/orange-apple-navigation.js') })
       await page.addScriptTag({ content: read('../adapters/orange-apple-report-editor.js') })
+      await page.addScriptTag({ content: read('../adapters/orange-apple-roster.js') })
       await page.addScriptTag({ content: read('../adapters/orange-apple-workflows.js') })
       await page.addScriptTag({ content: read('../adapters/orange-apple.js') })
       await page.addScriptTag({ content: read('../runtime-bridge.js') });await page.addScriptTag({ content: read('../ui-core.js') });await page.addScriptTag({ content: read('../ui-messages.js') })
@@ -120,6 +121,22 @@ for (const [browserName, executablePath] of executables) {
           assert.match(await page.locator('#reports th[data-edulog-week-selected]').textContent(), /上週/)
         }
       }
+      if (name === 'real-class') {
+        // 班級名單 tab: roster cards replace the native table and fit every width.
+        await page.evaluate(() => { for (const pane of document.querySelectorAll('.tab-pane')) pane.classList.toggle('active', pane.id === 'overview'), pane.classList.toggle('show', pane.id === 'overview') })
+        assert.equal(await page.locator('#students-table').isVisible(), false, `${browserName} ${name} ${width}: native roster hidden behind cards`)
+        assert.equal(await page.locator('.color-labels').isVisible(), false, `${browserName} ${name} ${width}: colour legend replaced by text badges`)
+        const rosterFit = await page.locator('.edulog-roster-cards').evaluate(el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.left >= 0 && r.right <= innerWidth + 1 && [...el.querySelectorAll('.edulog-roster-card')].every(card => card.getBoundingClientRect().right <= innerWidth + 1) })
+        assert.ok(rosterFit, `${browserName} ${name} ${width}: roster cards fit the viewport`)
+        const smallRoster = await page.locator('.edulog-roster-cards button:visible, .edulog-roster-cards summary:visible, .edulog-roster-select:visible, .edulog-roster-select-all:visible').evaluateAll(els => els.filter(el => el.getBoundingClientRect().height < 44).length)
+        assert.equal(smallRoster, 0, `${browserName} ${name} ${width}: roster targets are at least 44px`)
+        await page.locator('.edulog-roster-cards').screenshot({ path: join(output, `${browserName}-roster-${width}.png`) })
+        await page.getByRole('button', { name: /剩餘少/ }).click()
+        assert.equal(await page.locator('.edulog-roster-card').count(), 2)
+        await page.getByRole('button', { name: /^全部/ }).first().click()
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${browserName} ${name} ${width}: roster must not overflow the page`)
+        await page.evaluate(() => { for (const pane of document.querySelectorAll('.tab-pane')) pane.classList.toggle('active', pane.id === 'lesson-reports'), pane.classList.toggle('show', pane.id === 'lesson-reports') })
+      }
       if (name === 'reports' && width <= 991) {
         await page.getByRole('button',{name:'三週比較'}).click()
         assert.equal(await page.locator('.edulog-report-details').first().getAttribute('open'),null)
@@ -134,10 +151,9 @@ for (const [browserName, executablePath] of executables) {
         assert.equal(await page.locator('#employee_password').isVisible(),true)
       }
       if (name === 'class' && width === 390) {
-        const row = page.locator('#students-table tbody tr').first()
-        assert.equal(await row.locator('[data-edulog-extra]:visible').count(), 0)
-        await row.getByRole('button', { name: '更多資料' }).click()
-        assert.ok(await row.locator('[data-edulog-extra]:visible').count() > 0)
+        // The roster table is replaced by cards; the native rows stay in the DOM, hidden.
+        assert.equal(await page.locator('#students-table').isVisible(), false)
+        assert.ok(await page.locator('.edulog-roster-card:visible').count() > 0)
       }
       if (name === 'class') {
         const avatar = await page.locator('.card.teacher img').boundingBox()

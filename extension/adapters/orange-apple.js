@@ -117,12 +117,17 @@
       for (const row of students.rows) if (row.querySelector(lexicon.selectors.studentPicker) || row.querySelector('input[type=search],input[placeholder*="學生"]')) mark(row, 'data-edulog-student-search', '')
       const headers = [...(headerRow?.cells || [])].map(h => h.textContent.trim())
       const nameIndex = Math.max(0, headers.findIndex(h => words.nameHeader.test(h)))
+      // Roster cards replace the table view; the native rows stay the source and filter target.
+      const rosterView = globalThis.edulogSiteRoster?.mount({ doc, scope, table: students, box: input.closest('.edulog-table-tools'), view, onChange: () => refreshStudents() }) || null
       mark(headerRow?.cells[nameIndex], 'data-edulog-name', '')
       refreshStudents = () => {
         const rows = [...students.tBodies].flatMap(body => [...body.rows]).filter(row => row !== headerRow && !row.querySelector('th') && !row.hasAttribute('data-edulog-student-search'))
         let visible = 0
+        const searched = new Set()
         for (const row of rows) {
-          const matches = row.textContent.toLocaleLowerCase().includes(input.value.trim().toLocaleLowerCase())
+          const found = row.textContent.toLocaleLowerCase().includes(input.value.trim().toLocaleLowerCase())
+          if (found) searched.add(row)
+          const matches = found && (!rosterView || rosterView.allows(row))
           mark(row, 'data-edulog-filtered', matches ? null : '')
           if (matches) visible++
           for (const [index, cell] of [...row.cells].entries()) {
@@ -149,6 +154,7 @@
             nameCell.append(button); added.push(button)
           }
         }
+        rosterView?.render(searched)
         const text = `顯示 ${visible} / ${rows.length} 位學生`
         if (count.textContent !== text) count.textContent = text
         view.studentQuery = input.value

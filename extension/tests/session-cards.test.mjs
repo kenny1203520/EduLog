@@ -169,7 +169,7 @@ test('a teaching note with unseen content shows a reminder until it is opened', 
   chip(again.doc, 'all').click(); await settle()
   assert.equal(card(again.doc, '學生丙').querySelector('.edulog-note-alert'), null, 'seen content stays quiet')
   again.dom.window.close()
-  const changed = withNotes(store, read('fixtures/real-class.html').replace('需留意作業進度', '本週改為線上上課'))
+  const changed = withNotes(store, read('fixtures/real-class.html').replaceAll('需留意作業進度', '本週改為線上上課'))
   chip(changed.doc, 'all').click(); await settle()
   assert.ok(card(changed.doc, '學生丙').querySelector('.edulog-note-alert'), 'changed content reminds again')
   changed.result.restore()

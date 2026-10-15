@@ -59,6 +59,7 @@
         "adapters/orange-apple-accounts.js",
         "adapters/orange-apple-navigation.js",
         "adapters/orange-apple-report-editor.js",
+        "adapters/orange-apple-roster.js",
         "adapters/orange-apple-workflows.js",
         "adapters/orange-apple-integration.js",
         "editor-prefill.js",

@@ -529,3 +529,24 @@ html[data-edulog-ui="on"] .edulog-nav .edulog-nav-close, html[data-edulog-ui="on
 /* New teaching-note reminder on a lesson report card (shown until the changed note is opened). */
 html[data-edulog-ui="on"] .edulog-session-cards .edulog-note-alert { min-height:44px; padding:6px 12px 6px 10px; cursor:pointer; font:inherit; font-size:14px; font-weight:600; }
 html[data-edulog-ui="on"] .edulog-session-cards .edulog-note-alert:hover { border-color:var(--edulog-primary); }
+/* Class roster cards (班級名單): one card per enrolment; the native table stays hidden as the source. */
+html[data-edulog-ui="on"] .edulog-roster-cards { margin:12px 0 24px; }
+html[data-edulog-ui="on"] .edulog-roster-card { padding:14px 16px; border:1px solid var(--edulog-border); border-left:4px solid var(--edulog-border); border-radius:var(--edulog-radius-lg); background:var(--edulog-surface); }
+html[data-edulog-ui="on"] .edulog-roster-card[data-group="danger"] { border-left-color:var(--edulog-status-danger); }
+html[data-edulog-ui="on"] .edulog-roster-card[data-group="warn"] { border-left-color:var(--edulog-status-warn); }
+html[data-edulog-ui="on"] .edulog-roster-card[data-group="paused"] { background:var(--edulog-surface-subtle); }
+html[data-edulog-ui="on"] .edulog-roster-cards :is(a,button,summary,input):focus-visible { outline:3px solid var(--edulog-focus-ring); outline-offset:2px; }
+html[data-edulog-ui="on"] .edulog-roster-progress { display:flex; flex-wrap:wrap; align-items:center; gap:4px 10px; min-width:0; }
+html[data-edulog-ui="on"] .edulog-roster-remaining { font-weight:600; color:var(--edulog-text); }
+html[data-edulog-ui="on"] .edulog-roster-bar { display:block; flex:1 1 100%; height:8px; border-radius:999px; background:var(--edulog-surface-muted); overflow:hidden; }
+html[data-edulog-ui="on"] .edulog-roster-bar > span { display:block; height:100%; background:var(--edulog-primary); }
+html[data-edulog-ui="on"] .edulog-roster-bar[data-tone="warn"] > span { background:var(--edulog-status-warn); }
+html[data-edulog-ui="on"] .edulog-roster-bar[data-tone="danger"] > span { background:var(--edulog-status-danger); }
+html[data-edulog-ui="on"] :is(.edulog-roster-select,.edulog-roster-select-all) { display:inline-flex; align-items:center; gap:8px; min-height:44px; padding:0 12px 0 8px; border:1px solid var(--edulog-border-strong); border-radius:var(--edulog-radius-sm); background:var(--edulog-surface); color:var(--edulog-text-secondary); font-size:15px; cursor:pointer; }
+html[data-edulog-ui="on"] :is(.edulog-roster-select,.edulog-roster-select-all) input { width:20px; height:20px; margin:0; cursor:pointer; }
+html[data-edulog-ui="on"] .edulog-roster-laptop { display:inline-flex; align-items:center; gap:8px; min-height:44px; padding:0 4px 0 12px; border:1px solid var(--edulog-border-strong); border-radius:var(--edulog-radius-sm); }
+html[data-edulog-ui="on"] .edulog-roster-laptop .dropdown > i { display:inline-flex; align-items:center; justify-content:center; min-width:44px; min-height:44px; cursor:pointer; }
+@media (min-width:1024px) {
+  html[data-edulog-ui="on"] .edulog-roster-card .edulog-card-face { grid-template-columns:minmax(180px,1.3fr) minmax(150px,0.8fr) minmax(140px,1fr) 200px; }
+  html[data-edulog-ui="on"] .edulog-roster-card .edulog-card-actions { justify-content:flex-end; }
+}
