@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
 import type { Request, Response, NextFunction } from 'express'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { ApiConfig } from './config.js'
+import type { ApiConfig } from '../config/config.js'
 import { ApiError } from './errors.js'
 import { measureRequestPhase } from './context.js'
 

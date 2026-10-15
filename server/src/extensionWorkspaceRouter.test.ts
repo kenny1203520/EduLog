@@ -3,7 +3,7 @@ import request from 'supertest'
 import { describe, expect, it, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createExtensionWorkspaceRouter, importBatch, importRow, pendingPush, importJob, memoryConfirmation, fieldMappingResolve, fieldMappingConfirm, reportDecisionResolve, reportDecisionConfirm } from './extensionWorkspaceRouter.js'
-import { errorHandler } from './errors.js'
+import { errorHandler } from './http/errors.js'
 const id = '00000000-0000-4000-8000-000000000001'
 const row = { source_id: '101', target_id: id, overwrite: [], record: { kind: 'student', data: { name: 'Test A' } } }
 function appWith(data: unknown, error: unknown = null, productionErrors = false) {

@@ -4,8 +4,8 @@ import { describe, expect, it, vi } from 'vitest'
 import crypto from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createExtensionIntegrationRouter, buildExtensionSettingsUrl } from './extensionIntegrationRouter.js'
-import { loadConfig } from './config.js'
-import type { SupabaseClients } from './supabase.js'
+import { loadConfig } from './config/config.js'
+import type { SupabaseClients } from './infra/supabase.js'
 
 const extensionOrigin = `chrome-extension://${'a'.repeat(32)}`
 const pairingId = '0051a2b5-fb29-4390-86f6-bd5e81ab7a16'

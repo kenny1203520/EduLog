@@ -2,7 +2,7 @@ import crypto from 'node:crypto'
 import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { ApiError, mapDatabaseError } from './errors.js'
+import { ApiError, mapDatabaseError } from './http/errors.js'
 import { reportMissingFlags } from './reportSemantics.js'
 
 const uuid = z.string().uuid()

@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
 import { jwtVerify } from 'jose'
 import { createClient, type Session, type SupabaseClient, type User } from '@supabase/supabase-js'
-import type { ApiConfig } from './config.js'
+import type { ApiConfig } from '../config/config.js'
 
 export type SupabaseClients = {
   publicClient: SupabaseClient

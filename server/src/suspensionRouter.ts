@@ -1,8 +1,8 @@
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod'
-import { ApiError, mapDatabaseError } from './errors.js'
+import { ApiError, mapDatabaseError } from './http/errors.js'
 import { complete, idempotency } from './resourceRouter.js'
-import { setAuditContext } from './context.js'
+import { setAuditContext } from './http/context.js'
 import { requireAuthorizationDecision } from './authorization.js'
 
 const fields = 'id,enrollment_id,start_date,end_date,time_zone,reason,created_at,updated_at'

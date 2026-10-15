@@ -3,14 +3,14 @@ import { once } from 'node:events'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { WebSocket, WebSocketServer } from 'ws'
-import type { ApiConfig } from './config.js'
+import type { ApiConfig } from './config/config.js'
 
 const supabaseMocks = vi.hoisted(() => ({
   createUserClient: vi.fn(),
   validateAccessToken: vi.fn(),
 }))
 
-vi.mock('./supabase.js', () => supabaseMocks)
+vi.mock('./infra/supabase.js', () => supabaseMocks)
 
 import { attachRealtimeProxy } from './realtime.js'
 

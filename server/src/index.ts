@@ -1,7 +1,7 @@
 import { createServer } from 'node:http'
 import { createApp } from './app.js'
-import { loadConfig } from './config.js'
-import { createSupabaseClients } from './supabase.js'
+import { loadConfig } from './config/config.js'
+import { createSupabaseClients } from './infra/supabase.js'
 import { attachRealtimeProxy } from './realtime.js'
 
 const config = loadConfig()

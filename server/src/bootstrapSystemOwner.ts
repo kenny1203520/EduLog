@@ -1,6 +1,6 @@
 import { z } from 'zod'
-import { loadConfig } from './config.js'
-import { createSupabaseClients } from './supabase.js'
+import { loadConfig } from './config/config.js'
+import { createSupabaseClients } from './infra/supabase.js'
 
 const userId = z.string().uuid().parse(process.env.SYSTEM_OWNER_USER_ID)
 const clients = createSupabaseClients(loadConfig())
