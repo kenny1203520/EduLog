@@ -4,6 +4,7 @@ import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { setAuditContext } from '../../http/context.js'
 import { requireAuthorizationDecision } from '../../auth/authorization.js'
+import { matchScheduleRule, nextDate, type ScheduleRule } from '../../domain/occurrenceSchedule.js'
 
 const fields = 'id,class_session_id,occurrence_date,status,notes,original_start_time,original_end_time,actual_start_time,actual_end_time,teacher_ids,teacher_attendance,is_conducted,time_zone,created_at,updated_at'
 export const occurrenceBodySchema = z.object({ status: z.enum(['scheduled', 'completed', 'cancelled']).optional(), notes: z.string().max(10000).nullable().optional(), actual_start_time: z.string().max(32).nullable().optional(), actual_end_time: z.string().max(32).nullable().optional(), teacher_attendance: z.record(z.string(), z.boolean()).optional(), is_conducted: z.boolean().optional() }).strict()
@@ -43,11 +44,6 @@ export const occurrenceGenerationSchema = z.object({
   skip_existing_dates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).max(3660).optional(),
 }).strict()
 
-function nextDate(value: string) {
-  const date = new Date(`${value}T00:00:00Z`)
-  date.setUTCDate(date.getUTCDate() + 1)
-  return date.toISOString().slice(0, 10)
-}
 
 async function generate(req: Request, res: Response) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
@@ -68,13 +64,12 @@ async function generate(req: Request, res: Response) {
   const existingByDate = new Map((existing.data ?? []).map((row) => [row.occurrence_date, row]))
   const assignments = await req.db.from('class_session_teachers').select('teacher_id,effective_from,effective_to').eq('class_session_id', input.class_session_id)
   if (assignments.error) throw mapDatabaseError(assignments.error)
-  const rules = (session.data.class_session_schedule_rules ?? []) as Array<{ schedule_kind: string; day_of_week: number | null; day_of_month: number | null; occurrence_date: string | null; start_time: string; end_time: string }>
+  const rules = (session.data.class_session_schedule_rules ?? []) as ScheduleRule[]
   const skip = new Set(input.skip_existing_dates ?? [])
   const rows: Record<string, unknown>[] = []
   for (let date = input.start_date; date <= input.end_date; date = nextDate(date)) {
     if (skip.has(date) || (session.data.start_date && date < session.data.start_date) || (session.data.end_date && date > session.data.end_date)) continue
-    const day = new Date(`${date}T00:00:00Z`).getUTCDay()
-    const rule = rules.find((candidate) => candidate.schedule_kind === 'specific_dates' ? candidate.occurrence_date === date : candidate.schedule_kind === 'monthly' ? candidate.day_of_month === Number(date.slice(8, 10)) : candidate.day_of_week === day)
+    const rule = matchScheduleRule(rules, date)
     if (!rule) continue
     const activeTeachers = assignments.data.filter((assignment) => assignment.effective_from <= date && (!assignment.effective_to || assignment.effective_to >= date)).map((assignment) => assignment.teacher_id)
     const teacherIds = [...new Set(activeTeachers.length ? activeTeachers : [session.data.user_id].filter(Boolean))]
