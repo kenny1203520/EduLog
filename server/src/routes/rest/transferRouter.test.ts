@@ -21,3 +21,28 @@ describe('transfer API contract', () => {
     expect(source).not.toContain("select('*')")
   })
 })
+
+describe('transfer RPC error mapping', () => {
+  it('returns the blocking business rule as details.reason', async () => {
+    const { transferRpcError } = await import('./transferRouter.js')
+    expect(transferRpcError({ code: 'P0001', message: 'SOURCE_OCCURRENCE_NOT_EFFECTIVE' })).toMatchObject({
+      status: 422,
+      code: 'TRANSFER_INVALID',
+      details: { reason: 'SOURCE_OCCURRENCE_NOT_EFFECTIVE' },
+    })
+    expect(transferRpcError({ code: 'P0001', message: 'TARGET_OCCURRENCE_ALREADY_EFFECTIVE' })).toMatchObject({
+      status: 409,
+      code: 'TRANSFER_CONFLICT',
+      details: { reason: 'TARGET_OCCURRENCE_ALREADY_EFFECTIVE' },
+    })
+    expect(transferRpcError({ code: 'P0001', message: 'TARGET_REPORT_ALREADY_EXISTS' }).details).toEqual({ reason: 'TARGET_REPORT_ALREADY_EXISTS' })
+    expect(transferRpcError({ code: 'P0001', message: 'SINGLE_LESSON_TRANSFER_FORBIDDEN' })).toMatchObject({ status: 403, details: { reason: 'SINGLE_LESSON_TRANSFER_FORBIDDEN' } })
+  })
+
+  it('does not expose unknown database messages as a reason', async () => {
+    const { transferRpcError } = await import('./transferRouter.js')
+    const error = transferRpcError({ code: 'P0001', message: 'internal SQL details' })
+    expect(error.details).toBeUndefined()
+    expect(error.message).not.toContain('internal')
+  })
+})

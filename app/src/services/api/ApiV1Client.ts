@@ -2,10 +2,10 @@ import { getRuntimeConfigValue } from '@/lib/runtimeConfig'
 
 export type ApiMeta = Record<string, unknown> | null
 export type ApiEnvelope<T> = { data: T; meta?: ApiMeta; request_id: string; trace_id: string }
-export type ApiErrorBody = { error: { code: string; message: string; request_id: string; trace_id: string; fields?: Record<string, string[]> } }
+export type ApiErrorBody = { error: { code: string; message: string; request_id: string; trace_id: string; fields?: Record<string, string[]>; details?: { reason?: string } } }
 export class ApiV1Error extends Error {
-  readonly code: string; readonly status: number; readonly requestId: string; readonly traceId: string; readonly fields?: Record<string, string[]>
-  constructor(status: number, body: ApiErrorBody) { super(body.error.message); this.name = 'ApiV1Error'; this.status = status; this.code = body.error.code; this.requestId = body.error.request_id; this.traceId = body.error.trace_id; this.fields = body.error.fields }
+  readonly code: string; readonly status: number; readonly requestId: string; readonly traceId: string; readonly fields?: Record<string, string[]>; readonly reason?: string
+  constructor(status: number, body: ApiErrorBody) { super(body.error.message); this.name = 'ApiV1Error'; this.status = status; this.code = body.error.code; this.requestId = body.error.request_id; this.traceId = body.error.trace_id; this.fields = body.error.fields; this.reason = body.error.details?.reason }
 }
 export type ApiRequestOptions = Omit<RequestInit, 'body'> & { body?: unknown; idempotencyKey?: string }
 type AuthRecovery = () => Promise<Record<string, unknown> | null>

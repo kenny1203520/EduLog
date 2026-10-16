@@ -9,6 +9,7 @@ export class ApiError extends Error {
     public readonly fields?: Record<string, string[]>,
     public readonly retryAfter?: number,
     public readonly diagnosticSource?: 'version_check',
+    public readonly details?: { reason?: string },
   ) {
     super(message)
     this.name = 'ApiError'
@@ -75,6 +76,7 @@ export function sendError(req: Request, res: Response, error: unknown) {
       message: apiError.message,
       ...(apiError.fields ? { fields: apiError.fields } : {}),
       ...(apiError.diagnosticSource ? { diagnostic_source: apiError.diagnosticSource } : {}),
+      ...(apiError.details ? { details: apiError.details } : {}),
       request_id: req.requestId,
       trace_id: req.traceId,
     },

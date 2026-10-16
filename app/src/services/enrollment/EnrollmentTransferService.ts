@@ -13,10 +13,12 @@ import {
 import type { TransferReportFieldSelections } from '@/services/report/ReportFieldConflictService'
 import { apiV1Client } from '@/services/api/ApiV1Client'
 import { getApiV1Mode } from '@/services/api/ApiModeClient'
+import { hasDomainErrorCode } from '@/services/errors/mapDomainError'
 
 export class EnrollmentTransferService {
-    private static getOccurrenceInfo<T extends { class_occurrence: any }>(row: T): any {
-        return Array.isArray(row.class_occurrence) ? row.class_occurrence[0] : row.class_occurrence
+    private static getOccurrenceInfo(row: { class_occurrence?: any; class_occurrences?: any }): any {
+        const occurrence = row.class_occurrence ?? row.class_occurrences
+        return Array.isArray(occurrence) ? occurrence[0] : occurrence
     }
 
     private static isBlankText(value: unknown): boolean {
@@ -297,7 +299,7 @@ export class EnrollmentTransferService {
                 existingOriginalReport?.id || null
             )
         } catch (error: any) {
-            if (error?.message?.includes('TARGET_REPORT_ALREADY_EXISTS')) {
+            if (hasDomainErrorCode(error, 'TARGET_REPORT_ALREADY_EXISTS')) {
                 return SingleLessonTransferConflictService.createConflict(
                     enrollmentId,
                     originalOccId,
@@ -364,7 +366,7 @@ export class EnrollmentTransferService {
                 report.id
             )
         } catch (error: any) {
-            if (error?.message?.includes('TARGET_REPORT_ALREADY_EXISTS')) {
+            if (hasDomainErrorCode(error, 'TARGET_REPORT_ALREADY_EXISTS')) {
                 if (!originalSessionId) throw new Error('ORIGINAL_OCCURRENCE_NOT_IN_ENROLLMENT_SESSION')
                 return SingleLessonTransferConflictService.createConflict(
                     report.enrollment_id,
