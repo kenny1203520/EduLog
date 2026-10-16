@@ -6,6 +6,7 @@ import { getApiV1Mode } from '@/services/api/ApiModeClient'
 import { apiV1Client } from '@/services/api/ApiV1Client'
 
 export const INCOMPLETE_REPORT_PERMISSION = 'reports.incomplete.receive'
+export const DASHBOARD_SCHEDULE_ALL_PERMISSION = 'teaching.dashboard.schedule.all'
 export interface PolicyScopeTarget { type: PolicyScope; id?: string | null }
 
 export class PermissionPolicyService {

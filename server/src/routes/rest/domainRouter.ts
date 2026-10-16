@@ -6,6 +6,7 @@ import { setAuditContext } from '../../http/context.js'
 import { requireAuthorizationDecision } from '../../auth/authorization.js'
 import { findReportProgressGaps } from '../../domain/reportProgressGaps.js'
 import { transferRpcError } from './transferRouter.js'
+import { orderByRelation } from './relationOrder.js'
 
 const occurrenceFields = 'id,class_session_id,occurrence_date,status,original_start_time,original_end_time,actual_start_time,actual_end_time,time_zone,is_conducted,teacher_ids,teacher_attendance,created_at,updated_at,class_sessions(id,name,time_zone,classroom_id,classrooms(id,name,color))'
 const reportFields = 'id,enrollment_id,class_occurrence_id,lesson_id,is_completed,progress_letter,attendance_status,absence_reason,class_participation,classroom_behavior,contact_notes,contact_notes_document,class_notes,class_notes_document,content,content_document,external_link,version,last_edited_by,last_edited_at,created_at,updated_at'
@@ -323,13 +324,12 @@ async function enrollmentReportProgressContext(req: Request, res: Response) {
   const pageSize = 500
   for (let offset = 0; ; offset += pageSize) {
     let builder = req.db!.from('occurrence_reports')
-      .select('id,lesson_id,is_completed,progress_letter,attendance_status,class_occurrences!inner(occurrence_date)')
+      .select('id,lesson_id,is_completed,progress_letter,attendance_status,class_occurrences!inner(occurrence_date,actual_start_time,original_start_time)')
       .eq('enrollment_id', enrollmentId)
       .eq('attendance_status', 'present')
       .not('lesson_id', 'is', null)
       .lt('class_occurrences.occurrence_date', occurrence.data.occurrence_date)
-      .order('occurrence_date', { ascending: true, foreignTable: 'class_occurrences' })
-    builder = builder.neq('id', query.report_id)
+    builder = orderByRelation(builder.neq('id', query.report_id), 'class_occurrences', 'occurrence_date', true).order('id', { ascending: true })
     const result = await builder.range(offset, offset + pageSize - 1)
     if (result.error) throw mapDatabaseError(result.error)
     const page = (result.data ?? []) as Array<Record<string, any>>

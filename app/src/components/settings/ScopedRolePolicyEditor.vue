@@ -23,12 +23,14 @@ const props = withDefaults(defineProps<{
     modelValue: RolePolicySelections
     compact?: boolean
     disabled?: boolean
+    labelNamespace?: string
 }>(), {
     scopeId: null,
     classroomId: null,
     classSessionId: null,
     compact: false,
-    disabled: false
+    disabled: false,
+    labelNamespace: 'settings.incomplete_notifications'
 })
 
 const emit = defineEmits<{ 'update:modelValue': [value: RolePolicySelections] }>()
@@ -61,17 +63,17 @@ function effectiveFor(roleId: string) {
 
 function resultLabel(roleId: string, inherited = false) {
     const result = inherited ? inheritedFor(roleId) : effectiveFor(roleId)
-    if (result.effect) return t(`settings.incomplete_notifications.${result.effect}`)
+    if (result.effect) return t(`${props.labelNamespace}.${result.effect}`)
     return hierarchyHasPolicy.value
-        ? t('settings.incomplete_notifications.no_policy')
-        : t('settings.incomplete_notifications.legacy_fallback')
+        ? t(`${props.labelNamespace}.no_policy`)
+        : t(`${props.labelNamespace}.legacy_fallback`)
 }
 
 function sourceLabel(roleId: string, inherited = false) {
     const source = (inherited ? inheritedFor(roleId) : effectiveFor(roleId)).source
     return source
-        ? t(`settings.incomplete_notifications.${source}`)
-        : t('settings.incomplete_notifications.no_policy')
+        ? t(`${props.labelNamespace}.${source}`)
+        : t(`${props.labelNamespace}.no_policy`)
 }
 
 function update(roleId: string, effect: PolicySelection) {
@@ -88,7 +90,7 @@ function update(roleId: string, effect: PolicySelection) {
             <div class="min-w-0">
                 <p class="truncate font-black text-gray-800" :title="roleDisplayName(role, t)">{{ roleDisplayName(role, t) }}</p>
                 <p class="mt-1 text-xs font-bold text-gray-400">
-                    {{ $t('settings.incomplete_notifications.effective') }}:
+                    {{ $t(`${labelNamespace}.effective`) }}:
                     <span :class="effectiveFor(role.id).effect === 'deny' ? 'text-red-600' : effectiveFor(role.id).effect === 'allow' ? 'text-emerald-600' : 'text-gray-500'">
                         {{ resultLabel(role.id) }}
                     </span>
@@ -104,11 +106,11 @@ function update(roleId: string, effect: PolicySelection) {
                         : 'text-gray-500 hover:bg-gray-100'"
                     :aria-pressed="modelValue[role.id] === effect" :disabled="disabled"
                     @click="update(role.id, effect)">
-                    {{ $t('settings.incomplete_notifications.' + effect) }}
+                    {{ $t(`${labelNamespace}.${effect}`) }}
                 </button>
             </div>
             <p v-if="!compact" class="text-xs font-bold text-gray-400">
-                {{ $t('settings.incomplete_notifications.inherited') }}:
+                {{ $t(`${labelNamespace}.inherited`) }}:
                 {{ resultLabel(role.id, true) }} · {{ sourceLabel(role.id, true) }}
             </p>
         </article>

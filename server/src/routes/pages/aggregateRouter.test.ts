@@ -48,6 +48,20 @@ describe('aggregate API contract', () => {
     expect(source).toContain('database_error_code')
   })
 
+  it('scopes the dashboard schedule by permission and teaching assignment instead of attendance', () => {
+    expect(source).toContain('DASHBOARD_SCHEDULE_ALL_PERMISSIONS')
+    expect(source).toContain("db.from('class_session_teachers').select('class_session_id,effective_from,effective_to').eq('teacher_id', teacherId)")
+    expect(source).toContain('filterOccurrencesByAssignments(rows, assignments)')
+    expect(source).toContain(".not('status', 'in', '(cancelled,rescheduled)')")
+    expect(source).not.toContain("eq('is_conducted', true)")
+    expect(source).not.toContain('isTeacherPresent')
+  })
+
+  it('orders enrollment reports by the parent lesson date rather than only the embedded rows', () => {
+    expect(source).toContain("orderByRelation(reportsQuery, 'class_occurrences', 'occurrence_date', !descending)")
+    expect(source).not.toContain('foreignTable')
+  })
+
   it('validates dashboard date ranges before calling the database', () => {
     expect(source).toContain('start and end must be provided together')
     expect(source).toContain('end must not be earlier than start')
