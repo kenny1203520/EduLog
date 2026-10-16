@@ -32,6 +32,9 @@ describe('SessionDetails background refresh contract', () => {
         expect(source).not.toContain("toast.info(t('classroom.live_update_applied'))")
         expect(source).toContain('<RealtimeStatusBadge')
         expect(source).toContain('@retry="retryRealtimeAction"')
+        // Sessions created from schedule rules have null start_time/end_time.
+        expect(source).not.toContain('session.start_time.slice(0, 5)')
+        expect(source).toContain('{{ sessionTimeLabel }}')
     })
 
     it('saves and closes the old editor before changing the selected occurrence date', () => {

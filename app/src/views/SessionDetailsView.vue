@@ -724,6 +724,14 @@ const sessionSchedule = computed(() => {
     }
 })
 const calendarToday = computed(() => DateUtils.todayString(sessionTimeZone.value))
+// Sessions created from schedule rules leave class_sessions.start_time/end_time
+// null; fall back to the first rule's times instead of crashing the header.
+const sessionTimeLabel = computed(() => {
+    const rule = session.value?.schedule_rules?.[0]
+    const start = (session.value?.start_time || rule?.start_time || '').slice(0, 5)
+    const end = (session.value?.end_time || rule?.end_time || '').slice(0, 5)
+    return start && end ? `${start}–${end}` : '-'
+})
 
 function isPlannedClassDate(date: string) {
     return sessionSchedule.value?.isScheduledOn(date) ?? false
@@ -2360,7 +2368,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
-                                {{ session.start_time.slice(0, 5) }}–{{ session.end_time.slice(0, 5) }}
+                                {{ sessionTimeLabel }}
                             </span>
                             <span class="inline-grid max-w-full min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-1.5 rounded-xl bg-white px-3 py-2 shadow-sm ring-1 ring-gray-100">
                                 <span class="whitespace-nowrap text-[10px] font-black uppercase tracking-wide text-gray-400">{{ $t('classroom.session_time_zone') }}</span>
@@ -2801,7 +2809,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
             :title="$t('student.transfer_history.cancel_confirm_title')"
             :message="pendingTransferCancel ? $t('classroom.lesson_transfer.cancel_confirm_message', {
                 student: pendingTransferCancel.student_name,
-                target: DateUtils.displayDateWithWeekday(pendingTransferCancel.other_occurrence_date, preferences.locale)
+                target: [DateUtils.displayDateWithWeekday(pendingTransferCancel.other_occurrence_date, preferences.locale), pendingTransferCancel.other_session_name].filter(Boolean).join(' ')
             }) : ''"
             :confirm-text="$t('student.transfer_history.cancel_transfer')"
             :cancel-text="$t('student.transfer_history.keep_transfer')"
