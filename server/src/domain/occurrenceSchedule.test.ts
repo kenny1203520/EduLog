@@ -36,5 +36,8 @@ describe('enrollment report provisioning contract', () => {
     expect(source).not.toContain("rpc('provision_occurrence_reports'")
     expect(source).toContain("'/enrollments/:id/start-date-impact'")
     expect(source).toContain('ignoreDuplicates: true')
+    // Back-dated starts must not skip lessons before the generated window.
+    expect(source).toContain('if (planned.target_count > 0) await ensurePlannedLessons(')
+    expect(source).not.toContain('if (planned.missing_count > 0) await ensurePlannedLessons(')
   })
 })

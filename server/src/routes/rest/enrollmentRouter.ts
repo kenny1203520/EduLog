@@ -169,8 +169,11 @@ async function syncEnrollmentReports(req: Request, enrollment: { id: string; cla
   }
   if (options.dryRun) return plan.data as ReportSyncResult
   const planned = plan.data as ReportSyncResult
-  // Leave headroom for cancelled lessons and lessons transferred away.
-  if (planned.missing_count > 0) await ensurePlannedLessons(req, enrollment.class_session_id, planned.start_date, planned.target_count + planned.missing_count + 4)
+  // Always fill in scheduled lessons from the start date: lessons are usually
+  // generated from today onward, so a back-dated start would otherwise skip
+  // the lessons between it and today. Headroom covers cancelled lessons and
+  // lessons transferred away.
+  if (planned.target_count > 0) await ensurePlannedLessons(req, enrollment.class_session_id, planned.start_date, planned.target_count + planned.missing_count + 4)
   const result = await call(false)
   if (result.error) {
     req.log.warn({ event: 'enrollment_report_provisioning_failed', database_error_code: result.error.code ?? 'UNKNOWN' }, 'enrollment_report_provisioning_failed')
