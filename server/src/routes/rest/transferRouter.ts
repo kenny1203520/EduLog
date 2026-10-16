@@ -68,6 +68,10 @@ const transferReasons: Array<[reason: string, status: number, code: string, mess
   ['ORIGINAL_OCCURRENCE_NOT_IN_ENROLLMENT_SESSION', 422, 'TRANSFER_INVALID', 'The transfer violates a business rule'],
   ['INVALID_TRANSFER_FIELD_SELECTIONS', 422, 'TRANSFER_INVALID', 'The transfer violates a business rule'],
   ['DATE_NOT_CLASS_DAY', 422, 'TRANSFER_INVALID', 'The transfer violates a business rule'],
+  ['TARGET_SESSION_SAME_AS_CURRENT', 422, 'TRANSFER_INVALID', 'The transfer violates a business rule'],
+  ['ENROLLMENT_HAS_NO_CLASS', 422, 'TRANSFER_INVALID', 'The transfer violates a business rule'],
+  ['INVALID_TRANSFER_DATE', 422, 'TRANSFER_INVALID', 'The transfer violates a business rule'],
+  ['PERMISSION_DENIED', 403, 'PERMISSION_DENIED', 'You do not have permission to perform this transfer'],
 ]
 
 export function transferRpcError(error: { code?: string; message?: string } | null | undefined): ApiError {

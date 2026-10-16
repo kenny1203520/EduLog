@@ -20,6 +20,7 @@ import { SessionEligibilityPolicy } from '@/models/SessionEligibilityPolicy'
 import TransferReportConflictModal from '@/components/TransferReportConflictModal.vue'
 import type { SingleLessonTransferConflict, SingleLessonTransferResult } from '@/services/enrollment/SingleLessonTransferConflictService'
 import type { TransferReportFieldSelections } from '@/services/report/ReportFieldConflictService'
+import type { RetainedClassReport } from '@/services/enrollment/EnrollmentTransferService'
 
 const props = defineProps<{
     isOpen: boolean
@@ -243,10 +244,18 @@ async function fetchReports() {
     }
 }
 
+const retainedReports = ref<RetainedClassReport[] | null>(null)
+
+function closeModal() {
+    retainedReports.value = null
+    emit('close')
+}
+
 watch(() => props.isOpen, (val) => {
     if (val) {
         selectedClassroomId.value = ''
         transferConflict.value = null
+        retainedReports.value = null
         fetchClassrooms()
         fetchSessions()
         fetchReports()
@@ -342,12 +351,19 @@ async function submitTransfer() {
             // Compatibility parameter: transfer service keeps the argument but uses transferDate for the new rule.
             const originalLastDate = DateUtils.addDaysToDateString(transferForm.value.effective_date, -1)
 
-            await EnrollmentService.transferClass(
+            const classResult = await EnrollmentService.transferClass(
                 props.fromEnrollmentId,
                 transferForm.value.to_session_id,
                 originalLastDate,
                 transferForm.value.effective_date
             )
+            if (classResult.retainedReports.length) {
+                // Keep the dialog open so the retained reports can be reviewed.
+                toast.success(t('common.success'))
+                emit('success')
+                retainedReports.value = classResult.retainedReports
+                return
+            }
         }
 
         if (singleResult?.status === 'conflict') {
@@ -419,7 +435,7 @@ async function resolveTransferConflict(selections: TransferReportFieldSelections
 
 <template>
     <div v-if="isOpen" class="fixed inset-0 z-50 flex items-stretch justify-center bg-black/60 backdrop-blur-md p-2 sm:items-center sm:p-4"
-        @click.self="emit('close')">
+        @click.self="closeModal">
         <div
             class="bg-white rounded-[1.75rem] sm:rounded-[2.5rem] shadow-2xl w-full max-w-xl max-h-[calc(100dvh-1rem)] sm:max-h-[90dvh] min-h-0 flex flex-col overflow-hidden animate-in zoom-in fade-in duration-300">
             <!-- Header -->
@@ -440,7 +456,7 @@ async function resolveTransferConflict(selections: TransferReportFieldSelections
                             $t('student.transfer_modal.subtitle') }}</p>
                     </div>
                 </div>
-                <button @click="emit('close')"
+                <button @click="closeModal" :aria-label="$t('common.close')"
                     class="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all cursor-pointer shrink-0">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
@@ -450,8 +466,25 @@ async function resolveTransferConflict(selections: TransferReportFieldSelections
                 </button>
             </div>
 
+            <!-- Result: reports with content that stayed in the old class -->
+            <div v-if="retainedReports" class="flex-1 min-h-0 p-5 sm:p-8 overflow-y-auto space-y-4" role="status">
+                <h3 class="text-lg font-black text-gray-900">{{ $t('student.transfer_modal.retained_title') }}</h3>
+                <p class="text-sm font-medium text-gray-600 leading-relaxed">{{ $t('student.transfer_modal.retained_body', { count: retainedReports.length }) }}</p>
+                <ul class="space-y-2">
+                    <li v-for="report in retainedReports" :key="report.reportId"
+                        class="flex items-center justify-between gap-3 rounded-2xl border border-amber-100 bg-amber-50/60 px-4 py-3">
+                        <span class="font-bold text-gray-800">{{ DateUtils.displayDateWithWeekday(report.occurrenceDate, preferences.locale) }}</span>
+                        <router-link v-if="fromEnrollmentId" :to="{ name: 'lesson-reports', params: { enrollmentId: fromEnrollmentId } }"
+                            class="min-h-[44px] inline-flex items-center rounded-xl px-3 text-xs font-black text-amber-700 transition-colors hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+                            @click="closeModal">
+                            {{ $t('student.transfer_modal.retained_open') }}
+                        </router-link>
+                    </li>
+                </ul>
+            </div>
+
             <!-- Body -->
-            <div class="flex-1 min-h-0 p-5 sm:p-8 overflow-y-auto overscroll-contain custom-scrollbar space-y-6 sm:space-y-8">
+            <div v-else class="flex-1 min-h-0 p-5 sm:p-8 overflow-y-auto overscroll-contain custom-scrollbar space-y-6 sm:space-y-8">
                 <div class="space-y-5 sm:space-y-6">
                     <TimeZoneSelect :label="$t('common.time_zone')" dense />
 
@@ -606,8 +639,14 @@ async function resolveTransferConflict(selections: TransferReportFieldSelections
             </div>
 
             <!-- Footer -->
-            <div class="p-5 sm:p-8 border-t border-gray-50 shrink-0 bg-gray-50/50 flex gap-3 sm:gap-4">
-                <button @click="emit('close')"
+            <div v-if="retainedReports" class="p-5 sm:p-8 border-t border-gray-50 shrink-0 bg-gray-50/50 flex">
+                <button @click="closeModal"
+                    class="flex-1 px-4 sm:px-8 py-4 bg-amber-600 text-white rounded-2xl hover:bg-amber-700 transition-colors text-sm sm:text-base font-black cursor-pointer uppercase tracking-widest">
+                    {{ $t('student.transfer_modal.retained_done') }}
+                </button>
+            </div>
+            <div v-else class="p-5 sm:p-8 border-t border-gray-50 shrink-0 bg-gray-50/50 flex gap-3 sm:gap-4">
+                <button @click="closeModal"
                     class="flex-1 px-4 sm:px-8 py-4 text-sm sm:text-base font-black text-gray-400 hover:text-gray-600 transition-colors uppercase tracking-widest cursor-pointer">
                     {{ $t('common.cancel') }}
                 </button>

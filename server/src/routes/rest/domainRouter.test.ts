@@ -126,3 +126,14 @@ describe('occurrence progress gap summary contract', () => {
     expect(source).not.toContain("select('enrollment_id,lesson_id,class_occurrences!inner(occurrence_date),content")
   })
 })
+
+describe('class transfer contract', () => {
+  it('moves the enrollment through the date-effective RPC instead of a direct update', () => {
+    const source = readFileSync(new URL('./domainRouter.ts', import.meta.url), 'utf8')
+    const handler = source.slice(source.indexOf('async function transferClass'), source.indexOf('async function bulkDeleteTeachers'))
+    expect(handler).toContain("rpc('transfer_enrollment_class'")
+    expect(handler).toContain('p_effective_date: input.transfer_date')
+    expect(handler).toContain('retained_reports')
+    expect(handler).not.toContain(".from('enrollments').update(")
+  })
+})

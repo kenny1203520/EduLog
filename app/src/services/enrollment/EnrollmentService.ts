@@ -4,7 +4,7 @@ import { EnrollmentQueryService } from './EnrollmentQueryService'
 import type { SingleLessonTransferConflict, SingleLessonTransferResult } from './SingleLessonTransferConflictService'
 import type { TransferReportFieldSelections } from '@/services/report/ReportFieldConflictService'
 import { EnrollmentTransferQueryService, type EffectiveSingleLessonTransferTarget, type OccurrenceLessonTransfer, type SingleLessonTransferHistoryItem } from './EnrollmentTransferQueryService'
-import type { SingleLessonTransferCancelResult } from './EnrollmentTransferService'
+import type { ClassTransferResult, SingleLessonTransferCancelResult } from './EnrollmentTransferService'
 
 type EnrollmentCreateOptions = {
     targetReportCount?: number
@@ -79,7 +79,7 @@ export class EnrollmentService {
         newSessionId: string,
         originalLastDate: string,
         transferDate: string
-    ): Promise<Enrollment> {
+    ): Promise<ClassTransferResult> {
         return EnrollmentCommandService.transferClass(
             enrollmentId,
             newSessionId,

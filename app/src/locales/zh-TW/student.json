@@ -213,6 +213,10 @@
         "target_date_not_class_day": "目標日期不是該班級的授課日，請改選授課日。",
         "target_report_exists": "此學生課程在目標日期已經有報告，無法重複調課。",
         "same_session_error": "目標班級不可與目前班級相同。",
+        "retained_title": "轉班完成，部分報告保留在原班",
+        "retained_body": "生效日以後有 {count} 份已經寫了內容的報告，仍留在原班的課次。請確認是否需要另外處理。",
+        "retained_open": "查看報告",
+        "retained_done": "完成",
         "original_report_not_found": "找不到原定上課報告。",
         "original_report_ambiguous": "同一天有多筆報告，請改用報告選單指定單一報告。",
         "original_date_not_class_day": "原定日期不是目前班級的授課日，請改選原班級上課日。"
