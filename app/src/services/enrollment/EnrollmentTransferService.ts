@@ -22,6 +22,18 @@ export interface SingleLessonTransferCancelResult {
     targetReportRetained: boolean
 }
 
+/** A report with content that stayed in the old class after a class transfer. */
+export interface RetainedClassReport {
+    reportId: string
+    occurrenceId: string
+    occurrenceDate: string
+}
+
+export interface ClassTransferResult {
+    enrollment: Enrollment
+    retainedReports: RetainedClassReport[]
+}
+
 export class EnrollmentTransferService {
     private static getOccurrenceInfo(row: { class_occurrence?: any; class_occurrences?: any }): any {
         const occurrence = row.class_occurrence ?? row.class_occurrences
@@ -82,14 +94,22 @@ export class EnrollmentTransferService {
         newSessionId: string,
         originalLastDate: string,
         transferDate: string
-    ): Promise<Enrollment> {
+    ): Promise<ClassTransferResult> {
         if (getApiV1Mode() === 'v1') {
             const response = await apiV1Client.post<any>(`/enrollments/${encodeURIComponent(enrollmentId)}/transfers/class`, {
                 target_class_session_id: newSessionId,
                 original_last_date: originalLastDate,
                 transfer_date: transferDate,
             })
-            return new Enrollment(response.data)
+            const retained = Array.isArray(response.meta?.retained_reports) ? response.meta.retained_reports as any[] : []
+            return {
+                enrollment: new Enrollment(response.data),
+                retainedReports: retained.map(row => ({
+                    reportId: String(row.report_id),
+                    occurrenceId: String(row.occurrence_id),
+                    occurrenceDate: String(row.occurrence_date)
+                }))
+            }
         }
         void originalLastDate
 
@@ -178,7 +198,7 @@ export class EnrollmentTransferService {
 
         await EnrollmentTransferToolService.syncSessionPair(oldSessionId, newSessionId)
 
-        return new Enrollment(updated)
+        return { enrollment: new Enrollment(updated), retainedReports: [] }
     }
 
     private static async commitSingleLessonTransfer(

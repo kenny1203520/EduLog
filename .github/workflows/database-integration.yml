@@ -53,6 +53,7 @@ jobs:
           done
           psql -v ON_ERROR_STOP=1 -f supabase/tests/migration_chain_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/single_lesson_transfer_cancel_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/enrollment_class_history_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/security_lint_remediation_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/rbac_scope_constraint_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/report_lifecycle_integration.sql

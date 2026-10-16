@@ -3,7 +3,7 @@ import { Enrollment, type EnrollmentDTO } from '@/models/Enrollment'
 import { OccurrenceService } from '../occurrence/OccurrenceService'
 import { OccurrenceReportService } from '../occurrence/OccurrenceReportService'
 import { EnrollmentStatusPolicyService } from './EnrollmentStatusPolicyService'
-import { EnrollmentTransferService, type SingleLessonTransferCancelResult } from './EnrollmentTransferService'
+import { EnrollmentTransferService, type ClassTransferResult, type SingleLessonTransferCancelResult } from './EnrollmentTransferService'
 import { EnrollmentSupportService } from './EnrollmentSupportService'
 import { DateUtils } from '@/utils/DateUtils'
 import { SessionService } from '../session/SessionService'
@@ -267,7 +267,7 @@ export class EnrollmentCommandService {
         newSessionId: string,
         originalLastDate: string,
         transferDate: string
-    ): Promise<Enrollment> {
+    ): Promise<ClassTransferResult> {
         return EnrollmentTransferService.transferClass(
             enrollmentId,
             newSessionId,
