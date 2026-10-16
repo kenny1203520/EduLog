@@ -30,7 +30,8 @@ describe('SessionDetails background refresh contract', () => {
         expect(source).toContain('const reportOnly = relevantEvents.every(payload => payload.change === \'report\')')
         expect(source).toContain('if (pendingRealtimeInvalidations.length && !realtimeRefreshTimer)')
         expect(source).not.toContain("toast.info(t('classroom.live_update_applied'))")
-        expect(source).toContain('class="mb-2 flex min-h-6 flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs"')
+        expect(source).toContain('<RealtimeStatusBadge')
+        expect(source).toContain('@retry="retryRealtimeAction"')
     })
 
     it('saves and closes the old editor before changing the selected occurrence date', () => {

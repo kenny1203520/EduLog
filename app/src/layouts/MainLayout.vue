@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useRouter } from 'vue-router'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
 import { useFeedback } from '@/composables/useFeedback'
+import { useAccountIdentity } from '@/composables/useAccountIdentity'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -16,8 +17,7 @@ const accountMenuOpen = ref(false)
 const logoutBusy = ref(false)
 const isOnline = ref(typeof navigator === 'undefined' ? true : navigator.onLine)
 const pendingRequests = ref(0)
-const accountDisplayName = computed(() => auth.user?.nickname?.trim() || auth.user?.display_name?.trim() || auth.user?.full_name?.trim() || auth.user?.email || '')
-const accountInitial = computed(() => accountDisplayName.value.charAt(0).toLocaleUpperCase())
+const { accountDisplayName, accountInitial } = useAccountIdentity()
 
 function onOnline() { isOnline.value = true }
 function onOffline() { isOnline.value = false }

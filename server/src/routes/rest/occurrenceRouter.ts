@@ -87,4 +87,31 @@ async function generate(req: Request, res: Response) {
   await complete(req, 200, body)
   return res.json(body)
 }
-export function createOccurrenceRouter() { const router = Router(); router.post('/occurrences/generate', wrap(generate)); router.patch('/occurrences/:id', wrap(update)); router.delete('/occurrences/:id', wrap(remove)); return router }
+export const reportCompletionQuery = z.object({
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+}).strict()
+
+/** Counts each lesson's reports in a date range, for the class calendar's completion dot. */
+export function summarizeReportCompletion(rows: Array<{ id: string; occurrence_date: string; occurrence_reports?: Array<{ is_completed: boolean | null }> | null }>) {
+  return rows.map((row) => {
+    const reports = row.occurrence_reports ?? []
+    return { occurrence_id: row.id, occurrence_date: row.occurrence_date, total: reports.length, completed: reports.filter((report) => report.is_completed === true).length }
+  })
+}
+
+async function reportCompletion(req: Request, res: Response) {
+  if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
+  const sessionId = z.string().uuid().parse(req.params.id)
+  const query = reportCompletionQuery.parse(req.query)
+  if (query.from > query.to) throw new ApiError(422, 'INVALID_DATE_RANGE', 'from must not be after to')
+  setAuditContext(req, { domain: 'teaching', resource: 'reports', action: 'list', permission: 'teaching.reports.list', scopeId: sessionId, scopeType: 'class_session' })
+  const permission = await req.db.rpc('has_api_permission', { p_user_id: req.user.id, p_permission_key: 'teaching.reports.list', p_classroom_id: null, p_class_session_id: sessionId })
+  requireAuthorizationDecision(req, permission, { permission: 'teaching.reports.list', stage: 'report_completion_permission', message: 'You do not have permission to list reports in this class', scopeId: sessionId, scopeType: 'class_session' })
+  const result = await req.db.from('class_occurrences').select('id,occurrence_date,occurrence_reports(is_completed)').eq('class_session_id', sessionId).gte('occurrence_date', query.from).lte('occurrence_date', query.to).order('occurrence_date', { ascending: true }).limit(800)
+  if (result.error) throw mapDatabaseError(result.error)
+  const data = summarizeReportCompletion((result.data ?? []) as Parameters<typeof summarizeReportCompletion>[0])
+  return res.json({ data, meta: { from: query.from, to: query.to, total: data.length }, request_id: req.requestId, trace_id: req.traceId })
+}
+
+export function createOccurrenceRouter() { const router = Router(); router.get('/class-sessions/:id/report-completion', wrap(reportCompletion)); router.post('/occurrences/generate', wrap(generate)); router.patch('/occurrences/:id', wrap(update)); router.delete('/occurrences/:id', wrap(remove)); return router }

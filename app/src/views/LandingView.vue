@@ -2,8 +2,10 @@
 import { useAuthStore } from '@/stores/useAuthStore'
 import { computed } from 'vue'
 import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
+import { useAccountIdentity } from '@/composables/useAccountIdentity'
 
 const auth = useAuthStore()
+const { accountDisplayName, accountInitial } = useAccountIdentity()
 
 const getStartedRoute = computed(() => auth.isAuthenticated ? '/dashboard' : '/login')
 </script>
@@ -22,7 +24,13 @@ const getStartedRoute = computed(() => auth.isAuthenticated ? '/dashboard' : '/l
             </router-link>
             <div class="flex shrink-0 items-center gap-2 sm:gap-3">
                 <LanguageSwitcher align="right" />
-                <router-link to="/login"
+                <router-link v-if="auth.isAuthenticated" :to="{ name: 'dashboard' }"
+                    :aria-label="$t('landing.enter_app_as', { name: accountDisplayName })"
+                    class="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-gray-900 py-1.5 pl-1.5 pr-4 font-black text-white shadow-lg transition-colors hover:bg-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 sm:rounded-2xl sm:pr-6">
+                    <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500 text-sm font-black text-white sm:rounded-xl" aria-hidden="true">{{ accountInitial || '?' }}</span>
+                    <span>{{ $t('landing.enter_app') }}</span>
+                </router-link>
+                <router-link v-else to="/login"
                     class="flex min-h-11 items-center justify-center rounded-xl bg-gray-900 px-4 py-2.5 font-black text-white shadow-lg transition-all hover:bg-emerald-600 hover:shadow-emerald-200 active:scale-95 sm:rounded-2xl sm:px-7">
                     {{ $t('auth.submit') }}
                 </router-link>

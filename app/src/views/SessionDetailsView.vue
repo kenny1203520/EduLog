@@ -6,6 +6,7 @@ import { PageApiService } from '@/services/api/PageApiService'
 import { SessionService } from '@/services/session/SessionService'
 import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
 import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
+import { ClassSessionFactory } from '@/models/ClassSession'
 import { invalidationAffectsDate, parseClassSessionDate } from '@/services/session/ClassSessionInvalidation'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
@@ -34,6 +35,7 @@ import OccurrenceCalendar from '@/components/OccurrenceCalendar.vue'
 import QuickAttendancePanel, { type QuickAttendanceStatus } from '@/components/classroom/QuickAttendancePanel.vue'
 import StudentRosterPanel, { type StudentRosterItem } from '@/components/classroom/StudentRosterPanel.vue'
 import TransferredOutStudents from '@/components/classroom/TransferredOutStudents.vue'
+import RealtimeStatusBadge, { type RealtimeBadgeTone } from '@/components/common/RealtimeStatusBadge.vue'
 import type { OccurrenceLessonTransfer } from '@/services/enrollment/EnrollmentTransferQueryService'
 import type { ProgressGapHintLesson } from '@/components/classroom/CourseProgressGapHint.vue'
 import ConflictModal from '@/components/ConflictModal.vue'
@@ -80,6 +82,7 @@ const sessionId = route.params.id as string
 const todayOccurrence = ref<any>(null)
 const selectedDateKey = ref<string | null>(parseClassSessionDate(route.query.date) || null)
 const sessionOccurrences = ref<ClassOccurrence[]>([])
+const reportCompletionByDate = ref<Record<string, { total: number; completed: number }>>({})
 const sessionTeachers = ref<SessionTeacherAssignmentDTO[]>([])
 const weekAnchorDate = ref(DateUtils.todayDate(preferences.timeZone))
 const isCalendarExpanded = ref(false)
@@ -166,6 +169,20 @@ const realtimeStatusMessage = computed(() => {
         case 'subscribing': return t('classroom.live_updates_subscribing')
         case 'reconnecting': return t('classroom.live_updates_reconnecting')
         default: return t('classroom.live_updates_connected')
+    }
+})
+// Live updates only refresh the roster; the page works without them, so the
+// status is a fixed-size badge that recolors instead of a bar that shifts content.
+const realtimeBadge = computed<{ tone: RealtimeBadgeTone; label: string; canRetry: boolean }>(() => {
+    if (realtimeRefreshError.value) return { tone: 'warning', label: t('classroom.live_badge_refresh_failed'), canRetry: true }
+    if (isRealtimeRefreshing.value) return { tone: 'connecting', label: t('classroom.live_badge_refreshing'), canRetry: false }
+    switch (realtimeStatus.value) {
+        case 'connected': return { tone: 'live', label: t('classroom.live_badge_live'), canRetry: false }
+        case 'connecting':
+        case 'subscribing': return { tone: 'connecting', label: t('classroom.live_badge_connecting'), canRetry: false }
+        case 'offline':
+        case 'reconnecting': return { tone: 'warning', label: t('classroom.live_badge_paused'), canRetry: true }
+        default: return { tone: 'paused', label: t('classroom.live_badge_unavailable'), canRetry: false }
     }
 })
 const selectedEditorEnrollmentSnapshot = ref<Enrollment | null>(null)
@@ -683,6 +700,33 @@ async function loadSessionOccurrences(anchorDate: Date): Promise<void> {
     const request = ++occurrenceListRequest
     const occurrences = await OccurrenceService.getOccurrencesByDateRange(rangeStart, rangeEnd, [sessionId])
     if (request === occurrenceListRequest) sessionOccurrences.value = occurrences
+    void loadReportCompletion(rangeStart, rangeEnd, request)
+}
+
+async function loadReportCompletion(rangeStart: Date, rangeEnd: Date, request: number) {
+    try {
+        const completion = await OccurrenceService.getReportCompletionByDate(
+            sessionId, DateUtils.formatLocalDate(rangeStart), DateUtils.formatLocalDate(rangeEnd)
+        )
+        if (request === occurrenceListRequest) reportCompletionByDate.value = completion
+    } catch (error) {
+        // The completion dot is a hint; the calendar works without it.
+        console.error('Failed to load report completion:', error)
+    }
+}
+
+const sessionSchedule = computed(() => {
+    if (!session.value) return null
+    try {
+        return ClassSessionFactory.create({ ...session.value, schedule_rules: session.value.schedule_rules ?? [] })
+    } catch {
+        return null
+    }
+})
+const calendarToday = computed(() => DateUtils.todayString(sessionTimeZone.value))
+
+function isPlannedClassDate(date: string) {
+    return sessionSchedule.value?.isScheduledOn(date) ?? false
 }
 
 async function loadReportsForCurrentOccurrence(options: { createMissing?: boolean } = {}) {
@@ -918,7 +962,16 @@ async function setCurrentOccurrence(occurrence: ClassOccurrence | null) {
 }
 
 async function handleCalendarDateSelect(date: Date) {
-    await selectClassDate(DateUtils.formatLocalDate(date))
+    const dateStr = DateUtils.formatLocalDate(date)
+    // A future lesson the schedule plans but that was never generated: create it first.
+    if (!findOccurrenceByDate(date) && dateStr >= calendarToday.value && isPlannedClassDate(dateStr)) {
+        try {
+            await OccurrenceService.generateOccurrences(sessionId, date, date)
+        } catch (error) {
+            console.error('Failed to generate the planned lesson:', error)
+        }
+    }
+    await selectClassDate(dateStr)
 }
 
 function syncSelectedDateToUrl(date: string) {
@@ -2282,6 +2335,17 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                             {{ session.name }}
                         </h1>
                         <div class="mt-3 flex min-w-0 flex-wrap gap-2 text-xs font-bold text-gray-500 sm:text-sm">
+                            <RealtimeStatusBadge
+                                :tone="realtimeBadge.tone"
+                                :label="realtimeBadge.label"
+                                :message="realtimeStatusMessage"
+                                :detail="realtimeStatusDetail ? `${$t('classroom.live_update_detail')} ${realtimeStatusDetail}` : null"
+                                :note="lastRealtimeUpdateAt ? $t('classroom.live_update_time', { time: lastRealtimeUpdateLabel }) : null"
+                                :can-retry="realtimeBadge.canRetry"
+                                :retry-label="realtimeRefreshError ? $t('classroom.live_update_retry') : $t('classroom.live_reconnect')"
+                                :busy="isRealtimeRefreshing"
+                                :status-label="$t('classroom.live_badge_aria')"
+                                @retry="retryRealtimeAction" />
                             <span class="inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-xl bg-white px-3 py-2 shadow-sm ring-1 ring-gray-100">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" fill="none"
                                     viewBox="0 0 24 24" stroke="currentColor">
@@ -2360,27 +2424,6 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
         </div>
 
         <div v-else class="session-workspace w-full">
-            <div v-if="realtimeStatus !== 'connected' || isRealtimeRefreshing || realtimeRefreshError || lastRealtimeUpdateAt"
-                class="mb-2 flex min-h-6 flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs"
-                :class="realtimeRefreshError || ['forbidden', 'expired', 'disabled'].includes(realtimeStatus) ? 'text-rose-700' : (realtimeStatus === 'offline' || realtimeStatus === 'reconnecting' ? 'text-amber-800' : 'text-slate-500')"
-                role="status" aria-live="polite" :aria-busy="isRealtimeRefreshing">
-                <div class="flex min-w-0 items-center gap-2">
-                    <span v-if="isRealtimeRefreshing" class="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-current border-r-transparent" aria-hidden="true"></span>
-                    <span v-else class="h-2 w-2 shrink-0 rounded-full" :class="realtimeStatus === 'connected' ? 'bg-emerald-500' : 'bg-current'" aria-hidden="true"></span>
-                    <span class="font-semibold">{{ realtimeStatusMessage }}</span>
-                    <span v-if="realtimeStatusDetail && !realtimeRefreshError" class="break-all opacity-75">
-                        {{ $t('classroom.live_update_detail') }} {{ realtimeStatusDetail }}
-                    </span>
-                </div>
-                <span v-if="lastRealtimeUpdateAt && !isRealtimeRefreshing && !realtimeRefreshError" class="ml-auto whitespace-nowrap text-slate-400">
-                    {{ $t('classroom.live_update_time', { time: lastRealtimeUpdateLabel }) }}
-                </span>
-                <button v-if="realtimeStatus === 'offline' || realtimeStatus === 'reconnecting' || realtimeRefreshError" type="button"
-                    class="min-h-8 shrink-0 rounded-lg border border-current/20 bg-white px-3 py-1 text-xs font-bold transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-                    :disabled="isRealtimeRefreshing" @click="retryRealtimeAction">
-                    {{ realtimeRefreshError ? $t('classroom.live_update_retry') : $t('classroom.live_reconnect') }}
-                </button>
-            </div>
             <div v-if="occurrenceLoadError" class="flex flex-col items-center justify-center rounded-3xl border border-red-100 bg-white px-6 py-20 text-center shadow-sm">
                 <p class="font-black text-red-700">{{ occurrenceLoadError }}</p>
                 <button type="button" class="mt-5 rounded-xl bg-red-600 px-5 py-3 text-sm font-black text-white hover:bg-red-700" @click="loadData">
@@ -2437,6 +2480,10 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                         <Transition name="fade-slide">
                             <div v-show="isCalendarExpanded" class="max-w-4xl mx-auto w-full">
                                 <OccurrenceCalendar :occurrences="sessionOccurrences" :compact="true"
+                                    mark-class-days
+                                    :is-planned-date="isPlannedClassDate"
+                                    :report-completion="reportCompletionByDate"
+                                    :today="calendarToday"
                                     :model-value="selectedDateKey || null"
                                     @select-date="handleCalendarDateSelect" />
                             </div>
