@@ -74,6 +74,22 @@ export interface SingleLessonTransferHistoryItem {
     target_classroom_name: string | null
 }
 
+/** One active single-lesson transfer into ('in') or out of ('out') an occurrence. */
+export interface OccurrenceLessonTransfer {
+    direction: 'in' | 'out'
+    transfer_id: string
+    enrollment_id: string
+    student_name: string
+    other_occurrence_id: string
+    other_occurrence_date: string
+    other_start_time: string | null
+    other_end_time: string | null
+    other_session_id: string
+    other_session_name: string | null
+    other_classroom_name: string | null
+    can_cancel: boolean
+}
+
 export interface EffectiveSingleLessonTransferTarget {
     transfer_id: string
     source_occurrence_id: string
@@ -93,6 +109,12 @@ export class EnrollmentTransferQueryService {
         })
         if (error) throw new Error(error.message)
         return (data || []) as SingleLessonTransferHistoryItem[]
+    }
+
+    /** Lists the active transfers into and out of one class occurrence. */
+    static async getOccurrenceLessonTransfers(occurrenceId: string): Promise<OccurrenceLessonTransfer[]> {
+        const response = await apiV1Client.get<OccurrenceLessonTransfer[]>('/occurrences/' + encodeURIComponent(occurrenceId) + '/lesson-transfers')
+        return response.data || []
     }
 
     static async getEffectiveSingleLessonTransferTargets(enrollmentId: string): Promise<EffectiveSingleLessonTransferTarget[]> {

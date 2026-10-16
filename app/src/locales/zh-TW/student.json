@@ -261,7 +261,14 @@
         "report_missing": "報告缺失",
         "repair_report": "重新產生報告",
         "repairing": "正在產生…",
-        "repair_error": "無法重新產生已調課的報告，請再試一次。"
+        "repair_error": "無法重新產生已調課的報告，請再試一次。",
+        "cancel_transfer": "取消調課",
+        "keep_transfer": "保留調課",
+        "cancel_confirm_title": "取消這筆調課？",
+        "cancel_confirm_message": "報告會從 {target} 移回原本的 {source}。如果這堂課之後又被調到其他日期，那些調課也會一起取消。",
+        "cancelled": "已取消調課，報告已移回原日期。",
+        "cancelled_target_retained": "已取消調課並還原原日期的報告。目標課次原本就有的報告仍保留，如不需要請手動刪除。",
+        "cancel_error": "無法取消調課。"
     },
     "activate_trial_modal": {
         "title": "轉為正式學員",

@@ -190,6 +190,19 @@ export class DateUtils {
         return d.toLocaleDateString(locale, { timeZone })
     }
 
+    /**
+     * Formats a YYYY-MM-DD date as `yyyy/mm/dd(w)`, e.g. `2026/10/03(六)` in
+     * Chinese and `2026/10/03 (Sat)` in English.
+     */
+    static displayDateWithWeekday(date: string | undefined, locale: string = i18n.global.locale.value): string {
+        const parsed = date ? this.parseLocalDate(date) : null
+        if (!parsed || Number.isNaN(parsed.getTime())) return '-'
+        const isChinese = locale.toLowerCase().startsWith('zh')
+        const weekday = new Intl.DateTimeFormat(locale, { weekday: isChinese ? 'narrow' : 'short' }).format(parsed)
+        const day = date!.slice(0, 10).replaceAll('-', '/')
+        return isChinese ? `${day}(${weekday})` : `${day} (${weekday})`
+    }
+
     static displayDateTime(date: Date | string | undefined, locale: string = i18n.global.locale.value, timeZone: string = this.getDefaultTimeZone()): string {
         if (!date) return '-'
         const d = typeof date === 'string' ? new Date(date) : date

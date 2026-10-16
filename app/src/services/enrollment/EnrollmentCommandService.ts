@@ -3,7 +3,7 @@ import { Enrollment, type EnrollmentDTO } from '@/models/Enrollment'
 import { OccurrenceService } from '../occurrence/OccurrenceService'
 import { OccurrenceReportService } from '../occurrence/OccurrenceReportService'
 import { EnrollmentStatusPolicyService } from './EnrollmentStatusPolicyService'
-import { EnrollmentTransferService } from './EnrollmentTransferService'
+import { EnrollmentTransferService, type SingleLessonTransferCancelResult } from './EnrollmentTransferService'
 import { EnrollmentSupportService } from './EnrollmentSupportService'
 import { DateUtils } from '@/utils/DateUtils'
 import { SessionService } from '../session/SessionService'
@@ -325,7 +325,7 @@ export class EnrollmentCommandService {
         return EnrollmentTransferService.resolveSingleLessonTransferConflict(conflict, fieldSources)
     }
 
-    static async cancelSingleLessonTransfer(transferId: string): Promise<void> {
+    static async cancelSingleLessonTransfer(transferId: string): Promise<SingleLessonTransferCancelResult> {
         return EnrollmentTransferService.cancelSingleLessonTransfer(transferId)
     }
 

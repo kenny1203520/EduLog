@@ -59,6 +59,8 @@ const transferReasons: Array<[reason: string, status: number, code: string, mess
   ['TARGET_OCCURRENCE_ALREADY_EFFECTIVE', 409, 'TRANSFER_CONFLICT', 'The transfer conflicts with an existing report or transfer'],
   ['TRANSFER_CONFLICT_STALE', 409, 'TRANSFER_CONFLICT', 'The transfer conflicts with an existing report or transfer'],
   ['VERSION_CONFLICT', 409, 'TRANSFER_CONFLICT', 'The transfer conflicts with an existing report or transfer'],
+  ['SOURCE_REPORT_HAS_CONTENT', 409, 'TRANSFER_CONFLICT', 'The transfer conflicts with an existing report or transfer'],
+  ['TRANSFER_CHAIN_HAS_MERGED_REPORT', 409, 'TRANSFER_CONFLICT', 'The transfer conflicts with an existing report or transfer'],
   ['SOURCE_OCCURRENCE_NOT_EFFECTIVE', 422, 'TRANSFER_INVALID', 'The transfer violates a business rule'],
   ['TARGET_OCCURRENCE_NOT_EFFECTIVE', 422, 'TRANSFER_INVALID', 'The transfer violates a business rule'],
   ['SOURCE_AND_TARGET_OCCURRENCES_MATCH', 422, 'TRANSFER_INVALID', 'The transfer violates a business rule'],
@@ -189,9 +191,20 @@ async function cancel(req: Request, res: Response) {
   if (replay) return res.status(replay.status).json(replay.body)
   const result = await req.db!.rpc('cancel_single_lesson_transfer', { p_transfer_id: input.transfer_id })
   if (result.error) throw transferRpcError(result.error)
-  const body = { data: { cancelled: true, transfer_id: input.transfer_id }, meta: {}, request_id: req.requestId, trace_id: req.traceId }
+  const summary = (result.data && typeof result.data === 'object' ? result.data : {}) as { restored_report_id?: string | null; target_report_retained?: boolean; cancelled_transfer_ids?: string[] }
+  const body = { data: { cancelled: true, transfer_id: input.transfer_id, cancelled_transfer_ids: summary.cancelled_transfer_ids ?? [input.transfer_id], restored_report_id: summary.restored_report_id ?? null, target_report_retained: summary.target_report_retained ?? false }, meta: {}, request_id: req.requestId, trace_id: req.traceId }
   await complete(req, 200, body)
   return res.json(body)
+}
+
+async function occurrenceTransfers(req: Request, res: Response) {
+  const id = typeof req.params.id === 'string' ? req.params.id : undefined
+  if (!id) throw new ApiError(400, 'INVALID_ID', 'Occurrence id is required')
+  await assertOccurrencePermission(req, id, 'read')
+  const result = await req.db!.rpc('get_occurrence_lesson_transfers', { p_occurrence_id: id })
+  if (result.error) throw transferRpcError(result.error)
+  const data = (result.data ?? []) as unknown[]
+  return res.json({ data, meta: { limit: data.length, offset: 0, total: data.length, sort: '-direction,student_name' }, request_id: req.requestId, trace_id: req.traceId })
 }
 
 async function roster(req: Request, res: Response) {
@@ -213,5 +226,6 @@ export function createTransferRouter() {
   router.post('/enrollment-transfers/conflicts/resolve', wrap(resolveConflict))
   router.post('/enrollment-transfers/cancel', wrap(cancel))
   router.get('/occurrences/:id/roster', wrap(roster))
+  router.get('/occurrences/:id/lesson-transfers', wrap(occurrenceTransfers))
   return router
 }

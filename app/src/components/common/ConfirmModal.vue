@@ -9,6 +9,8 @@ const props = defineProps<{
     cancelText?: string
     isDangerous?: boolean
     isLoading?: boolean
+    /** Stack above another modal (e.g. a confirm opened from inside a dialog). */
+    stacked?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -38,7 +40,7 @@ onUnmounted(() => {
 
 <template>
     <Teleport to="body">
-    <div v-if="isOpen" class="fixed inset-0 z-[90] flex items-center justify-center p-4">
+    <div v-if="isOpen" class="fixed inset-0 flex items-center justify-center p-4" :class="stacked ? 'z-[110]' : 'z-[90]'">
         <!-- Backdrop -->
         <div class="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" @click="$emit('close')"></div>
 

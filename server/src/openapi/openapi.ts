@@ -270,6 +270,9 @@ export function buildOpenApi() {
   paths['/api/enrollment-transfers/cancel'] = {
     post: { operationId: 'enrollment_transfer_cancel', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.enrollments.update', parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/TransferCancelMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
+  paths['/api/occurrences/{id}/lesson-transfers'] = {
+    get: { operationId: 'occurrence_lesson_transfers', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.occurrences.read', description: 'Active single-lesson transfers into (direction=in) and out of (direction=out) the occurrence.', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+  }
   paths['/api/occurrences/{id}/roster'] = {
     get: { operationId: 'occurrence_roster', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.occurrences.read', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
