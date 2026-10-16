@@ -1,4 +1,5 @@
 import type { PermissionDTO, PolicyEffect, PolicyScope, RolePermissionPolicyDTO } from '@/models/Rbac'
+import { schedulePolicyOverrides, type DashboardSchedulePolicies, type DashboardScheduleSelections } from '@/models/DashboardScheduleMode'
 import { AuthorizationError } from '@/services/errors/AppError'
 import { apiResourceClient } from '@/services/api/ApiResourceClient'
 import { apiDataClient } from '@/services/api/ApiDataClient'
@@ -7,6 +8,7 @@ import { apiV1Client } from '@/services/api/ApiV1Client'
 
 export const INCOMPLETE_REPORT_PERMISSION = 'reports.incomplete.receive'
 export const DASHBOARD_SCHEDULE_ALL_PERMISSION = 'teaching.dashboard.schedule.all'
+export const DASHBOARD_SCHEDULE_VIEW_PERMISSION = 'teaching.dashboard.schedule.view'
 export interface PolicyScopeTarget { type: PolicyScope; id?: string | null }
 
 export class PermissionPolicyService {
@@ -68,5 +70,20 @@ export class PermissionPolicyService {
             if ((error as any)?.status === 401 || (error as any)?.status === 403 || (error as any)?.code === '42501') throw new AuthorizationError({ message: 'RBAC policy management was denied', cause: error })
             throw error
         }
+    }
+
+    /** Both permissions behind the four-state today's-schedule mode. */
+    static async getDashboardSchedulePolicies(): Promise<DashboardSchedulePolicies> {
+        const [allPermission, viewPermission] = await Promise.all([
+            this.getPermission(DASHBOARD_SCHEDULE_ALL_PERMISSION),
+            this.getPermission(DASHBOARD_SCHEDULE_VIEW_PERMISSION)
+        ])
+        const [all, view] = await Promise.all([this.getPolicies(allPermission.id), this.getPolicies(viewPermission.id)])
+        return { all, view }
+    }
+    static async replaceDashboardScheduleModes(scope: PolicyScopeTarget, selections: DashboardScheduleSelections): Promise<void> {
+        const overrides = schedulePolicyOverrides(selections)
+        await this.replacePolicies(DASHBOARD_SCHEDULE_VIEW_PERMISSION, scope, overrides.view)
+        await this.replacePolicies(DASHBOARD_SCHEDULE_ALL_PERMISSION, scope, overrides.all)
     }
 }

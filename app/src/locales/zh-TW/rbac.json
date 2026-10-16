@@ -126,6 +126,7 @@
     "manage": { "name": "管理", "description": "執行管理操作" },
     "receive_notifications": { "name": "接收通知", "description": "接收系統產生的教學通知" },
     "schedule_all": { "name": "查看所有今日課表", "description": "在今日課表中查看所有課程，而非僅限自己授課的課程" },
+    "schedule_view": { "name": "顯示今日課表", "description": "拒絕時，該範圍的課程（包含自己授課的班級）不會出現在今日課表" },
     "read_sensitive": { "name": "讀取敏感資料", "description": "查看受保護的個人資料" },
     "update_sensitive": { "name": "更新敏感資料", "description": "編輯受保護的個人資料" }
   },
