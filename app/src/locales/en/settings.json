@@ -113,9 +113,8 @@
     },
     "dashboard_schedule": {
         "title": "Today's Schedule Visibility",
-        "description": "Choose, for each teaching role, which classes appear in the dashboard's today's schedule. Classrooms and classes can override this in Classroom management.",
-        "system_roles_hint": "System Owner and System Administrator see the full schedule by default; adjust them under System role permissions (Dashboard › View all of today's schedule).",
-        "inheritance_hint": "Each role uses its most specific setting (class, then classroom, then system). When a user has several roles, including system roles, the strictest explicit setting wins: Hidden, then Assigned classes only, then All classes.",
+        "description": "Choose, for each teaching role, which classes appear in the dashboard's today's schedule. Classrooms and classes can override this in Classroom management. System roles do not affect the schedule.",
+        "inheritance_hint": "Each role uses its most specific setting (class, then classroom, then system). When a user has several teaching roles, the strictest explicit setting wins: Hidden, then Assigned classes only, then All classes.",
         "scope_hint": "Choose which classes each teaching role sees in today's schedule here. Inherit uses the classroom or system setting.",
         "saved": "Schedule visibility saved",
         "system": "System-wide",

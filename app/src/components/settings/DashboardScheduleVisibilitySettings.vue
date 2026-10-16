@@ -68,9 +68,6 @@ onMounted(load)
             <p class="mt-1 text-sm font-bold text-gray-400">{{ $t('settings.dashboard_schedule.description') }}</p>
         </div>
         <div class="space-y-6 p-6 sm:p-8">
-            <p class="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-xs font-bold leading-5 text-gray-500">
-                {{ $t('settings.dashboard_schedule.system_roles_hint') }}
-            </p>
             <div v-if="loading" class="py-8 text-center font-bold text-gray-400">{{ $t('common.loading') }}</div>
             <template v-else>
                 <p v-if="!canManageRbac" class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">

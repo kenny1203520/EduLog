@@ -11,10 +11,13 @@
 --
 -- resolve_dashboard_schedule_modes picks, per class and per teaching role, the
 -- most specific policy (class > classroom > system), then the strictest
--- explicit mode across the user's roles (hidden > assigned > all). System roles
--- only offer all/assigned through system.dashboard.schedule.all and join the
--- same strictest comparison. Roles without a policy do not restrict, and a
--- user with no explicit mode at all sees only the classes they teach.
+-- explicit mode across the user's teaching roles (hidden > assigned > all).
+-- Roles without a policy do not restrict, and a user with no explicit mode
+-- sees only the classes they teach.
+--
+-- Only teaching roles decide the schedule now: system.dashboard.schedule.all
+-- (1000145) is removed, so system owners and administrators need a teaching
+-- role set to "all" to see every class.
 
 DO $$
 BEGIN
@@ -35,6 +38,9 @@ SET name = EXCLUDED.name,
     domain = EXCLUDED.domain,
     resource = EXCLUDED.resource,
     action = EXCLUDED.action;
+
+-- role_permission_policies rows cascade with the permission.
+DELETE FROM public.permissions WHERE key = 'system.dashboard.schedule.all';
 
 CREATE OR REPLACE FUNCTION public.resolve_dashboard_schedule_modes(
   p_user_id uuid, p_class_session_ids uuid[], p_effective_date date DEFAULT CURRENT_DATE
@@ -113,24 +119,9 @@ WITH RECURSIVE targets AS (
   FROM role_policies
   WHERE role_policies.rank = 1
   GROUP BY role_policies.class_session_id, role_policies.root_role_id
-), system_roles(role_id) AS (
-  SELECT assignment.role_id FROM public.user_role_assignments assignment
-  JOIN public.roles role ON role.id = assignment.role_id AND role.domain = 'system'
-  WHERE assignment.user_id = p_user_id AND assignment.scope_type = 'system'
-    AND assignment.status = 'active' AND assignment.effective_from <= p_effective_date
-    AND (assignment.effective_to IS NULL OR assignment.effective_to >= p_effective_date)
-  UNION
-  SELECT inheritance.parent_role_id FROM public.role_inheritance inheritance
-  JOIN system_roles child ON child.role_id = inheritance.role_id
-), system_mode AS (
-  SELECT CASE WHEN bool_or(policy.effect = 'deny') THEN 2 WHEN bool_or(policy.effect = 'allow') THEN 1 END AS strictness
-  FROM public.role_permission_policies policy
-  JOIN public.permissions permission ON permission.id = policy.permission_id
-  WHERE policy.role_id IN (SELECT role_id FROM system_roles)
-    AND policy.scope_type = 'system' AND permission.key = 'system.dashboard.schedule.all'
 )
 SELECT target.class_session_id,
-       CASE GREATEST(COALESCE(max(role_modes.strictness), 0), COALESCE((SELECT strictness FROM system_mode), 0))
+       CASE COALESCE(max(role_modes.strictness), 0)
          WHEN 3 THEN 'hidden'
          WHEN 1 THEN 'all'
          ELSE 'assigned'

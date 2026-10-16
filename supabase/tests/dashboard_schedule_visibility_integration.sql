@@ -1,6 +1,7 @@
 -- Rollback-only fixture for 1000147: per-class dashboard schedule modes.
 -- Most specific scope wins per role, the strictest explicit mode wins across
--- roles (system roles included), and roles without a policy never restrict.
+-- teaching roles, roles without a policy never restrict, and system roles no
+-- longer widen the schedule.
 BEGIN;
 
 SELECT set_config('request.jwt.claim.role', 'service_role', true);
@@ -33,8 +34,8 @@ BEGIN
     (session_a2, 'A2', classroom_a, '{}'::uuid[], owner_id, v_teaching_id, '13:00', '15:00'),
     (session_b1, 'B1', classroom_b, '{}'::uuid[], owner_id, v_teaching_id, '10:00', '12:00');
 
-  -- admin_user: system admin (seeded schedule.all = allow) who also holds a
-  -- teaching role hidden in classroom A, lifted again to "all" in class A2.
+  -- admin_user: system admin who also holds a teaching role hidden in
+  -- classroom A and lifted to "all" in class A2; nothing set for classroom B.
   INSERT INTO public.user_role_assignments(user_id, role_id, scope_type, scope_id, effective_from, status)
   SELECT admin_user, role.id, 'system', NULL, DATE '2026-01-01', 'active'
   FROM public.roles role WHERE role.code = 'system_admin' AND role.domain = 'system' AND role.is_builtin;
@@ -68,8 +69,11 @@ BEGIN
   PERFORM set_config('request.jwt.claim.sub', '7e000000-0000-4000-8000-000000000002', true);
   SELECT string_agg(mode, ',' ORDER BY class_session_id) INTO modes
   FROM public.resolve_dashboard_schedule_modes('7e000000-0000-4000-8000-000000000002', sessions, DATE '2026-10-17');
-  IF modes IS DISTINCT FROM 'hidden,all,all' THEN
-    RAISE EXCEPTION 'admin with a classroom-hidden role should get hidden,all,all, got %', modes;
+  IF modes IS DISTINCT FROM 'hidden,all,assigned' THEN
+    RAISE EXCEPTION 'only the teaching role should decide the admin''s schedule (hidden,all,assigned), got %', modes;
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.permissions WHERE key = 'system.dashboard.schedule.all') THEN
+    RAISE EXCEPTION 'system.dashboard.schedule.all should be removed';
   END IF;
 
   PERFORM set_config('request.jwt.claim.sub', '7e000000-0000-4000-8000-000000000003', true);
