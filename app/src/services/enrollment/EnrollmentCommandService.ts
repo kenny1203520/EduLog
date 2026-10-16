@@ -20,6 +20,14 @@ type EnrollmentUpdateOptions = {
     targetTotalReports?: number
 }
 
+export interface EnrollmentStartDateImpact {
+    createdDates: string[]
+    removedDates: string[]
+    /** Dates of reports with content that would fall before the new start date; they are kept. */
+    reportsWithContentBeforeStart: string[]
+    missingCount: number
+}
+
 export class EnrollmentCommandService {
     private static async alignSessionContext(
         enrollmentData: Partial<EnrollmentDTO>,
@@ -104,6 +112,20 @@ export class EnrollmentCommandService {
         }
 
         return new Enrollment(enrollment as EnrollmentDTO)
+    }
+
+    /** Dry run of a start-date edit: which placeholder dates move, and which reports with content fall before it. */
+    static async getStartDateImpact(enrollmentId: string, startDate: string): Promise<EnrollmentStartDateImpact> {
+        const response = await apiV1Client.get<any>(
+            '/enrollments/' + encodeURIComponent(enrollmentId) + '/start-date-impact?start_date=' + encodeURIComponent(startDate)
+        )
+        const data = response.data || {}
+        return {
+            createdDates: data.created_dates ?? [],
+            removedDates: data.removed_dates ?? [],
+            reportsWithContentBeforeStart: data.fixed_before_start_dates ?? [],
+            missingCount: data.missing_count ?? 0
+        }
     }
 
     static async update(

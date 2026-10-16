@@ -5,6 +5,7 @@ import type { SingleLessonTransferConflict, SingleLessonTransferResult } from '.
 import type { TransferReportFieldSelections } from '@/services/report/ReportFieldConflictService'
 import { EnrollmentTransferQueryService, type EffectiveSingleLessonTransferTarget, type OccurrenceLessonTransfer, type SingleLessonTransferHistoryItem } from './EnrollmentTransferQueryService'
 import type { ClassTransferResult, SingleLessonTransferCancelResult } from './EnrollmentTransferService'
+import type { EnrollmentStartDateImpact } from './EnrollmentCommandService'
 
 type EnrollmentCreateOptions = {
     targetReportCount?: number
@@ -60,6 +61,10 @@ export class EnrollmentService {
             targetSessionId,
             targetDate
         )
+    }
+
+    static async getStartDateImpact(enrollmentId: string, startDate: string): Promise<EnrollmentStartDateImpact> {
+        return EnrollmentCommandService.getStartDateImpact(enrollmentId, startDate)
     }
 
     static async update(

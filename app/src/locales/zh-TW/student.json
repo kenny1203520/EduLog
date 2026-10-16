@@ -342,5 +342,10 @@
         "credential_value_required": "帳號、密碼或連結至少需填寫一項",
         "session_full": "所選時段在該區間已滿額",
         "session_course_mismatch": "所選班級無法教授這門課程"
+    },
+    "start_date_impact": {
+        "title": "有已寫內容的報告會落在新開始日之前",
+        "message": "{dates} 的報告已經有內容，會保留在原日期，不會被刪除或移動。其他空白報告會依新的開始日期重新排列。要繼續儲存嗎？",
+        "confirm": "仍要儲存"
     }
 }
