@@ -12,32 +12,11 @@
         </div>
 
         <!-- Header -->
-        <div v-if="effectiveCollaborationEnabled && (collaborationStatus === 'connecting' || collaborationStatus === 'subscribing')"
-            class="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700"
-            role="status">
-            {{ collaborationConnectingMessage }}
-        </div>
-        <div v-else-if="effectiveCollaborationEnabled && (collaborationStatus === 'error' || collaborationStatus === 'reconnecting' || collaborationStatus === 'offline' || collaborationStatus === 'forbidden' || collaborationStatus === 'auth-expired' || collaborationStatus === 'account-disabled' || collabInitialState === 'error')"
-            class="mt-2 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
-            role="status" aria-live="polite">
-            <span>{{ collaborationStatusMessage }}</span>
-            <button v-if="collaborationStatus !== 'forbidden' && collaborationStatus !== 'auth-expired' && collaborationStatus !== 'account-disabled'" type="button" class="min-h-9 rounded-lg border border-amber-300 bg-white px-3 font-bold text-amber-900 hover:bg-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-700 disabled:opacity-50" @click="reconnectCollaboration">
-                {{ $t('report.editor.collaboration_retry') }}
-            </button>
-            <span v-if="collaborationError" class="basis-full break-words text-[11px] font-medium" aria-live="polite">
-                {{ $t('report.editor.collaboration_error_detail') }} {{ collaborationError }}
-            </span>
-        </div>
-        <div v-else-if="effectiveCollaborationEnabled && collaborationRecovered"
-            class="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700"
-            role="status">
-            {{ $t('report.editor.collaboration_recovered', 'Real-time collaboration has been restored.') }}
-        </div>
-
         <div class="flex items-center justify-between gap-3">
             <h3 class="text-lg font-semibold text-gray-800">
                 {{ props.title || $t('report.editor.title') }}
             </h3>
+            <div class="flex min-w-0 flex-wrap items-center justify-end gap-2">
             <div v-if="onlineParticipantCount > 0" class="flex items-center gap-1 text-xs text-slate-500" aria-live="polite">
                 <span class="font-semibold text-emerald-700">{{ onlineParticipantCount }} online</span>
                 <span v-for="peer in activePeers.slice(0, 3)" :key="peer.clientId"
@@ -45,6 +24,16 @@
                     :style="{ color: peer.user?.color, backgroundColor: (peer.user?.color || '#94a3b8') + '20' }">
                     {{ peer.user?.name || 'Collaborator' }}<span v-if="peer.activity?.field"> - {{ peer.activity.field }}</span>
                 </span>
+            </div>
+            <RealtimeStatusBadge v-if="effectiveCollaborationEnabled"
+                :tone="collaborationBadge.tone"
+                :label="collaborationBadge.label"
+                :message="collaborationBadge.message"
+                :detail="collaborationError ? `${$t('report.editor.collaboration_error_detail')} ${collaborationError}` : null"
+                :can-retry="collaborationBadge.canRetry"
+                :retry-label="$t('report.editor.collaboration_retry')"
+                :status-label="$t('report.editor.collaboration_badge_aria')"
+                @retry="reconnectCollaboration" />
             </div>
         </div>
 
@@ -683,6 +672,7 @@ import { useAutoSave, type AutoSaveErrorContext } from '@/composables/useAutoSav
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { useAuthStore } from '@/stores/useAuthStore'
 import RatingInput from '@/components/common/RatingInput.vue'
+import RealtimeStatusBadge, { type RealtimeBadgeTone } from '@/components/common/RealtimeStatusBadge.vue'
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
 import TextEditor from '@/components/common/text-editor/TextEditor.vue'
 import CollaborativeTextEditor from '@/components/common/text-editor/CollaborativeTextEditor.vue'
@@ -1640,21 +1630,6 @@ const {
     presenceEnabled: preferences.editorSettings.collaboration.presenceEnabled
 })))
 
-const collaborationRecovered = ref(false)
-let collaborationHadError = false
-let collaborationRecoveryTimer: ReturnType<typeof setTimeout> | null = null
-watch(collaborationStatus, nextStatus => {
-    if (nextStatus === 'error') collaborationHadError = true
-    if (nextStatus === 'ready' && collaborationHadError) {
-        collaborationHadError = false
-        collaborationRecovered.value = true
-        if (collaborationRecoveryTimer) clearTimeout(collaborationRecoveryTimer)
-        collaborationRecoveryTimer = setTimeout(() => {
-            collaborationRecovered.value = false
-            collaborationRecoveryTimer = null
-        }, 4000)
-    }
-})
 
 const contactNotesEditorRef = ref<TextEditorHandle | null>(null)
 const classNotesEditorRef = ref<TextEditorHandle | null>(null)
@@ -1995,6 +1970,30 @@ const { t } = useI18n()
 const collaborationConnectingMessage = computed(() => collaborationStatus.value === 'subscribing'
     ? t('report.editor.collaboration_subscribing')
     : t('report.editor.collaboration_connecting'))
+// Collaboration is a convenience: editing and saving keep working whatever the
+// state, so the badge only recolors instead of pushing banners into the layout.
+const collaborationBadge = computed<{ tone: RealtimeBadgeTone; label: string; message: string; canRetry: boolean }>(() => {
+    const status = collaborationStatus.value
+    if (collabInitialState.value === 'error' && status !== 'ready') {
+        return { tone: 'paused', label: t('report.editor.collaboration_badge_paused'), message: collaborationStatusMessage.value, canRetry: true }
+    }
+    switch (status) {
+        case 'ready':
+            return { tone: 'live', label: t('report.editor.collaboration_badge_live'), message: t('report.editor.collaboration_live'), canRetry: false }
+        case 'connecting':
+        case 'subscribing':
+            return { tone: 'connecting', label: t('report.editor.collaboration_connecting_short'), message: collaborationConnectingMessage.value, canRetry: false }
+        case 'reconnecting':
+        case 'offline':
+            return { tone: 'warning', label: t(status === 'offline' ? 'report.editor.collaboration_badge_offline' : 'report.editor.collaboration_badge_reconnecting'), message: collaborationStatusMessage.value, canRetry: true }
+        case 'forbidden':
+        case 'auth-expired':
+        case 'account-disabled':
+            return { tone: 'paused', label: t('report.editor.collaboration_badge_paused'), message: collaborationStatusMessage.value, canRetry: false }
+        default:
+            return { tone: 'paused', label: t('report.editor.collaboration_badge_paused'), message: collaborationStatusMessage.value, canRetry: true }
+    }
+})
 const collaborationStatusMessage = computed(() => {
     switch (collaborationStatus.value) {
         case 'offline': return t('report.editor.collaboration_offline')
@@ -2887,8 +2886,6 @@ onMounted(() => {
 onBeforeUnmount(async () => {
     reportEditorUnmounted = true
     collabEditorGeneration++
-    if (collaborationRecoveryTimer) clearTimeout(collaborationRecoveryTimer)
-    collaborationRecoveryTimer = null
     window.removeEventListener('pagehide', flushOnPageHide)
     document.removeEventListener('visibilitychange', handleVisibilityChange)
     cleanupReportCollabBindings()

@@ -273,6 +273,9 @@ export function buildOpenApi() {
   paths['/api/enrollments/{id}/start-date-impact'] = {
     get: { operationId: 'enrollment_start_date_impact', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.enrollments.update', description: 'Dry run of moving the enrollment start date: placeholder report dates created and removed, and reports with content that would fall before the new start.', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }, { name: 'start_date', in: 'query', required: true, schema: { type: 'string', format: 'date' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
+  paths['/api/class-sessions/{id}/report-completion'] = {
+    get: { operationId: 'class_session_report_completion', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.reports.list', description: 'Per-lesson report totals and completed counts in a date range.', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }, { name: 'from', in: 'query', required: true, schema: { type: 'string', format: 'date' } }, { name: 'to', in: 'query', required: true, schema: { type: 'string', format: 'date' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+  }
   paths['/api/occurrences/{id}/lesson-transfers'] = {
     get: { operationId: 'occurrence_lesson_transfers', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.occurrences.read', description: 'Active single-lesson transfers into (direction=in) and out of (direction=out) the occurrence.', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }

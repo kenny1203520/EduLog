@@ -378,11 +378,28 @@
     "live_updates_connecting": "Establishing the live connection…",
     "live_updates_subscribing": "Connected. Joining the live update channel…",
     "live_update_detail": "Connection detail:",
+    "live_badge_live": "Live",
+    "live_badge_connecting": "Connecting…",
+    "live_badge_refreshing": "Updating…",
+    "live_badge_paused": "Sync paused",
+    "live_badge_refresh_failed": "Update failed",
+    "live_badge_unavailable": "Sync unavailable",
+    "live_badge_aria": "Class live update status",
     "lesson_transfer": {
         "title": "Transferred to another lesson",
         "transferred_out": "(transferred to {date} {session} {time})",
         "transferred_in": "From the {date} {time} class",
         "open_target": "Open",
         "cancel_confirm_message": "{student}'s report moves from {target} back to this lesson."
+    },
+    "calendar": {
+        "legend": "Calendar legend",
+        "held": "Held",
+        "upcoming": "Upcoming",
+        "cancelled": "Cancelled",
+        "completion": "Report progress",
+        "completion_complete": "All reports complete",
+        "completion_partial": "Some reports complete",
+        "completion_none": "No reports complete"
     }
 }
