@@ -344,8 +344,8 @@
         "session_course_mismatch": "The selected class session cannot teach this course"
     },
     "start_date_impact": {
-        "title": "Reports with content fall before the new start date",
-        "message": "The reports on {dates} already have content. They stay on their dates and are not deleted or moved; the blank reports are rearranged from the new start date. Save anyway?",
+        "title": "Some reports stay before the new start date",
+        "message": "The reports on {dates} have content (including attendance) or come from a transfer or make-up lesson. They stay on their dates and are not deleted or moved; the blank reports are rearranged from the new start date. Save anyway?",
         "confirm": "Save anyway"
     }
 }

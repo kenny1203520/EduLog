@@ -450,7 +450,7 @@ async function refreshData() {
         <ConfirmModal :is-open="startDateWarningDates !== null"
             :title="$t('student.start_date_impact.title')"
             :message="startDateWarningDates ? $t('student.start_date_impact.message', {
-                dates: startDateWarningDates.map(date => DateUtils.displayDateWithWeekday(date, preferences.locale)).join('、')
+                dates: [...new Set(startDateWarningDates)].map(date => DateUtils.displayDateWithWeekday(date, preferences.locale)).join('、')
             }) : ''"
             :confirm-text="$t('student.start_date_impact.confirm')"
             :is-loading="isModifying" @close="startDateWarningDates = null"

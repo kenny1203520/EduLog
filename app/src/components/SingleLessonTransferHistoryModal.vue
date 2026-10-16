@@ -249,8 +249,8 @@ watch(() => [props.isOpen, props.enrollmentId], ([isOpen]) => {
         :is-open="pendingCancel !== null"
         :title="$t('student.transfer_history.cancel_confirm_title')"
         :message="pendingCancel ? $t('student.transfer_history.cancel_confirm_message', {
-            source: DateUtils.displayDateWithWeekday(pendingCancel.source_occurrence_date, preferences.locale),
-            target: DateUtils.displayDateWithWeekday(pendingCancel.target_occurrence_date, preferences.locale)
+            source: [DateUtils.displayDateWithWeekday(pendingCancel.source_occurrence_date, preferences.locale), pendingCancel.source_session_name].filter(Boolean).join(' '),
+            target: [DateUtils.displayDateWithWeekday(pendingCancel.target_occurrence_date, preferences.locale), pendingCancel.target_session_name].filter(Boolean).join(' ')
         }) : ''"
         :confirm-text="$t('student.transfer_history.cancel_transfer')"
         :cancel-text="$t('student.transfer_history.keep_transfer')"
