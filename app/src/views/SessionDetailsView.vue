@@ -2344,6 +2344,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                         </h1>
                         <div class="mt-3 flex min-w-0 flex-wrap gap-2 text-xs font-bold text-gray-500 sm:text-sm">
                             <RealtimeStatusBadge
+                                align="start"
                                 :tone="realtimeBadge.tone"
                                 :label="realtimeBadge.label"
                                 :message="realtimeStatusMessage"

@@ -28,4 +28,15 @@ describe('RealtimeStatusBadge', () => {
         await wrapper.get('button').trigger('click')
         expect(wrapper.findAll('button')).toHaveLength(1)
     })
+
+    it('grows the popover leftward by default and rightward when aligned to the start edge', async () => {
+        const end = mount(RealtimeStatusBadge, { props: { ...base, tone: 'live' } })
+        await end.get('button').trigger('click')
+        expect(end.get('[role="dialog"]').classes()).toContain('right-0')
+
+        const start = mount(RealtimeStatusBadge, { props: { ...base, tone: 'live', align: 'start' } })
+        await start.get('button').trigger('click')
+        expect(start.get('[role="dialog"]').classes()).toContain('left-0')
+        expect(start.get('[role="dialog"]').classes()).not.toContain('right-0')
+    })
 })
