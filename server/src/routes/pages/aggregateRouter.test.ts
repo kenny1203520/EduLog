@@ -48,10 +48,11 @@ describe('aggregate API contract', () => {
     expect(source).toContain('database_error_code')
   })
 
-  it('scopes the dashboard schedule by permission and teaching assignment instead of attendance', () => {
-    expect(source).toContain('DASHBOARD_SCHEDULE_ALL_PERMISSIONS')
+  it('scopes the dashboard schedule by per-class modes and teaching assignment instead of attendance', () => {
+    expect(source).toContain("db.rpc('resolve_dashboard_schedule_modes', { p_user_id: req.user!.id, p_class_session_ids: sessionIds })")
     expect(source).toContain("db.from('class_session_teachers').select('class_session_id,effective_from,effective_to').eq('teacher_id', teacherId)")
-    expect(source).toContain('filterOccurrencesByAssignments(rows, assignments)')
+    expect(source).toContain('filterOccurrencesByScheduleModes(rows, modes, assignments).slice(0, DASHBOARD_OCCURRENCE_LIMIT)')
+    expect(source).not.toContain('hasDashboardScheduleAll')
     expect(source).toContain(".not('status', 'in', '(cancelled,rescheduled)')")
     expect(source).not.toContain("eq('is_conducted', true)")
     expect(source).not.toContain('isTeacherPresent')

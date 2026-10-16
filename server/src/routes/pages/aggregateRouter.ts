@@ -2,7 +2,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod'
 import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { sendData } from '../../http/response.js'
-import { DASHBOARD_SCHEDULE_ALL_PERMISSIONS, filterOccurrencesByAssignments, type TeacherSessionAssignment } from '../../domain/dashboardSchedule.js'
+import { filterOccurrencesByScheduleModes, type DashboardScheduleMode, type TeacherSessionAssignment } from '../../domain/dashboardSchedule.js'
 import { measureRequestPhase, recordDatabaseCall, setAuditContext } from '../../http/context.js'
 import { authorizeCollection, authorizeResource, requireAuthorizationDecision } from '../../auth/authorization.js'
 import { resources } from '../rest/resources.js'
@@ -233,16 +233,17 @@ async function loadDashboardCounts(req: Request) {
   return (result.data ?? {}) as { totalStudents?: number; activeCourses?: number }
 }
 
-async function hasDashboardScheduleAll(req: Request) {
+// Upper bound on candidate occurrences before per-class modes are applied;
+// the page still returns at most DASHBOARD_OCCURRENCE_LIMIT rows.
+const DASHBOARD_OCCURRENCE_CANDIDATES = 500
+const DASHBOARD_OCCURRENCE_LIMIT = 100
+
+async function loadDashboardScheduleModes(req: Request, sessionIds: string[]) {
   const db = requireDb(req)
-  const checks = await Promise.all(DASHBOARD_SCHEDULE_ALL_PERMISSIONS.map((permission) => database(req, () => db.rpc('has_api_permission', {
-    p_user_id: req.user!.id,
-    p_permission_key: permission,
-    p_classroom_id: null,
-    p_class_session_id: null,
-  }))))
-  for (const check of checks) if (check.error) throwDatabaseError(req, 'dashboard.schedule_permission', check.error)
-  return checks.some((check) => check.data === true)
+  const result = await database(req, () => db.rpc('resolve_dashboard_schedule_modes', { p_user_id: req.user!.id, p_class_session_ids: sessionIds }))
+  if (result.error) throwDatabaseError(req, 'dashboard.schedule_permission', result.error)
+  const rows = (result.data ?? []) as Array<{ class_session_id: string; mode: DashboardScheduleMode }>
+  return new Map(rows.map((row) => [row.class_session_id, row.mode]))
 }
 
 async function loadTeacherSessionAssignments(req: Request, teacherId: string, start: string, end: string): Promise<TeacherSessionAssignment[]> {
@@ -255,19 +256,17 @@ async function loadTeacherSessionAssignments(req: Request, teacherId: string, st
 async function loadDashboardOccurrences(req: Request, start: string | undefined, end: string | undefined, teacher: TeacherScope) {
   if (!start || !end) return []
   const db = requireDb(req)
-  const seeAll = await hasDashboardScheduleAll(req)
-  let assignments: TeacherSessionAssignment[] = []
-  if (!seeAll) {
-    if (!teacher) return []
-    assignments = await loadTeacherSessionAssignments(req, teacher.id, start, end)
-    if (!assignments.length) return []
-  }
-  let occurrenceQuery = db.from('class_occurrences').select(dashboardOccurrenceFields).not('status', 'in', '(cancelled,rescheduled)').gte('occurrence_date', start).lte('occurrence_date', end)
-  if (!seeAll) occurrenceQuery = occurrenceQuery.in('class_session_id', [...new Set(assignments.map((assignment) => assignment.class_session_id))])
-  const result = await database(req, () => occurrenceQuery.order('occurrence_date', { ascending: true }).order('id', { ascending: true }).range(0, 99))
+  const occurrenceQuery = db.from('class_occurrences').select(dashboardOccurrenceFields).not('status', 'in', '(cancelled,rescheduled)').gte('occurrence_date', start).lte('occurrence_date', end)
+  const result = await database(req, () => occurrenceQuery.order('occurrence_date', { ascending: true }).order('id', { ascending: true }).range(0, DASHBOARD_OCCURRENCE_CANDIDATES - 1))
   if (result.error) throwDatabaseError(req, 'dashboard.occurrences', result.error)
   const rows = (result.data ?? []) as any[]
-  return seeAll ? rows : filterOccurrencesByAssignments(rows, assignments)
+  if (!rows.length) return []
+  const sessionIds = [...new Set(rows.map((row) => row.class_session_id as string))]
+  const [modes, assignments] = await Promise.all([
+    loadDashboardScheduleModes(req, sessionIds),
+    teacher ? loadTeacherSessionAssignments(req, teacher.id, start, end) : Promise.resolve([] as TeacherSessionAssignment[]),
+  ])
+  return filterOccurrencesByScheduleModes(rows, modes, assignments).slice(0, DASHBOARD_OCCURRENCE_LIMIT)
 }
 
 async function dashboard(req: Request, res: Response) {
