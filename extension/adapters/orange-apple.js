@@ -223,7 +223,11 @@
       const chips = cardsApi?.createChips({ doc, scope, onSelect: chip => { view.reportFilter = chip; view.reportFilterChosen = true; refreshReports() } })
       if (chips) box.append(chips.element)
       // Single-session mode shows extension cards; the native table stays in the DOM, hidden.
-      const cards = cardsApi?.mountCards({ doc, scope, anchor: reportScrollRegion, onChange: () => { if (cards?.element.isConnected) refreshReports() } })
+      // 本週快速點名 becomes a tile grid; the provider's form stays hidden and does the saving.
+      const quickApi = globalThis.edulogSiteQuickAttendance, quickForm = content.querySelector(lexicon.selectors.quickAttendanceForm)
+      const quick = quickApi && quickForm ? quickApi.mount({ doc, scope, form: quickForm, view, entries: quickApi.read({ form: quickForm, reports, roster, notStarted: label => model.sessionStarted(label, classStart) === false }) }) : null
+      const revealAttendance = quick && { target: row => quick.targetFor(row), reveal: row => quick.reveal(row) }
+      const cards = cardsApi?.mountCards({ doc, scope, anchor: reportScrollRegion, revealAttendance, onChange: () => { if (cards?.element.isConnected) refreshReports() } })
       if (cards) box.append(cardsApi.createDensityToggle({ scope, key: 'reports', target: cards.element, view }))
       refreshReports = () => {
         const rows = [...reports.rows].filter(row => row.hasAttribute('data-edulog-report-row'))
