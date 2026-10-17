@@ -9,6 +9,12 @@ import ScopedRolePolicyEditor, {
     type RolePolicySelections
 } from '@/components/settings/ScopedRolePolicyEditor.vue'
 import ClassroomRoleAssignmentsPanel from '@/components/classroom/ClassroomRoleAssignmentsPanel.vue'
+import DashboardScheduleModeEditor from '@/components/settings/DashboardScheduleModeEditor.vue'
+import {
+    scheduleSelectionsAt,
+    type DashboardSchedulePolicies,
+    type DashboardScheduleSelections
+} from '@/models/DashboardScheduleMode'
 import {
     INCOMPLETE_REPORT_PERMISSION,
     PermissionPolicyService
@@ -24,6 +30,8 @@ const props = defineProps<{
     roles: RoleDTO[]
     policies: RolePermissionPolicyDTO[]
     roomSelections: RolePolicySelections
+    schedulePolicies: DashboardSchedulePolicies
+    roomScheduleSelections: DashboardScheduleSelections
     saving?: boolean
     initialTab?: PanelTab
 }>()
@@ -31,6 +39,7 @@ const props = defineProps<{
 const emit = defineEmits<{
     'update:room': [value: Partial<ClassroomDTO>]
     'update:roomSelections': [value: RolePolicySelections]
+    'update:roomScheduleSelections': [value: DashboardScheduleSelections]
     close: []
     save: []
     'edit-session': [session: ClassSessionDTO]
@@ -44,6 +53,7 @@ const activeTab = ref<PanelTab>(props.initialTab || 'details')
 const search = ref('')
 const expandedSessionId = ref<string | null>(null)
 const sessionSelections = ref<RolePolicySelections>({})
+const sessionScheduleSelections = ref<DashboardScheduleSelections>({})
 const sessionBaseline = ref('')
 const savingSessionPolicy = ref(false)
 const canManageRbac = ref(false)
@@ -58,11 +68,19 @@ const roomPolicyModel = computed({
     get: () => props.roomSelections,
     set: value => emit('update:roomSelections', value)
 })
+const roomScheduleModel = computed({
+    get: () => props.roomScheduleSelections,
+    set: value => emit('update:roomScheduleSelections', value)
+})
 const filteredSessions = computed(() => props.sessions.filter(session =>
     !search.value || session.name.toLocaleLowerCase().includes(search.value.toLocaleLowerCase())
 ))
 const sessionPolicyDirty = computed(() => Boolean(expandedSessionId.value)
-    && JSON.stringify(sessionSelections.value) !== sessionBaseline.value)
+    && sessionSnapshot() !== sessionBaseline.value)
+
+function sessionSnapshot() {
+    return JSON.stringify([sessionSelections.value, sessionScheduleSelections.value])
+}
 
 function selectionsFor(scopeType: 'classroom' | 'class_session', scopeId?: string | null) {
     return Object.fromEntries(props.roles.map(role => {
@@ -75,7 +93,8 @@ function selectionsFor(scopeType: 'classroom' | 'class_session', scopeId?: strin
 function loadSessionPolicy(sessionId: string) {
     expandedSessionId.value = sessionId
     sessionSelections.value = selectionsFor('class_session', sessionId)
-    sessionBaseline.value = JSON.stringify(sessionSelections.value)
+    sessionScheduleSelections.value = scheduleSelectionsAt(props.schedulePolicies, props.roles.map(role => role.id), { type: 'class_session', id: sessionId })
+    sessionBaseline.value = sessionSnapshot()
 }
 
 function runAfterDirtyCheck(action: () => void) {
@@ -112,8 +131,7 @@ function requestFullEdit(session: ClassSessionDTO) {
 
 function resetSessionPolicy() {
     if (!expandedSessionId.value) return
-    sessionSelections.value = selectionsFor('class_session', expandedSessionId.value)
-    sessionBaseline.value = JSON.stringify(sessionSelections.value)
+    loadSessionPolicy(expandedSessionId.value)
 }
 
 async function saveSessionPolicy(continuePending = false) {
@@ -124,14 +142,12 @@ async function saveSessionPolicy(continuePending = false) {
             const effect = sessionSelections.value[role.id]
             return effect === 'allow' || effect === 'deny' ? [{ role_id: role.id, effect }] : []
         })
-        await PermissionPolicyService.replacePolicies(
-            INCOMPLETE_REPORT_PERMISSION,
-            { type: 'class_session', id: expandedSessionId.value },
-            overrides
-        )
-        sessionBaseline.value = JSON.stringify(sessionSelections.value)
+        const scope = { type: 'class_session' as const, id: expandedSessionId.value }
+        await PermissionPolicyService.replacePolicies(INCOMPLETE_REPORT_PERMISSION, scope, overrides)
+        await PermissionPolicyService.replaceDashboardScheduleModes(scope, sessionScheduleSelections.value)
+        sessionBaseline.value = sessionSnapshot()
         emit('policies-changed')
-        toast.success(t('settings.incomplete_notifications.saved'))
+        toast.success(t('classroom.role_settings_saved'))
         if (continuePending && pendingAction.value) pendingAction.value()
         showUnsavedDialog.value = false
         pendingAction.value = null
@@ -218,11 +234,24 @@ watch(() => props.roomId, () => {
                     </label>
                 </div>
 
-                <div v-else-if="activeTab === 'notifications'" class="mx-auto max-w-4xl space-y-4">
-                    <p class="text-sm font-bold leading-6 text-gray-500">{{ $t('classroom.room_notification_hint') }}</p>
+                <div v-else-if="activeTab === 'notifications'" class="mx-auto max-w-4xl space-y-8">
                     <p v-if="!canManageRbac" class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">{{ $t('errors.permission_required_for_settings') }}</p>
-                    <ScopedRolePolicyEditor v-model="roomPolicyModel" :roles="roles" :policies="policies"
-                        scope-type="classroom" :scope-id="roomId" :classroom-id="roomId" :disabled="saving || !canManageRbac" />
+                    <section class="space-y-4" aria-labelledby="room-notification-settings">
+                        <div>
+                            <h4 id="room-notification-settings" class="font-black text-gray-900">{{ $t('settings.incomplete_notifications.title') }}</h4>
+                            <p class="mt-1 text-sm font-bold leading-6 text-gray-500">{{ $t('classroom.room_notification_hint') }}</p>
+                        </div>
+                        <ScopedRolePolicyEditor v-model="roomPolicyModel" :roles="roles" :policies="policies"
+                            scope-type="classroom" :scope-id="roomId" :classroom-id="roomId" :disabled="saving || !canManageRbac" />
+                    </section>
+                    <section class="space-y-4 border-t border-gray-100 pt-8" aria-labelledby="room-schedule-settings">
+                        <div>
+                            <h4 id="room-schedule-settings" class="font-black text-gray-900">{{ $t('settings.dashboard_schedule.title') }}</h4>
+                            <p class="mt-1 text-sm font-bold leading-6 text-gray-500">{{ $t('settings.dashboard_schedule.scope_hint') }}</p>
+                        </div>
+                        <DashboardScheduleModeEditor v-model="roomScheduleModel" :roles="roles" :policies="schedulePolicies"
+                            scope-type="classroom" :scope-id="roomId" :classroom-id="roomId" :disabled="saving || !canManageRbac" />
+                    </section>
                 </div>
 
                 <ClassroomRoleAssignmentsPanel v-else-if="activeTab === 'role_assignments'" :classroom-id="roomId" />
@@ -245,7 +274,12 @@ watch(() => props.roomId, () => {
                             <span class="text-sm font-black text-emerald-600">{{ expandedSessionId === session.id ? '−' : '+' }}</span>
                         </button>
                         <div v-if="expandedSessionId === session.id" class="space-y-4 border-t border-gray-100 bg-gray-50/60 p-4">
+                            <h5 class="text-sm font-black text-gray-700">{{ $t('settings.incomplete_notifications.title') }}</h5>
                             <ScopedRolePolicyEditor v-model="sessionSelections" :roles="roles" :policies="policies"
+                                scope-type="class_session" :scope-id="session.id" :classroom-id="roomId"
+                                :class-session-id="session.id" compact :disabled="savingSessionPolicy || !canManageRbac" />
+                            <h5 class="border-t border-gray-200 pt-4 text-sm font-black text-gray-700">{{ $t('settings.dashboard_schedule.title') }}</h5>
+                            <DashboardScheduleModeEditor v-model="sessionScheduleSelections" :roles="roles" :policies="schedulePolicies"
                                 scope-type="class_session" :scope-id="session.id" :classroom-id="roomId"
                                 :class-session-id="session.id" compact :disabled="savingSessionPolicy || !canManageRbac" />
                             <div class="flex flex-wrap justify-end gap-2">

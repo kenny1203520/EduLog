@@ -1,4 +1,6 @@
-export const DASHBOARD_SCHEDULE_ALL_PERMISSIONS = ['teaching.dashboard.schedule.all', 'system.dashboard.schedule.all'] as const
+// Per-class mode resolved by public.resolve_dashboard_schedule_modes: every
+// occurrence, only the classes the user teaches, or nothing at all.
+export type DashboardScheduleMode = 'all' | 'assigned' | 'hidden'
 
 export type TeacherSessionAssignment = {
   class_session_id: string
@@ -20,4 +22,13 @@ export function isAssignmentEffectiveOn(assignment: TeacherSessionAssignment, da
 export function filterOccurrencesByAssignments<T extends DashboardOccurrenceRow>(rows: T[], assignments: TeacherSessionAssignment[]) {
   return rows.filter((row) => assignments.some((assignment) =>
     assignment.class_session_id === row.class_session_id && isAssignmentEffectiveOn(assignment, row.occurrence_date)))
+}
+
+// Classes without a resolved mode fall back to 'assigned'.
+export function filterOccurrencesByScheduleModes<T extends DashboardOccurrenceRow>(rows: T[], modes: ReadonlyMap<string, DashboardScheduleMode>, assignments: TeacherSessionAssignment[]) {
+  const assigned = filterOccurrencesByAssignments(rows, assignments)
+  return rows.filter((row) => {
+    const mode = modes.get(row.class_session_id) ?? 'assigned'
+    return mode === 'all' || (mode === 'assigned' && assigned.includes(row))
+  })
 }

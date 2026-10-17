@@ -14,6 +14,8 @@ import type { RolePolicySelections } from '@/components/settings/ScopedRolePolic
 import { roleDisplayName } from '@/utils/roleDisplay'
 import ScopedRolePolicyEditor from '@/components/settings/ScopedRolePolicyEditor.vue'
 import ClassroomManagementPanel from '@/components/classroom/ClassroomManagementPanel.vue'
+import DashboardScheduleModeEditor from '@/components/settings/DashboardScheduleModeEditor.vue'
+import { scheduleSelectionsAt, type DashboardSchedulePolicies, type DashboardScheduleSelections } from '@/models/DashboardScheduleMode'
 import { Classroom, type ClassroomDTO, type ClassSessionDTO } from '@/models/Classroom'
 import {
     type ClassSessionScheduleRuleDTO,
@@ -119,6 +121,10 @@ const notificationPermission = ref<PermissionDTO | null>(null)
 const notificationPolicies = ref<RolePermissionPolicyDTO[]>([])
 const roomPolicySelections = ref<RolePolicySelections>({})
 const sessionPolicySelections = ref<RolePolicySelections>({})
+const schedulePolicies = ref<DashboardSchedulePolicies>({ all: [], view: [] })
+const schedulePoliciesLoaded = ref(false)
+const roomScheduleSelections = ref<DashboardScheduleSelections>({})
+const sessionScheduleSelections = ref<DashboardScheduleSelections>({})
 const roomSessions = ref<ClassSessionDTO[]>([])
 const returnToRoomAfterSession = ref(false)
 const roomPanelInitialTab = ref<'details' | 'notifications' | 'sessions' | 'role_assignments'>('details')
@@ -208,6 +214,23 @@ function policyOverrides(selections: RolePolicySelections) {
 async function refreshNotificationPolicies() {
     if (!notificationPermission.value) return loadNotificationPolicies()
     notificationPolicies.value = await PermissionPolicyService.getPolicies(notificationPermission.value.id)
+}
+
+async function loadSchedulePolicies() {
+    schedulePolicies.value = await PermissionPolicyService.getDashboardSchedulePolicies()
+    schedulePoliciesLoaded.value = true
+}
+
+function scheduleSelectionsFor(scopeType: 'classroom' | 'class_session', scopeId?: string | null): DashboardScheduleSelections {
+    return scheduleSelectionsAt(schedulePolicies.value, roles.value.map(role => role.id), { type: scopeType, id: scopeId })
+}
+
+function inheritScheduleSelections(): DashboardScheduleSelections {
+    return Object.fromEntries(roles.value.map(role => [role.id, 'inherit']))
+}
+
+async function refreshRolePolicies() {
+    await Promise.all([refreshNotificationPolicies(), loadSchedulePolicies()])
 }
 
 async function loadRoomSessions(roomId?: string | null) {
@@ -304,6 +327,7 @@ async function ensureEditorDependencies() {
     }
     if (teachersList.value.length === 0) await loadTeachers()
     if (!notificationPermission.value) await loadNotificationPolicies()
+    if (!schedulePoliciesLoaded.value) await loadSchedulePolicies()
 }
 
 async function loadTeacherRoleCatalog(scopeType: 'classroom' | 'class_session', scopeId: string) {
@@ -555,8 +579,9 @@ async function saveClassroom() {
             { type: 'classroom', id: saved.id },
             policyOverrides(roomPolicySelections.value)
         )
+        await PermissionPolicyService.replaceDashboardScheduleModes({ type: 'classroom', id: saved.id }, roomScheduleSelections.value)
         AggregateService.clearCache()
-        await Promise.all([loadRooms(), loadAllRooms(), refreshNotificationPolicies()])
+        await Promise.all([loadRooms(), loadAllRooms(), refreshRolePolicies()])
         closeRoomModal()
         toast.success(t('classroom.room_save_success') || 'Room saved successfully')
     } catch (e: any) {
@@ -578,6 +603,7 @@ async function openEditRoom(room: Classroom) {
         external_link: room.external_link || ''
     }
     roomPolicySelections.value = policySelectionsFor('classroom', room.id)
+    roomScheduleSelections.value = scheduleSelectionsFor('classroom', room.id)
     await loadRoomSessions(room.id)
     isCreateRoomModalOpen.value = true
 }
@@ -588,6 +614,7 @@ async function openCreateRoomModal() {
     editingClassroom.value = null
     newClassroom.value = { name: '', address: '', phone: '', color: '#10b981', external_link: '' }
     roomPolicySelections.value = Object.fromEntries(roles.value.map(role => [role.id, 'inherit'])) as RolePolicySelections
+    roomScheduleSelections.value = inheritScheduleSelections()
     roomSessions.value = []
     isCreateRoomModalOpen.value = true
 }
@@ -597,6 +624,7 @@ function closeRoomModal() {
     editingClassroom.value = null
     newClassroom.value = { name: '', address: '', phone: '', color: '#10b981', external_link: '' }
     roomPolicySelections.value = {}
+    roomScheduleSelections.value = {}
     roomSessions.value = []
 }
 
@@ -707,10 +735,11 @@ async function saveSession() {
             { type: 'class_session', id: sessionId },
             policyOverrides(sessionPolicySelections.value)
         )
+        await PermissionPolicyService.replaceDashboardScheduleModes({ type: 'class_session', id: sessionId }, sessionScheduleSelections.value)
         const reconciliation = await OccurrenceService.syncSessionOccurrences(sessionId)
 
         AggregateService.clearCache()
-        await Promise.all([loadSessions(), refreshNotificationPolicies()])
+        await Promise.all([loadSessions(), refreshRolePolicies()])
         if (returnToRoomAfterSession.value && saved.classroom_id) await loadRoomSessions(saved.classroom_id)
         closeSessionModal()
         toast.success(t('classroom.session_save_success') || 'Session saved successfully')
@@ -733,6 +762,7 @@ async function openEditSession(session: ClassSessionDTO) {
     pastAssignmentsPage.value = 1
     showPastAssignments.value = false
     sessionPolicySelections.value = policySelectionsFor('class_session', session.id)
+    sessionScheduleSelections.value = scheduleSelectionsFor('class_session', session.id)
     newSession.value = {
         ...session,
         time_zone: session.time_zone || preferences.timeZone,
@@ -761,6 +791,7 @@ async function openCreateSessionModal() {
     teacherAssignmentsLoadError.value = false
     editingSession.value = null
     sessionPolicySelections.value = Object.fromEntries(roles.value.map(role => [role.id, 'inherit'])) as RolePolicySelections
+    sessionScheduleSelections.value = inheritScheduleSelections()
     newSession.value = {
         name: '',
         classroom_id: '',
@@ -792,6 +823,7 @@ function closeSessionModal() {
     teacherAssignmentSaveError.value = false
     teacherAssignmentsLoadError.value = false
     sessionPolicySelections.value = {}
+    sessionScheduleSelections.value = {}
     clearTeacherSelection()
     newSession.value = {
         name: '',
@@ -1255,11 +1287,11 @@ function clearTeacherSelection() {
         </div>
         <!-- Responsive Room Management Panel -->
         <ClassroomManagementPanel v-if="isCreateRoomModalOpen" v-model:room="newClassroom"
-            v-model:room-selections="roomPolicySelections" :room-id="editingClassroom?.id"
-            :sessions="roomSessions" :roles="roles" :policies="notificationPolicies" :saving="isSavingRoom"
-            :initial-tab="roomPanelInitialTab"
+            v-model:room-selections="roomPolicySelections" v-model:room-schedule-selections="roomScheduleSelections"
+            :room-id="editingClassroom?.id" :sessions="roomSessions" :roles="roles" :policies="notificationPolicies"
+            :schedule-policies="schedulePolicies" :saving="isSavingRoom" :initial-tab="roomPanelInitialTab"
             @close="closeRoomModal" @save="saveClassroom" @edit-session="editSessionFromRoomPanel"
-            @policies-changed="refreshNotificationPolicies" />
+            @policies-changed="refreshRolePolicies" />
 
         <!-- Create Session Modal -->
         <div v-if="isCreateSessionModalOpen"
@@ -1549,6 +1581,17 @@ function clearTeacherSelection() {
                         <p class="mt-1 text-xs font-bold text-gray-400">{{ $t('classroom.session_notification_hint') }}</p>
                     </div>
                     <ScopedRolePolicyEditor v-model="sessionPolicySelections" :roles="roles" :policies="notificationPolicies"
+                        scope-type="class_session" :scope-id="editingSession?.id"
+                        :classroom-id="newSession.classroom_id || null" :class-session-id="editingSession?.id"
+                        compact :disabled="isSavingSession" />
+                </section>
+
+                <section class="mt-4 space-y-4 rounded-2xl border border-gray-100 bg-gray-50 p-4 sm:p-5">
+                    <div>
+                        <h4 class="font-black text-gray-900">{{ $t('settings.dashboard_schedule.title') }}</h4>
+                        <p class="mt-1 text-xs font-bold text-gray-500">{{ $t('classroom.session_schedule_hint') }}</p>
+                    </div>
+                    <DashboardScheduleModeEditor v-model="sessionScheduleSelections" :roles="roles" :policies="schedulePolicies"
                         scope-type="class_session" :scope-id="editingSession?.id"
                         :classroom-id="newSession.classroom_id || null" :class-session-id="editingSession?.id"
                         compact :disabled="isSavingSession" />

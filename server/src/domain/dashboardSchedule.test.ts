@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { filterOccurrencesByAssignments, isAssignmentEffectiveOn, type TeacherSessionAssignment } from './dashboardSchedule.js'
+import { filterOccurrencesByAssignments, filterOccurrencesByScheduleModes, isAssignmentEffectiveOn, type DashboardScheduleMode, type TeacherSessionAssignment } from './dashboardSchedule.js'
 
 const assignments: TeacherSessionAssignment[] = [
   { class_session_id: 'session-a', effective_from: '2026-09-01', effective_to: null },
@@ -23,5 +23,22 @@ describe('dashboard schedule visibility', () => {
       { id: 'unassigned', class_session_id: 'session-c', occurrence_date: '2026-10-16', teacher_attendance: {} },
     ]
     expect(filterOccurrencesByAssignments(rows, assignments).map((row) => row.id)).toEqual(['assigned', 'still-assigned'])
+  })
+
+  it('shows every class in "all", only taught classes in "assigned" and falls back to "assigned"', () => {
+    const rows = [
+      { id: 'all-taught', class_session_id: 'session-a', occurrence_date: '2026-10-16' },
+      { id: 'all-other', class_session_id: 'session-c', occurrence_date: '2026-10-16' },
+      { id: 'assigned-taught', class_session_id: 'session-b', occurrence_date: '2026-10-15' },
+      { id: 'assigned-other', class_session_id: 'session-d', occurrence_date: '2026-10-16' },
+      { id: 'unresolved-other', class_session_id: 'session-e', occurrence_date: '2026-10-16' },
+    ]
+    const modes = new Map<string, DashboardScheduleMode>([['session-a', 'all'], ['session-c', 'all'], ['session-b', 'assigned'], ['session-d', 'assigned']])
+    expect(filterOccurrencesByScheduleModes(rows, modes, assignments).map((row) => row.id)).toEqual(['all-taught', 'all-other', 'assigned-taught'])
+  })
+
+  it('hides a class in "hidden" even when the user teaches it', () => {
+    const rows = [{ id: 'hidden-taught', class_session_id: 'session-a', occurrence_date: '2026-10-16' }]
+    expect(filterOccurrencesByScheduleModes(rows, new Map([['session-a', 'hidden' as const]]), assignments)).toEqual([])
   })
 })

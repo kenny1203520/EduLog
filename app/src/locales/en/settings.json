@@ -113,20 +113,21 @@
     },
     "dashboard_schedule": {
         "title": "Today's Schedule Visibility",
-        "description": "Choose which teaching roles see every class in the dashboard's today's schedule. Other users see only the classes they are assigned to teach that day.",
-        "system_roles_hint": "System Owner and System Administrator see the full schedule by default; adjust them under System role permissions (Dashboard › View all of today's schedule).",
-        "inheritance_hint": "This setting applies system-wide. A deny on any of a user's teaching roles takes priority.",
+        "description": "Choose, for each teaching role, which classes appear in the dashboard's today's schedule. Classrooms and classes can override this in Classroom management. System roles do not affect the schedule.",
+        "inheritance_hint": "Each role uses its most specific setting (class, then classroom, then system). When a user has several teaching roles, the strictest explicit setting wins: Hidden, then Assigned classes only, then All classes.",
+        "scope_hint": "Choose which classes each teaching role sees in today's schedule here. Inherit uses the classroom or system setting.",
         "saved": "Schedule visibility saved",
         "system": "System-wide",
         "classroom": "Specific classroom",
         "class_session": "Specific class",
-        "allow": "All classes",
-        "deny": "Assigned classes only",
+        "all": "All classes",
+        "assigned": "Assigned classes only",
+        "hidden": "Hidden",
         "inherit": "Inherit",
         "effective": "Effective result",
         "inherited": "Inherited result",
-        "no_policy": "Assigned classes only (default)",
-        "legacy_fallback": "Assigned classes only (default)"
+        "no_policy": "Assigned classes only",
+        "default_source": "Default"
     },
     "extension": {
         "title": "Browser extension connections",
