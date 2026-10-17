@@ -196,16 +196,16 @@ async function loadAuxData() {
     try {
         try {
             const [roomsRes, sessionsRes] = await Promise.all([
-                AggregateService.getClassroomSessionManagerAggregate(1, 1000, ''),
-                SessionService.getClassSessions(1, 1000)
+                AggregateService.getAllClassroomsOverview(''),
+                SessionService.getAllClassSessions()
             ])
             classrooms.value = (roomsRes.classrooms || []).map((d: any) => d)
             sessions.value = sessionsRes.data
             teachers.value = await TeacherService.getAllTeachers()
         } catch (e) {
             const [roomsRes, sessionsRes, teachersRes] = await Promise.all([
-                ClassroomService.getClassrooms(1, 1000),
-                SessionService.getClassSessions(1, 1000),
+                ClassroomService.getAllClassrooms(),
+                SessionService.getAllClassSessions(),
                 TeacherService.getAllTeachers()
             ])
             classrooms.value = roomsRes.data
@@ -1002,7 +1002,7 @@ function closeModal() {
                                     </div>
                                     <span
                                         class="text-[10px] font-bold text-gray-400 uppercase tracking-wider break-words mt-1">
-                                        {{ getRoomName(s.classroom_id) }} · {{ s.time_zone || preferences.timeZone }}
+                                        {{ getRoomName(s.classroom_id) }} · {{ DateUtils.formatTimeZoneLabel(s.time_zone || preferences.timeZone, preferences.locale) }}
                                     </span>
                                 </div>
                             </label>

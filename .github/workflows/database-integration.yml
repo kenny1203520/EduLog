@@ -1,0 +1,206 @@
+name: database-integration
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: false
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/tests/**'
+      - '.github/workflows/database-integration.yml'
+  push:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+jobs:
+  migration-and-rls:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: edulog_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d edulog_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGPASSWORD: postgres
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGDATABASE: edulog_test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - name: Bootstrap Supabase-compatible schemas
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/postgres_bootstrap.sql
+      - name: Clean-install migration and RLS gate
+        shell: bash
+        run: |
+          for migration in supabase/migrations/*.sql; do
+            psql -v ON_ERROR_STOP=1 -f "$migration"
+          done
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/migration_chain_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/single_lesson_transfer_cancel_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/enrollment_class_history_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/enrollment_report_sync_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/single_lesson_transfer_permission_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/dashboard_schedule_visibility_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/security_lint_remediation_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/rbac_scope_constraint_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/report_lifecycle_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/student_create_permission_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/student_sensitive_permission_integration.sql
+      - name: Reconciliation migrations are rerunnable
+        shell: bash
+        run: |
+          # Re-run legacy reconciliation migrations against the schema that
+          # existed before the strict RBAC domain rebuild. Later constraints
+          # intentionally reject the old 1000072 system-scoped seed shape.
+          createdb edulog_reconciliation_legacy
+          export PGDATABASE=edulog_reconciliation_legacy
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/postgres_bootstrap.sql
+          for migration in supabase/migrations/*.sql; do
+            case "$migration" in
+            *1000081*|*1000082*|*1000083*|*100009[2-9]*|*/10001[0-9][0-9]_*) continue ;;
+            esac
+            psql -v ON_ERROR_STOP=1 -f "$migration"
+          done
+          for migration in supabase/migrations/1000062*.sql supabase/migrations/1000063*.sql supabase/migrations/1000064*.sql supabase/migrations/1000065*.sql supabase/migrations/1000066*.sql supabase/migrations/1000067*.sql supabase/migrations/1000068*.sql supabase/migrations/1000069*.sql supabase/migrations/1000070*.sql supabase/migrations/1000071*.sql supabase/migrations/1000072*.sql supabase/migrations/1000073*.sql supabase/migrations/1000074*.sql supabase/migrations/1000075*.sql supabase/migrations/1000076*.sql supabase/migrations/1000077*.sql supabase/migrations/1000078*.sql supabase/migrations/1000079*.sql supabase/migrations/1000080*.sql supabase/migrations/1000084*.sql supabase/migrations/1000085*.sql supabase/migrations/1000086*.sql supabase/migrations/1000087*.sql supabase/migrations/1000088*.sql supabase/migrations/1000089*.sql supabase/migrations/1000090*.sql supabase/migrations/1000091*.sql; do
+            psql -v ON_ERROR_STOP=1 -f "$migration"
+            psql -v ON_ERROR_STOP=1 -f "$migration"
+          done
+
+          # Re-run the new RBAC migrations on a complete current-schema copy.
+          createdb edulog_reconciliation_rbac
+          export PGDATABASE=edulog_reconciliation_rbac
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/postgres_bootstrap.sql
+          for migration in supabase/migrations/*.sql; do
+            psql -v ON_ERROR_STOP=1 -f "$migration"
+          done
+          for migration in supabase/migrations/1000100*.sql supabase/migrations/1000101*.sql supabase/migrations/1000111*.sql supabase/migrations/1000112*.sql supabase/migrations/1000113*.sql supabase/migrations/1000114*.sql supabase/migrations/1000115*.sql supabase/migrations/1000128*.sql supabase/migrations/1000129*.sql; do
+            psql -v ON_ERROR_STOP=1 -f "$migration"
+            psql -v ON_ERROR_STOP=1 -f "$migration"
+          done
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/student_create_permission_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/student_sensitive_permission_integration.sql
+      - name: Upgrade an existing database and verify owner backfill
+        shell: bash
+        run: |
+          createdb edulog_upgrade
+          export PGDATABASE=edulog_upgrade
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/postgres_bootstrap.sql
+          for migration in supabase/migrations/*.sql; do
+            case "$migration" in
+              *100004[0-9]*|*100005*|*100006*|*100007*|*100008*|*100009*|*/10001[0-9][0-9]_*) continue ;;
+            esac
+            psql -v ON_ERROR_STOP=1 -f "$migration"
+          done
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/migration_upgrade_fixture.sql
+          for migration in supabase/migrations/100004*.sql supabase/migrations/100005*.sql supabase/migrations/100006*.sql supabase/migrations/100007*.sql supabase/migrations/100008*.sql supabase/migrations/100009*.sql; do
+            psql -v ON_ERROR_STOP=1 -f "$migration"
+          done
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000100_platform_teaching_roles_without_workspace.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000101_private_invoker_views_and_lint_remediation.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/rate_limit_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/sensitive_data_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/migration_upgrade_assertions.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/rbac_scope_constraint_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/security_lint_remediation_integration.sql
+          # Advance through the remaining current migrations before testing
+          # student creation against the latest role/profile shape.
+          for migration in supabase/migrations/100010[2-9]*.sql supabase/migrations/10001[1-9]*.sql; do
+            psql -v ON_ERROR_STOP=1 -f "$migration"
+          done
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/student_create_permission_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/student_sensitive_permission_integration.sql
+      - name: Upgrade an existing 1000061 database through 1000091
+        shell: bash
+        run: |
+          createdb edulog_history
+          export PGDATABASE=edulog_history
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/postgres_bootstrap.sql
+          for migration in supabase/migrations/*.sql; do
+            case "$migration" in
+              *1000062*|*1000063*|*1000064*|*1000065*|*1000066*|*1000067*|*1000068*|*1000069*|*1000070*|*1000071*|*1000072*|*1000073*|*1000074*|*1000075*|*1000076*|*1000077*|*1000078*|*1000079*|*1000080*|*1000081*|*1000082*|*1000083*|*1000084*|*1000085*|*1000086*|*1000087*|*1000088*|*1000089*|*1000090*|*1000091*|*100009[2-9]*|*/10001[0-9][0-9]_*) continue ;;
+            esac
+            psql -v ON_ERROR_STOP=1 -f "$migration"
+          done
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000062_report_lifecycle_atomicity.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000062_report_lifecycle_atomicity.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000063_report_mutation_contract_and_delete_replay.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000063_report_mutation_contract_and_delete_replay.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000064_report_delete_replay_rbac.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000064_report_delete_replay_rbac.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/rbac_scope_constraint_legacy_fixture.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000065_rbac_scope_constraint_reconciliation.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000065_rbac_scope_constraint_reconciliation.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000066_atomic_scoped_rbac_policy_replacement.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000066_atomic_scoped_rbac_policy_replacement.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000067_idempotency_output_column_qualification.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000067_idempotency_output_column_qualification.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000068_class_session_scoped_table_access.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000068_class_session_scoped_table_access.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000069_report_template_teaching_backfill.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000069_report_template_teaching_backfill.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000070_class_session_rpc_reference_reads.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000070_class_session_rpc_reference_reads.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000071_student_rls_enrollment_lookup_index.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000071_student_rls_enrollment_lookup_index.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000072_sensitive_data_permissions.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000072_sensitive_data_permissions.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000073_dashboard_page_read_model.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000073_dashboard_page_read_model.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000074_dashboard_read_model_hardening.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000074_dashboard_read_model_hardening.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000075_dashboard_query_segmentation.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000075_dashboard_query_segmentation.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000076_dashboard_counts_set_based.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000076_dashboard_counts_set_based.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000077_students_overview_set_based.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000077_students_overview_set_based.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000078_page_api_performance_read_models.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000078_page_api_performance_read_models.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000079_student_profile_school_summary.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000079_student_profile_school_summary.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000080_incomplete_report_calculation.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000080_incomplete_report_calculation.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000081_rbac_domain_rebuild.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000081_rbac_domain_rebuild.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000082_rbac_management_functions.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000082_rbac_management_functions.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000083_system_user_status.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000083_system_user_status.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000084_suspension_attendance_and_capacity.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000084_suspension_attendance_and_capacity.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000085_report_provisioning_status_guard.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000085_report_provisioning_status_guard.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000086_report_attendance_table_grants.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000086_report_attendance_table_grants.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000087_report_provisioning_rls_alignment.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000087_report_provisioning_rls_alignment.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000088_report_provisioning_permission_parity.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000088_report_provisioning_permission_parity.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000089_remove_stale_report_insert_policy.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000089_remove_stale_report_insert_policy.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000090_narrow_report_provisioning_command.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000090_narrow_report_provisioning_command.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000091_session_roster_as_of_occurrence_date.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000091_session_roster_as_of_occurrence_date.sql
+          # This standalone audit index is independent of the later platform
+          # role/profile migrations and is required by the shared chain check.
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000094_audit_events_created_at_index.sql
+          # The migration-chain assertions use the latest profiles/RBAC shape
+          # and run in the clean-install and current-upgrade jobs.
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/core_rls_security.sql

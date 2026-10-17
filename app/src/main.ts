@@ -12,6 +12,9 @@ import { mapDomainError } from './services/errors/mapDomainError'
 import { mapSupabaseError } from './services/errors/mapSupabaseError'
 import { AppError } from './services/errors/AppError'
 import { usePreferencesStore } from './stores/usePreferencesStore'
+import { preventIosInputZoom } from './lib/iosViewport'
+
+preventIosInputZoom(document, navigator)
 
 const app = createApp(App)
 

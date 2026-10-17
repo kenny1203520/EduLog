@@ -75,7 +75,7 @@ export abstract class ClassSession {
         this.courseIds = data.course_ids || []
         this.capacity = data.capacity ?? 10
         this.lessonNumber = data.lesson_number
-        this.timeZone = DateUtils.isValidTimeZone(data.time_zone) ? data.time_zone : 'Asia/Taipei'
+        this.timeZone = DateUtils.isValidTimeZone(data.time_zone) ? data.time_zone : DateUtils.getDefaultTimeZone()
         this.startDate = data.start_date
         this.endDate = data.end_date
         this.externalLink = data.external_link

@@ -26,7 +26,7 @@ const { fromMock, rpcMock, occurrenceChain, lessonChain } = vi.hoisted(() => {
     }
 })
 
-vi.mock('@/lib/supabase', () => ({ supabase: { from: fromMock, rpc: rpcMock } }))
+vi.mock('@/services/api/ApiDataClient', () => ({ apiDataClient: { from: fromMock, rpc: rpcMock } }))
 
 describe('EnrollmentTransferQueryService conflict display context', () => {
     beforeEach(() => {

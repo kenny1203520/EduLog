@@ -11,8 +11,11 @@ import { RoleService } from '@/services/rbac/RoleService'
 import { INCOMPLETE_REPORT_PERMISSION, PermissionPolicyService } from '@/services/rbac/PermissionPolicyService'
 import type { PermissionDTO, RoleDTO, RolePermissionPolicyDTO } from '@/models/Rbac'
 import type { RolePolicySelections } from '@/components/settings/ScopedRolePolicyEditor.vue'
+import { roleDisplayName } from '@/utils/roleDisplay'
 import ScopedRolePolicyEditor from '@/components/settings/ScopedRolePolicyEditor.vue'
 import ClassroomManagementPanel from '@/components/classroom/ClassroomManagementPanel.vue'
+import DashboardScheduleModeEditor from '@/components/settings/DashboardScheduleModeEditor.vue'
+import { scheduleSelectionsAt, type DashboardSchedulePolicies, type DashboardScheduleSelections } from '@/models/DashboardScheduleMode'
 import { Classroom, type ClassroomDTO, type ClassSessionDTO } from '@/models/Classroom'
 import {
     type ClassSessionScheduleRuleDTO,
@@ -25,8 +28,10 @@ import { useToast } from 'vue-toastification'
 import { useFeedback } from '@/composables/useFeedback'
 import Pagination from '@/components/common/Pagination.vue'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
+import EffectiveTeachingRoles from '@/components/rbac/EffectiveTeachingRoles.vue'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { DateUtils } from '@/utils/DateUtils'
+import { paginateTeacherAssignments, partitionTeacherAssignments } from '@/utils/teacherAssignmentHistory'
 import { buildSessionScheduleDisplayItems } from '@/utils/sessionScheduleDisplay'
 
 import ConfirmModal from '../components/common/ConfirmModal.vue'
@@ -41,6 +46,8 @@ const preferences = usePreferencesStore()
 const activeTab = ref<'rooms' | 'sessions'>('rooms')
 type DisplayMode = 'visible' | 'all' | 'hidden'
 
+// Hidden records remain available through the explicit display controls, but
+// the management page starts with the user's visible working set.
 const displayMode = ref<DisplayMode>('visible')
 const selectedSessionClassroomFilter = ref('')
 
@@ -101,15 +108,26 @@ const searchQuery = ref('')
 const allClassrooms = ref<Classroom[]>([]) // For Dropdown
 const hiddenClassroomIds = ref<Set<string>>(new Set())
 const hiddenSessionIds = ref<Set<string>>(new Set())
+const classroomOverviewCounts = ref({ total: 0, visible: 0, hidden: 0 })
+const sessionOverviewCounts = ref({ total: 0, visible: 0, hidden: 0 })
 const teachersList = ref<any[]>([])
 const roles = ref<RoleDTO[]>([])
+const teacherRoleCatalog = ref<RoleDTO[]>([])
+const teacherRoleCatalogError = ref(false)
+const teacherRoleManageAllowed = ref<boolean | null>(null)
+const teacherRolePermissionError = ref(false)
+let teacherRoleCatalogSequence = 0
 const notificationPermission = ref<PermissionDTO | null>(null)
 const notificationPolicies = ref<RolePermissionPolicyDTO[]>([])
 const roomPolicySelections = ref<RolePolicySelections>({})
 const sessionPolicySelections = ref<RolePolicySelections>({})
+const schedulePolicies = ref<DashboardSchedulePolicies>({ all: [], view: [] })
+const schedulePoliciesLoaded = ref(false)
+const roomScheduleSelections = ref<DashboardScheduleSelections>({})
+const sessionScheduleSelections = ref<DashboardScheduleSelections>({})
 const roomSessions = ref<ClassSessionDTO[]>([])
 const returnToRoomAfterSession = ref(false)
-const roomPanelInitialTab = ref<'details' | 'notifications' | 'sessions'>('details')
+const roomPanelInitialTab = ref<'details' | 'notifications' | 'sessions' | 'role_assignments'>('details')
 
 interface SessionTeacherConfig {
     teacher_id: string
@@ -118,6 +136,29 @@ interface SessionTeacherConfig {
     effective_to?: string | null
 }
 const selectedTeacherConfigs = ref<SessionTeacherConfig[]>([])
+const teacherAssignmentBaseline = ref<SessionTeacherConfig[]>([])
+const teacherAssignmentSaveError = ref(false)
+const teacherAssignmentsLoadError = ref(false)
+const teacherAssignmentsChanged = computed(() => {
+    const normalize = (items: SessionTeacherConfig[]) => items
+        .filter(item => item.teacher_id)
+        .map(item => ({ teacher_id: item.teacher_id, role_id: item.role_id, effective_from: item.effective_from, effective_to: item.effective_to || null }))
+        .sort((a, b) => `${a.teacher_id}:${a.effective_from}:${a.role_id}`.localeCompare(`${b.teacher_id}:${b.effective_from}:${b.role_id}`))
+    return JSON.stringify(normalize(selectedTeacherConfigs.value)) !== JSON.stringify(normalize(teacherAssignmentBaseline.value))
+})
+const teacherAssignmentsPerPage = 10
+const currentUpcomingAssignmentsPage = ref(1)
+const pastAssignmentsPage = ref(1)
+const showPastAssignments = ref(false)
+const teacherAssignmentPartitions = computed(() => partitionTeacherAssignments(
+    selectedTeacherConfigs.value,
+    DateUtils.todayString(newSession.value.time_zone || preferences.timeZone)
+))
+const currentUpcomingTeacherAssignments = computed(() => teacherAssignmentPartitions.value.currentAndUpcoming)
+const pastTeacherAssignments = computed(() => teacherAssignmentPartitions.value.past)
+const currentUpcomingAssignmentsView = computed(() => paginateTeacherAssignments(currentUpcomingTeacherAssignments.value, currentUpcomingAssignmentsPage.value, teacherAssignmentsPerPage))
+const pastAssignmentsView = computed(() => paginateTeacherAssignments(pastTeacherAssignments.value, pastAssignmentsPage.value, teacherAssignmentsPerPage))
+const visibleTeacherAssignments = computed(() => showPastAssignments.value ? pastAssignmentsView.value : currentUpcomingAssignmentsView.value)
 
 const roomsPagination = ref({ page: 1, perPage: 10, total: 0 })
 const sessionsPagination = ref({ page: 1, perPage: 10, total: 0 })
@@ -175,12 +216,29 @@ async function refreshNotificationPolicies() {
     notificationPolicies.value = await PermissionPolicyService.getPolicies(notificationPermission.value.id)
 }
 
+async function loadSchedulePolicies() {
+    schedulePolicies.value = await PermissionPolicyService.getDashboardSchedulePolicies()
+    schedulePoliciesLoaded.value = true
+}
+
+function scheduleSelectionsFor(scopeType: 'classroom' | 'class_session', scopeId?: string | null): DashboardScheduleSelections {
+    return scheduleSelectionsAt(schedulePolicies.value, roles.value.map(role => role.id), { type: scopeType, id: scopeId })
+}
+
+function inheritScheduleSelections(): DashboardScheduleSelections {
+    return Object.fromEntries(roles.value.map(role => [role.id, 'inherit']))
+}
+
+async function refreshRolePolicies() {
+    await Promise.all([refreshNotificationPolicies(), loadSchedulePolicies()])
+}
+
 async function loadRoomSessions(roomId?: string | null) {
     if (!roomId) {
         roomSessions.value = []
         return
     }
-    const result = await SessionService.getClassSessions(1, 500, '', roomId, 'all')
+    const result = await AggregateService.getAllClassSessionsOverview('', roomId, 'all')
     roomSessions.value = [...result.data].sort((a, b) => {
         const firstA = a.schedule_rules?.[0]
         const firstB = b.schedule_rules?.[0]
@@ -193,7 +251,7 @@ async function loadRoomSessions(roomId?: string | null) {
 
 async function loadTeachers() {
     try {
-        teachersList.value = await TeacherService.getAllTeachers()
+        teachersList.value = await AggregateService.getAllTeachersOverview()
     } catch (e) {
         console.error('Failed to load teachers:', e)
     }
@@ -221,15 +279,10 @@ onMounted(async () => {
 async function loadData() {
     try {
         loading.value = true
-        await Promise.all([
-            loadRooms(),
-            loadSessions(),
-            loadAllRooms(),
-            loadTeachers(),
-            RoleService.getRoles().then(data => { roles.value = data }),
-            loadNotificationPolicies(),
-            CourseCatalogService.getCourses().then(res => { courses.value = res.data })
-        ])
+        // The room list is the visible initial tab.  Editor dependencies and
+        // session data are loaded only when the user opens that UI, rather
+        // than turning one page render into seven unrelated requests.
+        await loadRooms()
     } catch (e) {
         console.error(e)
     } finally {
@@ -246,48 +299,123 @@ async function loadRooms() {
             displayMode.value
         )
         classrooms.value = (agg.classrooms || []).map((d: any) => new Classroom(d))
+        allClassrooms.value = classrooms.value
         roomsPagination.value.total = agg.count || 0
         hiddenClassroomIds.value = new Set((agg.hiddenClassroomIds as string[] | undefined) || [])
         hiddenSessionIds.value = new Set((agg.hiddenSessionIds as string[] | undefined) || [])
+        classroomOverviewCounts.value = {
+            total: Number(agg.classroomTotal ?? agg.count ?? 0),
+            visible: Number(agg.visibleClassroomCount ?? Math.max(0, Number(agg.count ?? 0) - hiddenClassroomIds.value.size)),
+            hidden: Number(agg.hiddenClassroomCount ?? hiddenClassroomIds.value.size),
+        }
+        sessionOverviewCounts.value = {
+            total: Number(agg.sessionTotal ?? agg.sessionCount ?? 0),
+            visible: Number(agg.visibleSessionCount ?? Math.max(0, Number(agg.sessionCount ?? 0) - hiddenSessionIds.value.size)),
+            hidden: Number(agg.hiddenSessionCount ?? hiddenSessionIds.value.size),
+        }
         return
     } catch (e) {
-        // fallback to existing client-side approach
-        const res = await ClassroomService.getClassrooms(
-            roomsPagination.value.page,
-            roomsPagination.value.perPage,
-            searchQuery.value,
-            displayMode.value
-        )
-        classrooms.value = res.data
-        roomsPagination.value.total = res.count
-
-        const roomIds = classrooms.value.map(room => room.id).filter((id): id is string => Boolean(id))
-        hiddenClassroomIds.value = await VisibilityPreferenceService.getHiddenEntityIds('classroom', roomIds)
+        reportError(e)
     }
 }
 
+async function ensureEditorDependencies() {
+    if (roles.value.length === 0) roles.value = await RoleService.getRoles()
+    if (courses.value.length === 0) {
+        const result = await CourseCatalogService.getCourses()
+        courses.value = result.data
+    }
+    if (teachersList.value.length === 0) await loadTeachers()
+    if (!notificationPermission.value) await loadNotificationPolicies()
+    if (!schedulePoliciesLoaded.value) await loadSchedulePolicies()
+}
+
+async function loadTeacherRoleCatalog(scopeType: 'classroom' | 'class_session', scopeId: string) {
+    const sequence = ++teacherRoleCatalogSequence
+    teacherRoleCatalog.value = []
+    teacherRoleCatalogError.value = false
+    teacherRoleManageAllowed.value = null
+    teacherRolePermissionError.value = false
+    const [catalog, managePermission] = await Promise.allSettled([
+        RoleService.getRolesForScope({ domain: 'teaching', scopeType, scopeId }),
+        RoleService.canManageRoleScope(scopeType, scopeId)
+    ])
+    if (sequence !== teacherRoleCatalogSequence) return
+    if (catalog.status === 'fulfilled') teacherRoleCatalog.value = catalog.value
+    else {
+        teacherRoleCatalog.value = []
+        teacherRoleCatalogError.value = true
+        reportError(catalog.reason)
+    }
+    if (managePermission.status === 'fulfilled') teacherRoleManageAllowed.value = managePermission.value
+    else {
+        teacherRoleManageAllowed.value = false
+        teacherRolePermissionError.value = true
+        reportError(managePermission.reason)
+    }
+}
+
+async function loadSessionTeacherAssignments(sessionId: string) {
+    teacherAssignmentsLoadError.value = false
+    try {
+        const assignedTeachers = await TeacherService.getSessionTeachers(sessionId)
+        selectedTeacherConfigs.value = assignedTeachers.map(teacher => ({
+            teacher_id: teacher.id!,
+            role_id: teacher.role_id,
+            effective_from: teacher.effective_from,
+            effective_to: teacher.effective_to
+        }))
+        teacherAssignmentBaseline.value = selectedTeacherConfigs.value.map(item => ({ ...item }))
+    } catch (error) {
+        clearTeacherSelection()
+        teacherAssignmentBaseline.value = []
+        teacherAssignmentsLoadError.value = true
+        console.error('Failed to load session teachers:', error)
+    }
+}
+
+function retrySessionTeacherAssignments() {
+    if (editingSession.value?.id) void loadSessionTeacherAssignments(editingSession.value.id)
+}
+
+function retryTeacherRoleCatalog() {
+    if (editingSession.value?.id) {
+        void loadTeacherRoleCatalog('class_session', editingSession.value.id)
+    } else if (newSession.value.classroom_id) {
+        void loadTeacherRoleCatalog('classroom', newSession.value.classroom_id)
+    }
+}
+
+watch(() => [isCreateSessionModalOpen.value, editingSession.value?.id, newSession.value.classroom_id] as const, ([isOpen, sessionId, classroomId]) => {
+    if (!isOpen || sessionId || !classroomId) return
+    void loadTeacherRoleCatalog('classroom', classroomId)
+}, { immediate: true })
+
 async function loadSessions() {
-    const res = await SessionService.getClassSessions(
+    const res = await AggregateService.getClassSessionsOverview(
         sessionsPagination.value.page,
         sessionsPagination.value.perPage,
         searchQuery.value,
         selectedSessionClassroomFilter.value || null,
         displayMode.value
     )
-    sessions.value = res.data
+    sessions.value = res.data as any[]
     sessionsPagination.value.total = res.count
-
-    const sessionIds = sessions.value.map(session => session.id).filter((id): id is string => Boolean(id))
-    hiddenSessionIds.value = await VisibilityPreferenceService.getHiddenEntityIds('class_session', sessionIds)
+    hiddenSessionIds.value = new Set(res.hiddenSessionIds)
+    sessionOverviewCounts.value = {
+        total: Number((res as any).sessionTotal ?? res.count ?? 0),
+        visible: Number((res as any).visibleSessionCount ?? Math.max(0, Number(res.count ?? 0) - hiddenSessionIds.value.size)),
+        hidden: Number((res as any).hiddenSessionCount ?? hiddenSessionIds.value.size),
+    }
 }
 
 async function loadAllRooms() {
     try {
-        const agg = await AggregateService.getClassroomSessionManagerAggregate(1, 1000, '')
+        const agg = await AggregateService.getAllClassroomsOverview('')
         allClassrooms.value = (agg.classrooms || []).map((d: any) => new Classroom(d))
         return
     } catch (e) {
-        const res = await ClassroomService.getClassrooms(1, 1000)
+        const res = await ClassroomService.getAllClassrooms()
         allClassrooms.value = res.data
     }
 }
@@ -306,7 +434,7 @@ watch(activeTab, () => {
         return
     }
 
-    loadSessions()
+    void Promise.all([loadSessions(), loadAllRooms()])
 })
 watch(displayMode, () => {
     if (activeTab.value === 'rooms') {
@@ -422,10 +550,13 @@ const teacherOptions = computed(() => teachersList.value.map(t => ({
     value: t.id
 })))
 
-const roleOptions = computed(() => roles.value.map(role => ({
-    label: role.name,
+const teacherRoleOptions = computed(() => teacherRoleCatalog.value.map(role => ({
+    label: roleDisplayName(role, t),
     value: role.id
 })))
+function linkedTeacherUserId(teacherId: string) {
+    return teachersList.value.find(teacher => teacher.id === teacherId)?.user_id ?? null
+}
 
 const roomOptions = computed(() => allClassrooms.value.map(c => ({
     label: c.name + (c.address ? ` (${c.address})` : ''),
@@ -448,7 +579,9 @@ async function saveClassroom() {
             { type: 'classroom', id: saved.id },
             policyOverrides(roomPolicySelections.value)
         )
-        await Promise.all([loadRooms(), loadAllRooms(), refreshNotificationPolicies()])
+        await PermissionPolicyService.replaceDashboardScheduleModes({ type: 'classroom', id: saved.id }, roomScheduleSelections.value)
+        AggregateService.clearCache()
+        await Promise.all([loadRooms(), loadAllRooms(), refreshRolePolicies()])
         closeRoomModal()
         toast.success(t('classroom.room_save_success') || 'Room saved successfully')
     } catch (e: any) {
@@ -459,6 +592,7 @@ async function saveClassroom() {
 }
 
 async function openEditRoom(room: Classroom) {
+    await ensureEditorDependencies()
     roomPanelInitialTab.value = 'details'
     editingClassroom.value = room
     newClassroom.value = {
@@ -469,15 +603,18 @@ async function openEditRoom(room: Classroom) {
         external_link: room.external_link || ''
     }
     roomPolicySelections.value = policySelectionsFor('classroom', room.id)
+    roomScheduleSelections.value = scheduleSelectionsFor('classroom', room.id)
     await loadRoomSessions(room.id)
     isCreateRoomModalOpen.value = true
 }
 
-function openCreateRoomModal() {
+async function openCreateRoomModal() {
+    await ensureEditorDependencies()
     roomPanelInitialTab.value = 'details'
     editingClassroom.value = null
     newClassroom.value = { name: '', address: '', phone: '', color: '#10b981', external_link: '' }
     roomPolicySelections.value = Object.fromEntries(roles.value.map(role => [role.id, 'inherit'])) as RolePolicySelections
+    roomScheduleSelections.value = inheritScheduleSelections()
     roomSessions.value = []
     isCreateRoomModalOpen.value = true
 }
@@ -487,6 +624,7 @@ function closeRoomModal() {
     editingClassroom.value = null
     newClassroom.value = { name: '', address: '', phone: '', color: '#10b981', external_link: '' }
     roomPolicySelections.value = {}
+    roomScheduleSelections.value = {}
     roomSessions.value = []
 }
 
@@ -501,6 +639,7 @@ async function deleteClassroom(id: string) {
     openConfirm(t('classroom.confirm_delete_room'), async () => {
         try {
             await ClassroomService.deleteClassroom(id)
+            AggregateService.clearCache()
             await Promise.all([loadRooms(), loadAllRooms()])
             toast.success(t('classroom.room_delete_success') || 'Room deleted successfully')
         } catch (e) {
@@ -518,6 +657,7 @@ function isSessionHidden(id?: string) {
 }
 
 async function refreshActiveList() {
+    AggregateService.clearCache()
     if (activeTab.value === 'rooms') {
         await loadRooms()
         return
@@ -556,6 +696,11 @@ async function toggleSessionVisibility(id?: string) {
 
 async function saveSession() {
     if (!newSession.value.name) return
+    teacherAssignmentSaveError.value = false
+    if (teacherAssignmentsChanged.value && teacherRoleManageAllowed.value !== true) {
+        teacherAssignmentSaveError.value = true
+        return
+    }
     const payload = {
         ...newSession.value,
         schedule_rules: (newSession.value.schedule_rules || []).map(rule => ({
@@ -580,15 +725,21 @@ async function saveSession() {
         editingSession.value = saved
         newSession.value = { ...newSession.value, id: saved.id }
         const sessionId = saved.id!
-        await TeacherService.replaceTeachersForSession(sessionId, selectedTeacherConfigs.value.filter(c => c.teacher_id))
+        if (teacherAssignmentsChanged.value) {
+            const assignmentsToSave = selectedTeacherConfigs.value.filter(c => c.teacher_id)
+            await TeacherService.replaceTeachersForSession(sessionId, assignmentsToSave)
+            teacherAssignmentBaseline.value = assignmentsToSave.map(item => ({ ...item }))
+        }
         await PermissionPolicyService.replacePolicies(
             INCOMPLETE_REPORT_PERMISSION,
             { type: 'class_session', id: sessionId },
             policyOverrides(sessionPolicySelections.value)
         )
+        await PermissionPolicyService.replaceDashboardScheduleModes({ type: 'class_session', id: sessionId }, sessionScheduleSelections.value)
         const reconciliation = await OccurrenceService.syncSessionOccurrences(sessionId)
 
-        await Promise.all([loadSessions(), refreshNotificationPolicies()])
+        AggregateService.clearCache()
+        await Promise.all([loadSessions(), refreshRolePolicies()])
         if (returnToRoomAfterSession.value && saved.classroom_id) await loadRoomSessions(saved.classroom_id)
         closeSessionModal()
         toast.success(t('classroom.session_save_success') || 'Session saved successfully')
@@ -601,8 +752,17 @@ async function saveSession() {
 }
 
 async function openEditSession(session: ClassSessionDTO) {
+    await ensureEditorDependencies()
+    if (session.id) await loadTeacherRoleCatalog('class_session', session.id)
+    clearTeacherSelection()
+    teacherAssignmentBaseline.value = []
+    teacherAssignmentsLoadError.value = false
     editingSession.value = session
+    currentUpcomingAssignmentsPage.value = 1
+    pastAssignmentsPage.value = 1
+    showPastAssignments.value = false
     sessionPolicySelections.value = policySelectionsFor('class_session', session.id)
+    sessionScheduleSelections.value = scheduleSelectionsFor('class_session', session.id)
     newSession.value = {
         ...session,
         time_zone: session.time_zone || preferences.timeZone,
@@ -610,26 +770,28 @@ async function openEditSession(session: ClassSessionDTO) {
         schedule_mode: session.schedule_mode || 'weekly',
         schedule_rules: (session.schedule_rules || []).map(rule => ({ ...rule }))
     }
-    try {
-        const assignedTeachers = await TeacherService.getSessionTeachers(session.id!)
-        selectedTeacherConfigs.value = assignedTeachers.map(t => ({
-            teacher_id: t.id!,
-            role_id: t.role_id,
-            effective_from: t.effective_from,
-            effective_to: t.effective_to
-        }))
-    } catch (e) {
-        console.error('Failed to load session teachers:', e)
-        clearTeacherSelection()
-    }
+    if (session.id) await loadSessionTeacherAssignments(session.id)
+    teacherAssignmentSaveError.value = false
     isCreateSessionModalOpen.value = true
 }
 
-function openCreateSessionModal() {
+async function openCreateSessionModal() {
+    await ensureEditorDependencies()
     returnToRoomAfterSession.value = false
+    currentUpcomingAssignmentsPage.value = 1
+    pastAssignmentsPage.value = 1
+    showPastAssignments.value = false
     clearTeacherSelection()
+    teacherRoleCatalog.value = []
+    teacherRoleCatalogError.value = false
+    teacherRoleManageAllowed.value = null
+    teacherRolePermissionError.value = false
+    teacherAssignmentBaseline.value = []
+    teacherAssignmentSaveError.value = false
+    teacherAssignmentsLoadError.value = false
     editingSession.value = null
     sessionPolicySelections.value = Object.fromEntries(roles.value.map(role => [role.id, 'inherit'])) as RolePolicySelections
+    sessionScheduleSelections.value = inheritScheduleSelections()
     newSession.value = {
         name: '',
         classroom_id: '',
@@ -655,7 +817,13 @@ function closeSessionModal() {
     const restoreRoom = returnToRoomAfterSession.value
     isCreateSessionModalOpen.value = false
     editingSession.value = null
+    teacherRoleManageAllowed.value = null
+    teacherRolePermissionError.value = false
+    teacherAssignmentBaseline.value = []
+    teacherAssignmentSaveError.value = false
+    teacherAssignmentsLoadError.value = false
     sessionPolicySelections.value = {}
+    sessionScheduleSelections.value = {}
     clearTeacherSelection()
     newSession.value = {
         name: '',
@@ -682,8 +850,9 @@ async function deleteSession(id: string) {
     openConfirm(t('classroom.confirm_delete_session'), async () => {
         try {
             await SessionService.deleteClassSession(id)
+            AggregateService.clearCache()
             await loadSessions()
-            toast.success(t('classroom.session_delete_success') || 'Session deleted successfully')
+            toast.success(t('classroom.copy.session_delete_success'))
         } catch (e) {
             reportError(e)
         }
@@ -696,7 +865,7 @@ function getDayLabel(day: number) {
 }
 
 function getRoomName(id?: string) {
-    return allClassrooms.value.find(c => c.id === id)?.name || t('common.unknown_room', 'Unknown Room')
+    return allClassrooms.value.find(c => c.id === id)?.name || t('classroom.copy.unknown_room')
 }
 
 function toggleCourseSelection(courseId: string) {
@@ -709,9 +878,11 @@ function toggleCourseSelection(courseId: string) {
 }
 
 function addTeacherAssignment() {
+    showPastAssignments.value = false
+    currentUpcomingAssignmentsPage.value = Math.max(1, Math.ceil((currentUpcomingTeacherAssignments.value.length + 1) / teacherAssignmentsPerPage))
     selectedTeacherConfigs.value.push({
         teacher_id: '',
-        role_id: roles.value.find(role => role.code === 'teacher')?.id || roles.value[0]?.id || '',
+        role_id: teacherRoleCatalog.value.find(role => role.code === 'teacher')?.id || '',
         effective_from: newSession.value.start_date || DateUtils.todayString(newSession.value.time_zone || preferences.timeZone),
         effective_to: null
     })
@@ -719,6 +890,8 @@ function addTeacherAssignment() {
 
 function removeTeacherAssignment(index: number) {
     selectedTeacherConfigs.value.splice(index, 1)
+    currentUpcomingAssignmentsPage.value = currentUpcomingAssignmentsView.value.page
+    pastAssignmentsPage.value = pastAssignmentsView.value.page
 }
 
 function clearTeacherSelection() {
@@ -753,7 +926,7 @@ function clearTeacherSelection() {
                                     d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                             </svg>
                         </div>
-                        <input v-model="searchQuery" type="text" :placeholder="t('common.search', 'Search...')"
+                        <input v-model="searchQuery" type="text" :placeholder="t('common.search')"
                             class="flex-1 bg-transparent border-none outline-none text-sm font-bold text-gray-700 placeholder:text-gray-300 py-2 min-w-0" />
                         <button v-if="searchQuery" @click="searchQuery = ''"
                             class="p-2 text-gray-300 hover:text-gray-500 transition-colors">
@@ -964,6 +1137,13 @@ function clearTeacherSelection() {
                     class="col-span-full text-center py-16 bg-white rounded-xl border border-dashed border-gray-300 text-gray-400">
                     {{ $t('classroom.no_rooms') }} <span v-if="searchQuery">{{ $t('common.matching') }} "{{ searchQuery
                     }}"</span>
+                    <template v-if="displayMode === 'visible' && classroomOverviewCounts.hidden > 0">
+                        <p class="mt-2">{{ $t('classroom.all_rooms_hidden') }}</p>
+                        <button class="mt-3 rounded-lg border border-emerald-200 px-3 py-2 text-sm font-bold text-emerald-700"
+                            @click="displayMode = 'all'">
+                            {{ $t('classroom.show_all_rooms') }}
+                        </button>
+                    </template>
                 </div>
             </div>
 
@@ -1049,7 +1229,7 @@ function clearTeacherSelection() {
                             </div>
                             <div class="flex min-w-0 items-start gap-2.5 rounded-xl bg-gray-50 p-3 text-gray-500">
                                 <svg class="mt-0.5 h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 0c2.5 2.7 3.8 6 3.8 10S14.5 19.3 12 22M2 12h20M12 2c-2.5 2.7-3.8 6-3.8 10s1.3 7.3 3.8 10" /></svg>
-                                <div class="min-w-0"><p class="text-[10px] font-black text-gray-400">{{ $t('classroom.session_time_zone') }}</p><p class="break-words text-sm font-bold text-gray-700">{{ session.time_zone || 'Asia/Taipei' }}</p></div>
+                                <div class="min-w-0"><p class="text-[10px] font-black text-gray-400">{{ $t('classroom.session_time_zone') }}</p><p class="break-words text-sm font-bold text-gray-700">{{ DateUtils.formatTimeZoneLabel(session.time_zone || preferences.timeZone, preferences.locale) }}</p></div>
                             </div>
                             <div class="flex min-w-0 items-start gap-2.5 rounded-xl bg-gray-50 p-3 text-gray-500">
                                 <svg class="mt-0.5 h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2c0-1.18.68-2.2 1.67-2.69M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
@@ -1077,7 +1257,7 @@ function clearTeacherSelection() {
                             class="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-black text-white shadow-md transition-all active:scale-95"
                             :style="{ backgroundColor: getDayColor(primaryScheduleDay(session)) }">
                             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-                            {{ $t('classroom.view_students', 'Students') }}
+                            {{ $t('classroom.view_students') }}
                         </router-link>
                     </div>
 
@@ -1090,6 +1270,13 @@ function clearTeacherSelection() {
                 <div v-if="sortedSessions.length === 0"
                     class="col-span-full text-center py-16 bg-white rounded-xl border border-dashed border-gray-300 text-gray-400">
                     {{ $t('classroom.no_sessions') }}
+                    <template v-if="displayMode === 'visible' && sessionOverviewCounts.hidden > 0">
+                        <p class="mt-2">{{ $t('classroom.all_sessions_hidden') }}</p>
+                        <button class="mt-3 rounded-lg border border-emerald-200 px-3 py-2 text-sm font-bold text-emerald-700"
+                            @click="displayMode = 'all'">
+                            {{ $t('classroom.show_all_sessions') }}
+                        </button>
+                    </template>
                 </div>
             </div>
 
@@ -1100,11 +1287,11 @@ function clearTeacherSelection() {
         </div>
         <!-- Responsive Room Management Panel -->
         <ClassroomManagementPanel v-if="isCreateRoomModalOpen" v-model:room="newClassroom"
-            v-model:room-selections="roomPolicySelections" :room-id="editingClassroom?.id"
-            :sessions="roomSessions" :roles="roles" :policies="notificationPolicies" :saving="isSavingRoom"
-            :initial-tab="roomPanelInitialTab"
+            v-model:room-selections="roomPolicySelections" v-model:room-schedule-selections="roomScheduleSelections"
+            :room-id="editingClassroom?.id" :sessions="roomSessions" :roles="roles" :policies="notificationPolicies"
+            :schedule-policies="schedulePolicies" :saving="isSavingRoom" :initial-tab="roomPanelInitialTab"
             @close="closeRoomModal" @save="saveClassroom" @edit-session="editSessionFromRoomPanel"
-            @policies-changed="refreshNotificationPolicies" />
+            @policies-changed="refreshRolePolicies" />
 
         <!-- Create Session Modal -->
         <div v-if="isCreateSessionModalOpen"
@@ -1170,7 +1357,7 @@ function clearTeacherSelection() {
                             <label class="block text-sm font-semibold text-gray-700">{{ $t('common.end_date') }}</label>
                             <button v-if="newSession.end_date" @click="newSession.end_date = null"
                                 class="text-[10px] text-gray-400 hover:text-red-500 font-medium uppercase tracking-wider transition-colors">
-                                {{ $t('common.clear', 'Clear') }}
+                                {{ $t('common.clear') }}
                             </button>
                         </div>
                         <input type="date" v-model="newSession.end_date"
@@ -1271,25 +1458,50 @@ function clearTeacherSelection() {
 
                     <div class="md:col-span-2">
                         <label class="block text-sm font-semibold text-gray-700 mb-2">{{
-                            $t('classroom.teaching_schedule') || 'Teaching Schedule' }}</label>
+                            $t('classroom.copy.teaching_schedule') }}</label>
+                        <p v-if="teacherRolePermissionError" role="alert" class="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
+                            <span>{{ $t('rbac.teacher_assignment_permission_check_failed') }}</span>
+                            <button type="button" class="min-h-11 rounded-lg px-3 underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500" @click="retryTeacherRoleCatalog">{{ $t('rbac.platform_teaching_assignments.retry') }}</button>
+                        </p>
+                        <p v-if="teacherAssignmentsLoadError" role="alert" class="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
+                            <span>{{ $t('rbac.teacher_assignment_list_load_failed') }}</span>
+                            <button type="button" class="min-h-11 rounded-lg px-3 underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500" @click="retrySessionTeacherAssignments">{{ $t('rbac.platform_teaching_assignments.retry') }}</button>
+                        </p>
+                        <p v-else-if="teacherRoleManageAllowed === null" role="status" aria-live="polite" class="mb-3 text-xs text-slate-500">{{ $t('rbac.teacher_assignment_permission_loading') }}</p>
+                        <p v-else-if="teacherRoleManageAllowed === false" role="status" class="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">{{ $t('rbac.teacher_assignment_manage_required') }}</p>
+                        <p v-if="teacherAssignmentSaveError" role="alert" class="mb-3 rounded-xl bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">{{ $t('rbac.teacher_assignment_manage_required') }}</p>
+                        <div class="mb-3 flex flex-wrap gap-2 rounded-xl bg-gray-100 p-1">
+                            <button type="button" @click="showPastAssignments = false; currentUpcomingAssignmentsPage = 1"
+                                class="rounded-lg px-3 py-2 text-xs font-bold transition-colors"
+                                :class="!showPastAssignments ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-800'">
+                                {{ $t('classroom.teacher_assignments_current_upcoming') }} ({{ currentUpcomingTeacherAssignments.length }})
+                            </button>
+                            <button v-if="pastTeacherAssignments.length" type="button"
+                                @click="showPastAssignments = true; pastAssignmentsPage = 1"
+                                class="rounded-lg px-3 py-2 text-xs font-bold transition-colors"
+                                :class="showPastAssignments ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-800'">
+                                {{ $t('classroom.teacher_assignments_history') }} ({{ pastTeacherAssignments.length }})
+                            </button>
+                        </div>
                         <div class="space-y-3">
-                            <div v-for="(config, index) in selectedTeacherConfigs" :key="index"
+                            <div v-for="entry in visibleTeacherAssignments.items" :key="`${entry.config.teacher_id}:${entry.config.effective_from}:${entry.index}`"
                                 class="p-3 border border-gray-200 rounded-xl bg-gray-50/50 space-y-3">
                                 <div class="flex items-start justify-between gap-3">
                                     <div class="flex-1">
                                         <label
                                             class="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">{{
                                                 $t('classroom.teacher') }}</label>
-                                        <SearchableSelect v-model="config.teacher_id" :options="teacherOptions"
-                                            :placeholder="$t('classroom.teacher_search_placeholder')" />
+                                        <SearchableSelect v-model="entry.config.teacher_id" :options="teacherOptions"
+                                            :placeholder="$t('classroom.teacher_search_placeholder')" :disabled="teacherRoleManageAllowed !== true || teacherAssignmentsLoadError" />
                                     </div>
                                     <div class="flex-1">
                                         <label class="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">
                                             {{ $t('classroom.teacher_role') }}</label>
-                                        <SearchableSelect v-model="config.role_id" :options="roleOptions"
-                                            :placeholder="$t('classroom.teacher_role_placeholder')" />
+                                        <SearchableSelect v-model="entry.config.role_id" :options="teacherRoleOptions"
+                                            :placeholder="$t('classroom.teacher_role_placeholder')"
+                                            :disabled="teacherRoleManageAllowed !== true || teacherAssignmentsLoadError || teacherRoleCatalogError || !teacherRoleCatalog.length" />
                                     </div>
-                                    <button @click="removeTeacherAssignment(index)"
+                                    <button @click="removeTeacherAssignment(entry.index)" :disabled="teacherRoleManageAllowed !== true || teacherAssignmentsLoadError"
                                         class="mt-6 p-2 text-gray-400 hover:text-red-500 transition-colors">
                                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -1297,40 +1509,67 @@ function clearTeacherSelection() {
                                         </svg>
                                     </button>
                                 </div>
+                                <div v-if="teacherRoleCatalogError" role="alert" class="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-rose-700">
+                                    <span>{{ $t('rbac.teacher_assignment_role_catalog_failed') }}</span>
+                                    <button type="button" class="min-h-11 rounded-lg px-3 underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500" @click="retryTeacherRoleCatalog">{{ $t('rbac.platform_teaching_assignments.retry') }}</button>
+                                </div>
+                                <p v-else-if="entry.config.teacher_id && !linkedTeacherUserId(entry.config.teacher_id)" role="status" class="text-xs leading-5 text-amber-700">{{ $t('rbac.teacher_assignment_unlinked') }}</p>
+                                <template v-else>
+                                    <p class="text-xs leading-5 text-slate-500">{{ $t('rbac.teacher_assignment_role_grant_notice') }}</p>
+                                    <EffectiveTeachingRoles v-if="editingSession?.id && linkedTeacherUserId(entry.config.teacher_id)" :user-id="linkedTeacherUserId(entry.config.teacher_id)" scope-type="class_session" :scope-id="editingSession.id" :effective-date="entry.config.effective_from" />
+                                </template>
                                 <div class="grid grid-cols-2 gap-3">
                                     <div>
                                         <label
                                             class="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">{{
                                                 $t('common.start_date') }}</label>
-                                        <input type="date" v-model="config.effective_from"
-                                            class="w-full text-sm border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500" />
+                                        <input type="date" v-model="entry.config.effective_from"
+                                            :disabled="teacherRoleManageAllowed !== true || teacherAssignmentsLoadError" class="w-full text-sm border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-100" />
                                     </div>
                                     <div>
                                         <div class="flex items-center justify-between mb-1">
                                             <label
                                                 class="block text-[10px] font-bold uppercase tracking-wider text-gray-500">
                                                 {{ $t('common.end_date') }}
-                                                <span v-if="!config.effective_to"
+                                                <span v-if="!entry.config.effective_to"
                                                     class="ml-1 text-[9px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">{{
                                                         $t('classroom.default_teacher') }}</span>
                                             </label>
-                                            <button v-if="config.effective_to" @click="config.effective_to = null"
+                                            <button v-if="entry.config.effective_to" @click="entry.config.effective_to = null"
                                                 class="text-[9px] text-gray-400 hover:text-red-500 font-bold uppercase transition-colors">
                                                 {{ $t('common.clear') }}
                                             </button>
                                         </div>
-                                        <input type="date" v-model="config.effective_to"
-                                            class="w-full text-sm border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500" />
+                                        <input type="date" v-model="entry.config.effective_to"
+                                            :disabled="teacherRoleManageAllowed !== true || teacherAssignmentsLoadError" class="w-full text-sm border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-100" />
                                     </div>
                                 </div>
                             </div>
-                            <button @click="addTeacherAssignment"
-                                class="w-full py-2.5 border-2 border-dashed border-gray-300 rounded-xl text-sm font-bold text-gray-500 hover:border-emerald-500 hover:text-emerald-600 hover:bg-emerald-50/30 transition-all flex items-center justify-center gap-2">
+                            <div v-if="visibleTeacherAssignments.items.length === 0"
+                                class="rounded-xl border border-dashed border-gray-200 px-4 py-6 text-center text-xs font-bold text-gray-400">
+                                {{ $t('classroom.no_teachers_assigned') }}
+                            </div>
+                            <div v-if="visibleTeacherAssignments.pageCount > 1"
+                                class="flex items-center justify-between border-t border-gray-100 pt-3 text-xs font-bold text-gray-500">
+                                <button type="button" class="rounded-lg px-3 py-2 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                    :disabled="visibleTeacherAssignments.page <= 1"
+                                    @click="showPastAssignments ? pastAssignmentsPage-- : currentUpcomingAssignmentsPage--">
+                                    {{ $t('classroom.teacher_assignments_previous_page') }}
+                                </button>
+                                <span>{{ $t('classroom.teacher_assignments_page', { page: visibleTeacherAssignments.page, pages: visibleTeacherAssignments.pageCount }) }}</span>
+                                <button type="button" class="rounded-lg px-3 py-2 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                    :disabled="visibleTeacherAssignments.page >= visibleTeacherAssignments.pageCount"
+                                    @click="showPastAssignments ? pastAssignmentsPage++ : currentUpcomingAssignmentsPage++">
+                                    {{ $t('classroom.teacher_assignments_next_page') }}
+                                </button>
+                            </div>
+                            <button @click="addTeacherAssignment" :disabled="teacherRoleManageAllowed !== true || teacherAssignmentsLoadError || teacherRoleCatalogError || !teacherRoleCatalog.length"
+                                class="w-full py-2.5 border-2 border-dashed border-gray-300 rounded-xl text-sm font-bold text-gray-500 hover:border-emerald-500 hover:text-emerald-600 hover:bg-emerald-50/30 transition-all flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-50">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M12 4v16m8-8H4" />
                                 </svg>
-                                {{ $t('classroom.add_teacher_assignment') || 'Add Teacher Assignment' }}
+                                {{ $t('classroom.copy.add_teacher_assignment') }}
                             </button>
                         </div>
                     </div>
@@ -1342,6 +1581,17 @@ function clearTeacherSelection() {
                         <p class="mt-1 text-xs font-bold text-gray-400">{{ $t('classroom.session_notification_hint') }}</p>
                     </div>
                     <ScopedRolePolicyEditor v-model="sessionPolicySelections" :roles="roles" :policies="notificationPolicies"
+                        scope-type="class_session" :scope-id="editingSession?.id"
+                        :classroom-id="newSession.classroom_id || null" :class-session-id="editingSession?.id"
+                        compact :disabled="isSavingSession" />
+                </section>
+
+                <section class="mt-4 space-y-4 rounded-2xl border border-gray-100 bg-gray-50 p-4 sm:p-5">
+                    <div>
+                        <h4 class="font-black text-gray-900">{{ $t('settings.dashboard_schedule.title') }}</h4>
+                        <p class="mt-1 text-xs font-bold text-gray-500">{{ $t('classroom.session_schedule_hint') }}</p>
+                    </div>
+                    <DashboardScheduleModeEditor v-model="sessionScheduleSelections" :roles="roles" :policies="schedulePolicies"
                         scope-type="class_session" :scope-id="editingSession?.id"
                         :classroom-id="newSession.classroom_id || null" :class-session-id="editingSession?.id"
                         compact :disabled="isSavingSession" />

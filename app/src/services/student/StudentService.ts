@@ -1,4 +1,4 @@
-import { Student, type StudentDTO } from '@/models/Student'
+import { Student, type StudentDTO, type StudentSchoolCreate, type StudentSchoolUpdate } from '@/models/Student'
 import { StudentCommandService } from './StudentCommandService'
 import { StudentQueryService } from './StudentQueryService'
 
@@ -43,11 +43,11 @@ export class StudentService {
     }
 
     // School management
-    static async addSchool(school: any) {
+    static async addSchool(school: StudentSchoolCreate) {
         return StudentCommandService.addSchool(school)
     }
 
-    static async updateSchool(id: string, school: any) {
+    static async updateSchool(id: string, school: StudentSchoolUpdate) {
         return StudentCommandService.updateSchool(id, school)
     }
 

@@ -2,6 +2,12 @@ import { describe, it, expect } from 'vitest'
 import { DateUtils } from './DateUtils'
 
 describe('DateUtils', () => {
+    it('displayDateWithWeekday formats yyyy/mm/dd(w) per locale', () => {
+        expect(DateUtils.displayDateWithWeekday('2026-10-03', 'zh-TW')).toBe('2026/10/03(六)')
+        expect(DateUtils.displayDateWithWeekday('2026-10-03', 'en')).toBe('2026/10/03 (Sat)')
+        expect(DateUtils.displayDateWithWeekday(undefined, 'en')).toBe('-')
+    })
+
     it('isValidTimeZone returns true for valid time zones', () => {
         expect(DateUtils.isValidTimeZone('Asia/Taipei')).toBe(true)
         expect(DateUtils.isValidTimeZone('UTC')).toBe(true)

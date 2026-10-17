@@ -1,5 +1,6 @@
 <template>
     <div class="student-reports-view p-6 max-w-7xl mx-auto">
+        <EnrollmentHistoryPanel v-if="route.params.enrollmentId" :enrollment-id="String(route.params.enrollmentId)" />
         <!-- Header with Back Button and Actions -->
         <div class="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
@@ -268,6 +269,11 @@
                             {{ displayReport.content || $t('common.none') }}
                         </div>
 
+                        <a v-if="safeExternalHref(displayReport.externalLink)" :href="safeExternalHref(displayReport.externalLink) || undefined" target="_blank" rel="noopener noreferrer" @click.stop
+                            class="inline-flex w-fit items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-700">
+                            {{ $t('report.editor.view_report_link') }}
+                        </a>
+
                         <!-- Notes Summary -->
                         <div v-if="displayReport.classNotes"
                             class="text-xs text-gray-500 italic bg-amber-50 p-2 rounded border border-amber-100">
@@ -287,22 +293,22 @@
                     <!-- Right: Ratings -->
                     <div
                         class="w-full md:w-48 shrink-0 border-l-0 md:border-l pl-0 md:pl-6 pt-4 md:pt-0 border-t md:border-t-0 border-gray-100 space-y-4 flex flex-col justify-center">
-                        <div v-if="displayReport.classParticipation">
+                        <div>
                             <div class="text-xs text-gray-500 mb-1 flex justify-between">
                                 <span>{{ $t('report.participation') }}</span>
-                                <span class="font-bold text-gray-900">{{ displayReport.classParticipation }}</span>
+                                <span class="font-bold text-gray-900">{{ displayReport.classParticipation && displayReport.classParticipation > 0 ? displayReport.classParticipation : $t('report.editor.unrated') }}</span>
                             </div>
-                            <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div v-if="displayReport.classParticipation && displayReport.classParticipation > 0" class="h-1.5 bg-gray-100 rounded-full overflow-hidden">
                                 <div class="h-full bg-emerald-500"
                                     :style="{ width: (displayReport.classParticipation * 20) + '%' }"></div>
                             </div>
                         </div>
-                        <div v-if="displayReport.classroomBehavior">
+                        <div>
                             <div class="text-xs text-gray-500 mb-1 flex justify-between">
                                 <span>{{ $t('report.behavior') }}</span>
-                                <span class="font-bold text-gray-900">{{ displayReport.classroomBehavior }}</span>
+                                <span class="font-bold text-gray-900">{{ displayReport.classroomBehavior && displayReport.classroomBehavior > 0 ? displayReport.classroomBehavior : $t('report.editor.unrated') }}</span>
                             </div>
-                            <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div v-if="displayReport.classroomBehavior && displayReport.classroomBehavior > 0" class="h-1.5 bg-gray-100 rounded-full overflow-hidden">
                                 <div class="h-full bg-indigo-500"
                                     :style="{ width: (displayReport.classroomBehavior * 20) + '%' }"></div>
                             </div>
@@ -523,10 +529,10 @@
 </template>
 
 <script setup lang="ts">
+import EnrollmentHistoryPanel from '@/components/reports/EnrollmentHistoryPanel.vue'
 import { computed, ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/useAuthStore'
 import OccurrenceCalendar from '@/components/OccurrenceCalendar.vue'
 import ReportEditor from '@/components/ReportEditor.vue'
@@ -542,12 +548,12 @@ import { ClassOccurrence } from '@/models/ClassOccurrence'
 import { OccurrenceReport } from '@/models/OccurrenceReport'
 import { SuspensionService } from '@/services/suspension/SuspensionService'
 import { Suspension } from '@/models/Suspension'
-import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import { useToast } from 'vue-toastification'
 import { DateUtils } from '@/utils/DateUtils'
 import { isAttendanceReportStatus } from '@/utils/reportListFilter'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
+import { safeExternalHref } from '@/utils/safeExternalHref'
 
 type ReportEditorExpose = {
     saveNow: (options?: { reason?: 'manual' | 'switch' }) => Promise<boolean>
@@ -597,7 +603,6 @@ const effectiveTransferTargets = ref<Array<{
     target_report_id: string | null
 }>>([])
 const courseLessons = ref<any[]>([])
-let reportSubscription: RealtimeChannel | null = null
 
 // Confirm Modal State
 const showCreateConfirm = ref(false)
@@ -620,35 +625,12 @@ function isMissingTransferredOccurrence(occurrenceId: string | undefined): boole
     return !!occurrenceId && missingTransferredOccurrenceIds.value.has(occurrenceId)
 }
 
-function clearReportSubscription() {
-    if (reportSubscription) {
-        supabase.removeChannel(reportSubscription)
-        reportSubscription = null
-    }
-}
+function clearReportSubscription() {}
 
-function subscribeToReport(reportId: string | null) {
+// Collaboration updates are delivered by the authenticated /api/realtime provider.
+function subscribeToReport(_reportId: string | null) {
     clearReportSubscription()
-
-    if (!reportId) return
-
-    reportSubscription = supabase
-        .channel(`report-${reportId}`)
-        .on(
-            'postgres_changes',
-            {
-                event: 'UPDATE',
-                schema: 'public',
-                table: 'occurrence_reports',
-                filter: `id=eq.${reportId}`
-            },
-            (payload) => {
-                handleRealtimeUpdate(payload)
-            }
-        )
-        .subscribe()
 }
-
 async function restorePendingSelection() {
     const snapshot = pendingSelectionState.value
     pendingSelectionState.value = null
@@ -691,7 +673,8 @@ async function handleConfirmCreate() {
         showCreateConfirm.value = false
     } catch (e) {
         console.error('Failed to create report', e)
-        toast.error(t('report.create_error') || 'Failed to create report')
+        const publicMessageKey = (e as any)?.i18nKey || 'report.create_error'
+        toast.error(t(publicMessageKey) || t('report.create_error') || 'Failed to create report')
     } finally {
         isCreatingReport.value = false
     }
@@ -808,6 +791,7 @@ const allReportDisplay = computed(() => {
                 lessonTitle: lesson ? `${lesson.sequence ? `Lesson ${lesson.sequence}` : ''} ${lesson.title || ''}` : '',
                 classParticipation: r.class_participation,
                 classroomBehavior: r.classroom_behavior,
+                externalLink: r.external_link,
                 isCompleted: r.is_completed,
                 contactNotes: r.contact_notes,
                 progressDisplay: r.progress_letter
@@ -831,8 +815,9 @@ const allReportDisplay = computed(() => {
                 classNotes: '',
                 version: 0,
                 lessonTitle: '-',
-                classParticipation: 0,
-                classroomBehavior: 0,
+                classParticipation: null,
+                classroomBehavior: null,
+                externalLink: null,
                 isCompleted: false,
                 contactNotes: '',
                 progressDisplay: '',
@@ -864,6 +849,7 @@ const allReportDisplay = computed(() => {
                 lessonTitle: lesson ? `${lesson.sequence ? `Lesson ${lesson.sequence}` : ''} ${lesson.title || ''}` : '',
                 classParticipation: r.class_participation,
                 classroomBehavior: r.classroom_behavior,
+                externalLink: r.external_link,
                 isCompleted: r.is_completed,
                 contactNotes: r.contact_notes,
                 progressDisplay: r.progress_letter
@@ -1061,9 +1047,6 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-    if (reportSubscription) {
-        supabase.removeChannel(reportSubscription)
-    }
 })
 
 // Methods
@@ -1128,19 +1111,19 @@ async function loadOccurrences() {
 
         // Map reports to ClassOccurrence objects
         const historicalOccurrences: ClassOccurrence[] = reportsWithDetails.map((r: any) => {
-            const occData = r.class_occurrence
+            const occData = r.class_occurrence || {}
             const occ = new ClassOccurrence({
                 id: r.class_occurrence_id,
-                class_session_id: occData.class_session?.id,
-                occurrence_date: occData.occurrence_date,
-                status: occData.status,
-                original_start_time: occData.original_start_time,
-                original_end_time: occData.original_end_time,
-                actual_start_time: occData.actual_start_time,
-                actual_end_time: occData.actual_end_time,
-                notes: occData.notes,
-                created_at: occData.created_at,
-                updated_at: occData.updated_at
+                class_session_id: occData.class_session?.id || occData.class_session_id,
+                occurrence_date: occData.occurrence_date || '',
+                status: occData.status || 'scheduled',
+                original_start_time: occData.original_start_time || null,
+                original_end_time: occData.original_end_time || null,
+                actual_start_time: occData.actual_start_time || null,
+                actual_end_time: occData.actual_end_time || null,
+                notes: occData.notes || null,
+                created_at: occData.created_at || r.created_at,
+                updated_at: occData.updated_at || r.updated_at
             })
 
             if (occData.class_session) {
@@ -1404,27 +1387,6 @@ async function selectOccurrence(
 
 async function handleCancelCreate() {
     await restorePendingSelection()
-}
-
-function handleRealtimeUpdate(payload: any) {
-    const newRecord = payload.new
-    // Ignore our own updates
-    if (newRecord.last_edited_by === authStore.user?.id) return
-
-    // If version is newer, prompt user
-    if (selectedReport.value && newRecord.version > selectedReport.value.version) {
-        toast.info(t('report.update_available') || 'Update Available', {
-            timeout: 0,
-            onClick: () => {
-                refreshReport()
-            }
-        })
-    }
-}
-
-async function refreshReport() {
-    if (!selectedOccurrence.value) return
-    await selectOccurrence(selectedOccurrence.value)
 }
 
 function handleSaveSuccess(updatedReport: OccurrenceReportDTO) {

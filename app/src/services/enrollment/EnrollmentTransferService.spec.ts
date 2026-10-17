@@ -5,9 +5,13 @@ import { EnrollmentTransferToolService } from './EnrollmentTransferToolService'
 import { OccurrenceService } from '../occurrence/OccurrenceService'
 import { SessionService } from '../session/SessionService'
 
-const { rpcMock } = vi.hoisted(() => ({ rpcMock: vi.fn() }))
+const { rpcMock, postMock } = vi.hoisted(() => ({ rpcMock: vi.fn(), postMock: vi.fn() }))
 
-vi.mock('@/lib/supabase', () => ({ supabase: { from: vi.fn(), rpc: rpcMock } }))
+vi.mock('@/services/api/ApiDataClient', () => ({ apiDataClient: { from: vi.fn(), rpc: rpcMock } }))
+vi.mock('@/services/api/ApiV1Client', async importOriginal => ({
+    ...await importOriginal<typeof import('@/services/api/ApiV1Client')>(),
+    apiV1Client: { post: postMock, get: vi.fn() }
+}))
 vi.mock('./EnrollmentTransferQueryService', () => ({
     EnrollmentTransferQueryService: {
         getEnrollmentSessionInfo: vi.fn(),
@@ -164,11 +168,39 @@ describe('EnrollmentTransferService single-lesson transfers', () => {
         expect(EnrollmentTransferToolService.syncSessionPair).not.toHaveBeenCalled()
     })
 
-    it('cancels a transfer through the atomic reverse RPC', async () => {
-        await EnrollmentTransferService.cancelSingleLessonTransfer('transfer-1')
+    it('opens the conflict tool for v1 reports that embed class_occurrences (plural)', async () => {
+        vi.mocked(EnrollmentTransferQueryService.getReportTransferInfo).mockResolvedValue({
+            id: 'source-report',
+            enrollment_id: 'enrollment-1',
+            class_occurrence_id: 'source-occurrence',
+            class_occurrences: { occurrence_date: '2026-10-03', class_session_id: 'source-session' }
+        } as any)
+        vi.mocked(EnrollmentTransferQueryService.getExistingReportForOccurrence)
+            .mockReset()
+            .mockResolvedValue({ id: 'target-report' } as any)
+        vi.mocked(EnrollmentTransferQueryService.getReportForOccurrence)
+            .mockResolvedValueOnce({
+                id: 'source-report', enrollment_id: 'enrollment-1', class_occurrence_id: 'source-occurrence', content: 'source', version: 1
+            })
+            .mockResolvedValueOnce({
+                id: 'target-report', enrollment_id: 'enrollment-1', class_occurrence_id: 'target-occurrence', content: 'target', version: 1
+            })
+        vi.mocked(EnrollmentTransferQueryService.getTransferConflictDisplayContext)
+            .mockResolvedValueOnce({ occurrenceId: 'source-occurrence', occurrenceDate: '2026-10-03', sessionId: 'source-session' })
+            .mockResolvedValueOnce({ occurrenceId: 'target-occurrence', occurrenceDate: '2026-10-03', sessionId: 'target-session' })
 
-        expect(rpcMock).toHaveBeenCalledWith('cancel_single_lesson_transfer', {
-            p_transfer_id: 'transfer-1'
-        })
+        const result = await EnrollmentTransferService.transferSingleLessonReport('source-report', 'target-session', '2026-10-03')
+
+        expect(result.status).toBe('conflict')
+        expect(rpcMock).not.toHaveBeenCalledWith('transfer_single_lesson', expect.anything())
+    })
+
+    it('cancels a transfer through the API and reports a retained target report', async () => {
+        postMock.mockResolvedValue({ data: { cancelled: true, restored_report_id: 'report-1', target_report_retained: true } })
+
+        const result = await EnrollmentTransferService.cancelSingleLessonTransfer('transfer-1')
+
+        expect(postMock).toHaveBeenCalledWith('/enrollment-transfers/cancel', { transfer_id: 'transfer-1' })
+        expect(result).toEqual({ transferId: 'transfer-1', restoredReportId: 'report-1', targetReportRetained: true })
     })
 })

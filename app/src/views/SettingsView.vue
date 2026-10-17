@@ -1,268 +1,130 @@
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
-import { usePreferencesStore } from '@/stores/usePreferencesStore'
-import { DateUtils } from '@/utils/DateUtils'
-import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
+import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import BasePageHeader from '@/components/common/BasePageHeader.vue'
-import TeacherRoleSettings from '@/components/settings/TeacherRoleSettings.vue'
 import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
-import IncompleteReportNotificationSettings from '@/components/settings/IncompleteReportNotificationSettings.vue'
+import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
+import { DateUtils } from '@/utils/DateUtils'
+import { usePreferencesStore } from '@/stores/usePreferencesStore'
+import { useAuthStore } from '@/stores/useAuthStore'
+import { apiV1Client } from '@/services/api/ApiV1Client'
+import type { SettingsOverview } from '@/models/Rbac'
+import { useFeedback } from '@/composables/useFeedback'
+import PasswordInput from '@/components/common/PasswordInput.vue'
+import WebExtensionIntegrations from '@/components/settings/WebExtensionIntegrations.vue'
 
+const SystemSettingsPanel = defineAsyncComponent(() => import('@/components/settings/SystemSettingsPanel.vue'))
+const route = useRoute()
+const router = useRouter()
 const preferences = usePreferencesStore()
-const search = ref('')
+const auth = useAuthStore()
+const { reportError, success } = useFeedback()
+type PersonProfileForm = {
+    full_name?: string | null
+    nickname?: string | null
+    display_name?: string | null
+    contact_email?: string | null
+    phone?: string | null
+    address?: string | null
+    mailing_address?: string | null
+    birthday?: string | null
+    government_id?: string | null
+    bio?: string | null
+    bio_document?: Record<string, unknown> | null
+}
+const loading = ref(true)
+const overview = ref<SettingsOverview | null>(null)
+const dirty = ref(false)
+const profileLoading = ref(false)
+const profileSaving = ref(false)
+const personProfile = ref<PersonProfileForm>({})
+const securityBusy = ref<'email' | 'password' | null>(null)
+const securityError = ref('')
+const securityNotice = ref('')
+const emailChange = ref({ current_password: '', email: '' })
+const passwordChange = ref({ current_password: '', new_password: '', confirm_password: '' })
+const currentEmail = computed(() => auth.user?.email ?? '')
+const requestedTab = computed(() => { const value = typeof route.query.tab === 'string' ? route.query.tab : 'personal'; return ['personal', 'system'].includes(value) ? value as 'personal' | 'system' : 'personal' })
+const activeTab = ref<'personal' | 'system'>('personal')
+const canSystem = computed(() => overview.value?.tabs.system === true)
 
-const timeZoneOptions = preferences.timeZoneOptions
-const browserTimeZoneLabel = computed(() => DateUtils.formatTimeZoneLabel(DateUtils.getBrowserTimeZone(), preferences.locale))
-
-const filteredOptions = ref(timeZoneOptions)
-
-function handleSearch() {
-    if (!search.value) {
-        filteredOptions.value = timeZoneOptions
-        return
-    }
-    const q = search.value.toLowerCase()
-    filteredOptions.value = timeZoneOptions.filter(opt =>
-        opt.label.toLowerCase().includes(q) ||
-        opt.value.toLowerCase().includes(q)
-    )
+function isTabAllowed(tab: 'personal' | 'system') {
+    return tab === 'personal' || (tab === 'system' && canSystem.value)
 }
 
-function selectTimeZone(zone: string) {
-    preferences.timeZone = zone
+async function syncTab(tab: 'personal' | 'system') {
+    if (!overview.value || isTabAllowed(tab)) { activeTab.value = tab; return }
+    activeTab.value = 'personal'
+    await router.replace({ query: { ...route.query, tab: 'personal' } })
 }
 
-function useBrowserTimeZone() {
-    preferences.timeZone = DateUtils.getBrowserTimeZone()
-}
-
-onMounted(() => {
-    handleSearch()
-})
-
+async function loadOverview() { loading.value = true; try { overview.value = (await apiV1Client.get<SettingsOverview>('/pages/settings/overview')).data } catch (error) { reportError(error) } finally { loading.value = false } }
+async function loadPersonProfile() { profileLoading.value = true; try { personProfile.value = (await apiV1Client.get<PersonProfileForm>('/pages/me/person-profile')).data ?? {} } catch (error) { reportError(error) } finally { profileLoading.value = false } }
+async function savePersonProfile() { profileSaving.value = true; try { const fields = ['full_name', 'nickname', 'contact_email', 'phone', 'address', 'mailing_address', 'birthday', 'government_id', 'bio', 'bio_document'] as const; const values = personProfile.value as Record<string, unknown>; const patch = Object.fromEntries(fields.map((field) => [field, values[field] === '' ? null : values[field]])); personProfile.value = (await apiV1Client.patch<PersonProfileForm>('/pages/me/person-profile', patch)).data ?? personProfile.value; if (auth.user) auth.user = { ...auth.user, full_name: personProfile.value.full_name ?? null, nickname: personProfile.value.nickname ?? null, display_name: personProfile.value.nickname?.trim() || personProfile.value.full_name || null }; success('common.save_success') } catch (error) { reportError(error) } finally { profileSaving.value = false } }
+function securityErrorKey(error: unknown) { const code = (error as { code?: string })?.code; return code === 'CURRENT_PASSWORD_INVALID' ? 'settings.security.current_password_invalid' : code === 'RATE_LIMITED' ? 'settings.security.rate_limited' : 'settings.security.request_failed' }
+async function requestEmailChange() { securityBusy.value = 'email'; securityError.value = ''; securityNotice.value = ''; try { await apiV1Client.post('/auth/me/email', emailChange.value); emailChange.value = { current_password: '', email: '' }; securityNotice.value = 'settings.security.email_confirmation_sent'; success(securityNotice.value) } catch (error) { securityError.value = securityErrorKey(error) } finally { securityBusy.value = null } }
+async function changePassword() { securityError.value = ''; securityNotice.value = ''; if (passwordChange.value.new_password !== passwordChange.value.confirm_password) { securityError.value = 'settings.security.password_mismatch'; return } securityBusy.value = 'password'; try { await apiV1Client.post('/auth/me/password', passwordChange.value); passwordChange.value = { current_password: '', new_password: '', confirm_password: '' }; securityNotice.value = 'settings.security.password_changed'; success(securityNotice.value) } catch (error) { securityError.value = securityErrorKey(error) } finally { securityBusy.value = null } }
+async function selectTab(tab: 'personal' | 'system') { if (dirty.value && !window.confirm('目前有尚未儲存的修改，確定要切換分頁嗎？')) return; if (tab === 'system' && !canSystem.value) return router.replace({ query: { ...route.query, tab: 'personal' } }); dirty.value = false; await router.replace({ query: { ...route.query, tab } }) }
+function useBrowserTimeZone() { preferences.timeZone = DateUtils.getBrowserTimeZone() }
+watch([requestedTab, canSystem], ([value]) => { void syncTab(value) })
+watch(() => preferences.timeZone, () => { dirty.value = true })
+onMounted(async () => { await Promise.all([loadOverview(), loadPersonProfile()]); await syncTab(requestedTab.value) })
 </script>
 
 <template>
-    <div class="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-        <!-- Header -->
-        <BasePageHeader
-            :overline="$t('nav.settings')"
-            :title="$t('nav.settings')"
-            :subtitle="$t('settings.subtitle')"
-        >
-            <template #icon>
-                <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shadow-inner">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
+    <div class="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <BasePageHeader :overline="$t('nav.settings')" :title="$t('nav.settings')" :subtitle="$t('settings.page_subtitle')"><template #icon><div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600" aria-hidden="true"><svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.5 3h3l.6 2.1a7 7 0 0 1 1.6.9l2.1-.7 1.5 2.6-1.5 1.6a7 7 0 0 1 0 1.9l1.5 1.6-1.5 2.6-2.1-.7a7 7 0 0 1-1.6.9l-.6 2.1h-3l-.6-2.1a7 7 0 0 1-1.6-.9l-2.1.7-1.5-2.6 1.5-1.6a7 7 0 0 1 0-1.9L5.2 8l1.5-2.6 2.1.7a7 7 0 0 1 1.6-.9L10.5 3z"/><circle cx="12" cy="10.5" r="2.5" stroke-width="2"/></svg></div></template></BasePageHeader>
+        <div v-if="loading" class="rounded-3xl border border-gray-100 bg-white p-10 text-center font-bold text-gray-400">{{ $t('common.loading') }}</div>
+        <template v-else>
+            <nav class="flex flex-wrap gap-2 rounded-3xl border border-gray-100 bg-white p-3 shadow-sm" :aria-label="$t('settings.tabs_aria')">
+                <button class="rounded-2xl px-5 py-3 text-sm font-black transition" :class="activeTab === 'personal' ? 'bg-emerald-600 text-white' : 'text-gray-500 hover:bg-gray-50'" @click="selectTab('personal')">{{ $t('settings.tab_personal') }}</button>
+                <button v-if="canSystem" class="rounded-2xl px-5 py-3 text-sm font-black transition" :class="activeTab === 'system' ? 'bg-emerald-600 text-white' : 'text-gray-500 hover:bg-gray-50'" @click="selectTab('system')">{{ $t('settings.tab_system') }}</button>
+            </nav>
+            <div v-if="activeTab === 'personal'" class="grid gap-6 lg:grid-cols-[18rem_1fr]">
+                <aside class="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm"><p class="mb-3 text-xs font-black uppercase tracking-widest text-gray-400">{{ $t('settings.personal_title') }}</p><a href="#profile" class="block rounded-xl bg-emerald-50 px-4 py-3 font-bold text-emerald-700">{{ $t('settings.profile.nav_label') }}</a><a href="#security" class="mt-2 block rounded-xl px-4 py-3 font-bold text-gray-500 hover:bg-gray-50">{{ $t('settings.security.nav_label') }}</a><a href="#timezone" class="mt-2 block rounded-xl px-4 py-3 font-bold text-gray-500 hover:bg-gray-50">{{ $t('settings.timezone.nav_label') }}</a><a href="#appearance" class="mt-2 block rounded-xl px-4 py-3 font-bold text-gray-500 hover:bg-gray-50">{{ $t('settings.appearance.nav_label') }}</a><a href="#integrations" class="mt-2 block rounded-xl px-4 py-3 font-bold text-gray-500 hover:bg-gray-50">{{ $t('settings.extension.title') }}</a></aside>
+                <div class="space-y-6">
+                    <section id="profile" class="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+                        <div class="flex flex-wrap items-start justify-between gap-4"><div><h2 class="text-xl font-black">{{ $t('settings.profile.title') }}</h2><p class="mt-1 text-sm font-bold text-gray-400">{{ $t('settings.profile.description') }}</p></div><button class="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-black text-white disabled:opacity-50" :disabled="profileLoading || profileSaving" @click="savePersonProfile">{{ profileSaving ? $t('common.saving') : $t('common.save') }}</button></div>
+                        <p v-if="profileLoading" class="mt-5 text-sm font-bold text-gray-400">{{ $t('common.loading') }}</p>
+                        <div v-else class="mt-5 grid gap-4 sm:grid-cols-2">
+                            <label class="text-sm font-bold text-gray-600">{{ $t('settings.profile.full_name') }}<input v-model="personProfile.full_name" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-900" maxlength="200" /></label>
+                            <label class="text-sm font-bold text-gray-600">{{ $t('settings.profile.nickname') }}<input v-model="personProfile.nickname" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-900" maxlength="100" /></label>
+                            <label class="text-sm font-bold text-gray-600">{{ $t('settings.profile.contact_email') }}<input v-model="personProfile.contact_email" type="email" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-900" /></label>
+                            <label class="text-sm font-bold text-gray-600">{{ $t('settings.profile.phone') }}<input v-model="personProfile.phone" type="tel" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-900" /></label>
+                            <label class="text-sm font-bold text-gray-600">{{ $t('settings.profile.birthday') }}<input v-model="personProfile.birthday" type="date" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-900" /></label>
+                            <label class="text-sm font-bold text-gray-600 sm:col-span-2">{{ $t('settings.profile.address') }}<input v-model="personProfile.address" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-900" /></label>
+                            <label class="text-sm font-bold text-gray-600 sm:col-span-2">{{ $t('settings.profile.mailing_address') }}<input v-model="personProfile.mailing_address" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-900" /></label>
+                            <label class="text-sm font-bold text-gray-600">{{ $t('settings.profile.government_id') }}<input v-model="personProfile.government_id" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-900" /></label>
+                            <label class="text-sm font-bold text-gray-600 sm:col-span-2">{{ $t('settings.profile.bio') }}<textarea v-model="personProfile.bio" rows="4" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-900" maxlength="10000" /></label>
+                        </div>
+                    </section>
+                    <section id="security" class="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+                        <div><h2 class="text-xl font-black">{{ $t('settings.security.title') }}</h2><p class="mt-1 text-sm font-bold text-gray-400">{{ $t('settings.security.description') }}</p></div>
+                        <p v-if="securityError" role="alert" class="mt-4 rounded-xl bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">{{ $t(securityError) }}</p>
+                        <p v-if="securityNotice" role="status" class="mt-4 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">{{ $t(securityNotice) }}</p>
+                        <div class="mt-5 grid gap-6 lg:grid-cols-2">
+                            <form class="space-y-4 rounded-2xl border border-gray-100 p-5" @submit.prevent="requestEmailChange">
+                                <div><h3 class="font-black">{{ $t('settings.security.change_email') }}</h3><p class="mt-1 text-sm text-gray-500">{{ $t('settings.security.current_email') }}: {{ currentEmail || '—' }}</p></div>
+                                <div><label for="email-change-current-password" class="block text-sm font-bold text-gray-600">{{ $t('settings.security.current_password') }}</label><PasswordInput id="email-change-current-password" v-model="emailChange.current_password" autocomplete="current-password" required :maxlength="1024" input-class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-900" /></div>
+                                <label for="email-change-new-email" class="block text-sm font-bold text-gray-600">{{ $t('settings.security.new_email') }}<input id="email-change-new-email" v-model="emailChange.email" type="email" autocomplete="email" required maxlength="320" class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-900" /></label>
+                                <p class="text-xs text-gray-500">{{ $t('settings.security.email_confirmation_hint') }}</p>
+                                <button type="submit" class="min-h-11 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-black text-white disabled:opacity-50" :disabled="securityBusy !== null">{{ securityBusy === 'email' ? $t('common.saving') : $t('settings.security.submit_email') }}</button>
+                            </form>
+                            <form class="space-y-4 rounded-2xl border border-gray-100 p-5" @submit.prevent="changePassword">
+                                <div><h3 class="font-black">{{ $t('settings.security.change_password') }}</h3><p class="mt-1 text-sm text-gray-500">{{ $t('settings.security.password_hint') }}</p></div>
+                                <div><label for="password-change-current-password" class="block text-sm font-bold text-gray-600">{{ $t('settings.security.current_password') }}</label><PasswordInput id="password-change-current-password" v-model="passwordChange.current_password" autocomplete="current-password" required :maxlength="1024" input-class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-900" /></div>
+                                <div><label for="password-change-new-password" class="block text-sm font-bold text-gray-600">{{ $t('settings.security.new_password') }}</label><PasswordInput id="password-change-new-password" v-model="passwordChange.new_password" autocomplete="new-password" required :minlength="8" :maxlength="1024" input-class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-900" /></div>
+                                <div><label for="password-change-confirm-password" class="block text-sm font-bold text-gray-600">{{ $t('settings.security.confirm_password') }}</label><PasswordInput id="password-change-confirm-password" v-model="passwordChange.confirm_password" autocomplete="new-password" required :minlength="8" :maxlength="1024" input-class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-900" /></div>
+                                <button type="submit" class="min-h-11 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-black text-white disabled:opacity-50" :disabled="securityBusy !== null">{{ securityBusy === 'password' ? $t('common.saving') : $t('settings.security.submit_password') }}</button>
+                            </form>
+                        </div>
+                    </section>
+                    <section id="timezone" class="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm"><div class="flex flex-wrap items-center justify-between gap-4"><div><h2 class="text-xl font-black">{{ $t('settings.timezone.title') }}</h2><p class="mt-1 text-sm font-bold text-gray-400">{{ $t('settings.timezone.description') }}</p></div><button class="rounded-xl border border-emerald-200 px-4 py-2 text-sm font-black text-emerald-700" @click="useBrowserTimeZone">{{ $t('settings.timezone.use_browser') }}</button></div><div class="mt-5 rounded-2xl bg-emerald-50 p-5"><p class="text-xs font-black uppercase tracking-widest text-emerald-600">{{ $t('settings.timezone.current') }}</p><p class="mt-1 text-xl font-black text-gray-900">{{ preferences.timeZoneLabel }}</p><p class="text-sm font-bold text-gray-500">{{ preferences.timeZone }}</p></div><div class="mt-5"><TimeZoneSelect :label="$t('common.time_zone')" dense /></div></section>
+                    <section id="appearance" class="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm"><h2 class="text-xl font-black">{{ $t('settings.appearance.title') }}</h2><div class="mt-5 flex items-center gap-4"><button class="h-12 w-12 rounded-xl bg-gray-50 text-xl font-black" @click="preferences.adjustGlobalScale(-preferences.STEP)" :aria-label="$t('settings.appearance.decrease_font')">&minus;</button><span class="font-black">{{ preferences.globalFontScale }}%</span><button class="h-12 w-12 rounded-xl bg-gray-50 text-xl font-black" @click="preferences.adjustGlobalScale(preferences.STEP)" :aria-label="$t('settings.appearance.increase_font')">&plus;</button></div><div class="mt-6 border-t border-gray-100 pt-5"><LanguageSwitcher full-width label-on-mobile align="left" /></div></section>
+                    <section id="integrations" class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"><div class="mb-5"><h2 class="text-xl font-black text-slate-900">{{ $t('settings.extension.title') }}</h2></div><WebExtensionIntegrations /></section>
                 </div>
-            </template>
-        </BasePageHeader>
-
-        <div class="grid grid-cols-1 md:grid-cols-12 gap-6 lg:gap-8">
-            <!-- Sidebar Navigation (Quick scroll or tabs) -->
-            <div class="md:col-span-4 space-y-2">
-                <nav class="sticky top-8 space-y-1">
-                    <a href="#timezone"
-                        class="flex items-center gap-3 px-4 py-3 rounded-2xl bg-emerald-50 text-emerald-700 font-black transition-all">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                            stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        {{ $t('settings.timezone.title') }}
-                    </a>
-                    <a href="#appearance"
-                        class="flex items-center gap-3 px-4 py-3 rounded-2xl text-gray-400 hover:bg-gray-50 font-bold transition-all">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                            stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                                d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
-                        </svg>
-                        {{ $t('settings.appearance.title') }}
-                    </a>
-                    <a href="#teacher-roles" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-gray-400 hover:bg-gray-50 font-bold transition-all">
-                        <span class="flex h-5 w-5 items-center justify-center">♙</span>{{ $t('settings.teacher_roles.title') }}
-                    </a>
-                    <a href="#incomplete-notifications" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-gray-400 hover:bg-gray-50 font-bold transition-all">
-                        <span class="flex h-5 w-5 items-center justify-center">!</span>{{ $t('settings.incomplete_notifications.title') }}
-                    </a>
-                </nav>
             </div>
-
-            <!-- Content -->
-            <div class="md:col-span-8 space-y-8">
-                <!-- Timezone Section -->
-                <section id="timezone"
-                    class="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden">
-                    <div class="p-8 border-b border-gray-50">
-                        <h3 class="text-2xl font-black text-gray-900 tracking-tight">{{ $t('settings.timezone.title') }}
-                        </h3>
-                        <p class="text-sm font-bold text-gray-400 italic mt-1">{{ $t('settings.timezone.description') }}
-                        </p>
-                    </div>
-
-                    <div class="p-8 space-y-6">
-                        <!-- Current Selection Highlight -->
-                        <div
-                            class="bg-emerald-50 rounded-3xl p-6 border border-emerald-100 flex items-center justify-between">
-                            <div>
-                                <p class="text-xs font-black text-emerald-600 uppercase tracking-widest mb-1">{{
-                                    $t('settings.timezone.current') }}</p>
-                                <p class="text-xl font-black text-gray-900">{{ preferences.timeZoneLabel }}</p>
-                                <p class="text-sm font-bold text-gray-400 mt-1">{{ preferences.timeZone }}</p>
-                            </div>
-                            <button @click="useBrowserTimeZone"
-                                class="bg-white text-emerald-600 border border-emerald-200 px-4 py-2 rounded-xl text-sm font-black hover:bg-emerald-600 hover:text-white transition-all active:scale-95">
-                                {{ $t('settings.timezone.use_browser') }}
-                            </button>
-                        </div>
-
-                        <!-- Quick Selector -->
-                        <div class="rounded-3xl border border-gray-100 bg-gray-50/60 p-5 space-y-4">
-                            <div class="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-                                <div>
-                                    <p class="text-xs font-black uppercase tracking-widest text-gray-400 mb-1">
-                                        {{ $t('settings.timezone.title') }}
-                                    </p>
-                                    <h4 class="text-lg font-black text-gray-900 tracking-tight">
-                                        {{ $t('common.time_zone') }}
-                                    </h4>
-                                </div>
-                                <button @click="useBrowserTimeZone"
-                                    class="self-start sm:self-auto text-emerald-600 bg-white border border-emerald-200 px-4 py-2 rounded-xl text-sm font-black hover:bg-emerald-600 hover:text-white transition-all active:scale-95">
-                                    {{ $t('settings.timezone.use_browser') }}
-                                </button>
-                            </div>
-
-                            <TimeZoneSelect :label="$t('common.time_zone')" dense />
-
-                            <p class="text-xs font-medium text-gray-500 leading-relaxed">
-                                {{ $t('settings.timezone.description') }}
-                            </p>
-                            <p class="text-[11px] font-bold text-gray-400 uppercase tracking-widest">
-                                {{ browserTimeZoneLabel }}
-                            </p>
-                        </div>
-
-                        <!-- Picker -->
-                        <div class="space-y-4">
-                            <div class="relative">
-                                <input v-model="search" type="text"
-                                    :placeholder="$t('settings.timezone.search_placeholder')" @input="handleSearch"
-                                    class="w-full pl-12 pr-4 py-4 bg-gray-50 border-none rounded-2xl font-bold text-gray-900 focus:ring-2 focus:ring-emerald-500 transition-all">
-                                <svg xmlns="http://www.w3.org/2000/svg"
-                                    class="h-6 w-6 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                </svg>
-                            </div>
-
-                            <div class="max-h-96 overflow-y-auto pr-2 custom-scrollbar">
-                                <div class="grid grid-cols-1 gap-2">
-                                    <button v-for="opt in filteredOptions" :key="opt.value"
-                                        @click="selectTimeZone(opt.value)" :class="[
-                                            'text-left px-5 py-4 rounded-2xl font-bold transition-all flex items-center justify-between group',
-                                            preferences.timeZone === opt.value
-                                                ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200'
-                                                : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-100'
-                                        ]">
-                                        <span>{{ opt.label }}</span>
-                                        <svg v-if="preferences.timeZone === opt.value"
-                                            xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20"
-                                            fill="currentColor">
-                                            <path fill-rule="evenodd"
-                                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                                                clip-rule="evenodd" />
-                                        </svg>
-                                        <span v-else
-                                            class="text-[10px] text-gray-400 group-hover:text-emerald-500 opacity-0 group-hover:opacity-100 transition-all">{{
-                                                opt.value }}</span>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Appearance / Accessibility Section -->
-                <section id="appearance"
-                    class="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden">
-                    <div class="p-8 border-b border-gray-50">
-                        <h3 class="text-2xl font-black text-gray-900 tracking-tight">{{ $t('settings.appearance.title')
-                        }}</h3>
-                        <p class="text-sm font-bold text-gray-400 italic mt-1">{{ $t('settings.appearance.description')
-                        }}</p>
-                    </div>
-
-                    <div class="p-8 space-y-8">
-                        <!-- Font Scale -->
-                        <div class="space-y-4">
-                            <div class="flex items-center justify-between">
-                                <label class="text-sm font-black text-gray-900 uppercase tracking-widest">{{
-                                    $t('settings.appearance.font_scale') }}</label>
-                                <span class="bg-gray-100 px-3 py-1 rounded-lg text-sm font-black text-gray-600">{{
-                                    preferences.globalFontScale }}%</span>
-                            </div>
-                            <div class="flex items-center gap-4">
-                                <button @click="preferences.adjustGlobalScale(-preferences.STEP)"
-                                    class="w-12 h-12 rounded-xl bg-gray-50 flex items-center justify-center text-gray-900 hover:bg-gray-100 active:scale-90 transition-all">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none"
-                                        viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
-                                            d="M20 12H4" />
-                                    </svg>
-                                </button>
-                                <div class="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                                    <div class="h-full bg-emerald-500 transition-all duration-300"
-                                        :style="{ width: `${(preferences.globalFontScale - 70) / (200 - 70) * 100}%` }">
-                                    </div>
-                                </div>
-                                <button @click="preferences.adjustGlobalScale(preferences.STEP)"
-                                    class="w-12 h-12 rounded-xl bg-gray-50 flex items-center justify-center text-gray-900 hover:bg-gray-100 active:scale-90 transition-all">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none"
-                                        viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
-                                            d="M12 4v16m8-8H4" />
-                                    </svg>
-                                </button>
-                            </div>
-                            <p class="text-xs text-gray-400 font-bold italic">{{
-                                $t('settings.appearance.font_scale_hint') }}</p>
-                        </div>
-
-                        <!-- Language -->
-                        <div class="space-y-4 pt-4 border-t border-gray-50">
-                            <label class="text-sm font-black text-gray-900 uppercase tracking-widest block">{{
-                                $t('settings.appearance.language') }}</label>
-                            <LanguageSwitcher full-width label-on-mobile align="left" />
-                        </div>
-                    </div>
-                </section>
-                <TeacherRoleSettings />
-                <IncompleteReportNotificationSettings />
-            </div>
-        </div>
+            <SystemSettingsPanel v-else-if="activeTab === 'system'" />
+        </template>
     </div>
 </template>
-
-<style scoped>
-.custom-scrollbar::-webkit-scrollbar {
-    width: 6px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb {
-    background: #e2e8f0;
-    border-radius: 10px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: #cbd5e1;
-}
-</style>

@@ -2,6 +2,7 @@
 import { ref, onMounted, computed, watch } from 'vue' // Added watch
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { Course, Lesson, type CourseDTO } from '@/models/Course'
+import { PageApiService } from '@/services/api/PageApiService'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import { useFeedback } from '@/composables/useFeedback'
@@ -118,9 +119,17 @@ onMounted(async () => {
 async function fetchCourses() {
     try {
         loading.value = true
-        const res = await CourseCatalogService.getCourses(pagination.value.page, pagination.value.perPage)
-        courses.value = res.data
-        pagination.value.total = res.count
+        const response = await PageApiService.getCoursesOverview({
+            limit: pagination.value.perPage,
+            offset: (pagination.value.page - 1) * pagination.value.perPage,
+            sort: 'display_name'
+        })
+        courses.value = response.data.map(dto => {
+            const course = new Course(dto)
+            for (const lesson of dto.lessons ?? []) course.addLesson(new Lesson(lesson))
+            return course
+        })
+        pagination.value.total = Number(response.meta?.total ?? courses.value.length)
     } catch (e) {
         console.error(e)
     } finally {

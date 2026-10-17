@@ -12,6 +12,7 @@ import ActivateTrialModal from "@/components/ActivateTrialModal.vue";
 import StudentSuspensions from "@/components/StudentSuspensions.vue";
 import ConfirmModal from "@/components/common/ConfirmModal.vue";
 import TimeZoneSelect from "@/components/common/TimeZoneSelect.vue";
+import { DateUtils } from "@/utils/DateUtils";
 import KodingCodeCheckModal from "@/components/KodingCodeCheckModal.vue";
 
 const props = defineProps<{
@@ -26,6 +27,9 @@ const preferences = usePreferencesStore();
 
 const isModifying = ref(false);
 const editingEnrollmentId = ref<string | null>(null);
+const editingOriginalStartDate = ref<string | null>(null);
+// Reports with content that a start-date edit would leave before the new start.
+const startDateWarningDates = ref<string[] | null>(null);
 const editEnrollmentForm = ref({
     enrollment_type: "",
     start_date: "",
@@ -51,6 +55,7 @@ const enrollmentToDelete = ref<string | null>(null);
 
 function startEditEnrollment(enrollment: any) {
     editingEnrollmentId.value = enrollment.id;
+    editingOriginalStartDate.value = enrollment.startDate || enrollment.start_date || null;
     editEnrollmentForm.value = {
         enrollment_type: enrollment.status,
         start_date: enrollment.startDate || enrollment.start_date,
@@ -64,8 +69,26 @@ function cancelEditEnrollment() {
     editingEnrollmentId.value = null;
 }
 
-async function saveEnrollment() {
+async function saveEnrollment(options: { confirmedStartDate?: boolean } = {}) {
     if (!editingEnrollmentId.value) return;
+    const startDateChanged = Boolean(editEnrollmentForm.value.start_date)
+        && editEnrollmentForm.value.start_date !== editingOriginalStartDate.value;
+    if (startDateChanged && !options.confirmedStartDate) {
+        try {
+            isModifying.value = true;
+            const impact = await EnrollmentService.getStartDateImpact(editingEnrollmentId.value, editEnrollmentForm.value.start_date);
+            if (impact.reportsWithContentBeforeStart.length) {
+                startDateWarningDates.value = impact.reportsWithContentBeforeStart;
+                return;
+            }
+        } catch (e) {
+            // The preview only adds a warning; saving still applies the server rules.
+            console.error(e);
+        } finally {
+            isModifying.value = false;
+        }
+    }
+    startDateWarningDates.value = null;
     try {
         isModifying.value = true;
         await EnrollmentService.update(editingEnrollmentId.value, {
@@ -226,7 +249,7 @@ async function refreshData() {
                                             d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 9v7.5" />
                                     </svg>
                                     {{ e.formattedStartDate }}
-                                    <span class="text-[12px] text-gray-400 font-medium">({{ e.timeZone || 'Asia/Taipei'
+                                    <span class="text-[12px] text-gray-400 font-medium">({{ DateUtils.formatTimeZoneLabel(e.timeZone || preferences.timeZone, preferences.locale)
                                         }})</span>
                                 </span>
                             </div>
@@ -376,7 +399,7 @@ async function refreshData() {
                             class="px-4 py-2 text-sm font-black text-gray-400 hover:text-gray-600 transition-colors uppercase tracking-widest cursor-pointer">
                             {{ $t("common.cancel") }}
                         </button>
-                        <button @click="saveEnrollment" :disabled="isModifying"
+                        <button @click="saveEnrollment()" :disabled="isModifying"
                             class="px-6 py-2 bg-emerald-600 text-white rounded-xl text-sm font-black hover:bg-emerald-700 shadow-lg shadow-emerald-50 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2">
                             <svg v-if="isModifying" class="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24">
                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
@@ -424,6 +447,14 @@ async function refreshData() {
         <KodingCodeCheckModal :is-open="showKodingCheckModal" :target="kodingCheckTarget"
             @close="showKodingCheckModal = false" />
 
+        <ConfirmModal :is-open="startDateWarningDates !== null"
+            :title="$t('student.start_date_impact.title')"
+            :message="startDateWarningDates ? $t('student.start_date_impact.message', {
+                dates: [...new Set(startDateWarningDates)].map(date => DateUtils.displayDateWithWeekday(date, preferences.locale)).join('、')
+            }) : ''"
+            :confirm-text="$t('student.start_date_impact.confirm')"
+            :is-loading="isModifying" @close="startDateWarningDates = null"
+            @confirm="saveEnrollment({ confirmedStartDate: true })" />
         <ConfirmModal :is-open="showDeleteConfirm" :title="$t('student.enrollment_delete_title')"
             :message="$t('student.enrollment_delete_message')" :confirm-text="$t('common.delete')" :is-dangerous="true"
             :is-loading="isModifying" @close="showDeleteConfirm = false" @confirm="handleRemoveEnrollment" />

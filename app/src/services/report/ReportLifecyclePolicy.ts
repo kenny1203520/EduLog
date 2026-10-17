@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import { OccurrenceService } from '../occurrence/OccurrenceService'
 import { HolidayService } from '../holiday/HolidayService'
@@ -9,7 +9,7 @@ import { SessionService } from '../session/SessionService'
 
 export class ReportLifecyclePolicy {
     static async buildInitialReportPayload(enrollmentId: string, occurrenceId: string): Promise<Partial<OccurrenceReportDTO>> {
-        const { data: occurrence } = await supabase
+        const { data: occurrence } = await apiDataClient
             .from('class_occurrences')
             .select(`
                 occurrence_date,
@@ -49,7 +49,7 @@ export class ReportLifecyclePolicy {
         enrollmentId: string,
         reportId: string
     ): Promise<void> {
-        const { data: enrollment, error: enrollmentError } = await supabase
+        const { data: enrollment, error: enrollmentError } = await apiDataClient
             .from('enrollments')
             .select('status, class_session_id')
             .eq('id', enrollmentId)
@@ -60,7 +60,7 @@ export class ReportLifecyclePolicy {
 
         if (enrollment.status !== 'regular' || !enrollment.class_session_id) return
 
-        const { data: currentReport } = await supabase
+        const { data: currentReport } = await apiDataClient
             .from('occurrence_reports')
             .select('id, class_occurrence:class_occurrences!class_occurrence_id(id, occurrence_date, class_session_id)')
             .eq('id', reportId)
@@ -70,7 +70,7 @@ export class ReportLifecyclePolicy {
 
         const currentOcc = currentReport.class_occurrence as any
         const occurrenceDate = currentOcc.occurrence_date
-        const { count } = await supabase
+        const { count } = await apiDataClient
             .from('occurrence_reports')
             .select('id, class_occurrence:class_occurrences!class_occurrence_id(occurrence_date)', { count: 'exact', head: true })
             .eq('enrollment_id', enrollmentId)
@@ -90,7 +90,7 @@ export class ReportLifecyclePolicy {
         const nextDate = DateUtils.parseLocalDate(nextDateString) || new Date(nextDateString)
         await OccurrenceService.generateOccurrences(enrollment.class_session_id, nextDate, nextDate)
 
-        const { data: nextOcc } = await supabase
+        const { data: nextOcc } = await apiDataClient
             .from('class_occurrences')
             .select('id')
             .eq('class_session_id', enrollment.class_session_id)
@@ -100,7 +100,7 @@ export class ReportLifecyclePolicy {
         if (!nextOcc) return
 
         const nextPayload = await this.buildInitialReportPayload(enrollmentId, nextOcc.id)
-        const { error: insertError } = await supabase
+        const { error: insertError } = await apiDataClient
             .from('occurrence_reports')
             .upsert(nextPayload, {
                 onConflict: 'enrollment_id,class_occurrence_id',

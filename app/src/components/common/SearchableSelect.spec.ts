@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import SearchableSelect from './SearchableSelect.vue'
 
@@ -11,7 +11,7 @@ describe('SearchableSelect', () => {
     it('does not open while disabled', async () => {
         const wrapper = mount(SearchableSelect, {
             props: { modelValue: '', options, disabled: true },
-            global: { mocks: { $t: (key: string) => key } }
+            global: { mocks: { $t: (key: string) => key }, stubs: { Teleport: true } }
         })
 
         await wrapper.find('[role="button"]').trigger('click')
@@ -21,12 +21,130 @@ describe('SearchableSelect', () => {
     it('filters options by entered text', async () => {
         const wrapper = mount(SearchableSelect, {
             props: { modelValue: '', options },
-            global: { mocks: { $t: (key: string) => key } }
+            global: { mocks: { $t: (key: string) => key }, stubs: { Teleport: true } }
         })
 
         await wrapper.find('[role="button"]').trigger('click')
         await wrapper.find('input').setValue('beta')
         expect(wrapper.text()).toContain('Beta Room')
         expect(wrapper.text()).not.toContain('Alpha Room')
+    })
+
+    it('searches secondary identifiers and selects with the keyboard', async () => {
+        const wrapper = mount(SearchableSelect, {
+            props: { modelValue: '', options: [{ value: 'Asia/Taipei', label: 'Taipei Time (GMT+8)', searchText: 'Asia/Taipei', description: 'Asia/Taipei' }] },
+            global: { mocks: { $t: (key: string) => key }, stubs: { Teleport: true } }
+        })
+
+        await wrapper.find('[role="button"]').trigger('keydown', { key: 'Enter' })
+        const input = wrapper.find('input')
+        await input.setValue('Asia/Taipei')
+        await input.trigger('keydown', { key: 'Enter' })
+
+        expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual(['Asia/Taipei'])
+        expect(wrapper.find('[role="listbox"]').exists()).toBe(false)
+    })
+
+    it('emits remote search text and announces an empty result state', async () => {
+        const wrapper = mount(SearchableSelect, {
+            props: { modelValue: '', options: [], remoteSearch: true, noResultsText: 'Try another email' },
+            global: { mocks: { $t: (key: string) => key }, stubs: { Teleport: true } }
+        })
+        await wrapper.find('[role="button"]').trigger('click')
+        await wrapper.find('input').setValue('alex@example.com')
+        expect(wrapper.emitted('search')?.at(-1)).toEqual(['alex@example.com'])
+        expect(wrapper.find('[role="listbox"]').attributes('aria-multiselectable')).toBe('false')
+        expect(wrapper.find('[role="status"]').text()).toBe('Try another email')
+    })
+
+    it('keeps the chosen label when remote search options are replaced', async () => {
+        const wrapper = mount(SearchableSelect, {
+            props: { modelValue: 'account-1', options: [{ value: 'account-1', label: 'Alex · alex@example.com' }], remoteSearch: true },
+            global: { mocks: { $t: (key: string) => key }, stubs: { Teleport: true } }
+        })
+        await wrapper.setProps({ options: [] })
+        expect(wrapper.find('button').text()).toContain('Alex · alex@example.com')
+    })
+
+    it('returns focus to the trigger when Escape closes the menu', async () => {
+        const wrapper = mount(SearchableSelect, {
+            props: { modelValue: '', options },
+            global: { mocks: { $t: (key: string) => key }, stubs: { Teleport: true } }
+        })
+
+        await wrapper.find('[role="button"]').trigger('click')
+        await wrapper.find('input').trigger('keydown', { key: 'Escape' })
+        expect(wrapper.find('[role="listbox"]').exists()).toBe(false)
+    })
+
+    it('exposes full selected and option text through native hover titles', async () => {
+        const wrapper = mount(SearchableSelect, {
+            props: {
+                modelValue: 'long-option',
+                options: [{ value: 'long-option', label: 'A long classroom name', description: 'Full schedule details' }]
+            },
+            global: { mocks: { $t: (key: string) => key }, stubs: { Teleport: true } }
+        })
+
+        const trigger = wrapper.find('button[aria-haspopup="listbox"]')
+        expect(trigger.attributes('title')).toBe('A long classroom name — Full schedule details')
+        await trigger.trigger('click')
+        expect(wrapper.find('[role="option"]').attributes('title')).toBe('A long classroom name — Full schedule details')
+        wrapper.unmount()
+    })
+
+    it('shows an opted-in description below the selected label and option without truncating it', async () => {
+        const wrapper = mount(SearchableSelect, {
+            props: {
+                modelValue: 'session-1',
+                options: [{ value: 'session-1', label: 'Saturday class', description: 'Room 3 · Sat 10:00-12:00 · Sat 14:00-16:00' }],
+                descriptionPlacement: 'below',
+                showSelectedDescription: true
+            },
+            global: { mocks: { $t: (key: string) => key }, stubs: { Teleport: true } }
+        })
+
+        const trigger = wrapper.find('button[aria-haspopup="listbox"]')
+        expect(trigger.text()).toContain('Saturday class')
+        expect(trigger.text()).toContain('Room 3 · Sat 10:00-12:00 · Sat 14:00-16:00')
+        expect(trigger.find('span.whitespace-normal.break-words').exists()).toBe(true)
+
+        await trigger.trigger('keydown', { key: 'Enter' })
+        const option = wrapper.find('[role="option"]')
+        expect(option.text()).toContain('Saturday class')
+        expect(option.text()).toContain('Room 3 · Sat 10:00-12:00 · Sat 14:00-16:00')
+        expect(option.find('span.whitespace-normal.break-words').exists()).toBe(true)
+        wrapper.unmount()
+    })
+
+    it('portals the menu outside clipping containers and fits narrow viewports', async () => {
+        const wrapper = mount(SearchableSelect, {
+            attachTo: document.body,
+            props: { modelValue: '', options },
+            global: { mocks: { $t: (key: string) => key } }
+        })
+        const trigger = wrapper.find('button[aria-haspopup="listbox"]')
+        trigger.element.getBoundingClientRect = () => ({
+            x: 260, y: 550, left: 260, right: 360, top: 550, bottom: 590, width: 100, height: 40,
+            toJSON: () => ({})
+        }) as DOMRect
+
+        const originalClientWidth = Object.getOwnPropertyDescriptor(document.documentElement, 'clientWidth')
+        Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: 320 })
+        try {
+            await trigger.trigger('click')
+            await flushPromises()
+
+            const menu = document.body.querySelector<HTMLElement>('[role="combobox"]')?.parentElement
+            expect(menu?.parentElement).toBe(document.body)
+            expect(menu?.style.position).toBe('fixed')
+            expect(menu?.style.left).toBe('212px')
+            expect(menu?.style.width).toBe('100px')
+            expect(menu?.style.top).toBe('auto')
+        } finally {
+            if (originalClientWidth) Object.defineProperty(document.documentElement, 'clientWidth', originalClientWidth)
+            else Reflect.deleteProperty(document.documentElement, 'clientWidth')
+            wrapper.unmount()
+        }
     })
 })

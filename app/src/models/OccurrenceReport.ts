@@ -18,8 +18,8 @@ export interface OccurrenceReportDTO {
     progress_letter?: string  // A-Z when incomplete
     attendance_status?: 'present' | 'absent' | 'pending'
     absence_reason?: string
-    class_participation?: number
-    classroom_behavior?: number
+    class_participation?: number | null
+    classroom_behavior?: number | null
     contact_notes?: string
     class_notes?: string
     content: string
@@ -43,8 +43,8 @@ export interface ReportDraftSnapshot {
     progressLetter: string
     attendanceStatus: 'present' | 'absent' | 'pending'
     absenceReason: string | null
-    classParticipation: number
-    classroomBehavior: number
+    classParticipation: number | null
+    classroomBehavior: number | null
     contactNotes: string
     contactNotesDocument: RichTextDocumentV1
     classNotes: string
@@ -78,8 +78,8 @@ export class OccurrenceReport {
     progressLetter?: string
     attendanceStatus?: 'present' | 'absent' | 'pending'
     absenceReason?: string
-    classParticipation?: number
-    classroomBehavior?: number
+    classParticipation?: number | null
+    classroomBehavior?: number | null
     contactNotes?: string
     contactNotesDocument: RichTextDocumentV1
     classNotes?: string
@@ -294,7 +294,7 @@ export interface SaveReportResult {
     serverContent?: string
     serverReport?: OccurrenceReportDTO // Full server report for deep comparison
     updatedReport?: OccurrenceReportDTO // Authoritative row returned after a successful save
-    errorCode?: 'request_timeout' | 'save_outcome_unknown' | 'conflict' | 'permission_denied' | 'validation_error'
+    errorCode?: 'request_timeout' | 'save_outcome_unknown' | 'conflict' | 'permission_denied' | 'validation_error' | 'system_managed'
     /** Latest canonical version observed while reconciling a conflict. */
     serverVersion?: number
     /** True when the local draft was safely merged and retried. */

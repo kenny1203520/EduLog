@@ -2,6 +2,7 @@ import type { TextEditorContentInput } from '@/components/common/text-editor/typ
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import type { TransferConflictDisplayContext } from '@/services/enrollment/EnrollmentTransferQueryService'
 import { DateUtils } from '@/utils/DateUtils'
+import { absenceReasonLabel } from '@/utils/absenceReason'
 import type { TransferReportField } from './ReportFieldConflictService'
 
 type Translate = (key: string) => string
@@ -93,8 +94,7 @@ export class TransferReportConflictDisplayService {
             if (status !== 'absent' || !report.absence_reason) {
                 return { kind: 'text', text: labels[status], tone }
             }
-            const reasonKey = `report.editor.absence_reasons.${report.absence_reason}`
-            const reason = translated(t, reasonKey, report.absence_reason)
+            const reason = absenceReasonLabel(report.absence_reason, t) || report.absence_reason
             return { kind: 'text', text: `${labels.absent} · ${reason}`, tone }
         }
         if (field === 'class_participation' || field === 'classroom_behavior') {

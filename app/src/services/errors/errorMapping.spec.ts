@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mapDomainError } from './mapDomainError'
+import { domainErrorCode, hasDomainErrorCode, mapDomainError } from './mapDomainError'
 import { mapSupabaseError } from './mapSupabaseError'
 import { AppError, NetworkError, ValidationError, ConflictError, AuthorizationError } from './AppError'
 
@@ -10,7 +10,11 @@ describe('mapDomainError', () => {
             'TARGET_REPORT_ALREADY_EXISTS', 'ORIGINAL_REPORT_AMBIGUOUS', 'ORIGINAL_DATE_NOT_CLASS_DAY',
             'ORIGINAL_OCCURRENCE_NOT_IN_ENROLLMENT_SESSION', 'DUPLICATE_OCCURRENCE_REPORT',
             'MAKEUP_DATE_NOT_CLASS_DAY', 'COURSE_REQUIRED_FOR_SESSION', 'ROLE_NAME_REQUIRED',
-            'TRANSFER_CONFLICT_STALE', 'REPORT_ALREADY_EXISTS'
+            'TRANSFER_CONFLICT_STALE', 'REPORT_ALREADY_EXISTS',
+            'SOURCE_OCCURRENCE_NOT_EFFECTIVE', 'TARGET_OCCURRENCE_ALREADY_EFFECTIVE', 'TARGET_OCCURRENCE_NOT_EFFECTIVE',
+            'SOURCE_AND_TARGET_OCCURRENCES_MATCH', 'SINGLE_LESSON_TRANSFER_FORBIDDEN', 'SINGLE_LESSON_TRANSFER_ALREADY_EXISTS',
+            'SINGLE_LESSON_TRANSFER_NOT_FOUND', 'SOURCE_REPORT_ALREADY_EXISTS', 'ORIGINAL_REPORT_NOT_FOUND',
+            'SOURCE_REPORT_HAS_CONTENT', 'TRANSFER_CHAIN_HAS_MERGED_REPORT'
         ]
         const keys = new Set<string>()
         for (const code of codes) {
@@ -24,6 +28,13 @@ describe('mapDomainError', () => {
 
     it('prefers the more specific TARGET_REPORT_ALREADY_EXISTS over the REPORT_ALREADY_EXISTS substring', () => {
         expect(mapDomainError('TARGET_REPORT_ALREADY_EXISTS')!.i18nKey).toBe('errors.domain.TARGET_REPORT_ALREADY_EXISTS')
+    })
+
+    it('prefers the API reason over the generic server message', () => {
+        const apiError = Object.assign(new Error('The transfer violates a business rule'), { reason: 'SOURCE_OCCURRENCE_NOT_EFFECTIVE' })
+        expect(domainErrorCode(apiError)).toBe('SOURCE_OCCURRENCE_NOT_EFFECTIVE')
+        expect(hasDomainErrorCode(apiError, 'SOURCE_OCCURRENCE_NOT_EFFECTIVE')).toBe(true)
+        expect(domainErrorCode(new Error('TARGET_REPORT_ALREADY_EXISTS'))).toBe('TARGET_REPORT_ALREADY_EXISTS')
     })
 
     it('returns null for messages with no known code', () => {

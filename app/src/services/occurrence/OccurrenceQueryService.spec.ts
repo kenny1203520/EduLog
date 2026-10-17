@@ -1,10 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { OccurrenceQueryService } from './OccurrenceQueryService'
 
-const { fromMock } = vi.hoisted(() => ({ fromMock: vi.fn() }))
+const { fromMock, apiV1GetMock, apiModeMock } = vi.hoisted(() => ({
+    fromMock: vi.fn(),
+    apiV1GetMock: vi.fn(),
+    apiModeMock: vi.fn()
+}))
 
-vi.mock('@/lib/supabase', () => ({
-    supabase: { from: fromMock }
+vi.mock('@/services/api/ApiDataClient', () => ({
+    apiDataClient: { from: fromMock }
+}))
+vi.mock('@/services/api/ApiV1Client', () => ({
+    apiV1Client: { get: apiV1GetMock }
+}))
+vi.mock('@/services/api/ApiModeClient', () => ({
+    getApiV1Mode: apiModeMock
 }))
 
 function row(date: string, id = date) {
@@ -27,7 +37,10 @@ function query(result: { data: any; error: any }) {
 }
 
 describe('OccurrenceQueryService navigation', () => {
-    beforeEach(() => vi.clearAllMocks())
+    beforeEach(() => {
+        vi.clearAllMocks()
+        apiModeMock.mockReturnValue('mock')
+    })
 
     it('prefers today or the latest past occurrence', async () => {
         const previous = query({ data: row('2026-07-29'), error: null })
@@ -67,5 +80,26 @@ describe('OccurrenceQueryService navigation', () => {
         fromMock.mockReturnValue(query({ data: null, error: { message: 'offline' } }))
         await expect(OccurrenceQueryService.getPreferredOccurrence('session-1', new Date(2026, 6, 29)))
             .rejects.toThrow('offline')
+    })
+
+    it('queries an exact session date through the supported v1 occurrence parameters', async () => {
+        apiModeMock.mockReturnValue('v1')
+        apiV1GetMock.mockResolvedValue({ data: [row('2026-09-06', 'occurrence-1')] })
+
+        const result = await OccurrenceQueryService.getOccurrenceBySessionAndDate('session-1', '2026-09-06')
+
+        expect(result?.id).toBe('occurrence-1')
+        expect(apiV1GetMock).toHaveBeenCalledWith(
+            '/occurrences?class_session_id=session-1&date=2026-09-06&limit=1&sort=-created_at'
+        )
+        expect(fromMock).not.toHaveBeenCalled()
+    })
+
+    it('returns null when the session has no occurrence on the requested date', async () => {
+        apiModeMock.mockReturnValue('v1')
+        apiV1GetMock.mockResolvedValue({ data: [] })
+
+        await expect(OccurrenceQueryService.getOccurrenceBySessionAndDate('session-1', '2026-09-06'))
+            .resolves.toBeNull()
     })
 })

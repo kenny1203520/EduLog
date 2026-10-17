@@ -3,7 +3,9 @@ import { EnrollmentCommandService } from './EnrollmentCommandService'
 import { EnrollmentQueryService } from './EnrollmentQueryService'
 import type { SingleLessonTransferConflict, SingleLessonTransferResult } from './SingleLessonTransferConflictService'
 import type { TransferReportFieldSelections } from '@/services/report/ReportFieldConflictService'
-import { EnrollmentTransferQueryService, type EffectiveSingleLessonTransferTarget, type SingleLessonTransferHistoryItem } from './EnrollmentTransferQueryService'
+import { EnrollmentTransferQueryService, type EffectiveSingleLessonTransferTarget, type OccurrenceLessonTransfer, type SingleLessonTransferHistoryItem } from './EnrollmentTransferQueryService'
+import type { ClassTransferResult, SingleLessonTransferCancelResult } from './EnrollmentTransferService'
+import type { EnrollmentStartDateImpact } from './EnrollmentCommandService'
 
 type EnrollmentCreateOptions = {
     targetReportCount?: number
@@ -20,6 +22,10 @@ type EnrollmentUpdateOptions = {
 export class EnrollmentService {
     static async getSingleLessonTransferHistory(enrollmentId: string): Promise<SingleLessonTransferHistoryItem[]> {
         return EnrollmentTransferQueryService.getSingleLessonTransferHistory(enrollmentId)
+    }
+
+    static async getOccurrenceLessonTransfers(occurrenceId: string): Promise<OccurrenceLessonTransfer[]> {
+        return EnrollmentTransferQueryService.getOccurrenceLessonTransfers(occurrenceId)
     }
 
     static async getEffectiveSingleLessonTransferTargets(enrollmentId: string): Promise<EffectiveSingleLessonTransferTarget[]> {
@@ -57,6 +63,10 @@ export class EnrollmentService {
         )
     }
 
+    static async getStartDateImpact(enrollmentId: string, startDate: string): Promise<EnrollmentStartDateImpact> {
+        return EnrollmentCommandService.getStartDateImpact(enrollmentId, startDate)
+    }
+
     static async update(
         enrollmentId: string,
         updates: Partial<EnrollmentDTO>,
@@ -74,7 +84,7 @@ export class EnrollmentService {
         newSessionId: string,
         originalLastDate: string,
         transferDate: string
-    ): Promise<Enrollment> {
+    ): Promise<ClassTransferResult> {
         return EnrollmentCommandService.transferClass(
             enrollmentId,
             newSessionId,
@@ -132,7 +142,7 @@ export class EnrollmentService {
         return EnrollmentCommandService.resolveSingleLessonTransferConflict(conflict, fieldSources)
     }
 
-    static async cancelSingleLessonTransfer(transferId: string): Promise<void> {
+    static async cancelSingleLessonTransfer(transferId: string): Promise<SingleLessonTransferCancelResult> {
         return EnrollmentCommandService.cancelSingleLessonTransfer(transferId)
     }
 

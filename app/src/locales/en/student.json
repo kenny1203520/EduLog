@@ -213,6 +213,10 @@
         "target_date_not_class_day": "The target date is not a teaching day for that session.",
         "target_report_exists": "This enrollment already has a report on the target date.",
         "same_session_error": "Target session cannot be the current session.",
+        "retained_title": "Class changed; some reports stayed in the old class",
+        "retained_body": "{count} report(s) on or after the effective date already have content and stayed on the old class lessons. Check whether they need attention.",
+        "retained_open": "View reports",
+        "retained_done": "Done",
         "original_report_not_found": "Original class report was not found.",
         "original_report_ambiguous": "Multiple reports were found on that date. Select a specific report instead.",
         "original_date_not_class_day": "The original date is not a teaching day for the current session."
@@ -261,7 +265,14 @@
         "report_missing": "Report missing",
         "repair_report": "Regenerate report",
         "repairing": "Regenerating…",
-        "repair_error": "Unable to regenerate the transferred report. Please try again."
+        "repair_error": "Unable to regenerate the transferred report. Please try again.",
+        "cancel_transfer": "Cancel transfer",
+        "keep_transfer": "Keep transfer",
+        "cancel_confirm_title": "Cancel this transfer?",
+        "cancel_confirm_message": "The report moves from {target} back to {source}. Any later transfers of this lesson are cancelled too.",
+        "cancelled": "Transfer cancelled. The report is back on the original date.",
+        "cancelled_target_retained": "Transfer cancelled and the original report restored. The report that already existed on the target lesson was kept; delete it manually if it is not needed.",
+        "cancel_error": "Couldn't cancel the transfer."
     },
     "activate_trial_modal": {
         "title": "Convert to Regular",
@@ -331,5 +342,10 @@
         "credential_value_required": "Enter at least one of username, password, or link",
         "session_full": "Selected session is full in the chosen period",
         "session_course_mismatch": "The selected class session cannot teach this course"
+    },
+    "start_date_impact": {
+        "title": "Some reports stay before the new start date",
+        "message": "The reports on {dates} have content (including attendance) or come from a transfer or make-up lesson. They stay on their dates and are not deleted or moved; the blank reports are rearranged from the new start date. Save anyway?",
+        "confirm": "Save anyway"
     }
 }

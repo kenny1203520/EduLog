@@ -1,23 +1,27 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
+import { PageApiService } from '@/services/api/PageApiService'
 import { SessionService } from '@/services/session/SessionService'
-import { CourseService } from '@/services/course/CourseService'
 import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
 import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
+import { ClassSessionFactory } from '@/models/ClassSession'
+import { invalidationAffectsDate, parseClassSessionDate } from '@/services/session/ClassSessionInvalidation'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { CopyTemplateService } from '@/services/copy_template/CopyTemplateService'
 import { HolidayService } from '@/services/holiday/HolidayService'
-import type { Enrollment } from '@/models/Enrollment'
+import { PermissionPolicyService } from '@/services/rbac/PermissionPolicyService'
+import { Enrollment } from '@/models/Enrollment'
 import { countRosterAttendance, getRosterEnrollments } from '@/models/RosterFilter'
 import type { Lesson } from '@/models/Course'
 import type { ClassOccurrence } from '@/models/ClassOccurrence'
 import { OccurrenceReport } from '@/models/OccurrenceReport'
 import { DateUtils } from '@/utils/DateUtils'
 import { TeacherService } from '@/services/teacher/TeacherService'
-import type { SessionTeacherAssignmentDTO, TeacherDTO } from '@/services/teacher/TeacherService'
+import type { SessionTeacherAssignmentDTO } from '@/services/teacher/TeacherService'
+import type { TeacherOverviewDTO } from '@/services/api/PageApiService'
 import {
     ATTENDANCE_TEMPLATE_VARIABLE_DEFINITIONS,
     SYSTEM_ATTENDANCE_TEMPLATE,
@@ -30,6 +34,10 @@ import ReportEditor from '@/components/ReportEditor.vue'
 import OccurrenceCalendar from '@/components/OccurrenceCalendar.vue'
 import QuickAttendancePanel, { type QuickAttendanceStatus } from '@/components/classroom/QuickAttendancePanel.vue'
 import StudentRosterPanel, { type StudentRosterItem } from '@/components/classroom/StudentRosterPanel.vue'
+import TransferredOutStudents from '@/components/classroom/TransferredOutStudents.vue'
+import RealtimeStatusBadge, { type RealtimeBadgeTone } from '@/components/common/RealtimeStatusBadge.vue'
+import type { OccurrenceLessonTransfer } from '@/services/enrollment/EnrollmentTransferQueryService'
+import type { ProgressGapHintLesson } from '@/components/classroom/CourseProgressGapHint.vue'
 import ConflictModal from '@/components/ConflictModal.vue'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import CopyTemplateEditorModal from '@/components/common/CopyTemplateEditorModal.vue'
@@ -44,6 +52,11 @@ import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import { isTeacherPresentForScope } from '@/services/report/TeacherAttendanceScope'
+import { roleDisplayName } from '@/utils/roleDisplay'
+import { getEffectiveTeacherAssignments } from '@/utils/effectiveTeacherAssignments'
+import { absenceReasonLabel } from '@/utils/absenceReason'
+import { ApiRealtimeChannel } from '@/services/report/ApiRealtimeChannel'
+import { shouldApplyCommittedReport } from '@/services/report/CommittedReportState'
 
 type ReportEditorExpose = {
     saveNow: (options?: { reason?: 'manual' | 'switch' }) => Promise<boolean>
@@ -52,7 +65,7 @@ type ReportEditorExpose = {
 
 const { t } = useI18n()
 const toast = useToast()
-const { errorKey } = useFeedback()
+const { errorKey, reportError } = useFeedback()
 
 function isReportAuthorizationError(error: any): boolean {
     const code = error?.code
@@ -67,11 +80,15 @@ const router = useRouter()
 const auth = useAuthStore()
 const sessionId = route.params.id as string
 const todayOccurrence = ref<any>(null)
+const selectedDateKey = ref<string | null>(parseClassSessionDate(route.query.date) || null)
 const sessionOccurrences = ref<ClassOccurrence[]>([])
+const reportCompletionByDate = ref<Record<string, { total: number; completed: number }>>({})
 const sessionTeachers = ref<SessionTeacherAssignmentDTO[]>([])
 const weekAnchorDate = ref(DateUtils.todayDate(preferences.timeZone))
 const isCalendarExpanded = ref(false)
 const isOccurrenceInHoliday = ref(false)
+const teacherLeaveById = ref<Record<string, boolean>>({})
+const canManageTeacherAttendance = ref(false)
 const reportMap = ref<Map<string, any>>(new Map()) // enrollmentId -> report
 const savingMap = ref<Map<string, boolean>>(new Map()) // enrollmentId -> isSaving
 const selectedEnrollmentIds = ref<Set<string>>(new Set())
@@ -81,6 +98,11 @@ const occurrenceLoadError = ref<string | null>(null)
 const previousOccurrence = ref<ClassOccurrence | null>(null)
 const nextOccurrence = ref<ClassOccurrence | null>(null)
 let occurrenceLoadToken = 0
+let occurrenceListRequest = 0
+let reportLoadRequest = 0
+let editorSelectionRequest = 0
+let reportProvisionRequests = new Map<string, Promise<OccurrenceReport[]>>()
+let workspaceRosterDate: string | null = null
 const showAttendanceTemplateModal = ref(false)
 let attendanceTemplateRequestGeneration = 0
 const attendanceTemplateText = ref(SYSTEM_ATTENDANCE_TEMPLATE)
@@ -105,6 +127,8 @@ const selectedAttendanceTemplateModes = ref<Record<string, string>>({
 })
 const showAddStudentModal = ref(false)
 const isAddingStudent = ref(false)
+const makeupSubmitError = ref('')
+const makeupSubmitErrorElement = ref<HTMLElement | null>(null)
 const makeupCandidates = ref<Enrollment[]>([])
 const makeupSearch = ref('')
 const selectedMakeupStudentId = ref<string | null>(null)
@@ -116,8 +140,8 @@ const kodingTargetEnrollment = ref<Enrollment | null>(null)
 const kodingInitialLessonId = ref<string | null>(null)
 
 // Teacher Management State
-const occurrenceTeachers = ref<TeacherDTO[]>([])
-const allTeachersList = ref<TeacherDTO[]>([])
+const occurrenceTeachers = ref<Array<TeacherOverviewDTO & { role?: SessionTeacherAssignmentDTO['role'] }>>([])
+const allTeachersList = ref<TeacherOverviewDTO[]>([])
 const showTeacherEditModal = ref(false)
 const teacherSearchQuery = ref('')
 const selectedTeacherIds = ref<Set<string>>(new Set())
@@ -128,6 +152,52 @@ const showSplitView = ref(false)
 const selectedEnrollmentId = ref<string | null>(null)
 const isRefreshing = ref(false)
 const quickReportEditorRef = ref<ReportEditorExpose | null>(null)
+const realtimeStatus = ref<'connecting' | 'subscribing' | 'connected' | 'offline' | 'reconnecting' | 'forbidden' | 'expired' | 'disabled'>('connecting')
+const realtimeStatusDetail = ref('')
+const isRealtimeRefreshing = ref(false)
+const realtimeRefreshError = ref(false)
+const lastRealtimeUpdateAt = ref<Date | null>(null)
+const realtimeStatusMessage = computed(() => {
+    if (realtimeRefreshError.value) return t('classroom.live_update_failed')
+    if (isRealtimeRefreshing.value) return t('classroom.live_update_loading')
+    switch (realtimeStatus.value) {
+        case 'forbidden': return t('classroom.live_updates_forbidden')
+        case 'expired': return t('classroom.live_updates_expired')
+        case 'disabled': return t('classroom.live_updates_disabled')
+        case 'offline': return t('classroom.live_updates_offline')
+        case 'connecting': return t('classroom.live_updates_connecting')
+        case 'subscribing': return t('classroom.live_updates_subscribing')
+        case 'reconnecting': return t('classroom.live_updates_reconnecting')
+        default: return t('classroom.live_updates_connected')
+    }
+})
+// Live updates only refresh the roster; the page works without them, so the
+// status is a fixed-size badge that recolors instead of a bar that shifts content.
+const realtimeBadge = computed<{ tone: RealtimeBadgeTone; label: string; canRetry: boolean }>(() => {
+    if (realtimeRefreshError.value) return { tone: 'warning', label: t('classroom.live_badge_refresh_failed'), canRetry: true }
+    if (isRealtimeRefreshing.value) return { tone: 'connecting', label: t('classroom.live_badge_refreshing'), canRetry: false }
+    switch (realtimeStatus.value) {
+        case 'connected': return { tone: 'live', label: t('classroom.live_badge_live'), canRetry: false }
+        case 'connecting':
+        case 'subscribing': return { tone: 'connecting', label: t('classroom.live_badge_connecting'), canRetry: false }
+        case 'offline':
+        case 'reconnecting': return { tone: 'warning', label: t('classroom.live_badge_paused'), canRetry: true }
+        default: return { tone: 'paused', label: t('classroom.live_badge_unavailable'), canRetry: false }
+    }
+})
+const selectedEditorEnrollmentSnapshot = ref<Enrollment | null>(null)
+const selectedEditorReportSnapshot = ref<OccurrenceReport | null>(null)
+const selectedEditorReport = computed(() => selectedEditorReportSnapshot.value)
+let classSessionChannel: ApiRealtimeChannel | null = null
+let realtimeRefreshTimer: ReturnType<typeof setTimeout> | null = null
+let realtimeRefreshRequest = 0
+let realtimeRefreshRunning = false
+let selectedDateRequest = 0
+let hasLoadedInitialData = false
+let pendingRealtimeInvalidations: unknown[] = []
+let hasJoinedClassSessionChannel = false
+let lessonLoadPromises = new Map<string, Promise<Lesson[]>>()
+let progressSummaryRequestGeneration = 0
 
 // Conflict Resolution State
 const showConflictModal = ref(false)
@@ -145,6 +215,10 @@ const studentAttendanceFilter = ref<'all' | 'present' | 'absent' | 'pending'>('a
 const courseLessons = ref<any[]>([])
 const courseLessonsByCourseId = ref<Record<string, Lesson[]>>({})
 const studentProgressSummaries = ref<Record<string, StudentProgressSummary>>({})
+const studentProgressGaps = ref<Record<string, ProgressGapHintLesson[]>>({})
+const isLoadingProgressGaps = ref(false)
+const progressGapCheckFailed = ref(false)
+let progressGapRequestGeneration = 0
 const loading = ref(true)
 
 type ProgressTone = 'completed' | 'incomplete' | 'empty'
@@ -179,19 +253,26 @@ function getDefaultProgressSummary(): StudentProgressSummary {
     }
 }
 
-function getLessonsForCourse(courseId: string): Promise<Lesson[]> {
+function getLessonsForCourse(courseId: string, options: { refresh?: boolean } = {}): Promise<Lesson[]> {
     const cachedLessons = courseLessonsByCourseId.value[courseId]
-    if (cachedLessons) {
+    if (cachedLessons && !options.refresh) {
         return Promise.resolve(cachedLessons)
     }
 
-    return CourseCatalogService.getLessonsByCourse(courseId).then(lessons => {
+    const pending = lessonLoadPromises.get(courseId)
+    if (pending) return pending
+
+    const request = CourseCatalogService.getLessonsByCourse(courseId).then(lessons => {
         courseLessonsByCourseId.value = {
             ...courseLessonsByCourseId.value,
             [courseId]: lessons
         }
         return lessons
+    }).finally(() => {
+        if (lessonLoadPromises.get(courseId) === request) lessonLoadPromises.delete(courseId)
     })
+    lessonLoadPromises.set(courseId, request)
+    return request
 }
 
 function getLessonTitle(lessons: Lesson[], sequence?: number, fallbackLessonId?: string): string {
@@ -405,10 +486,15 @@ function getTodayCourseSummary(enrollment: Enrollment): TodayCourseSummary {
 async function loadStudentProgressSummaries(
     enrollmentList: Enrollment[],
     mode: 'replace' | 'merge' = 'replace',
-    referenceDate: Date = todayOccurrence.value?.occurrenceDate || new Date()
+    referenceDate: Date = todayOccurrence.value?.occurrenceDate || new Date(),
+    options: { loadMissingLessons?: boolean } = {}
 ) {
+    const generation = ++progressSummaryRequestGeneration
+    const requestedDate = DateUtils.formatLocalDate(referenceDate)
     const uniqueCourseIds = [...new Set(enrollmentList.map(enrollment => enrollment.courseId).filter(Boolean))]
-    await Promise.all(uniqueCourseIds.map(courseId => getLessonsForCourse(courseId)))
+    if (options.loadMissingLessons !== false) {
+        await Promise.all(uniqueCourseIds.map(courseId => getLessonsForCourse(courseId)))
+    }
 
     const enrollmentIds = enrollmentList.map(enrollment => enrollment.id).filter((id): id is string => !!id)
     // One request for the whole roster instead of one paginated, full-row
@@ -420,12 +506,17 @@ async function loadStudentProgressSummaries(
             return [enrollment.id, getDefaultProgressSummary()] as const
         }
 
-        const lessons = await getLessonsForCourse(enrollment.courseId)
+        const lessons = options.loadMissingLessons === false
+            ? courseLessonsByCourseId.value[enrollment.courseId] || []
+            : await getLessonsForCourse(enrollment.courseId)
         const reports = reportsByEnrollment.get(enrollment.id) || []
         return [enrollment.id, buildStudentProgressSummary(enrollment, reports, lessons, referenceDate)] as const
     }))
 
     const nextSummaries = Object.fromEntries(summaryEntries.filter(([id]) => !!id)) as Record<string, StudentProgressSummary>
+
+    if (generation !== progressSummaryRequestGeneration
+        || (selectedDateKey.value && selectedDateKey.value !== requestedDate)) return
 
     if (mode === 'merge') {
         studentProgressSummaries.value = {
@@ -438,6 +529,41 @@ async function loadStudentProgressSummaries(
     studentProgressSummaries.value = nextSummaries
 }
 
+async function loadStudentProgressGaps(
+    enrollmentList: Enrollment[],
+    occurrence: ClassOccurrence | null = todayOccurrence.value
+) {
+    const generation = ++progressGapRequestGeneration
+    progressGapCheckFailed.value = false
+    if (!occurrence?.id || !occurrence.occurrenceDate) {
+        isLoadingProgressGaps.value = false
+        return
+    }
+
+    const occurrenceId = occurrence.id
+    const occurrenceDate = DateUtils.formatLocalDate(occurrence.occurrenceDate)
+    const enrollmentIds = enrollmentList.map(enrollment => enrollment.id).filter((id): id is string => !!id)
+    isLoadingProgressGaps.value = true
+    try {
+        const summaries = await OccurrenceReportService.getProgressGapsByEnrollments(occurrenceId, enrollmentIds)
+        if (generation !== progressGapRequestGeneration
+            || todayOccurrence.value?.id !== occurrenceId
+            || DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate) !== occurrenceDate) return
+        studentProgressGaps.value = Object.fromEntries(summaries)
+    } catch (error) {
+        if (generation !== progressGapRequestGeneration) return
+        console.error('Failed to check course progress gaps:', error)
+        progressGapCheckFailed.value = true
+    } finally {
+        if (generation === progressGapRequestGeneration) isLoadingProgressGaps.value = false
+    }
+}
+
+function retryStudentProgressGaps() {
+    if (!todayOccurrence.value) return
+    void loadStudentProgressGaps(enrollments.value, todayOccurrence.value)
+}
+
 function getStudentProgressSummary(enrollmentId?: string): StudentProgressSummary {
     if (!enrollmentId) {
         return getDefaultProgressSummary()
@@ -448,7 +574,10 @@ function getStudentProgressSummary(enrollmentId?: string): StudentProgressSummar
 
 const displayedOccurrenceDate = computed(() => {
     if (!todayOccurrence.value?.occurrenceDate) {
-        return t('classroom.no_teaching_day_selected')
+        const selected = selectedDateKey.value ? DateUtils.parseLocalDate(selectedDateKey.value) : undefined
+        return selected
+            ? DateUtils.displayDate(selected, preferences.locale, preferences.timeZone)
+            : t('classroom.no_teaching_day_selected')
     }
 
     return DateUtils.displayDate(todayOccurrence.value.occurrenceDate, preferences.locale, preferences.timeZone)
@@ -543,10 +672,7 @@ const filteredTeachers = computed(() => {
     const query = teacherSearchQuery.value.trim().toLowerCase()
     if (!query) return allTeachersList.value
 
-    return allTeachersList.value.filter(t =>
-        t.name.toLowerCase().includes(query) ||
-        t.email.toLowerCase().includes(query)
-    )
+    return allTeachersList.value.filter(t => t.name.toLowerCase().includes(query))
 })
 
 const selectedMakeupEnrollment = computed(() => {
@@ -556,6 +682,10 @@ const selectedMakeupEnrollment = computed(() => {
 function handleMakeupStudentChange() {
     selectedMakeupEnrollmentId.value = null
 }
+
+watch([selectedMakeupStudentId, selectedMakeupEnrollmentId, makeupJoinDate], () => {
+    makeupSubmitError.value = ''
+})
 
 function findOccurrenceByDate(date: Date): ClassOccurrence | undefined {
     const target = DateUtils.formatLocalDate(date)
@@ -567,70 +697,209 @@ async function loadSessionOccurrences(anchorDate: Date): Promise<void> {
     rangeStart.setFullYear(rangeStart.getFullYear() - 1)
     const rangeEnd = new Date(anchorDate)
     rangeEnd.setFullYear(rangeEnd.getFullYear() + 1)
-    sessionOccurrences.value = await OccurrenceService.getOccurrencesByDateRange(rangeStart, rangeEnd, [sessionId])
+    const request = ++occurrenceListRequest
+    const occurrences = await OccurrenceService.getOccurrencesByDateRange(rangeStart, rangeEnd, [sessionId])
+    if (request === occurrenceListRequest) sessionOccurrences.value = occurrences
+    void loadReportCompletion(rangeStart, rangeEnd, request)
 }
 
-async function loadReportsForCurrentOccurrence() {
-    reportMap.value = new Map()
-    if (!todayOccurrence.value?.id) return
+async function loadReportCompletion(rangeStart: Date, rangeEnd: Date, request: number) {
+    try {
+        const completion = await OccurrenceService.getReportCompletionByDate(
+            sessionId, DateUtils.formatLocalDate(rangeStart), DateUtils.formatLocalDate(rangeEnd)
+        )
+        if (request === occurrenceListRequest) reportCompletionByDate.value = completion
+    } catch (error) {
+        // The completion dot is a hint; the calendar works without it.
+        console.error('Failed to load report completion:', error)
+    }
+}
 
-    const occurrenceReports = await OccurrenceReportService.createReportsForOccurrence(todayOccurrence.value.id)
-    const reportEnrollmentIds = new Set(occurrenceReports.map(r => r.enrollmentId))
-    occurrenceReports.forEach(r => {
-        if (r.enrollmentId) reportMap.value.set(r.enrollmentId, r)
-    })
+const sessionSchedule = computed(() => {
+    if (!session.value) return null
+    try {
+        return ClassSessionFactory.create({ ...session.value, schedule_rules: session.value.schedule_rules ?? [] })
+    } catch {
+        return null
+    }
+})
+const calendarToday = computed(() => DateUtils.todayString(sessionTimeZone.value))
+// Sessions created from schedule rules leave class_sessions.start_time/end_time
+// null; fall back to the first rule's times instead of crashing the header.
+const sessionTimeLabel = computed(() => {
+    const rule = session.value?.schedule_rules?.[0]
+    const start = (session.value?.start_time || rule?.start_time || '').slice(0, 5)
+    const end = (session.value?.end_time || rule?.end_time || '').slice(0, 5)
+    return start && end ? `${start}–${end}` : '-'
+})
 
-    const currentEnrollmentIds = new Set(enrollments.value.map(e => e.id))
-    const guestEnrollmentIds = [...reportEnrollmentIds].filter(id => id && !currentEnrollmentIds.has(id))
-    if (guestEnrollmentIds.length > 0) {
-        const guests = await CourseService.getEnrollmentsByIds(guestEnrollmentIds as string[])
-        const addedGuests: Enrollment[] = []
-        guests.forEach(guest => {
-            if (!guest) return
-            ;(guest as any).isGuest = true
-            if (!enrollments.value.find(e => e.id === guest.id)) {
-                enrollments.value.push(guest)
-                addedGuests.push(guest)
-            }
-        })
-        if (addedGuests.length > 0) {
-            await loadStudentProgressSummaries(addedGuests, 'merge', todayOccurrence.value.occurrenceDate)
-        }
+function isPlannedClassDate(date: string) {
+    return sessionSchedule.value?.isScheduledOn(date) ?? false
+}
+
+async function loadReportsForCurrentOccurrence(options: { createMissing?: boolean } = {}) {
+    const request = ++reportLoadRequest
+    const occurrenceId = todayOccurrence.value?.id
+    const nextReportMap = new Map<string, any>()
+    if (!occurrenceId) {
+        reportMap.value = nextReportMap
+        return
     }
 
+    let occurrenceReports: OccurrenceReport[]
+    if (options.createMissing === false) {
+        // If the initial provisioning POST is still running, wait for its
+        // writes to settle before taking the complete read snapshot.
+        const provisioning = reportProvisionRequests.get(occurrenceId)
+        if (provisioning) await provisioning
+        occurrenceReports = await OccurrenceReportService.getReportsByOccurrence(occurrenceId)
+    } else {
+        let provisioning = reportProvisionRequests.get(occurrenceId)
+        if (!provisioning) {
+            provisioning = OccurrenceReportService.createReportsForOccurrence(occurrenceId)
+            reportProvisionRequests.set(occurrenceId, provisioning)
+        }
+        try {
+            occurrenceReports = await provisioning
+        } finally {
+            if (reportProvisionRequests.get(occurrenceId) === provisioning) reportProvisionRequests.delete(occurrenceId)
+        }
+    }
+    if (request !== reportLoadRequest || todayOccurrence.value?.id !== occurrenceId) return
+    const currentEnrollmentIds = new Set(enrollments.value.map(enrollment => enrollment.id).filter(Boolean))
+    occurrenceReports.forEach(report => {
+        // The workspace RPC is the canonical effective roster. Never let an
+        // old source-occurrence report re-introduce a transferred student.
+        if (report.enrollmentId && currentEnrollmentIds.has(report.enrollmentId)) {
+            const currentReport = reportMap.value.get(report.enrollmentId) as OccurrenceReport | null | undefined
+            // A background read can race a newer save response. Keep the
+            // higher server version for the card instead of rolling it back.
+            nextReportMap.set(report.enrollmentId,
+                currentReport && currentReport.id === report.id && currentReport.version >= report.version
+                    ? currentReport
+                    : report)
+        }
+    })
+
     for (const enrollment of enrollments.value) {
-        if (enrollment.id && !reportMap.value.has(enrollment.id)) reportMap.value.set(enrollment.id, null)
+        if (enrollment.id && !nextReportMap.has(enrollment.id)) nextReportMap.set(enrollment.id, null)
+    }
+    reportMap.value = nextReportMap
+}
+
+const occurrenceTransfers = ref<OccurrenceLessonTransfer[]>([])
+const pendingTransferCancel = ref<OccurrenceLessonTransfer | null>(null)
+const cancellingTransferId = ref<string | null>(null)
+const transferredOutStudents = computed(() => occurrenceTransfers.value.filter(transfer => transfer.direction === 'out'))
+const transferInLabels = computed(() => new Map(occurrenceTransfers.value
+    .filter(transfer => transfer.direction === 'in')
+    .map(transfer => [transfer.enrollment_id, t('classroom.lesson_transfer.transferred_in', {
+        date: DateUtils.displayDateWithWeekday(transfer.other_occurrence_date, preferences.locale),
+        time: transfer.other_start_time?.slice(0, 5) || ''
+    })])))
+
+async function loadOccurrenceTransfers() {
+    const occurrenceId = todayOccurrence.value?.id
+    if (!occurrenceId) {
+        occurrenceTransfers.value = []
+        return
+    }
+    try {
+        const transfers = await EnrollmentService.getOccurrenceLessonTransfers(occurrenceId)
+        if (todayOccurrence.value?.id === occurrenceId) occurrenceTransfers.value = transfers
+    } catch (error) {
+        // The transfer notes are informational; the roster stays usable without them.
+        console.error('Failed to load lesson transfers:', error)
+        if (todayOccurrence.value?.id === occurrenceId) occurrenceTransfers.value = []
+    }
+}
+
+function openTransferTarget(transfer: OccurrenceLessonTransfer) {
+    void router.push({ name: 'session-details', params: { id: transfer.other_session_id }, query: { date: transfer.other_occurrence_date } })
+}
+
+async function confirmTransferCancel() {
+    const transfer = pendingTransferCancel.value
+    if (!transfer || cancellingTransferId.value) return
+    cancellingTransferId.value = transfer.transfer_id
+    try {
+        const result = await EnrollmentService.cancelSingleLessonTransfer(transfer.transfer_id)
+        toast.success(t(result.targetReportRetained
+            ? 'student.transfer_history.cancelled_target_retained'
+            : 'student.transfer_history.cancelled'))
+        pendingTransferCancel.value = null
+        if (todayOccurrence.value?.occurrenceDate) {
+            await loadWorkspaceRoster(todayOccurrence.value.occurrenceDate, true)
+            await loadReportsForCurrentOccurrence({ createMissing: false })
+        }
+    } catch (error) {
+        pendingTransferCancel.value = null
+        reportError(error, 'student.transfer_history.cancel_error')
+    } finally {
+        cancellingTransferId.value = null
+    }
+}
+
+async function loadWorkspaceRoster(occurrenceDate: Date, force = false): Promise<void> {
+    const date = DateUtils.formatLocalDate(occurrenceDate)
+    if (!force && workspaceRosterDate === date) return
+
+    const workspace = (await PageApiService.getClassSessionWorkspace(sessionId, date)).data
+    if (selectedDateKey.value && selectedDateKey.value !== date) return
+    if (todayOccurrence.value?.occurrenceDate && DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate) !== date) return
+    if (!workspace.session) throw new Error('Class session workspace is unavailable')
+    if (workspace.session.roster_date && workspace.session.roster_date !== date) {
+        throw new Error('Class session workspace returned an unexpected roster date')
+    }
+
+    enrollments.value = workspace.enrollments.map(enrollment => new Enrollment(enrollment))
+    workspaceRosterDate = date
+    void loadOccurrenceTransfers()
+    if (session.value) {
+        const rawSession = workspace.session as any
+        session.value = {
+            ...session.value,
+            ...rawSession,
+            schedule_rules: rawSession.schedule_rules ?? rawSession.class_session_schedule_rules ?? [],
+            classroom_name: rawSession.classrooms?.name ?? session.value.classroom_name,
+            classroom_address: rawSession.classrooms?.address ?? session.value.classroom_address,
+            classroom_external_link: rawSession.classrooms?.external_link ?? session.value.classroom_external_link,
+        }
     }
 }
 
 async function loadOccurrenceTeachers() {
     if (!todayOccurrence.value) {
         occurrenceTeachers.value = []
+        teacherLeaveById.value = {}
         selectedTeacherIds.value = new Set()
         return
     }
+    teacherLeaveById.value = {}
 
-    // sessionTeachers is session-level (not occurrence-specific) data: loadData()
-    // fetches it once for the session, and the assignment-mutation flows
-    // (addTeacherForToday, removeAssignment) explicitly re-fetch it themselves
-    // right before calling this function again. Re-fetching it here too made
-    // every single date navigation re-request the same session's assignment
-    // plan for no reason -- see setCurrentOccurrence's call to this function.
+    // Attendance roster is always derived from the effective teaching assignments.
+    // Keep the attendance status map on the occurrence, but never persist a second roster.
     const dateStr = DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate)
-    const activeAssignments = sessionTeachers.value.filter(st => dateStr >= st.effective_from && (!st.effective_to || dateStr <= st.effective_to))
-    const planTeacherIds = [...new Set(activeAssignments.map(a => a.id).filter(Boolean))] as string[]
-    const currentTeacherIds = todayOccurrence.value.teacherIds || []
-    selectedTeacherIds.value = new Set(currentTeacherIds)
-
-    if (currentTeacherIds.length === 0 && planTeacherIds.length > 0) {
-        selectedTeacherIds.value = new Set(planTeacherIds)
-        await saveOccurrenceTeachers(false)
-    }
-    if (allTeachersList.value.length === 0) {
-        const { data } = await TeacherService.getTeachers(1, 1000)
-        allTeachersList.value = data
-    }
-    occurrenceTeachers.value = allTeachersList.value.filter(t => t.id && selectedTeacherIds.value.has(t.id))
+    const assignmentsByTeacher = getEffectiveTeacherAssignments(sessionTeachers.value, dateStr)
+    selectedTeacherIds.value = new Set(assignmentsByTeacher.map(assignment => assignment.id).filter((id): id is string => Boolean(id)))
+    occurrenceTeachers.value = assignmentsByTeacher.map(assignment => ({
+        ...assignment,
+        role: assignment.role
+    }))
+    const occurrence = todayOccurrence.value
+    const leaveEntries = await Promise.all(assignmentsByTeacher
+        .filter(assignment => assignment.id)
+        .map(async assignment => [assignment.id!, await HolidayService.isTeacherOnLeave(
+            dateStr,
+            assignment.id!,
+            session.value?.classroom_id,
+            sessionId
+        ).catch(error => {
+            console.error('Failed to check teacher leave:', error)
+            return false
+        })] as const))
+    if (todayOccurrence.value?.id !== occurrence.id) return
+    teacherLeaveById.value = Object.fromEntries(leaveEntries)
 }
 
 async function setCurrentOccurrence(occurrence: ClassOccurrence | null) {
@@ -642,6 +911,18 @@ async function setCurrentOccurrence(occurrence: ClassOccurrence | null) {
     try {
         if (!occurrence?.occurrenceDate) {
             reportMap.value = new Map()
+            enrollments.value = []
+            studentProgressSummaries.value = {}
+            studentProgressGaps.value = {}
+            progressGapRequestGeneration++
+            isLoadingProgressGaps.value = false
+            progressGapCheckFailed.value = false
+            isOccurrenceInHoliday.value = false
+            occurrenceTeachers.value = []
+            teacherLeaveById.value = {}
+            selectedTeacherIds.value = new Set()
+            workspaceRosterDate = null
+            occurrenceTransfers.value = []
             previousOccurrence.value = null
             nextOccurrence.value = null
             return
@@ -649,7 +930,8 @@ async function setCurrentOccurrence(occurrence: ClassOccurrence | null) {
 
         weekAnchorDate.value = new Date(occurrence.occurrenceDate)
         const occurrenceDateStr = DateUtils.formatLocalDate(occurrence.occurrenceDate)
-        const [holiday, navigation] = await Promise.all([
+        const [, holiday, navigation] = await Promise.all([
+            loadWorkspaceRoster(occurrence.occurrenceDate),
             HolidayService.isHoliday(occurrenceDateStr, undefined, occurrence.classSessionId).catch(error => {
                 console.error('Failed to check holiday status:', error)
                 return false
@@ -673,7 +955,8 @@ async function setCurrentOccurrence(occurrence: ClassOccurrence | null) {
                 throw error
             }),
             loadOccurrenceTeachers(),
-            loadStudentProgressSummaries(enrollments.value, 'replace', occurrence.occurrenceDate)
+            loadStudentProgressSummaries(enrollments.value, 'replace', occurrence.occurrenceDate),
+            loadStudentProgressGaps(enrollments.value, occurrence)
         ])
     } catch (error) {
         if (loadToken === occurrenceLoadToken) {
@@ -686,17 +969,70 @@ async function setCurrentOccurrence(occurrence: ClassOccurrence | null) {
     }
 }
 
-async function handleCalendarOccurrenceSelect(occurrence: ClassOccurrence) {
-    if (isOccurrenceLoading.value) return
-    await setCurrentOccurrence(occurrence)
+async function handleCalendarDateSelect(date: Date) {
+    const dateStr = DateUtils.formatLocalDate(date)
+    // A future lesson the schedule plans but that was never generated: create it first.
+    if (!findOccurrenceByDate(date) && dateStr >= calendarToday.value && isPlannedClassDate(dateStr)) {
+        try {
+            await OccurrenceService.generateOccurrences(sessionId, date, date)
+        } catch (error) {
+            console.error('Failed to generate the planned lesson:', error)
+        }
+    }
+    await selectClassDate(dateStr)
+}
+
+function syncSelectedDateToUrl(date: string) {
+    if (parseClassSessionDate(route.query.date) === date) return
+    void router.replace({
+        query: { ...route.query, date }
+    })
+}
+
+async function selectClassDate(date: string, updateUrl = true) {
+    const validDate = parseClassSessionDate(date)
+    if (!validDate) return
+    if (validDate !== selectedDateKey.value && showSplitView.value) {
+        const saveSucceeded = await quickReportEditorRef.value?.saveNow({ reason: 'switch' })
+        if (saveSucceeded === false) return
+        showSplitView.value = false
+        selectedEnrollmentId.value = null
+        selectedEditorEnrollmentSnapshot.value = null
+        selectedEditorReportSnapshot.value = null
+    }
+    const request = ++selectedDateRequest
+    realtimeRefreshRequest++
+    isRealtimeRefreshing.value = false
+    selectedDateKey.value = validDate
+    weekAnchorDate.value = DateUtils.parseLocalDate(validDate) || weekAnchorDate.value
+    if (updateUrl) syncSelectedDateToUrl(validDate)
+
+    // Clear the previous day's data immediately; never leave it visible under
+    // a newly selected date while the occurrence range is loading.
+    await setCurrentOccurrence(null)
+    try {
+        if (request === selectedDateRequest) isOccurrenceLoading.value = true
+        const selectedDate = DateUtils.parseLocalDate(validDate)
+        if (!selectedDate) return
+        await loadSessionOccurrences(selectedDate)
+        if (request !== selectedDateRequest) return
+        const occurrence = findOccurrenceByDate(selectedDate) || null
+        await setCurrentOccurrence(occurrence)
+    } catch (error) {
+        if (request === selectedDateRequest) {
+            console.error('Failed to load selected class date:', error)
+            occurrenceLoadError.value = t('classroom.occurrence_load_error')
+        }
+    } finally {
+        if (request === selectedDateRequest) isOccurrenceLoading.value = false
+    }
 }
 
 async function moveOccurrence(direction: 'previous' | 'next') {
-    if (isOccurrenceLoading.value || !todayOccurrence.value) return
+    if (!todayOccurrence.value) return
     const adjacent = direction === 'previous' ? previousOccurrence.value : nextOccurrence.value
     if (!adjacent) return
-    await setCurrentOccurrence(adjacent)
-    await loadSessionOccurrences(adjacent.occurrenceDate)
+    await selectClassDate(DateUtils.formatLocalDate(adjacent.occurrenceDate))
 }
 
 async function ensureTodayOccurrence(today: Date): Promise<void> {
@@ -709,13 +1045,11 @@ async function ensureTodayOccurrence(today: Date): Promise<void> {
 }
 
 async function goToToday() {
-    if (isOccurrenceLoading.value) return
     const today = DateUtils.todayDate(sessionTimeZone.value)
     try {
         await ensureTodayOccurrence(today)
         const preferred = await OccurrenceService.getPreferredOccurrence(sessionId, today)
-        await setCurrentOccurrence(preferred)
-        if (preferred) await loadSessionOccurrences(preferred.occurrenceDate)
+        await selectClassDate(DateUtils.formatLocalDate(preferred?.occurrenceDate || today))
     } catch (error) {
         console.error(error)
         occurrenceLoadError.value = t('classroom.occurrence_load_error')
@@ -735,6 +1069,10 @@ const rosterLists = computed(() => getRosterEnrollments(
 ))
 const allRosterEnrollments = computed(() => rosterLists.value.all)
 const filteredEnrollments = computed(() => rosterLists.value.filtered)
+const selectedEditorEnrollment = computed(() =>
+    allRosterEnrollments.value.find(enrollment => enrollment.id === selectedEnrollmentId.value)
+    || selectedEditorEnrollmentSnapshot.value
+)
 const highlightedEnrollmentId = ref<string | null>(null)
 let rosterHighlightTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -767,6 +1105,33 @@ watch(filteredEnrollments, filtered => {
 })
 
 const attendanceCounts = computed(() => countRosterAttendance(allRosterEnrollments.value, reportMap.value))
+const occupiedRosterCount = computed(() => attendanceCounts.value.present + attendanceCounts.value.pending)
+const teacherAttendanceCounts = computed(() => {
+    let present = 0
+    let absent = 0
+    let onLeave = 0
+    for (const teacher of occurrenceTeachers.value) {
+        if (teacher.id && teacherLeaveById.value[teacher.id]) onLeave++
+        else if (isTeacherPresent(teacher.id, teacher.user_id)) present++
+        else absent++
+    }
+    return { present, absent, onLeave }
+})
+const lastRealtimeUpdateLabel = computed(() => lastRealtimeUpdateAt.value
+    ? lastRealtimeUpdateAt.value.toLocaleTimeString(preferences.locale, {
+        timeZone: preferences.timeZone,
+        hour: '2-digit',
+        minute: '2-digit',
+    })
+    : '')
+
+function isTeacherOnLeave(teacherId?: string): boolean {
+    return Boolean(teacherId && teacherLeaveById.value[teacherId])
+}
+
+function canEditTeacherAttendance(teacher: TeacherOverviewDTO): boolean {
+    return auth.user?.id === teacher.user_id || canManageTeacherAttendance.value
+}
 
 async function loadData() {
     try {
@@ -775,25 +1140,55 @@ async function loadData() {
         reportMap.value = new Map()
         studentProgressSummaries.value = {}
 
-        session.value = await SessionService.getSessionDetails(sessionId)
-        const [{ data: allEnrollments }, teachers, allTeachers] = await Promise.all([
-            CourseService.getEnrollmentsBySession(sessionId),
-            TeacherService.getSessionTeachers(sessionId),
-            TeacherService.getTeachers(1, 1000)
-        ])
+        const workspace = (await PageApiService.getClassSessionWorkspace(sessionId)).data
+        const rawSession = workspace.session as any
+        session.value = {
+            ...rawSession,
+            schedule_rules: rawSession.schedule_rules ?? rawSession.class_session_schedule_rules ?? [],
+            classroom_name: rawSession.classrooms?.name ?? 'Unknown',
+            classroom_address: rawSession.classrooms?.address ?? '',
+            classroom_external_link: rawSession.classrooms?.external_link ?? '',
+        }
+        const allEnrollments = workspace.enrollments.map(enrollment => new Enrollment(enrollment))
         enrollments.value = allEnrollments
-        sessionTeachers.value = teachers
-        allTeachersList.value = allTeachers.data
+        workspaceRosterDate = typeof rawSession.roster_date === 'string' ? rawSession.roster_date : null
+        const [teacherAssignments, canManageAttendance] = await Promise.all([
+            TeacherService.getSessionTeachers(sessionId),
+            PermissionPolicyService.canUpdateOccurrence(sessionId)
+        ])
+        sessionTeachers.value = teacherAssignments
+        canManageTeacherAttendance.value = canManageAttendance
+        allTeachersList.value = workspace.teachers
 
         if (allEnrollments[0]?.courseId) courseLessons.value = courseLessonsByCourseId.value[allEnrollments[0].courseId] || []
 
         const today = DateUtils.todayDate(sessionTimeZone.value)
+        const requestedDate = parseClassSessionDate(route.query.date)
+        const initialDate = requestedDate ? DateUtils.parseLocalDate(requestedDate) || today : today
         todayOccurrence.value = null
-        weekAnchorDate.value = today
-        await ensureTodayOccurrence(today)
-        const preferredOccurrence = await OccurrenceService.getPreferredOccurrence(sessionId, today)
-        if (preferredOccurrence) await loadSessionOccurrences(preferredOccurrence.occurrenceDate)
-        await setCurrentOccurrence(preferredOccurrence)
+        selectedDateKey.value = requestedDate || DateUtils.formatLocalDate(today)
+        weekAnchorDate.value = initialDate
+
+        let initialOccurrence: ClassOccurrence | null = null
+        if (requestedDate) {
+            await loadSessionOccurrences(initialDate)
+            initialOccurrence = findOccurrenceByDate(initialDate) || null
+        } else {
+            await ensureTodayOccurrence(today)
+            initialOccurrence = await OccurrenceService.getPreferredOccurrence(sessionId, today)
+            if (initialOccurrence) await loadSessionOccurrences(initialOccurrence.occurrenceDate)
+        }
+        if (initialOccurrence?.occurrenceDate) {
+            selectedDateKey.value = DateUtils.formatLocalDate(initialOccurrence.occurrenceDate)
+        }
+        await setCurrentOccurrence(initialOccurrence)
+        if (initialOccurrence?.occurrenceDate) {
+            selectedDateKey.value = DateUtils.formatLocalDate(initialOccurrence.occurrenceDate)
+        } else {
+            selectedDateKey.value = DateUtils.formatLocalDate(initialDate)
+        }
+        syncSelectedDateToUrl(selectedDateKey.value)
+        hasLoadedInitialData = true
     } catch (error) {
         console.error(error)
         occurrenceLoadError.value = t('classroom.occurrence_load_error')
@@ -802,26 +1197,234 @@ async function loadData() {
     }
 }
 
-onMounted(() => {
-    loadData()
+function scheduleRealtimeRefresh(invalidation?: unknown) {
+    pendingRealtimeInvalidations.push(invalidation ?? {})
+    if (realtimeRefreshTimer || realtimeRefreshRunning) return
+    realtimeRefreshTimer = setTimeout(() => {
+        realtimeRefreshTimer = null
+        void flushRealtimeInvalidations()
+    }, 300)
+}
+
+async function flushRealtimeInvalidations() {
+    if (realtimeRefreshRunning || pendingRealtimeInvalidations.length === 0) return
+    const events = pendingRealtimeInvalidations.splice(0)
+    const selectedDate = selectedDateKey.value || DateUtils.todayString(sessionTimeZone.value)
+    const relevantEvents = events.map(event => {
+        const payload = event && typeof event === 'object' && 'payload' in event
+            ? (event as { payload?: unknown }).payload
+            : event
+        return payload && typeof payload === 'object' ? payload as Record<string, unknown> : {}
+    }).filter(payload => invalidationAffectsDate(selectedDate, payload))
+
+    if (relevantEvents.length) {
+        const reportOnly = relevantEvents.every(payload => payload.change === 'report')
+        const refreshCatalog = relevantEvents.some(payload => payload.change === 'course_catalog' || payload.change === 'course' || payload.change === 'reconnect')
+        await refreshCurrentOccurrenceFromRealtime({ reportOnly, refreshCatalog })
+    }
+
+    if (pendingRealtimeInvalidations.length && !realtimeRefreshTimer) {
+        realtimeRefreshTimer = setTimeout(() => {
+            realtimeRefreshTimer = null
+            void flushRealtimeInvalidations()
+        }, 0)
+    }
+}
+
+async function refreshCurrentOccurrenceFromRealtime(options: { reportOnly?: boolean; refreshCatalog?: boolean } = {}) {
+    if (realtimeRefreshRunning) return
+    realtimeRefreshRunning = true
+    const requestId = ++realtimeRefreshRequest
+    const occurrenceAtStart = todayOccurrence.value as ClassOccurrence | null
+    const selectedDate = (selectedDateKey.value && DateUtils.parseLocalDate(selectedDateKey.value))
+        || occurrenceAtStart?.occurrenceDate
+        || DateUtils.todayDate(sessionTimeZone.value)
+    const selectedDateString = DateUtils.formatLocalDate(selectedDate)
+    const selectedEnrollmentAtStart = selectedEnrollmentId.value
+        ? enrollments.value.find(enrollment => enrollment.id === selectedEnrollmentId.value) || selectedEditorEnrollmentSnapshot.value
+        : null
+    isRealtimeRefreshing.value = true
+    realtimeRefreshError.value = false
+    try {
+        await Promise.all([
+            loadWorkspaceRoster(selectedDate, true),
+            ...(!options.reportOnly ? [loadSessionOccurrences(selectedDate)] : []),
+        ])
+        if (requestId !== realtimeRefreshRequest || selectedDateKey.value !== selectedDateString || (todayOccurrence.value?.occurrenceDate && DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate) !== selectedDateString)) return
+
+        if (!options.reportOnly) {
+            const refreshedOccurrence = findOccurrenceByDate(selectedDate)
+            if (refreshedOccurrence) todayOccurrence.value = refreshedOccurrence
+            else if (occurrenceAtStart) todayOccurrence.value = null
+        }
+
+        if (selectedEnrollmentAtStart && selectedEnrollmentId.value) {
+            selectedEditorEnrollmentSnapshot.value = enrollments.value.find(enrollment => enrollment.id === selectedEnrollmentId.value) || selectedEnrollmentAtStart
+        }
+        const validEnrollmentIds = new Set(enrollments.value.map(enrollment => enrollment.id).filter(Boolean))
+        selectedEnrollmentIds.value = new Set([...selectedEnrollmentIds.value].filter(id => validEnrollmentIds.has(id)))
+
+        if (todayOccurrence.value?.id) {
+            const occurrenceId = todayOccurrence.value.id
+            const occurrenceDate = todayOccurrence.value.occurrenceDate
+            const date = DateUtils.formatLocalDate(occurrenceDate)
+            if (!options.reportOnly) {
+                const [assignments, holiday, navigation] = await Promise.all([
+                    TeacherService.getSessionTeachers(sessionId),
+                    HolidayService.isHoliday(date, undefined, sessionId),
+                    OccurrenceService.getOccurrenceNavigationState(sessionId, occurrenceDate),
+                ])
+                if (requestId !== realtimeRefreshRequest || todayOccurrence.value?.id !== occurrenceId) return
+                sessionTeachers.value = assignments
+                isOccurrenceInHoliday.value = holiday
+                previousOccurrence.value = navigation.previous
+                nextOccurrence.value = navigation.next
+            }
+            // Realtime/background refreshes must only read the complete saved
+            // roster. The provisioning POST intentionally creates reports for
+            // a narrower set of active enrollments.
+            await loadReportsForCurrentOccurrence({ createMissing: false })
+            if (requestId !== realtimeRefreshRequest || todayOccurrence.value?.id !== occurrenceId) return
+            if (options.refreshCatalog) {
+                await Promise.all([...new Set(enrollments.value.map(enrollment => enrollment.courseId).filter(Boolean))]
+                    .map(courseId => getLessonsForCourse(courseId, { refresh: true })))
+            }
+            await Promise.all([
+                ...(!options.reportOnly ? [loadOccurrenceTeachers()] : []),
+                loadStudentProgressSummaries(enrollments.value, 'replace', occurrenceDate, {
+                    loadMissingLessons: !options.reportOnly,
+                }),
+                loadStudentProgressGaps(enrollments.value, todayOccurrence.value),
+            ])
+            if (progressGapCheckFailed.value) throw new Error('Failed to refresh course progress gaps')
+            if (options.refreshCatalog && selectedEditorEnrollment.value?.courseId) {
+                courseLessons.value = courseLessonsByCourseId.value[selectedEditorEnrollment.value.courseId] || []
+            }
+        } else {
+            // A remote change can remove the currently selected occurrence
+            // (for example, an occurrence was deleted) while its editor is
+            // still open. Keep that report mounted until the user closes it
+            // so local Yjs state and pending edits are not reset by the page
+            // refresh.
+            const selectedId = showSplitView.value ? selectedEnrollmentId.value : null
+            const selectedReport = selectedId ? reportMap.value.get(selectedId) : null
+            reportMap.value = selectedId && selectedReport
+                ? new Map([[selectedId, selectedReport]])
+                : new Map()
+            studentProgressSummaries.value = {}
+            studentProgressGaps.value = {}
+            progressGapRequestGeneration++
+            isLoadingProgressGaps.value = false
+            progressGapCheckFailed.value = false
+        }
+
+        if (requestId !== realtimeRefreshRequest) return
+        lastRealtimeUpdateAt.value = new Date()
+    } catch (error) {
+        if (requestId !== realtimeRefreshRequest) return
+        console.error('Failed to refresh class session after a remote change:', error)
+        realtimeRefreshError.value = true
+    } finally {
+        if (requestId === realtimeRefreshRequest) isRealtimeRefreshing.value = false
+        realtimeRefreshRunning = false
+    }
+}
+
+function startClassSessionRealtime() {
+    const presenceKey = `${auth.user?.id || 'user'}:${Date.now()}`
+    classSessionChannel = new ApiRealtimeChannel(sessionId, presenceKey, 'class_session')
+        .on('broadcast', { event: 'class_session_invalidated' }, (message) => scheduleRealtimeRefresh(message?.payload))
+    classSessionChannel.subscribe((status, detail) => {
+        if (status === 'SUBSCRIBED') {
+            realtimeStatus.value = 'connected'
+            realtimeStatusDetail.value = ''
+            if (hasJoinedClassSessionChannel) scheduleRealtimeRefresh({ change: 'reconnect' })
+            hasJoinedClassSessionChannel = true
+        } else if (status === 'CONNECTING') {
+            realtimeStatus.value = 'connecting'
+        } else if (status === 'SUBSCRIBING') {
+            realtimeStatus.value = 'subscribing'
+        } else if (status === 'RECONNECTING') {
+            realtimeStatus.value = 'reconnecting'
+        } else if (status === 'CHANNEL_ERROR') {
+            realtimeStatusDetail.value = detail || ''
+        } else if (status === 'OFFLINE') {
+            realtimeStatus.value = 'offline'
+            realtimeStatusDetail.value = ''
+        } else if (status === 'PERMISSION_DENIED') {
+            realtimeStatus.value = 'forbidden'
+            realtimeStatusDetail.value = detail || ''
+        } else if (status === 'AUTH_EXPIRED') {
+            realtimeStatus.value = 'expired'
+            realtimeStatusDetail.value = detail || ''
+        } else if (status === 'ACCOUNT_DISABLED') {
+            realtimeStatus.value = 'disabled'
+            realtimeStatusDetail.value = detail || ''
+        } else {
+            if (!['forbidden', 'expired', 'disabled'].includes(realtimeStatus.value)) realtimeStatus.value = 'reconnecting'
+        }
+    })
+}
+
+function retryRealtimeAction() {
+    if (realtimeRefreshError.value) {
+        scheduleRealtimeRefresh()
+        return
+    }
+    classSessionChannel?.reconnect()
+    realtimeStatus.value = 'connecting'
+}
+
+onMounted(async () => {
+    await loadData()
+    startClassSessionRealtime()
+})
+
+watch(() => route.query.date, (value) => {
+    if (!hasLoadedInitialData) return
+    const date = parseClassSessionDate(value)
+    if (!date) {
+        const today = DateUtils.todayString(sessionTimeZone.value)
+        void selectClassDate(today)
+        return
+    }
+    if (date !== selectedDateKey.value) void selectClassDate(date, false)
+})
+
+onBeforeUnmount(() => {
+    if (realtimeRefreshTimer) clearTimeout(realtimeRefreshTimer)
+    realtimeRefreshTimer = null
+    classSessionChannel?.unsubscribe()
+    classSessionChannel = null
 })
 
 // Attendance & Rating Handlers
 async function setAttendance(enrId: string, status: QuickAttendanceStatus) {
     if (isOccurrenceInHoliday.value) {
-        toast.error(t('report.error.cannot_set_conducted_during_holiday', 'Cannot modify attendance during a holiday period.'))
+        toast.error(t('report.error.cannot_set_conducted_during_holiday'))
         return
     }
     const report = reportMap.value.get(enrId)
     if (!report || savingMap.value.get(enrId) || (report.attendanceStatus || 'pending') === status) return
+    const occurrenceId = todayOccurrence.value?.id
+    if (!occurrenceId || report.classOccurrenceId !== occurrenceId) return
 
     savingMap.value.set(enrId, true)
     try {
-        await OccurrenceReportService.saveAttendanceOnly(report.id, report.version, undefined, {
+        const result = await OccurrenceReportService.saveAttendanceOnly(report.id, report.version, undefined, {
             attendanceStatus: status,
-            absenceReason: status === 'absent' ? t('report.editor.absence_reasons.reason_not_provided') : null
+            absenceReason: status === 'absent' ? 'reason_not_provided' : null
         })
-        reportMap.value.set(enrId, await OccurrenceReportService.getReportById(report.id))
+        if (!result.success || !result.updatedReport) {
+            throw new Error(result.message || 'Attendance save did not return the committed report')
+        }
+        if (todayOccurrence.value?.id !== occurrenceId
+            || reportMap.value.get(enrId)?.id !== report.id
+            || !enrollments.value.some(enrollment => enrollment.id === enrId)) return
+        const current = reportMap.value.get(enrId) as OccurrenceReport | null | undefined
+        const updatedReport = new OccurrenceReport(result.updatedReport)
+        if (!shouldApplyCommittedReport(updatedReport, current, enrId, occurrenceId)) return
+        reportMap.value = new Map(reportMap.value).set(enrId, updatedReport)
     } catch (error) {
         console.error('Failed to set attendance:', error)
         toast.error(t('common.save_error'))
@@ -832,7 +1435,7 @@ async function setAttendance(enrId: string, status: QuickAttendanceStatus) {
 
 async function batchSetAttendance(status: QuickAttendanceStatus) {
     if (isOccurrenceInHoliday.value) {
-        toast.error(t('report.error.cannot_set_conducted_during_holiday', 'Cannot modify attendance during a holiday period.'))
+        toast.error(t('report.error.cannot_set_conducted_during_holiday'))
         return
     }
     const visibleIds = new Set(filteredEnrollments.value.map(enrollment => enrollment.id))
@@ -863,13 +1466,16 @@ const quickAttendanceStudents = computed(() => filteredEnrollments.value.map(enr
     status: (reportMap.value.get(enrollment.id!)?.attendanceStatus || 'pending') as QuickAttendanceStatus,
     isSaving: savingMap.value.get(enrollment.id!) === true,
     disabled: !reportMap.value.has(enrollment.id!),
-    disabledReason: !reportMap.value.has(enrollment.id!) ? t('classroom.trial_report_unavailable') : undefined
+    disabledReason: !reportMap.value.has(enrollment.id!) ? t('classroom.trial_report_unavailable') : undefined,
+    progressGaps: studentProgressGaps.value[enrollment.id!] || []
 })))
 
 const studentRosterItems = computed<StudentRosterItem[]>(() => filteredEnrollments.value.map(enrollment => {
     const progress = getStudentProgressSummary(enrollment.id)
     const today = getTodayCourseSummary(enrollment)
     const attendanceStatus = (reportMap.value.get(enrollment.id!)?.attendanceStatus || 'pending') as QuickAttendanceStatus
+    const absenceReason = reportMap.value.get(enrollment.id!)?.absenceReason || null
+    const absenceReasonText = absenceReasonLabel(absenceReason, t)
     return {
         id: enrollment.id!,
         studentId: enrollment.studentId || '',
@@ -883,8 +1489,11 @@ const studentRosterItems = computed<StudentRosterItem[]>(() => filteredEnrollmen
         enrollmentStatus: t('student.internal_courses.status_' + enrollment.status),
         enrollmentTone: enrollment.status === 'regular' ? 'regular' : enrollment.status === 'trial' ? 'trial' : 'inactive',
         isGuest: Boolean((enrollment as any).isGuest),
+        transferInLabel: transferInLabels.value.get(enrollment.id!) ?? null,
         attendanceStatus,
         attendanceLabel: t('attendance.' + attendanceStatus),
+        absenceReason,
+        absenceReasonLabel: absenceReasonText,
         isSavingAttendance: savingMap.value.get(enrollment.id!) === true,
         todayTitle: today.title,
         todayProgress: today.chapterProgress,
@@ -897,7 +1506,8 @@ const studentRosterItems = computed<StudentRosterItem[]>(() => filteredEnrollmen
         latestStatus: progress.latestProgressStatus,
         latestTone: progress.latestProgressTone,
         isEditing: selectedEnrollmentId.value === enrollment.id && showSplitView.value,
-        reportAvailable: reportMap.value.has(enrollment.id!)
+        reportAvailable: reportMap.value.has(enrollment.id!),
+        progressGaps: studentProgressGaps.value[enrollment.id!] || []
     }
 }))
 
@@ -1297,7 +1907,7 @@ async function toggleIsConducted(event: any) {
     // Guard: check if occurrence is in a holiday period
     if (isOccurrenceInHoliday.value && isHeld) {
         event.target.checked = false
-        toast.error(t('report.error.cannot_set_conducted_during_holiday', 'Cannot mark class as conducted during a holiday period.'))
+        toast.error(t('report.error.cannot_set_conducted_during_holiday'))
         return
     }
 
@@ -1324,7 +1934,7 @@ function isTeacherPresent(teacherId: string | undefined, userId: string | null |
     return isTeacherPresentForScope({
         teacherId,
         teacherUserId: userId,
-        occurrenceTeacherIds: todayOccurrence.value.teacherIds,
+        occurrenceTeacherIds: occurrenceTeachers.value.map(teacher => teacher.id).filter((id): id is string => Boolean(id)),
         teacherAttendance: todayOccurrence.value.teacherAttendance
     })
 }
@@ -1336,7 +1946,7 @@ async function toggleTeacherAttendance(teacherId: string | undefined, event: any
     // Guard: check if occurrence is in a holiday period
     if (isOccurrenceInHoliday.value && isPresent) {
         event.target.checked = false
-        toast.error(t('report.error.cannot_set_teacher_present_during_holiday', 'Cannot mark teacher as present during a holiday period.'))
+        toast.error(t('report.error.cannot_set_teacher_present_during_holiday'))
         return
     }
 
@@ -1369,40 +1979,66 @@ async function toggleSplitView(enrollmentId: string) {
         return
     }
 
+    const selectionRequest = ++editorSelectionRequest
     const saveSucceeded = await quickReportEditorRef.value?.saveNow({ reason: 'switch' })
-    if (saveSucceeded === false) return
+    if (saveSucceeded === false || selectionRequest !== editorSelectionRequest) return
 
-    // finding the enrollment to get the courseId
+    const occurrenceId = todayOccurrence.value?.id
+    const occurrenceDate = todayOccurrence.value?.occurrenceDate
+    const dateKey = occurrenceDate ? DateUtils.formatLocalDate(occurrenceDate) : null
+
+    // Resolve course lessons without allowing a slow request to change the
+    // editor after the user selected another student or occurrence.
     const enrollment = enrollments.value.find(e => e.id === enrollmentId)
     if (enrollment?.courseId) {
-        courseLessons.value = await getLessonsForCourse(enrollment.courseId)
+        const lessons = await getLessonsForCourse(enrollment.courseId)
+        if (selectionRequest !== editorSelectionRequest
+            || todayOccurrence.value?.id !== occurrenceId
+            || selectedDateKey.value !== dateKey) return
+        courseLessons.value = lessons
     }
+
+    let editorReport = reportMap.value.get(enrollmentId) as OccurrenceReport | null | undefined
+    // Resolve the current persisted version before mounting the editor. Once
+    // mounted, background refreshes only replace the card snapshot.
+    if (occurrenceId) {
+        savingMap.value.set(enrollmentId, true)
+        try {
+            const fetched = await OccurrenceReportService.getReport(enrollmentId, occurrenceId)
+            if (selectionRequest !== editorSelectionRequest
+                || todayOccurrence.value?.id !== occurrenceId
+                || selectedDateKey.value !== dateKey) return
+            if (fetched) {
+                const cardReport = reportMap.value.get(enrollmentId) as OccurrenceReport | null | undefined
+                editorReport = cardReport && cardReport.id === fetched.id && cardReport.version > fetched.version ? cardReport : fetched
+                reportMap.value = new Map(reportMap.value).set(enrollmentId, editorReport)
+            }
+        } catch (error) {
+            console.error('Failed to sync report on quick edit open', error)
+        } finally {
+            savingMap.value.delete(enrollmentId)
+        }
+    }
+
+    if (selectionRequest !== editorSelectionRequest
+        || todayOccurrence.value?.id !== occurrenceId
+        || selectedDateKey.value !== dateKey) return
 
     selectedEnrollmentId.value = enrollmentId
+    selectedEditorEnrollmentSnapshot.value = enrollment || null
+    selectedEditorReportSnapshot.value = editorReport ? new OccurrenceReport(editorReport.toDTO()) : null
     showSplitView.value = true
-
-    // Fetch latest report content to ensure sync with server (fixes stale data issues)
-    if (todayOccurrence.value?.id) {
-        savingMap.value.set(enrollmentId, true)
-        OccurrenceReportService.getReport(enrollmentId, todayOccurrence.value.id)
-            .then(report => {
-                reportMap.value.set(enrollmentId, report)
-            })
-            .catch(e => {
-                console.error('Failed to sync report on quick edit open', e)
-            })
-            .finally(() => {
-                savingMap.value.delete(enrollmentId)
-            })
-    }
 }
 
 async function closeSplitView() {
     const enrollmentIdToRestore = selectedEnrollmentId.value
+    editorSelectionRequest++
     const saveSucceeded = await quickReportEditorRef.value?.saveNow({ reason: 'switch' })
     if (saveSucceeded === false) return
     showSplitView.value = false
     selectedEnrollmentId.value = null
+    selectedEditorEnrollmentSnapshot.value = null
+    selectedEditorReportSnapshot.value = null
 
     await nextTick()
     if (enrollmentIdToRestore) scrollToEnrollment(enrollmentIdToRestore)
@@ -1425,6 +2061,7 @@ async function openKodingCheck(enrollment: Enrollment) {
 
 async function openAddStudentModal() {
     showAddStudentModal.value = true
+    makeupSubmitError.value = ''
     makeupSearch.value = ''
     selectedMakeupStudentId.value = ''
     selectedMakeupEnrollmentId.value = ''
@@ -1467,61 +2104,119 @@ async function submitAddStudentToClass() {
 
     try {
         isAddingStudent.value = true
+        makeupSubmitError.value = ''
         await EnrollmentService.addEnrollmentToSessionOccurrence(
             selectedMakeupEnrollmentId.value,
             sessionId,
             normalizedJoinDate
         )
 
-        if (normalizeDateInput(todayOccurrence.value?.occurrenceDate) === normalizedJoinDate) {
-            await loadReportsForCurrentOccurrence()
+        if (selectedDateKey.value === normalizedJoinDate) {
+            try {
+                const displayDate = DateUtils.parseLocalDate(normalizedJoinDate)
+                if (displayDate) {
+                    await loadSessionOccurrences(displayDate)
+                    const refreshedOccurrence = findOccurrenceByDate(displayDate)
+                    if (refreshedOccurrence && todayOccurrence.value?.id !== refreshedOccurrence.id) {
+                        await setCurrentOccurrence(refreshedOccurrence)
+                    } else if (refreshedOccurrence) {
+                        const occurrenceDate = refreshedOccurrence.occurrenceDate
+                        await loadWorkspaceRoster(occurrenceDate, true)
+                        await loadReportsForCurrentOccurrence({ createMissing: false })
+                        await Promise.all([
+                            loadStudentProgressSummaries(enrollments.value, 'replace', occurrenceDate),
+                            loadStudentProgressGaps(enrollments.value, todayOccurrence.value),
+                        ])
+                    }
+                }
+            } catch (refreshError) {
+                // The makeup report is already committed; a roster refresh
+                // failure must not make retrying the add operation duplicate it.
+                console.error('Failed to refresh the class roster after adding a makeup report:', refreshError)
+            }
         }
 
         toast.success(t('classroom.add_student_success'))
         closeAddStudentModal()
     } catch (error: any) {
+        let errorMessage = t('classroom.add_student_retry_error')
         if (error?.message?.includes('Invalid date format')) {
-            toast.error(t('classroom.add_student_invalid_date'))
-            return
+            errorMessage = t('classroom.add_student_invalid_date')
+        } else if (error?.message?.includes('DUPLICATE_OCCURRENCE_REPORT')) {
+            errorMessage = t('classroom.add_student_duplicate_report')
+        } else if (error?.message?.includes('MAKEUP_DATE_NOT_CLASS_DAY')) {
+            errorMessage = t('classroom.add_student_not_class_day')
         }
-        if (error?.message?.includes('DUPLICATE_OCCURRENCE_REPORT')) {
-            toast.error(t('classroom.add_student_duplicate_report'))
-            return
-        }
-        if (error?.message?.includes('MAKEUP_DATE_NOT_CLASS_DAY')) {
-            toast.error(t('classroom.add_student_not_class_day'))
-            return
-        }
-        toast.error(error?.message || t('classroom.add_student_failed'))
+        makeupSubmitError.value = errorMessage
+        await nextTick()
+        makeupSubmitErrorElement.value?.focus()
     } finally {
         isAddingStudent.value = false
     }
 }
 
 function handleEditorUpdate(content: string, enrollmentId: string) {
-    const report = reportMap.value.get(enrollmentId)
+    const report = selectedEnrollmentId.value === enrollmentId ? selectedEditorReportSnapshot.value : null
     if (report) {
         report.content = content
     }
 }
 
 function handleReportExternalLinkUpdate(link: string, enrollmentId: string) {
-    const report = reportMap.value.get(enrollmentId)
+    const report = selectedEnrollmentId.value === enrollmentId ? selectedEditorReportSnapshot.value : null
     if (report) {
         report.externalLink = link
     }
 }
 
 function handleSaveSuccess(updatedReport: OccurrenceReportDTO, enrollmentId: string) {
-    const report = reportMap.value.get(enrollmentId)
-    if (report) {
-        report.applyDTO(updatedReport)
+    const report = reportMap.value.get(enrollmentId) as OccurrenceReport | null | undefined
+    const occurrenceId = todayOccurrence.value?.id
+    if (!occurrenceId || !enrollments.value.some(enrollment => enrollment.id === enrollmentId)) return
+    const incomingReport = new OccurrenceReport(updatedReport)
+    if (!shouldApplyCommittedReport(incomingReport, report, enrollmentId, occurrenceId)) return
+    const progressChanged = !report
+        || report.lessonId !== updatedReport.lesson_id
+        || report.isCompleted !== (updatedReport.is_completed ?? false)
+        || report.progressLetter !== updatedReport.progress_letter
+        || report.attendanceStatus !== updatedReport.attendance_status
+
+    // Cards intentionally show committed data only. Keep the editor's own
+    // draft snapshot independent so this replacement cannot reset its fields.
+    reportMap.value = new Map(reportMap.value).set(enrollmentId, incomingReport)
+    if (progressChanged) void refreshStudentProgressAfterSave(enrollmentId, todayOccurrence.value)
+}
+
+async function refreshStudentProgressAfterSave(enrollmentId: string, occurrence: ClassOccurrence | null) {
+    if (!occurrence?.id || !occurrence.occurrenceDate) return
+    const date = DateUtils.formatLocalDate(occurrence.occurrenceDate)
+    const generation = realtimeRefreshRequest
+    if (!enrollments.value.some(item => item.id === enrollmentId)) return
+    try {
+        await Promise.all([
+            loadStudentProgressSummaries(enrollments.value, 'replace', occurrence.occurrenceDate, { loadMissingLessons: false }),
+            loadStudentProgressGaps(enrollments.value, occurrence),
+        ])
+        if (progressGapCheckFailed.value) throw new Error('Failed to refresh course progress gaps')
+        if (generation !== realtimeRefreshRequest
+            || todayOccurrence.value?.id !== occurrence.id
+            || selectedDateKey.value !== date) return
+        lastRealtimeUpdateAt.value = new Date()
+        realtimeRefreshError.value = false
+    } catch (error) {
+        if (generation !== realtimeRefreshRequest
+            || todayOccurrence.value?.id !== occurrence.id
+            || selectedDateKey.value !== date) return
+        console.error('Failed to refresh saved student progress:', error)
+        realtimeRefreshError.value = true
     }
 }
 
 function handleReportRestored(restoredReport: OccurrenceReportDTO) {
     if (selectedEnrollmentId.value) {
-        reportMap.value.set(selectedEnrollmentId.value, new OccurrenceReport(restoredReport))
+        const restored = new OccurrenceReport(restoredReport)
+        reportMap.value = new Map(reportMap.value).set(selectedEnrollmentId.value, restored)
+        selectedEditorReportSnapshot.value = new OccurrenceReport(restoredReport)
     }
 }
 
@@ -1577,64 +2272,26 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
 function openTeacherEditModal() {
     if (!todayOccurrence.value) return
     teacherSearchQuery.value = ''
-    selectedTeacherIds.value = new Set(todayOccurrence.value.teacherIds || [])
+    const dateStr = DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate)
+    selectedTeacherIds.value = new Set(getEffectiveTeacherAssignments(sessionTeachers.value, dateStr)
+        .map(assignment => assignment.id)
+        .filter((id): id is string => Boolean(id)))
     showTeacherEditModal.value = true
 }
 
 
 
-async function saveOccurrenceTeachers(showToast = true) {
-    if (!todayOccurrence.value) return
-
-    try {
-        isSavingTeachers.value = true
-        const newTeacherIds = Array.from(selectedTeacherIds.value)
-
-        // Sync teacher attendance JSON
-        const existingAttendance = todayOccurrence.value.teacherAttendance || {}
-        const newAttendance: Record<string, boolean> = {}
-
-        newTeacherIds.forEach(id => {
-            newAttendance[id] = existingAttendance[id] !== undefined ? existingAttendance[id] : true
-        })
-
-        const updated = await OccurrenceService.updateOccurrence(todayOccurrence.value.id, {
-            teacher_ids: newTeacherIds,
-            teacher_attendance: newAttendance
-        })
-
-        todayOccurrence.value.teacherIds = updated.teacherIds
-        todayOccurrence.value.teacherAttendance = updated.teacherAttendance
-
-        // No need to reload all session teachers here, just update occurrenceTeachers
-        occurrenceTeachers.value = allTeachersList.value.filter(t => t.id && selectedTeacherIds.value.has(t.id))
-
-        showTeacherEditModal.value = false
-        if (showToast) toast.success(t('common.save_success'))
-    } catch (e: any) {
-        console.error('Failed to save teachers:', e)
-        if (showToast) toast.error(t('common.save_error'))
-    } finally {
-        isSavingTeachers.value = false
-    }
-}
-
-async function addTeacherForToday(teacher: TeacherDTO) {
+async function addTeacherForToday(teacher: TeacherOverviewDTO) {
     if (!todayOccurrence.value || !teacher.id) return
 
     try {
         isSavingTeachers.value = true
         const dateStr = DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate)
 
-        // 1. Add to Plan (class_session_teachers)
+        // Update the source-of-truth assignment only; attendance roster is derived from this plan.
         await TeacherService.assignTeacherForDate(sessionId, teacher.id, dateStr)
-
-        // 2. Add to Reality (teacher_ids)
-        selectedTeacherIds.value.add(teacher.id)
-        await saveOccurrenceTeachers(false)
-
-        // 3. Refresh Plan View
         sessionTeachers.value = await TeacherService.getSessionTeachers(sessionId)
+        await loadOccurrenceTeachers()
 
         toast.success(t('common.save_success'))
     } catch (e) {
@@ -1650,17 +2307,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
 
     try {
         isSavingTeachers.value = true
-        // 1. Remove from Plan
         await TeacherService.removeTeacherAssignment(sessionId, teacherId, effectiveFrom)
-
-        // 2. Remove from Reality for this occurrence if it matches
-        const dateStr = todayOccurrence.value ? DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate) : ''
-        if (effectiveFrom === dateStr) {
-            selectedTeacherIds.value.delete(teacherId)
-            await saveOccurrenceTeachers(false)
-        }
-
-        // 3. Refresh
         sessionTeachers.value = await TeacherService.getSessionTeachers(sessionId)
         await loadOccurrenceTeachers()
 
@@ -1696,6 +2343,18 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                             {{ session.name }}
                         </h1>
                         <div class="mt-3 flex min-w-0 flex-wrap gap-2 text-xs font-bold text-gray-500 sm:text-sm">
+                            <RealtimeStatusBadge
+                                align="start"
+                                :tone="realtimeBadge.tone"
+                                :label="realtimeBadge.label"
+                                :message="realtimeStatusMessage"
+                                :detail="realtimeStatusDetail ? `${$t('classroom.live_update_detail')} ${realtimeStatusDetail}` : null"
+                                :note="lastRealtimeUpdateAt ? $t('classroom.live_update_time', { time: lastRealtimeUpdateLabel }) : null"
+                                :can-retry="realtimeBadge.canRetry"
+                                :retry-label="realtimeRefreshError ? $t('classroom.live_update_retry') : $t('classroom.live_reconnect')"
+                                :busy="isRealtimeRefreshing"
+                                :status-label="$t('classroom.live_badge_aria')"
+                                @retry="retryRealtimeAction" />
                             <span class="inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-xl bg-white px-3 py-2 shadow-sm ring-1 ring-gray-100">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" fill="none"
                                     viewBox="0 0 24 24" stroke="currentColor">
@@ -1710,11 +2369,11 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
-                                {{ session.start_time.slice(0, 5) }}–{{ session.end_time.slice(0, 5) }}
+                                {{ sessionTimeLabel }}
                             </span>
                             <span class="inline-grid max-w-full min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-1.5 rounded-xl bg-white px-3 py-2 shadow-sm ring-1 ring-gray-100">
                                 <span class="whitespace-nowrap text-[10px] font-black uppercase tracking-wide text-gray-400">{{ $t('classroom.session_time_zone') }}</span>
-                                <span class="min-w-0 [overflow-wrap:anywhere]">{{ session.time_zone || 'Asia/Taipei' }}</span>
+                                <span class="min-w-0 [overflow-wrap:anywhere]">{{ DateUtils.formatTimeZoneLabel(session.time_zone || preferences.timeZone, preferences.locale) }}</span>
                             </span>
                             <a v-if="session.external_link" :href="session.external_link" target="_blank"
                                 rel="noopener noreferrer" :title="session.external_link"
@@ -1830,8 +2489,12 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                         <Transition name="fade-slide">
                             <div v-show="isCalendarExpanded" class="max-w-4xl mx-auto w-full">
                                 <OccurrenceCalendar :occurrences="sessionOccurrences" :compact="true"
-                                    :model-value="todayOccurrence?.occurrenceDate || null"
-                                    @select-occurrence="handleCalendarOccurrenceSelect" />
+                                    mark-class-days
+                                    :is-planned-date="isPlannedClassDate"
+                                    :report-completion="reportCompletionByDate"
+                                    :today="calendarToday"
+                                    :model-value="selectedDateKey || null"
+                                    @select-date="handleCalendarDateSelect" />
                             </div>
                         </Transition>
                     </div>
@@ -1869,7 +2532,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                             </button>
 
                             <label class="relative inline-flex items-center cursor-pointer"
-                                :title="isOccurrenceInHoliday ? ($t('report.error.cannot_set_conducted_during_holiday', 'Cannot modify during holiday') || 'Holiday Period') : ($t('classroom.class_held') || 'Class Held')"
+                                :title="isOccurrenceInHoliday ? $t('report.error.cannot_set_conducted_during_holiday') : $t('classroom.class_held')"
                                 :class="{ 'opacity-50 cursor-not-allowed': isOccurrenceInHoliday }">
                                 <input type="checkbox" :checked="todayOccurrence && todayOccurrence.isConducted"
                                     :disabled="isOccurrenceInHoliday" @change="toggleIsConducted($event)"
@@ -1884,12 +2547,18 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                     <!-- Teacher Attendance Section -->
                     <div class="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm space-y-4"
                         v-if="todayOccurrence">
-                        <div class="flex items-center justify-between">
-                            <div>
+                        <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                            <div class="min-w-0">
                                 <h3 class="font-black text-gray-900">{{ $t('classroom.teacher_attendance_title') }}</h3>
                                 <p class="text-xs font-bold text-gray-400">
                                     {{ $t('classroom.teacher_attendance_subtitle') }}
+                                    <span v-if="canManageTeacherAttendance"> · {{ $t('classroom.teacher_attendance_manager_edit') }}</span>
                                 </p>
+                                <div class="mt-3 flex flex-wrap gap-2 text-[11px] font-bold">
+                                    <span class="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">{{ $t('classroom.teacher_attendance_present_count', { count: teacherAttendanceCounts.present }) }}</span>
+                                    <span class="rounded-full bg-rose-50 px-3 py-1 text-rose-700">{{ $t('classroom.teacher_attendance_absent_count', { count: teacherAttendanceCounts.absent }) }}</span>
+                                    <span v-if="teacherAttendanceCounts.onLeave" class="rounded-full bg-amber-50 px-3 py-1 text-amber-700">{{ $t('classroom.teacher_attendance_leave_count', { count: teacherAttendanceCounts.onLeave }) }}</span>
+                                </div>
                             </div>
 
                             <button @click="openTeacherEditModal"
@@ -1903,31 +2572,32 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                             </button>
                         </div>
 
-                        <div v-if="occurrenceTeachers.length > 0" class="flex flex-wrap gap-4 mt-2">
+                        <div v-if="occurrenceTeachers.length > 0" class="mt-2 divide-y divide-gray-100 rounded-2xl border border-gray-100 bg-gray-50/70">
                             <div v-for="teacher in occurrenceTeachers" :key="teacher.id"
-                                class="flex items-center gap-3 bg-gray-50 px-4 py-3 rounded-2xl border border-gray-100 transition-colors"
-                                :class="{ 'border-emerald-200 bg-emerald-50/50': isTeacherPresent(teacher.id, teacher.user_id) }">
-
-                                <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold"
-                                    :class="isTeacherPresent(teacher.id, teacher.user_id) ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-500'">
+                                class="flex min-w-0 items-center gap-3 px-4 py-3 transition-colors"
+                                :class="isTeacherOnLeave(teacher.id) ? 'bg-amber-50/70' : (isTeacherPresent(teacher.id, teacher.user_id) ? 'bg-emerald-50/50' : '')">
+                                <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-bold"
+                                    :class="isTeacherOnLeave(teacher.id) ? 'bg-amber-100 text-amber-700' : (isTeacherPresent(teacher.id, teacher.user_id) ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-500')">
                                     {{ teacher.name.charAt(0) }}
                                 </div>
-                                <div class="flex-1 pr-2">
-                                    <div class="font-bold text-gray-900">{{ teacher.name }}</div>
-                                    <div class="text-[10px] uppercase font-black tracking-widest"
-                                        :class="isTeacherPresent(teacher.id, teacher.user_id) ? 'text-emerald-600' : 'text-gray-400'">
-                                        {{ isTeacherPresent(teacher.id, teacher.user_id) ? $t('attendance.present') : $t('attendance.absent') }}
+                                <div class="min-w-0 flex-1 pr-2">
+                                    <div class="truncate font-bold text-gray-900">{{ teacher.name }}</div>
+                                    <div v-if="teacher.role" class="mt-0.5 text-[10px] font-black tracking-wide text-gray-500">
+                                        {{ roleDisplayName(teacher.role, t) }}
                                     </div>
                                 </div>
-
-                                <label class="relative inline-flex items-center cursor-pointer ml-2"
-                                    :class="{ 'opacity-50 cursor-not-allowed': auth.user?.id !== teacher.user_id || isOccurrenceInHoliday }"
-                                    :title="isOccurrenceInHoliday ? $t('report.error.cannot_set_teacher_present_during_holiday') : (auth.user?.id !== teacher.user_id ? $t('classroom.teacher_attendance_only_self') : '')">
+                                <span class="shrink-0 rounded-full px-3 py-1 text-[10px] font-black"
+                                    :class="isTeacherOnLeave(teacher.id) ? 'bg-amber-100 text-amber-800' : (isTeacherPresent(teacher.id, teacher.user_id) ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-600')">
+                                    {{ isTeacherOnLeave(teacher.id) ? $t('classroom.teacher_on_leave') : (isTeacherPresent(teacher.id, teacher.user_id) ? $t('attendance.present') : $t('attendance.absent')) }}
+                                </span>
+                                <label class="relative inline-flex shrink-0 items-center cursor-pointer"
+                                    :class="{ 'opacity-50 cursor-not-allowed': !canEditTeacherAttendance(teacher) || isOccurrenceInHoliday || isTeacherOnLeave(teacher.id) }"
+                                    :title="isTeacherOnLeave(teacher.id) ? $t('classroom.teacher_attendance_on_leave') : (isOccurrenceInHoliday ? $t('report.error.cannot_set_teacher_present_during_holiday') : (!canEditTeacherAttendance(teacher) ? $t('classroom.teacher_attendance_only_self') : ''))">
                                     <input type="checkbox" :checked="isTeacherPresent(teacher.id, teacher.user_id)"
-                                        :disabled="auth.user?.id !== teacher.user_id || isOccurrenceInHoliday"
+                                        :disabled="!canEditTeacherAttendance(teacher) || isOccurrenceInHoliday || isTeacherOnLeave(teacher.id)"
                                         @change="toggleTeacherAttendance(teacher.id, $event)" class="sr-only peer">
                                     <div :class="isOccurrenceInHoliday ? 'bg-red-100' : 'bg-gray-200'"
-                                        class="w-11 h-6 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500">
+                                        class="relative h-6 w-11 rounded-full transition-colors after:absolute after:left-[2px] after:top-0.5 after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all peer-checked:bg-emerald-500 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none">
                                     </div>
                                 </label>
                             </div>
@@ -1959,6 +2629,16 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                         <span class="shrink-0 px-2 text-center text-xs font-black uppercase tracking-widest text-gray-400">{{ $t('classroom.student_filter_count', { count: filteredEnrollments.length }) }}</span>
                     </div>
 
+                    <div v-if="todayOccurrence && isLoadingProgressGaps" class="mb-3 flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600" role="status" aria-live="polite" aria-busy="true">
+                        <span class="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-emerald-600 motion-reduce:animate-none" aria-hidden="true"></span>
+                        {{ $t('classroom.progress_gap_checking') }}
+                    </div>
+                    <div v-if="todayOccurrence && progressGapCheckFailed" class="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-950" role="alert" aria-busy="false">
+                        <span>{{ $t('classroom.progress_gap_check_failed') }}</span>
+                        <button type="button" class="min-h-11 rounded-lg border border-amber-400 bg-white px-4 py-2 text-xs font-black text-amber-900 transition hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-700" @click="retryStudentProgressGaps">
+                            {{ $t('classroom.progress_gap_retry') }}
+                        </button>
+                    </div>
                     <QuickAttendancePanel v-if="todayOccurrence"
                         v-model:expanded="isQuickAttendanceExpanded"
                         :students="quickAttendanceStudents"
@@ -1999,14 +2679,14 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                     $t('classroom.capacity_utilization') }}</h4>
                                 <div class="flex items-end gap-3">
                                     <p class="text-4xl font-black text-gray-900 tracking-tighter">{{
-                                        Math.round((allRosterEnrollments.length / (session?.capacity || 1)) * 100) }}%</p>
+                                        Math.round((occupiedRosterCount / (session?.capacity || 1)) * 100) }}%</p>
                                     <p class="text-xs font-bold text-gray-400 pb-1">/ {{ session?.capacity }} {{
                                         $t('classroom.capacity') }}</p>
                                 </div>
                             </div>
                             <div class="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
                                 <div class="h-full bg-emerald-500 rounded-full transition-all duration-1000"
-                                    :style="{ width: `${(allRosterEnrollments.length / (session?.capacity || 1)) * 100}%` }">
+                                    :style="{ width: `${Math.min((occupiedRosterCount / (session?.capacity || 1)) * 100, 100)}%` }">
                                 </div>
                             </div>
                         </div>
@@ -2025,13 +2705,17 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                         @quick-edit="toggleSplitView"
                         @koding-check="openStudentKodingCheck"
                         @clear-filters="clearStudentFilters" />
+                    <TransferredOutStudents
+                        :transfers="transferredOutStudents"
+                        :cancelling-transfer-id="cancellingTransferId"
+                        @open="openTransferTarget"
+                        @cancel="pendingTransferCancel = $event" />
                 </div>
 
                 <!-- RIGHT COLUMN: Report Editor -->
                 <div v-if="showSplitView && selectedEnrollmentId"
                     class="animate-in slide-in-from-right-4 duration-500 min-w-0 w-full">
-                    <div class="sticky top-20 bg-white rounded-[2.5rem] border border-emerald-100 shadow-xl shadow-emerald-50/50 flex flex-col overflow-hidden"
-                        style="max-height: calc(100vh - 7rem);">
+                    <div class="session-report-editor sticky top-20 min-h-0 bg-white rounded-[2.5rem] border border-emerald-100 shadow-xl shadow-emerald-50/50 flex flex-col overflow-hidden">
                         <!-- Header: Fixed at top of sticky box -->
                         <div
                             class="flex items-center justify-between p-6 pb-4 shrink-0 bg-white z-20 border-b border-gray-50 shadow-sm shadow-gray-50/20">
@@ -2039,12 +2723,11 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                 <!-- Avatar and Name -->
                                 <div
                                     class="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-black text-xl shrink-0 shadow-lg shadow-emerald-100">
-                                    {{allRosterEnrollments.find(e => e.id ===
-                                        selectedEnrollmentId)?.studentName?.charAt(0)}}
+                                    {{selectedEditorEnrollment?.studentName?.charAt(0)}}
                                 </div>
                                 <div class="min-w-0">
                                     <div class="font-black text-gray-900 text-xl leading-tight truncate">
-                                        {{allRosterEnrollments.find(e => e.id === selectedEnrollmentId)?.studentName}}
+                                        {{selectedEditorEnrollment?.studentName}}
                                     </div>
                                     <div class="flex items-center gap-1.5 mt-1">
                                         <div class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
@@ -2071,35 +2754,36 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                         </div>
 
                         <!-- Scrollable Body -->
-                        <div class="flex-1 overflow-y-auto p-6 pt-4 custom-scrollbar bg-gray-50/30">
-                            <ReportEditor ref="quickReportEditorRef" v-if="reportMap.get(selectedEnrollmentId)"
-                                :key="selectedEnrollmentId" :report-id="reportMap.get(selectedEnrollmentId)?.id"
-                                :initial-version="reportMap.get(selectedEnrollmentId)?.version"
+                        <div class="min-h-0 flex-1 overflow-y-auto p-6 pt-4 custom-scrollbar bg-gray-50/30">
+                            <ReportEditor ref="quickReportEditorRef" v-if="selectedEditorReport"
+                                :key="selectedEnrollmentId" :report-id="selectedEditorReport?.id"
+                                :initial-version="selectedEditorReport?.version"
                                 :loading="savingMap.get(selectedEnrollmentId!)" :show-manual-save="true"
+                                :enrollment-id="selectedEditorEnrollment?.id" :class-occurrence-id="todayOccurrence?.id"
                                 :title="todayOccurrence ? `${new Date(todayOccurrence.occurrenceDate).toLocaleDateString(preferences.locale)} ${todayOccurrence.effectiveStartTime?.slice(0, 5) || ''}` : undefined"
-                                :course-name="allRosterEnrollments.find(e => e.id === selectedEnrollmentId)?.courseSubject + ' ' + allRosterEnrollments.find(e => e.id === selectedEnrollmentId)?.courseStage"
-                                :course-display-name="allRosterEnrollments.find(e => e.id === selectedEnrollmentId)?.courseDisplayName"
+                                :course-name="selectedEditorEnrollment?.courseSubject + ' ' + selectedEditorEnrollment?.courseStage"
+                                :course-display-name="selectedEditorEnrollment?.courseDisplayName"
                                 :initial-classroom-name="session?.classroom_name" :initial-session-name="session?.name"
                                 :initial-session-time="session ? `${session.start_time?.slice(0, 5) || ''}-${session.end_time?.slice(0, 5) || ''}` : ''"
-                                :initial-student-name="allRosterEnrollments.find(e => e.id === selectedEnrollmentId)?.studentName"
-                                :initial-student-id="allRosterEnrollments.find(e => e.id === selectedEnrollmentId)?.studentId"
-                                :initial-lesson-id="reportMap.get(selectedEnrollmentId)?.lessonId"
+                                :initial-student-name="selectedEditorEnrollment?.studentName"
+                                :initial-student-id="selectedEditorEnrollment?.studentId"
+                                :initial-lesson-id="selectedEditorReport?.lessonId"
                                 :available-lessons="courseLessons"
-                                :initial-report-external-link="reportMap.get(selectedEnrollmentId)?.externalLink"
-                                :initial-is-completed="reportMap.get(selectedEnrollmentId)?.isCompleted"
-                                :initial-progress-start="reportMap.get(selectedEnrollmentId)?.progressStart"
-                                :initial-progress-end="reportMap.get(selectedEnrollmentId)?.progressEnd"
-                                :initial-attendance-status="reportMap.get(selectedEnrollmentId)?.attendanceStatus"
-                                :initial-absence-reason="reportMap.get(selectedEnrollmentId)?.absenceReason"
-                                :initial-class-participation="parseFloat(reportMap.get(selectedEnrollmentId)?.classParticipation || '0')"
-                                :initial-classroom-behavior="parseFloat(reportMap.get(selectedEnrollmentId)?.classroomBehavior || '0')"
-                                :initial-contact-notes="reportMap.get(selectedEnrollmentId)?.contactNotes"
-                                :initial-contact-notes-document="reportMap.get(selectedEnrollmentId)?.contactNotesDocument"
-                                :initial-class-notes="reportMap.get(selectedEnrollmentId)?.classNotes"
-                                :initial-class-notes-document="reportMap.get(selectedEnrollmentId)?.classNotesDocument"
-                                :initial-content="reportMap.get(selectedEnrollmentId)?.content"
-                                :initial-content-document="reportMap.get(selectedEnrollmentId)?.contentDocument"
-                                :initial-enrollment-external-link="allRosterEnrollments.find(e => e.id === selectedEnrollmentId)?.externalLink"
+                                :initial-report-external-link="selectedEditorReport?.externalLink"
+                                :initial-is-completed="selectedEditorReport?.isCompleted"
+                                :initial-progress-start="selectedEditorReport?.progressStart"
+                                :initial-progress-end="selectedEditorReport?.progressEnd"
+                                :initial-attendance-status="selectedEditorReport?.attendanceStatus"
+                                :initial-absence-reason="selectedEditorReport?.absenceReason"
+                                :initial-class-participation="parseFloat(String(selectedEditorReport?.classParticipation ?? 0))"
+                                :initial-classroom-behavior="parseFloat(String(selectedEditorReport?.classroomBehavior ?? 0))"
+                                :initial-contact-notes="selectedEditorReport?.contactNotes"
+                                :initial-contact-notes-document="selectedEditorReport?.contactNotesDocument"
+                                :initial-class-notes="selectedEditorReport?.classNotes"
+                                :initial-class-notes-document="selectedEditorReport?.classNotesDocument"
+                                :initial-content="selectedEditorReport?.content"
+                                :initial-content-document="selectedEditorReport?.contentDocument"
+                                :initial-enrollment-external-link="selectedEditorEnrollment?.externalLink"
                                 @update:content="handleEditorUpdate($event, selectedEnrollmentId!)"
                                 @update:report-external-link="handleReportExternalLinkUpdate($event, selectedEnrollmentId!)"
                                 @save-success="handleSaveSuccess($event, selectedEnrollmentId!)"
@@ -2122,6 +2806,18 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
             :local-report="conflictLocalReport!" :available-lessons="courseLessons" @close="closeConflictModal"
             @resolve="resolveConflict" />
 
+        <ConfirmModal :is-open="pendingTransferCancel !== null"
+            :title="$t('student.transfer_history.cancel_confirm_title')"
+            :message="pendingTransferCancel ? $t('classroom.lesson_transfer.cancel_confirm_message', {
+                student: pendingTransferCancel.student_name,
+                target: [DateUtils.displayDateWithWeekday(pendingTransferCancel.other_occurrence_date, preferences.locale), pendingTransferCancel.other_session_name].filter(Boolean).join(' ')
+            }) : ''"
+            :confirm-text="$t('student.transfer_history.cancel_transfer')"
+            :cancel-text="$t('student.transfer_history.keep_transfer')"
+            :is-dangerous="true"
+            :is-loading="cancellingTransferId !== null"
+            @confirm="confirmTransferCancel"
+            @close="pendingTransferCancel = null" />
         <ConfirmModal v-if="showRefreshConfirm" :is-open="showRefreshConfirm" :title="$t('classroom.refresh_schedule')"
             :message="$t('classroom.refresh_confirm')" :confirm-text="$t('common.refresh')" confirm-type="warning"
             :is-loading="isRefreshing" @confirm="handleConfirmRefresh" @close="showRefreshConfirm = false" />
@@ -2131,10 +2827,11 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
 
         <div v-if="showAddStudentModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
             <div
+                role="dialog" aria-modal="true" aria-labelledby="makeup-add-student-title"
                 class="bg-white rounded-2xl flex flex-col w-full max-w-2xl max-h-[85vh] shadow-2xl m-4 overflow-hidden">
                 <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-                    <h3 class="text-xl font-bold text-gray-900">{{ $t('classroom.add_student_modal_title') }}</h3>
-                    <button @click="closeAddStudentModal" class="text-gray-400 hover:text-gray-600 transition-colors">
+                    <h3 id="makeup-add-student-title" class="text-xl font-bold text-gray-900">{{ $t('classroom.add_student_modal_title') }}</h3>
+                    <button @click="closeAddStudentModal" :aria-label="$t('common.close')" class="text-gray-400 hover:text-gray-600 transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -2145,6 +2842,11 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
 
                 <div class="flex-1 overflow-y-auto p-6 space-y-5">
                     <p class="text-sm text-gray-500">{{ $t('classroom.add_student_modal_hint') }}</p>
+
+                    <div v-if="makeupSubmitError" ref="makeupSubmitErrorElement" role="alert" tabindex="-1"
+                        class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium leading-6 text-rose-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">
+                        {{ makeupSubmitError }}
+                    </div>
 
                     <div>
                         <label class="block text-sm font-bold text-gray-700 mb-2">{{ $t('classroom.add_student_search')
@@ -2341,7 +3043,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                     </div>
                                     <div>
                                         <div class="text-sm font-black text-gray-900">{{ st.name }}</div>
-                                        <div v-if="st.role?.name" class="mt-0.5 text-[10px] font-black uppercase tracking-widest text-emerald-600">{{ st.role.name }}</div>
+                                        <div v-if="st.role?.name" class="mt-0.5 text-[10px] font-black tracking-wide text-emerald-600">{{ roleDisplayName(st.role, t) }}</div>
                                         <div class="text-[10px] font-bold text-gray-400">
                                             {{ st.effective_to ? `${st.effective_from} ~ ${st.effective_to}` :
                                                 `${st.effective_from} ~ ${$t('classroom.default_teacher')}` }}
@@ -2454,14 +3156,19 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
     display: none;
 }
 
-@container session-workspace (min-width: 960px) {
+@container session-workspace (min-width: 1100px) {
     .session-workspace__grid--editing {
-        grid-template-columns: minmax(520px, 1fr) minmax(392px, 560px);
+        grid-template-columns: minmax(520px, 1fr) minmax(480px, 560px);
     }
 
     .session-workspace__class-column--editing {
         display: block;
     }
+}
+
+.session-report-editor {
+    max-height: calc(100vh - 6rem);
+    max-height: calc(100dvh - 6rem);
 }
 
 .custom-scrollbar::-webkit-scrollbar {

@@ -1,7 +1,7 @@
 {
     "name": "edulog",
     "private": true,
-    "version": "1.8.1",
+    "version": "2.0.0-alpha.2",
     "type": "module",
     "scripts": {
         "dev": "vite",
@@ -11,14 +11,13 @@
         "start": "vite preview --host"
     },
     "dependencies": {
-        "@supabase/supabase-js": "^2.105.3",
-        "@tiptap/extension-collaboration": "^3.23.6",
-        "@tiptap/extension-collaboration-caret": "^3.23.6",
-        "@tiptap/extension-highlight": "^3.23.6",
-        "@tiptap/extension-list": "^3.23.6",
-        "@tiptap/extensions": "^3.23.6",
-        "@tiptap/starter-kit": "^3.23.6",
-        "@tiptap/vue-3": "^3.23.6",
+        "@tiptap/extension-collaboration": "^3.31.3",
+        "@tiptap/extension-collaboration-caret": "^3.31.3",
+        "@tiptap/extension-highlight": "^3.31.3",
+        "@tiptap/extension-list": "^3.31.3",
+        "@tiptap/extensions": "^3.31.3",
+        "@tiptap/starter-kit": "^3.31.3",
+        "@tiptap/vue-3": "^3.31.3",
         "@tiptap/y-tiptap": "^3.0.3",
         "autoprefixer": "^10.5.0",
         "pinia": "^3.0.4",
@@ -28,9 +27,7 @@
         "vue-i18n": "^11.4.2",
         "vue-router": "^5.0.6",
         "vue-toastification": "^2.0.0-rc.5",
-        "y-protocols": "^1.0.7",
-        "y-supabase": "^0.0.4-7-alpha",
-        "y-websocket": "^3.0.0"
+        "y-protocols": "^1.0.7"
     },
     "optionalDependencies": {
         "yjs": "^13.6.30"

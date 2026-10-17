@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { apiResourceClient } from '@/services/api/ApiResourceClient'
 import type { EditorUserSettings } from '@/components/common/text-editor/settings'
 
 export interface UserPreferenceDTO {
@@ -12,36 +12,12 @@ export interface UserPreferenceDTO {
 
 export class UserPreferenceService {
     static async getCurrentUserPreferences(): Promise<UserPreferenceDTO | null> {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return null
-
-        const { data, error } = await supabase
-            .from('user_preferences')
-            .select('*')
-            .eq('user_id', user.id)
-            .maybeSingle()
-
-        if (error) throw new Error(error.message)
-        return data as UserPreferenceDTO | null
+        try { return (await apiResourceClient.get<UserPreferenceDTO>('user-preferences', 'me')).data } catch (error) { if ((error as any)?.status === 404) return null; throw error }
     }
-
     static async updateCurrentUserTimeZone(timeZone: string): Promise<void> {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return
-
-        const { error } = await supabase
-            .from('user_preferences')
-            .upsert({ user_id: user.id, time_zone: timeZone }, { onConflict: 'user_id' })
-
-        if (error) throw new Error(error.message)
+        await apiResourceClient.update('user-preferences', 'me', { time_zone: timeZone })
     }
-
     static async updateCurrentUserEditorSettings(editorSettings: EditorUserSettings): Promise<void> {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return
-        const { error } = await supabase
-            .from('user_preferences')
-            .upsert({ user_id: user.id, editor_settings: editorSettings }, { onConflict: 'user_id' })
-        if (error) throw new Error(error.message)
+        await apiResourceClient.update('user-preferences', 'me', { editor_settings: editorSettings })
     }
 }

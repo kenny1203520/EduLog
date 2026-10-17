@@ -1,12 +1,13 @@
 export interface ClassroomDTO {
     id?: string
     name: string
+    teaching_id?: string
     address?: string
     phone?: string
     color?: string
     created_at?: string
     updated_at?: string
-    external_link?: string
+    external_link?: string | null
 }
 
 export type {
@@ -29,6 +30,7 @@ export interface ClassroomScheduleDTO {
 export class Classroom {
     id?: string
     name: string
+    teaching_id?: string
     address: string
     phone: string
     color: string
@@ -40,6 +42,7 @@ export class Classroom {
     constructor(data: ClassroomDTO) {
         this.id = data.id
         this.name = data.name
+        this.teaching_id = data.teaching_id
         this.address = data.address || ''
         this.phone = data.phone || ''
         this.color = data.color || '#10b981'

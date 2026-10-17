@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import { Enrollment } from '@/models/Enrollment'
 import { DateUtils } from '@/utils/DateUtils'
 import { OccurrenceService } from '../occurrence/OccurrenceService'
@@ -11,10 +11,33 @@ import {
     type SingleLessonTransferResult
 } from './SingleLessonTransferConflictService'
 import type { TransferReportFieldSelections } from '@/services/report/ReportFieldConflictService'
+import { apiV1Client } from '@/services/api/ApiV1Client'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
+import { hasDomainErrorCode } from '@/services/errors/mapDomainError'
+
+export interface SingleLessonTransferCancelResult {
+    transferId: string
+    restoredReportId: string | null
+    /** True when a conflict-tool merge was undone and the target report stayed on the target lesson. */
+    targetReportRetained: boolean
+}
+
+/** A report with content that stayed in the old class after a class transfer. */
+export interface RetainedClassReport {
+    reportId: string
+    occurrenceId: string
+    occurrenceDate: string
+}
+
+export interface ClassTransferResult {
+    enrollment: Enrollment
+    retainedReports: RetainedClassReport[]
+}
 
 export class EnrollmentTransferService {
-    private static getOccurrenceInfo<T extends { class_occurrence: any }>(row: T): any {
-        return Array.isArray(row.class_occurrence) ? row.class_occurrence[0] : row.class_occurrence
+    private static getOccurrenceInfo(row: { class_occurrence?: any; class_occurrences?: any }): any {
+        const occurrence = row.class_occurrence ?? row.class_occurrences
+        return Array.isArray(occurrence) ? occurrence[0] : occurrence
     }
 
     private static isBlankText(value: unknown): boolean {
@@ -36,7 +59,7 @@ export class EnrollmentTransferService {
     }
 
     private static async deleteReportVersions(reportId: string): Promise<void> {
-        const { error } = await supabase
+        const { error } = await apiDataClient
             .from('report_versions')
             .delete()
             .eq('occurrence_report_id', reportId)
@@ -49,7 +72,7 @@ export class EnrollmentTransferService {
     private static async deleteReport(reportId: string): Promise<void> {
         await this.deleteReportVersions(reportId)
 
-        const { error } = await supabase
+        const { error } = await apiDataClient
             .from('occurrence_reports')
             .delete()
             .eq('id', reportId)
@@ -71,7 +94,23 @@ export class EnrollmentTransferService {
         newSessionId: string,
         originalLastDate: string,
         transferDate: string
-    ): Promise<Enrollment> {
+    ): Promise<ClassTransferResult> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.post<any>(`/enrollments/${encodeURIComponent(enrollmentId)}/transfers/class`, {
+                target_class_session_id: newSessionId,
+                original_last_date: originalLastDate,
+                transfer_date: transferDate,
+            })
+            const retained = Array.isArray(response.meta?.retained_reports) ? response.meta.retained_reports as any[] : []
+            return {
+                enrollment: new Enrollment(response.data),
+                retainedReports: retained.map(row => ({
+                    reportId: String(row.report_id),
+                    occurrenceId: String(row.occurrence_id),
+                    occurrenceDate: String(row.occurrence_date)
+                }))
+            }
+        }
         void originalLastDate
 
         const enrollment = await EnrollmentTransferQueryService.getEnrollmentSessionInfo(enrollmentId)
@@ -92,7 +131,7 @@ export class EnrollmentTransferService {
             oldSessionId,
             transferDate
         )
-        const reportsToMigrate = futureReports.filter(report => this.isBlankPlaceholderReport(report))
+        const reportsToMigrate = futureReports.filter((report: any) => this.isBlankPlaceholderReport(report))
         const lessonCount = await EnrollmentTransferQueryService.getLessonCount(enrollment.course_id, 12)
         const occurrenceCount = Math.max(lessonCount, reportsToMigrate.length)
         const start = DateUtils.parseLocalDate(transferDate) || new Date(transferDate)
@@ -127,7 +166,7 @@ export class EnrollmentTransferService {
                 continue
             }
 
-            const { error: updateReportError } = await supabase
+            const { error: updateReportError } = await apiDataClient
                 .from('occurrence_reports')
                 .update({
                     class_occurrence_id: newOcc.id,
@@ -140,7 +179,7 @@ export class EnrollmentTransferService {
             }
         }
 
-        const { data: updated, error: updateError } = await supabase
+        const { data: updated, error: updateError } = await apiDataClient
             .from('enrollments')
             .update({
                 class_session_id: newSessionId,
@@ -159,7 +198,7 @@ export class EnrollmentTransferService {
 
         await EnrollmentTransferToolService.syncSessionPair(oldSessionId, newSessionId)
 
-        return new Enrollment(updated)
+        return { enrollment: new Enrollment(updated), retainedReports: [] }
     }
 
     private static async commitSingleLessonTransfer(
@@ -168,7 +207,11 @@ export class EnrollmentTransferService {
         targetOccurrenceId: string,
         reportId: string | null
     ): Promise<string> {
-        const { data, error } = await supabase.rpc('transfer_single_lesson', {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.post<{ status: string; transfer_id: string }>('/enrollment-transfers/single-lesson', { enrollment_id: enrollmentId, source_occurrence_id: sourceOccurrenceId, target_occurrence_id: targetOccurrenceId, report_id: reportId })
+            return response.data.transfer_id
+        }
+        const { data, error } = await apiDataClient.rpc('transfer_single_lesson', {
             p_enrollment_id: enrollmentId,
             p_source_occurrence_id: sourceOccurrenceId,
             p_target_occurrence_id: targetOccurrenceId,
@@ -283,7 +326,7 @@ export class EnrollmentTransferService {
                 existingOriginalReport?.id || null
             )
         } catch (error: any) {
-            if (error?.message?.includes('TARGET_REPORT_ALREADY_EXISTS')) {
+            if (hasDomainErrorCode(error, 'TARGET_REPORT_ALREADY_EXISTS')) {
                 return SingleLessonTransferConflictService.createConflict(
                     enrollmentId,
                     originalOccId,
@@ -350,7 +393,7 @@ export class EnrollmentTransferService {
                 report.id
             )
         } catch (error: any) {
-            if (error?.message?.includes('TARGET_REPORT_ALREADY_EXISTS')) {
+            if (hasDomainErrorCode(error, 'TARGET_REPORT_ALREADY_EXISTS')) {
                 if (!originalSessionId) throw new Error('ORIGINAL_OCCURRENCE_NOT_IN_ENROLLMENT_SESSION')
                 return SingleLessonTransferConflictService.createConflict(
                     report.enrollment_id,
@@ -375,12 +418,19 @@ export class EnrollmentTransferService {
         return SingleLessonTransferConflictService.resolve(conflict, fieldSources)
     }
 
-    /** Cancels one active single-lesson transfer and moves its report back atomically. */
-    static async cancelSingleLessonTransfer(transferId: string): Promise<void> {
-        const { error } = await supabase.rpc('cancel_single_lesson_transfer', {
-            p_transfer_id: transferId
-        })
-
-        if (error) throw new Error(error.message)
+    /**
+     * Cancels an active single-lesson transfer (and any onward transfers of the
+     * same lesson) and moves the report back to the original occurrence.
+     */
+    static async cancelSingleLessonTransfer(transferId: string): Promise<SingleLessonTransferCancelResult> {
+        const response = await apiV1Client.post<{ restored_report_id?: string | null; target_report_retained?: boolean }>(
+            '/enrollment-transfers/cancel',
+            { transfer_id: transferId }
+        )
+        return {
+            transferId,
+            restoredReportId: response.data?.restored_report_id ?? null,
+            targetReportRetained: response.data?.target_report_retained === true
+        }
     }
 }

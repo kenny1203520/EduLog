@@ -32,8 +32,9 @@ describe('SessionDetails responsive and loading contract', () => {
 
     it('uses the available class-page width to switch to a usable split view', () => {
         expect(source).toContain('container-name: session-workspace')
-        expect(source).toContain('@container session-workspace (min-width: 960px)')
-        expect(source).toContain('grid-template-columns: minmax(520px, 1fr) minmax(392px, 560px)')
+        expect(source).toContain('@container session-workspace (min-width: 1100px)')
+        expect(source).toContain('grid-template-columns: minmax(520px, 1fr) minmax(480px, 560px)')
+        expect(source).toContain('max-height: calc(100dvh - 6rem)')
         expect(source).toContain("'session-workspace__grid--editing': showSplitView")
         expect(source).toContain("'session-workspace__class-column--editing': showSplitView")
         expect(source).not.toContain('xl:grid-cols-[minmax(560px,1fr)_minmax(420px,560px)]')
@@ -49,5 +50,18 @@ describe('SessionDetails responsive and loading contract', () => {
         expect(source).toContain('await closeSplitView()')
         expect(source).not.toContain('classViewScrollY')
         expect(source).not.toContain('window.scrollTo(')
+    })
+
+    it('uses occupied attendance for capacity while keeping roster totals separate', () => {
+        expect(source).toContain('const occupiedRosterCount = computed(() => attendanceCounts.value.present + attendanceCounts.value.pending)')
+        expect(source).toContain('(occupiedRosterCount / (session?.capacity || 1))')
+        expect(source).toContain('{{ allRosterEnrollments.length }}')
+    })
+
+    it('applies attendance save results only to their active occurrence and report version', () => {
+        expect(source).toContain('const request = ++reportLoadRequest')
+        expect(source).toContain('request !== reportLoadRequest || todayOccurrence.value?.id !== occurrenceId')
+        expect(source).toContain('if (!result.success || !result.updatedReport)')
+        expect(source).toContain('shouldApplyCommittedReport(updatedReport, current, enrId, occurrenceId)')
     })
 })

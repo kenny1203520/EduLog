@@ -1,0 +1,7 @@
+<div id="lesson-report-modal" class="modal show"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h4 class="modal-title">測試學生課堂記錄</h4><button type="button" aria-label="Close">×</button></div><div class="modal-body"><form>
+<div class="row"><div class="col-md-6">完成狀況</div><div class="col-md-6">章節進度</div></div>
+<div class="row"><div class="col-md-6"><label>出席狀況</label><select id="lesson_report_attendance_status"><option>出席</option></select></div></div>
+<div class="row"><div class="col-md-6"><select id="dt_admission_lesson_report_completion_status"><option>完整完成</option></select></div><div class="col-md-6"><div class="input-group"><select id="dt_admission_lesson_report_start_from"><option>A</option></select><span>至</span><select id="dt_admission_lesson_report_end_to"><option>B</option></select></div></div></div>
+<div class="row"><div class="col-md-6"><div class="d-inline-block"><div class="rating"><input type="radio" name="admission_lesson_report[participation_rating]" value="10"><label>★</label><input type="radio" name="admission_lesson_report[participation_rating]" value="9"><label>★</label></div></div></div></div>
+<div><textarea id="lesson_report_feedback">樣本草稿</textarea></div><div><textarea id="lesson_report_comment">內部樣本</textarea></div><div><input type="checkbox" id="nothing"><label for="nothing">確認資訊</label><input type="submit" value="送出"></div>
+</form></div></div></div></div><style>#lesson-report-modal.modal.show{display:block}</style>

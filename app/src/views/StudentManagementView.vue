@@ -205,7 +205,7 @@ async function copyToClipboard(text: string) {
                                     d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
                                     clip-rule="evenodd" />
                             </svg>
-                            <span>{{ student.credentials?.length || 0 }}</span>
+                            <span>{{ student.credentialCount }}</span>
                         </div>
                         <div class="flex items-center gap-1.5" :title="$t('student.contacts.title')">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
@@ -213,7 +213,7 @@ async function copyToClipboard(text: string) {
                                 <path
                                     d="M7 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM14.5 9a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM1.615 16.428a1.224 1.224 0 0 1-.569-1.175 6.002 6.002 0 0 1 11.532-2.411 1.618 1.618 0 0 0-1.448.387c.187.018.377.049.567.099v.003c.005.001.009.001.013.002a4.96 4.96 0 0 0 6 3.582 1.224 1.224 0 0 1 1.234 1.516l-.439 2.378a1.225 1.225 0 0 1-1.224.992H2.822a1.225 1.225 0 0 1-1.207-.992l-.439-2.378Z" />
                             </svg>
-                            <span>{{ student.contacts?.length || 0 }}</span>
+                            <span>{{ student.contactCount }}</span>
                         </div>
                     </div>
 

@@ -1,0 +1,9 @@
+/* Bootstrap/Turbo dialog contract for offline samples. Not a copy of the live site's full stylesheet. */
+.modal{position:fixed;inset:0;z-index:1055;display:none;width:100%;height:100%;overflow-x:hidden;overflow-y:auto;outline:0}
+.modal-dialog{position:relative;width:auto;margin:28px auto;pointer-events:none;max-width:500px}
+.modal-content{position:relative;display:flex;flex-direction:column;width:100%;pointer-events:auto;background:#fff;border:1px solid #cbd5e1;border-radius:8px;outline:0}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:16px;border-bottom:1px solid #e2e8f0}
+.modal-title{margin:0}.modal-body{position:relative;flex:1 1 auto;padding:16px}
+.modal-backdrop{position:fixed;inset:0;z-index:1050;width:100vw;height:100vh;background:#000;opacity:.5}
+.btn-close{box-sizing:content-box;width:16px;height:16px;padding:4px;border:0;background:transparent;opacity:.75}
+.btn-close::before{content:'×';font-size:24px}.hidden{display:none}

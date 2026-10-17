@@ -1,14 +1,20 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import { Suspension, type SuspensionDTO } from '@/models/Suspension'
 import { SuspensionPolicyService } from './SuspensionPolicyService'
 import { DateUtils } from '@/utils/DateUtils'
+import { apiV1Client } from '@/services/api/ApiV1Client'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 export class SuspensionCommandService {
     static async createSuspension(enrollmentId: string, startDate: string, endDate: string | null, reason?: string, timeZone?: string): Promise<Suspension> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.post<any>('/student-suspensions', { enrollment_id: enrollmentId, start_date: startDate, end_date: endDate, time_zone: DateUtils.isValidTimeZone(timeZone) ? timeZone : DateUtils.getDefaultTimeZone(), reason: reason ?? null })
+            return new Suspension(response.data)
+        }
         await SuspensionPolicyService.validateNoOverlap(enrollmentId, startDate, endDate)
 
         const normalizedTimeZone = DateUtils.isValidTimeZone(timeZone) ? timeZone : DateUtils.getDefaultTimeZone()
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('student_suspensions')
             .insert({
                 enrollment_id: enrollmentId,
@@ -28,7 +34,11 @@ export class SuspensionCommandService {
     }
 
     static async updateSuspension(id: string, updates: Partial<SuspensionDTO>): Promise<Suspension> {
-        const { data: oldData, error: fetchError } = await supabase
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.patch<any>('/student-suspensions/' + id, updates)
+            return new Suspension(response.data)
+        }
+        const { data: oldData, error: fetchError } = await apiDataClient
             .from('student_suspensions')
             .select('*')
             .eq('id', id)
@@ -44,7 +54,7 @@ export class SuspensionCommandService {
                 : {})
         }
 
-        const { data: newData, error: updateError } = await supabase
+        const { data: newData, error: updateError } = await apiDataClient
             .from('student_suspensions')
             .update(updatePayload)
             .eq('id', id)
@@ -91,7 +101,11 @@ export class SuspensionCommandService {
     }
 
     static async deleteSuspension(id: string): Promise<void> {
-        const { data: suspension, error: fetchError } = await supabase
+        if (getApiV1Mode() === 'v1') {
+            await apiV1Client.delete('/student-suspensions/' + id)
+            return
+        }
+        const { data: suspension, error: fetchError } = await apiDataClient
             .from('student_suspensions')
             .select('*')
             .eq('id', id)
@@ -99,7 +113,7 @@ export class SuspensionCommandService {
 
         if (fetchError) throw new Error(fetchError.message)
 
-        const { error } = await supabase
+        const { error } = await apiDataClient
             .from('student_suspensions')
             .delete()
             .eq('id', id)

@@ -15,7 +15,10 @@ export function getRosterEnrollments<T extends RosterEnrollmentLike>(
     query: string,
     attendanceFilter: RosterAttendanceFilter
 ): { all: T[]; filtered: T[] } {
-    const all = enrollments.filter(enrollment => Boolean(enrollment.id && reports.get(enrollment.id)))
+    // Roster membership is independent from report provisioning. A student
+    // without a report must remain visible and counts as pending occupancy;
+    // report actions can still be disabled by the caller when unavailable.
+    const all = enrollments.filter(enrollment => Boolean(enrollment.id))
     const normalizedQuery = query.trim().toLocaleLowerCase()
     const filtered = all.filter(enrollment => {
         if (normalizedQuery && !enrollment.studentName?.toLocaleLowerCase().includes(normalizedQuery)) return false

@@ -3,27 +3,39 @@ name: Docker Publish
 on:
   push:
     tags: [ 'v*.*.*' ]
-  release:
-    types: [ published ]
   workflow_dispatch:
     inputs:
       tag:
         description: Release tag to build and publish
         required: true
-        default: v1.7.1
+        default: v2.0.0-alpha.2
+
+concurrency:
+  group: docker-publish-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  API_IMAGE_NAME: ghcr.io/kenny1203520/edulog-api
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  database:
+    uses: ./.github/workflows/database-integration.yml
+    with:
+      ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+  security:
+    uses: ./.github/workflows/api-contract-security.yml
+    with:
+      ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
   quality:
     runs-on: ubuntu-latest
-    env:
-      VITE_SUPABASE_URL: https://supabase.invalid
-      VITE_SUPABASE_ANON_KEY: ci-anon-key
-      VITE_SUPABASE_FUNCTIONS_BASE_URL: https://functions.invalid
     defaults:
       run:
         working-directory: ./app
@@ -32,12 +44,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.release.tag_name || github.ref_name }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 26
           cache: npm
           cache-dependency-path: app/package-lock.json
 
@@ -50,8 +62,16 @@ jobs:
       - name: Type-check and build production application
         run: npm run build
 
+      - name: Validate API service build and tests
+        working-directory: ./server
+        run: |
+          npm ci
+          npm run typecheck
+          npm test -- --run
+          npm run build
+
   build:
-    needs: quality
+    needs: [quality, database, security]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -62,7 +82,28 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.release.tag_name || github.ref_name }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
+      - name: Resolve release version and channel
+        id: version
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
+            echo "Invalid release tag: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          {
+            echo "major=${BASH_REMATCH[1]}"
+            echo "minor=${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
+            echo "version=${RELEASE_TAG#v}"
+            if [[ "$RELEASE_TAG" == *-* ]]; then
+              echo "stable=false"
+            else
+              echo "stable=true"
+            fi
+          } >> "$GITHUB_OUTPUT"
 
       - name: Setup Docker buildx
         uses: docker/setup-buildx-action@v3.0.0
@@ -74,19 +115,70 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract Docker metadata
-        id: meta
+      - name: Extract frontend Docker metadata
+        id: meta-frontend
         uses: docker/metadata-action@v5.0.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          flavor: latest=false
+          tags: |
+            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=latest,enable=${{ steps.version.outputs.stable }}
+            type=raw,value=${{ steps.version.outputs.major }},enable=${{ steps.version.outputs.stable }}
+            type=raw,value=${{ steps.version.outputs.minor }},enable=${{ steps.version.outputs.stable }}
 
-      - name: Build and push Docker image
-        id: build-and-push
+      - name: Extract API Docker metadata
+        id: meta-api
+        uses: docker/metadata-action@v5.0.0
+        with:
+          images: ${{ env.API_IMAGE_NAME }}
+          flavor: latest=false
+          tags: |
+            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=latest,enable=${{ steps.version.outputs.stable }}
+            type=raw,value=${{ steps.version.outputs.major }},enable=${{ steps.version.outputs.stable }}
+            type=raw,value=${{ steps.version.outputs.minor }},enable=${{ steps.version.outputs.stable }}
+
+      - name: Build frontend image for smoke testing
+        uses: docker/build-push-action@v5.0.0
+        with:
+          context: ./app
+          load: true
+          tags: edulog-release-smoke:frontend
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build API image for smoke testing
+        uses: docker/build-push-action@v5.0.0
+        with:
+          context: ./server
+          load: true
+          tags: edulog-release-smoke:api
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify images before publication
+        shell: bash
+        run: bash scripts/release-image-smoke.sh
+
+      - name: Build and push frontend Docker image
+        id: build-and-push-frontend
         uses: docker/build-push-action@v5.0.0
         with:
           context: ./app
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push API Docker image
+        id: build-and-push-api
+        uses: docker/build-push-action@v5.0.0
+        with:
+          context: ./server
+          push: true
+          tags: ${{ steps.meta-api.outputs.tags }}
+          labels: ${{ steps.meta-api.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

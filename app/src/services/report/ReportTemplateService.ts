@@ -1,6 +1,8 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import { ReportTemplate, type ReportTemplateDTO } from '@/models/ReportTemplate'
 import { createTextEditorContent } from '@/components/common/text-editor/content'
+import { apiResourceClient } from '@/services/api/ApiResourceClient'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 /**
  * ReportTemplateService handles database operations for report templates.
@@ -12,7 +14,11 @@ export class ReportTemplateService {
      * Gets all templates for a specific instructor
      */
     static async getTemplates(instructorId: string): Promise<ReportTemplate[]> {
-        const { data, error } = await supabase
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiResourceClient.list<ReportTemplateDTO>('report-templates', { instructorId, perPage: 100, sort: 'name', mode: 'v1' })
+            return (response.data || []).map((dto: any) => new ReportTemplate(dto))
+        }
+        const { data, error } = await apiDataClient
             .from('report_templates')
             .select(REPORT_TEMPLATE_EDITOR_COLUMNS)
             .eq('instructor_id', instructorId)
@@ -20,7 +26,7 @@ export class ReportTemplateService {
 
         if (error) throw new Error(`Failed to fetch templates: ${error.message}`)
 
-        return (data as ReportTemplateDTO[]).map(dto => new ReportTemplate(dto))
+        return (data as ReportTemplateDTO[]).map((dto: any) => new ReportTemplate(dto))
     }
 
     /**
@@ -39,7 +45,15 @@ export class ReportTemplateService {
             class_notes: classNotes.plainText,
             class_notes_document: classNotes.richText
         }
-        const { data, error } = await supabase
+        if (getApiV1Mode() === 'v1') {
+            const { id: ignoredId, ...writable } = payload
+            void ignoredId
+            const response = template.id
+                ? await apiResourceClient.update<ReportTemplateDTO>('report-templates', template.id, writable, 'v1')
+                : await apiResourceClient.create<ReportTemplateDTO>('report-templates', writable, 'v1')
+            return new ReportTemplate(response.data)
+        }
+        const { data, error } = await apiDataClient
             .from('report_templates')
             .upsert(payload)
             .select(REPORT_TEMPLATE_EDITOR_COLUMNS)
@@ -54,7 +68,11 @@ export class ReportTemplateService {
      * Deletes a template
      */
     static async deleteTemplate(id: string): Promise<void> {
-        const { error } = await supabase
+        if (getApiV1Mode() === 'v1') {
+            await apiResourceClient.remove('report-templates', id, 'v1')
+            return
+        }
+        const { error } = await apiDataClient
             .from('report_templates')
             .delete()
             .eq('id', id)

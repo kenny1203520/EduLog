@@ -7,11 +7,12 @@ import {
     type ReportCollabPeer,
     type SupabaseProviderOptions
 } from '@/services/report/SupabaseProvider'
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 import * as Y from 'yjs'
 import { useAuthStore } from '@/stores/useAuthStore'
 
-export type ReportCollaborationStatus = 'disabled' | 'connecting' | 'ready' | 'error'
+export type ReportCollaborationStatus = 'disabled' | 'connecting' | 'subscribing' | 'reconnecting' | 'offline' | 'ready' | 'error' | 'forbidden' | 'auth-expired' | 'account-disabled'
 
 export interface ReportCollaborationConfiguration {
     enabled: boolean
@@ -60,6 +61,9 @@ export function useReportCollab(
     const lastSyncedAt = ref<Date | null>(null)
     let generation = 0
     let awarenessHandler: (() => void) | null = null
+    let retryTimer: ReturnType<typeof setTimeout> | null = null
+    let retryAttempt = 0
+    let connectionPromise: Promise<boolean> | null = null
 
     const getReportId = () => (typeof reportId === 'string' ? reportId : reportId.value)
     const getReportVersion = () => (typeof reportVersion === 'number' ? reportVersion : reportVersion.value)
@@ -75,7 +79,7 @@ export function useReportCollab(
     // occurrence_reports would otherwise be silently discarded whenever either
     // happens, which is exactly the "switched pages" / "closed the tab mid-edit"
     // data-loss path this guards against.
-    async function destroyCurrent(flush = true) {
+    async function destroyCurrent(flush = true, preserveDocument = false) {
         ready.value = false
         initialState.value = 'none'
         activePeers.value = []
@@ -86,24 +90,51 @@ export function useReportCollab(
             await provider.value.destroy()
             provider.value = null
         }
-        if (ydoc.value) {
+        if (ydoc.value && !preserveDocument) {
             ydoc.value.destroy()
             ydoc.value = null
         }
     }
 
-    function handleStatus(next: ReportCollabConnectionStatus): void {
-        status.value = next === 'connected' ? 'ready' : next === 'disconnected' ? 'error' : next
-        if (next === 'error') error.value = i18n.global.t('report.collaboration_connection_failed')
+    function scheduleRetry() {
+        if (!configuration.enabled || retryTimer) return
+        const baseDelay = Math.min(30_000, 500 * (2 ** Math.min(retryAttempt++, 6)))
+        const delay = Math.round(baseDelay * (0.8 + Math.random() * 0.4))
+        status.value = 'reconnecting'
+        retryTimer = setTimeout(() => {
+            retryTimer = null
+            void connect()
+        }, delay)
     }
 
-    const connect = async () => {
+    function handleStatus(next: ReportCollabConnectionStatus, detail?: string): void {
+        const statusByConnectionState: Record<ReportCollabConnectionStatus, ReportCollaborationStatus> = {
+            connecting: 'connecting',
+            subscribing: 'subscribing',
+            reconnecting: 'reconnecting',
+            offline: 'offline',
+            connected: 'ready',
+            disconnected: 'reconnecting',
+            forbidden: 'forbidden',
+            'auth-expired': 'auth-expired',
+            'account-disabled': 'account-disabled',
+            error: 'error'
+        }
+        status.value = statusByConnectionState[next]
+        if (detail) error.value = detail
+        else if (next === 'connected') error.value = null
+        else if (next === 'error') error.value = i18n.global.t('report.collaboration_connection_failed')
+    }
+
+    const connectOnce = async () => {
         if (!configuration.enabled) {
             status.value = 'disabled'
             return false
         }
         const token = ++generation
-        await destroyCurrent(false)
+        if (retryTimer) clearTimeout(retryTimer)
+        retryTimer = null
+        await destroyCurrent(false, true)
         if (token !== generation) return false
         const reportIdValue = getReportId()
         if (!reportIdValue) {
@@ -113,7 +144,7 @@ export function useReportCollab(
 
         error.value = null
         status.value = 'connecting'
-        const doc = new Y.Doc()
+        const doc = ydoc.value || new Y.Doc()
         ydoc.value = doc
         const userId = authStore.user?.id || ''
         const nextProvider = providerFactory(doc, reportIdValue, getReportVersion(), userId, {
@@ -129,36 +160,56 @@ export function useReportCollab(
             await nextProvider.ready
         } catch (reason: any) {
             if (token === generation) {
+                const errorCode = reason?.code
+                await destroyCurrent(false, true)
+                if (token !== generation) return false
                 error.value = reason?.message || i18n.global.t('report.collaboration_init_failed')
-                status.value = 'error'
-                await destroyCurrent(false)
+                if (errorCode === 'REALTIME_FORBIDDEN') status.value = 'forbidden'
+                else if (errorCode === 'AUTH_EXPIRED') status.value = 'auth-expired'
+                else if (errorCode === 'ACCOUNT_DISABLED') status.value = 'account-disabled'
+                else status.value = 'error'
+                if (errorCode !== 'REALTIME_FORBIDDEN' && errorCode !== 'AUTH_EXPIRED' && errorCode !== 'ACCOUNT_DISABLED') scheduleRetry()
             } else {
                 await nextProvider.destroy()
-                doc.destroy()
             }
             return false
         }
 
         if (token !== generation) {
             await nextProvider.destroy()
-            doc.destroy()
             return false
         }
         initialState.value = nextProvider.initialState
         ready.value = true
         status.value = nextProvider.connected ? 'ready' : status.value
+        retryAttempt = 0
         updatePeers()
         return true
     }
 
+    const connect = () => {
+        if (connectionPromise) return connectionPromise
+        connectionPromise = connectOnce().finally(() => { connectionPromise = null })
+        return connectionPromise
+    }
+
     const disconnect = async (options: { flush?: boolean } = {}) => {
         generation += 1
+        if (retryTimer) clearTimeout(retryTimer)
+        retryTimer = null
         await destroyCurrent(options.flush ?? true)
         status.value = configuration.enabled ? 'error' : 'disabled'
     }
 
     const reconnect = async () => {
-        await disconnect({ flush: true })
+        retryAttempt = 0
+        if (retryTimer) clearTimeout(retryTimer)
+        retryTimer = null
+        generation += 1
+        await destroyCurrent(true, true)
+        // destroy() settles a provider's pending ready promise. Wait for that
+        // stale attempt to unwind before starting a new provider on the same Y.Doc.
+        await connectionPromise
         return connect()
     }
 
@@ -191,6 +242,8 @@ export function useReportCollab(
 
     const destroy = async () => {
         generation += 1
+        if (retryTimer) clearTimeout(retryTimer)
+        retryTimer = null
         await destroyCurrent()
         status.value = configuration.enabled ? 'error' : 'disabled'
     }
@@ -224,5 +277,9 @@ function defaultProviderFactory(
     userId: string,
     options: SupabaseProviderOptions
 ): SupabaseProvider {
-    return new SupabaseProvider(supabase, doc, reportId, reportVersion, userId, options)
+    // In production v1 mode the browser must use the authenticated same-origin
+    // WebSocket proxy. Passing the Supabase client here would expose a direct
+    // Realtime transport and bypass the Express room authorization boundary.
+    const transport = getApiV1Mode() === 'v1' ? undefined : apiDataClient
+    return new SupabaseProvider(transport, doc, reportId, reportVersion, userId, options)
 }

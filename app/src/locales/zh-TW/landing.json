@@ -10,5 +10,7 @@
     "private_desc": "您的數據屬於您。自託管資料庫確保完全的隱私與安全。",
     "copyright": "© {year} EduLog. 版權所有。",
     "get_started": "立即開始",
-    "cta_title": "準備好提升您的教學效率了嗎？"
+    "cta_title": "準備好提升您的教學效率了嗎？",
+    "enter_app": "進入系統",
+    "enter_app_as": "以 {name} 進入系統"
 }

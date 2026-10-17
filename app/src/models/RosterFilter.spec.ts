@@ -26,4 +26,11 @@ describe('roster workflow filtering', () => {
         expect(noMatch.all).toHaveLength(3)
         expect(noMatch.filtered).toHaveLength(0)
     })
+
+    it('keeps a roster member without a provisioned report as pending', () => {
+        const roster = getRosterEnrollments(enrollments, new Map([['1', { attendanceStatus: 'present' }]]), '', 'all')
+        expect(roster.all.map(item => item.id)).toEqual(['1', '2', '3'])
+        expect(roster.filtered.map(item => item.id)).toEqual(['1', '2', '3'])
+        expect(countRosterAttendance(roster.all, new Map([['1', { attendanceStatus: 'present' }]]))).toEqual({ present: 1, pending: 2, absent: 0 })
+    })
 })

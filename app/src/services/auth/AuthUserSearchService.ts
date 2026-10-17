@@ -1,32 +1,27 @@
-import { supabase } from '@/lib/supabase'
+import { apiV1Client } from '@/services/api/ApiV1Client'
 
 export interface AuthUserSearchResultDTO {
     id: string
     email: string
+    display_name?: string | null
+    account_status?: 'active' | 'disabled' | null
+    disabled_at?: string | null
+    disabled_reason?: string | null
     created_at?: string
     last_sign_in_at?: string | null
 }
 
 export class AuthUserSearchService {
-    /**
-     * Search Supabase Auth users by email fragment.
-     */
-    static async searchUsersByEmail(query: string, options?: { onlyUnlinked?: boolean }): Promise<AuthUserSearchResultDTO[]> {
+    static async searchUsers(query: string, options?: { onlyUnlinked?: boolean }): Promise<AuthUserSearchResultDTO[]> {
         const normalizedQuery = query.trim()
-
         if (!normalizedQuery) return []
+        const params = new URLSearchParams({ query: normalizedQuery })
+        if (options?.onlyUnlinked) params.set('only_unlinked', 'true')
+        const response = await apiV1Client.get<AuthUserSearchResultDTO[]>(`/users/search?${params.toString()}`)
+        return response.data || []
+    }
 
-        const payload: any = { query: normalizedQuery }
-        if (options?.onlyUnlinked) payload.only_unlinked = true
-
-        const { data, error } = await supabase.functions.invoke('user-search', {
-            body: payload
-        })
-
-        if (error) throw new Error(error.message)
-
-        return ((data as { users?: AuthUserSearchResultDTO[] } | null)?.users ?? []).filter(
-            (user) => Boolean(user.id && user.email)
-        )
+    static async searchUsersByEmail(query: string, options?: { onlyUnlinked?: boolean }): Promise<AuthUserSearchResultDTO[]> {
+        return this.searchUsers(query, options)
     }
 }

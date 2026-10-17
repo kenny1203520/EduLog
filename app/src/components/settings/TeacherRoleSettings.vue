@@ -5,6 +5,7 @@ import { useToast } from 'vue-toastification'
 import { useFeedback } from '@/composables/useFeedback'
 import { RoleService } from '@/services/rbac/RoleService'
 import type { RoleDTO } from '@/models/Rbac'
+import { roleDisplayName } from '@/utils/roleDisplay'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -70,7 +71,7 @@ onMounted(loadRoles)
                 <div v-for="role in roles" :key="role.id"
                     class="flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-gray-50 p-4">
                     <div class="min-w-0">
-                        <p class="truncate font-black text-gray-800">{{ role.name }}</p>
+                        <p class="truncate font-black text-gray-800">{{ roleDisplayName(role, t) }}</p>
                         <p class="text-[10px] font-black uppercase tracking-widest text-gray-400">
                             {{ role.is_system ? $t('settings.teacher_roles.system') : $t('settings.teacher_roles.custom') }}
                         </p>

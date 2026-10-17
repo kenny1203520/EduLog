@@ -1,7 +1,9 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import { ClassSessionFactory } from '@/models/ClassSession'
 import { DateUtils } from '@/utils/DateUtils'
 import { OccurrenceCommandService } from './OccurrenceCommandService'
+import { apiV1Client } from '@/services/api/ApiV1Client'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 export interface OccurrenceReconciliationResult {
     created: number
@@ -40,7 +42,7 @@ export function occurrenceHasProtectedData(occurrence: ExistingOccurrenceRow): b
         || occurrence.is_conducted === false
         || Object.values(occurrence.teacher_attendance || {}).some(value => value === false)
     )
-    const hasMeaningfulReport = (occurrence.occurrence_reports || []).some(report => Boolean(
+    const hasMeaningfulReport = (occurrence.occurrence_reports || []).some((report: any) => Boolean(
         report.content?.trim()
         || report.class_notes?.trim()
         || report.contact_notes?.trim()
@@ -56,8 +58,12 @@ export class OccurrenceSyncService {
         sessionId: string,
         scope: 'future' | 'all' = 'future'
     ): Promise<OccurrenceReconciliationResult> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.post<OccurrenceReconciliationResult>('/class-sessions/' + sessionId + '/occurrences/sync', { scope })
+            return response.data
+        }
         void scope
-        const { data: rawSession, error: sessionError } = await supabase
+        const { data: rawSession, error: sessionError } = await apiDataClient
             .from('class_sessions')
             .select('*, class_session_schedule_rules(*)')
             .eq('id', sessionId)
@@ -85,7 +91,7 @@ export class OccurrenceSyncService {
         const planned = session.plannedOccurrences(today, horizon)
         const plannedByDate = new Map(planned.map(item => [item.occurrenceDate, item]))
 
-        const { data, error: fetchError } = await supabase
+        const { data, error: fetchError } = await apiDataClient
             .from('class_occurrences')
             .select(`
                 id,
@@ -131,7 +137,7 @@ export class OccurrenceSyncService {
 
             if (!target) {
                 staleOccurrenceIds.push(occurrence.id)
-                placeholderReportIds.push(...(occurrence.occurrence_reports || []).map(report => report.id))
+                placeholderReportIds.push(...(occurrence.occurrence_reports || []).map((report: any) => report.id))
                 continue
             }
 
@@ -142,7 +148,7 @@ export class OccurrenceSyncService {
             ) {
                 updated += 1
                 updates.push(
-                    supabase
+                    apiDataClient
                         .from('class_occurrences')
                         .update({
                             original_start_time: target.startTime,
@@ -157,12 +163,12 @@ export class OccurrenceSyncService {
         if (updates.length > 0) await Promise.all(updates)
 
         if (placeholderReportIds.length > 0) {
-            const { error } = await supabase.from('occurrence_reports').delete().in('id', placeholderReportIds)
+            const { error } = await apiDataClient.from('occurrence_reports').delete().in('id', placeholderReportIds)
             if (error) throw new Error(`Failed to delete placeholder reports: ${error.message}`)
         }
 
         if (staleOccurrenceIds.length > 0) {
-            const { error } = await supabase.from('class_occurrences').delete().in('id', staleOccurrenceIds)
+            const { error } = await apiDataClient.from('class_occurrences').delete().in('id', staleOccurrenceIds)
             if (error) throw new Error(`Failed to delete stale occurrences: ${error.message}`)
         }
 

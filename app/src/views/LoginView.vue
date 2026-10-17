@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
+import { getSafePostLoginTarget } from '@/router/authRedirect'
 import { useI18n } from 'vue-i18n'
 import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
+import PasswordInput from '@/components/common/PasswordInput.vue'
 
 const { t } = useI18n()
 
@@ -11,9 +14,22 @@ const email = ref('')
 const password = ref('')
 const errorMsg = ref('')
 const loading = ref(false)
+const isOnline = ref(typeof navigator === 'undefined' ? true : navigator.onLine)
+function onOnline() { isOnline.value = true }
+function onOffline() { isOnline.value = false }
 
 const authStore = useAuthStore()
 const router = useRouter()
+const route = useRoute()
+
+onMounted(() => {
+    window.addEventListener('online', onOnline)
+    window.addEventListener('offline', onOffline)
+})
+onUnmounted(() => {
+    window.removeEventListener('online', onOnline)
+    window.removeEventListener('offline', onOffline)
+})
 
 async function handleLogin() {
     loading.value = true
@@ -21,7 +37,7 @@ async function handleLogin() {
 
     try {
         await authStore.signIn(email.value, password.value)
-        router.push('/dashboard')
+        await router.replace(getSafePostLoginTarget(route.query.redirect, router))
     } catch (e: any) {
         const message = e.message || ''
         if (message.includes('Invalid login credentials')) {
@@ -41,7 +57,8 @@ async function handleLogin() {
 
 <template>
     <div
-        class="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-100 flex items-center justify-center p-6 bg-fixed overflow-hidden relative">
+        class="relative flex min-h-dvh items-center justify-center overflow-x-hidden overflow-y-auto bg-fixed bg-gradient-to-br from-emerald-50 to-teal-100 p-4 sm:p-6">
+        <div v-if="!isOnline" class="fixed left-3 right-3 top-3 z-30 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-center text-sm font-bold text-amber-900 sm:left-auto sm:right-5 sm:max-w-md" role="status" aria-live="polite">{{ $t('common.offline_notice') }}</div>
         <!-- Animated background accents -->
         <div class="absolute -top-40 -left-40 w-96 h-96 bg-emerald-200/40 rounded-full blur-3xl animate-pulse"></div>
         <div
@@ -78,12 +95,13 @@ async function handleLogin() {
                 </div>
 
                 <div class="space-y-2">
-                    <label class="block text-[12px] font-black text-emerald-600 uppercase tracking-[0.2em] ml-1">{{
+                    <label for="login-password" class="block text-[12px] font-black text-emerald-600 uppercase tracking-[0.2em] ml-1">{{
                         $t('auth.password') }}</label>
-                    <div class="relative group">
-                        <input v-model="password" type="password" required
-                            class="w-full border-gray-100 rounded-2xl px-5 py-4 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all outline-none bg-gray-50/50 focus:bg-white text-gray-800 placeholder-gray-400 font-medium"
+                    <div class="relative group w-full">
+                        <PasswordInput id="login-password" v-model="password" required autocomplete="current-password"
+                            input-class="w-full border border-gray-100 rounded-2xl px-5 py-4 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all outline-none bg-gray-50/50 focus:bg-white text-gray-800 placeholder-gray-400 font-medium"
                             :placeholder="$t('auth.password_placeholder')">
+                        </PasswordInput>
                         <div
                             class="absolute inset-0 border-2 border-transparent group-focus-within:border-emerald-500/20 rounded-2xl pointer-events-none transition-all">
                         </div>
@@ -101,7 +119,7 @@ async function handleLogin() {
                     {{ $t('auth.error_login', { msg: errorMsg }) }}
                 </div>
 
-                <button type="submit" :disabled="loading"
+                <button type="submit" :disabled="loading || !isOnline"
                     class="w-full bg-emerald-600 text-white font-black py-4.5 rounded-2xl hover:bg-emerald-700 hover:shadow-2xl hover:shadow-emerald-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed group flex items-center justify-center gap-3 active:scale-95 overflow-hidden relative">
                     <div
                         class="absolute inset-0 bg-gradient-to-r from-emerald-400/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000">

@@ -2,12 +2,12 @@ import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
-import pkg from './package.json'
-import { buildHttpsOptions, buildSecurityHeaders, parseAllowedHosts } from './vite.security'
+import pkg from './package.json' with { type: 'json' }
+import { buildHttpsOptions, buildSecurityHeaders, parseAllowedHosts } from './vite.security.ts'
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
-  const env = { ...loadEnv(mode, path.resolve(__dirname, '..'), ''), ...process.env }
+  const env = { ...loadEnv(mode, path.resolve(import.meta.dirname, '..'), ''), ...process.env }
   const allowedHosts = parseAllowedHosts(env.EDULOG_ALLOWED_HOSTS)
   const securityHeaders = buildSecurityHeaders(env)
   const https = buildHttpsOptions(env)
@@ -51,13 +51,21 @@ export default defineConfig(({ mode }) => {
     },
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, './src'),
+        '@': path.resolve(import.meta.dirname, './src'),
       }
     },
     server: {
       ...(allowedHosts === undefined ? {} : { allowedHosts }),
       ...(https === undefined ? {} : { https }),
-      headers: securityHeaders
+      headers: securityHeaders,
+      proxy: {
+          "/api": {
+          target: env.EDULOG_API_DEV_TARGET || 'http://localhost:3000',
+          changeOrigin: true,
+          ws: true,
+          secure: false,
+          },
+      },
     },
     preview: {
       ...(allowedHosts === undefined ? {} : { allowedHosts }),

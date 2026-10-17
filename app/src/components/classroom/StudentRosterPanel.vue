@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { QuickAttendanceStatus } from './QuickAttendancePanel.vue'
+import CourseProgressGapHint, { type ProgressGapHintLesson } from './CourseProgressGapHint.vue'
 
 export type RosterProgressTone = 'completed' | 'incomplete' | 'empty'
 
@@ -16,8 +17,12 @@ export interface StudentRosterItem {
     enrollmentStatus: string
     enrollmentTone: 'regular' | 'trial' | 'inactive'
     isGuest: boolean
+    /** Set when this student was moved into this lesson by a single-lesson transfer. */
+    transferInLabel?: string | null
     attendanceStatus: QuickAttendanceStatus
     attendanceLabel: string
+    absenceReason?: string | null
+    absenceReasonLabel?: string | null
     isSavingAttendance: boolean
     todayTitle: string
     todayProgress: string
@@ -31,6 +36,7 @@ export interface StudentRosterItem {
     latestTone: RosterProgressTone
     isEditing: boolean
     reportAvailable?: boolean
+    progressGaps?: ProgressGapHintLesson[]
 }
 
 const props = withDefaults(defineProps<{
@@ -137,11 +143,14 @@ function requestAttendance(item: StudentRosterItem) {
                             <span class="rounded-full border px-2 py-0.5 text-[10px] font-black" :class="enrollmentToneClasses(item.enrollmentTone)">
                                 {{ item.enrollmentStatus }}
                             </span>
-                            <span v-if="item.isGuest" class="rounded-full border border-purple-100 bg-purple-50 px-2 py-0.5 text-[10px] font-black text-purple-700">
+                            <span v-if="item.transferInLabel" class="rounded-full border border-purple-100 bg-purple-50 px-2 py-0.5 text-[10px] font-black text-purple-700">
+                                {{ item.transferInLabel }}
+                            </span>
+                            <span v-else-if="item.isGuest" class="rounded-full border border-purple-100 bg-purple-50 px-2 py-0.5 text-[10px] font-black text-purple-700">
                                 {{ t('common.rescheduled') }}
                             </span>
-                        </div>
-                        <p class="mt-1 line-clamp-2 text-xs font-bold leading-5 text-slate-500">{{ item.currentCourse }}</p>
+                    </div>
+                    <p class="mt-1 line-clamp-2 text-xs font-bold leading-5 text-slate-500">{{ item.currentCourse }}</p>
                     </div>
                     <button v-if="hasOccurrence" type="button"
                         class="shrink-0 rounded-xl border px-2.5 py-2 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-50"
@@ -153,7 +162,13 @@ function requestAttendance(item: StudentRosterItem) {
                             {{ item.isSavingAttendance ? t('common.saving') : item.attendanceLabel }}
                         </span>
                     </button>
+                    <span v-if="item.attendanceStatus === 'absent' && item.absenceReasonLabel"
+                        class="mt-2 inline-flex rounded-full border border-red-100 bg-red-50 px-2 py-0.5 text-[10px] font-black text-red-700">
+                        {{ item.absenceReasonLabel }}
+                    </span>
                 </div>
+
+                <CourseProgressGapHint :lessons="item.progressGaps || []" />
 
                 <div class="mt-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-3.5">
                     <div class="flex flex-wrap items-start justify-between gap-2">
@@ -239,16 +254,23 @@ function requestAttendance(item: StudentRosterItem) {
                                     <div class="flex flex-wrap items-center gap-1.5">
                                         <p class="break-words font-black text-slate-900">{{ item.name }}</p>
                                         <span class="rounded-full border px-2 py-0.5 text-[9px] font-black" :class="enrollmentToneClasses(item.enrollmentTone)">{{ item.enrollmentStatus }}</span>
+                                        <span v-if="item.transferInLabel" class="rounded-full border border-purple-100 bg-purple-50 px-2 py-0.5 text-[9px] font-black text-purple-700">{{ item.transferInLabel }}</span>
                                     </div>
                                     <p class="mt-1 line-clamp-2 text-xs font-bold leading-5 text-slate-500">{{ item.currentCourse }}</p>
                                 </div>
                             </div>
+                            <CourseProgressGapHint :lessons="item.progressGaps || []" />
                         </td>
-                        <td class="px-4 py-5">
+                            <td class="px-4 py-5">
                             <button v-if="hasOccurrence" type="button" class="rounded-xl border px-3 py-2 text-xs font-black transition disabled:opacity-50"
-                                :class="attendanceToneClasses(item.attendanceStatus)" :disabled="attendanceDisabled || item.isSavingAttendance" @click="requestAttendance(item)">
+                                :class="attendanceToneClasses(item.attendanceStatus)" :disabled="attendanceDisabled || item.isSavingAttendance || item.reportAvailable === false"
+                                :title="item.reportAvailable === false ? t('classroom.trial_report_unavailable') : undefined" @click="requestAttendance(item)">
                                 {{ item.isSavingAttendance ? t('common.saving') : item.attendanceLabel }}
                             </button>
+                            <span v-if="item.attendanceStatus === 'absent' && item.absenceReasonLabel"
+                                class="mt-2 inline-flex rounded-full border border-red-100 bg-red-50 px-2 py-0.5 text-[10px] font-black text-red-700">
+                                {{ item.absenceReasonLabel }}
+                            </span>
                             <p class="mt-2 text-[10px] font-bold text-slate-400">{{ item.isGuest ? t('common.rescheduled') : item.enrollmentStatus }}</p>
                         </td>
                         <td class="px-4 py-5">

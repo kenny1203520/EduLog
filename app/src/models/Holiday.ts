@@ -32,7 +32,7 @@ export class Holiday {
         this.id = data.id
         this.startDate = data.start_date
         this.endDate = data.end_date
-        this.timeZone = DateUtils.isValidTimeZone(data.time_zone) ? data.time_zone : 'Asia/Taipei'
+        this.timeZone = DateUtils.isValidTimeZone(data.time_zone) ? data.time_zone : DateUtils.getDefaultTimeZone()
         this.name = data.name
         this.kind = data.kind === 'teacher_leave' ? 'teacher_leave' : 'closure'
         this.classroomIds = data.classroom_ids || []

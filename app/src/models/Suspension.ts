@@ -26,7 +26,7 @@ export class Suspension {
         this.enrollmentId = data.enrollment_id
         this.startDate = data.start_date
         this.endDate = data.end_date
-        this.timeZone = DateUtils.isValidTimeZone(data.time_zone) ? data.time_zone : 'Asia/Taipei'
+        this.timeZone = DateUtils.isValidTimeZone(data.time_zone) ? data.time_zone : DateUtils.getDefaultTimeZone()
         this.reason = data.reason
         this.createdAt = data.created_at ? new Date(data.created_at) : undefined
         this.updatedAt = data.updated_at ? new Date(data.updated_at) : undefined

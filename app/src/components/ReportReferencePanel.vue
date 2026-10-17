@@ -378,6 +378,7 @@ import { useI18n } from 'vue-i18n'
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
 import RichTextViewer from '@/components/common/text-editor/RichTextViewer.vue'
 import { useFeedback } from '@/composables/useFeedback'
+import { DateUtils } from '@/utils/DateUtils'
 
 const { t, locale } = useI18n()
 const { reportError } = useFeedback()
@@ -414,6 +415,11 @@ const props = defineProps<{
     lessonId?: string
     studentId?: string
     currentReportId?: string
+    focusedReportId?: string
+    focusedLessonSequence?: number
+    focusedLessonTitle?: string
+    focusedCourseName?: string
+    focusedStudentName?: string
 }>()
 
 const emit = defineEmits(['close', 'copy'])
@@ -485,11 +491,11 @@ function handleKeyDown(e: KeyboardEvent) {
     }
 }
 
-// Watch panel visibility
-watch(() => props.show, (newVal) => {
-    if (newVal) {
-        refreshData()
-    }
+let refreshRequestId = 0
+watch(() => [props.show, props.focusedReportId] as const, ([isOpen, reportId]) => {
+    if (!isOpen) return
+    if (reportId) activeTab.value = 'history'
+    refreshData()
 })
 
 // Tab handling
@@ -504,16 +510,16 @@ function switchTab(tab: 'peer' | 'history') {
 async function loadFilterOptions() {
     try {
         const crsP = CourseCatalogService.getCourseOptions(1, 1000)
-        const sessionsP = SessionService.getClassSessionOptions(1, 1000)
+        const sessionsP = SessionService.getAllClassSessionOptions()
 
         // Try aggregate for classrooms first
         try {
-            const [crs, agg, sessions] = await Promise.all([crsP, AggregateService.getClassroomSessionManagerAggregate(1, 1000, ''), sessionsP])
+            const [crs, agg, sessions] = await Promise.all([crsP, AggregateService.getAllClassroomsOverview(''), sessionsP])
             courses.value = crs.data
             classrooms.value = (agg.classrooms || []).map((d: any) => d)
             allSessions.value = sessions.data
         } catch (e) {
-            const [crs, cls, sessions] = await Promise.all([crsP, ClassroomService.getClassrooms(1, 1000), sessionsP])
+            const [crs, cls, sessions] = await Promise.all([crsP, ClassroomService.getAllClassrooms(), sessionsP])
             courses.value = crs.data
             classrooms.value = cls.data
             allSessions.value = sessions.data
@@ -526,6 +532,7 @@ async function loadFilterOptions() {
 
 async function refreshData() {
     if (!props.show) return
+    const requestId = ++refreshRequestId
 
     // Auto-switch to history if no lessonId but studentId is present
     if (!props.lessonId && props.studentId && activeTab.value === 'peer') {
@@ -534,7 +541,23 @@ async function refreshData() {
 
     loading.value = true
     loadError.value = null
+    reports.value = []
+    totalCount.value = 0
     try {
+        if (activeTab.value === 'history' && props.focusedReportId) {
+            const report = await OccurrenceReportService.getReportById(props.focusedReportId)
+            if (requestId !== refreshRequestId) return
+            const dto = report.toDTO()
+            reports.value = [{
+                ...dto,
+                updated_at: dto.updated_at,
+                class_occurrences: { occurrence_date: dto.occurrence_date },
+                lessons: { sequence: props.focusedLessonSequence, title: props.focusedLessonTitle },
+                enrollments: { courses: { display_name: props.focusedCourseName }, students: { name: props.focusedStudentName } }
+            }]
+            totalCount.value = 1
+            return
+        }
         const commonParams = {
             excludeReportId: props.currentReportId,
             page: currentPage.value,
@@ -568,16 +591,19 @@ async function refreshData() {
                 courseId: filterCourse.value
             })
         }
-        reports.value = res.data
-        totalCount.value = res.count
+        if (requestId === refreshRequestId) {
+            reports.value = res.data
+            totalCount.value = res.count
+        }
     } catch (e) {
+        if (requestId !== refreshRequestId) return
         console.error('Failed to load reports:', e)
         reports.value = []
         totalCount.value = 0
         loadError.value = t('report.reference_panel.load_error')
         reportError(e)
     } finally {
-        loading.value = false
+        if (requestId === refreshRequestId) loading.value = false
     }
 }
 
@@ -606,9 +632,12 @@ function nextPage() {
 }
 
 function formatDate(report: any) {
-    const d = report.class_occurrences?.occurrence_date || report.updated_at
-    if (!d) return '-'
-    return new Date(d).toLocaleDateString(locale.value)
+    const occurrence = Array.isArray(report.class_occurrences) ? report.class_occurrences[0] : report.class_occurrences
+    // occurrence_date is a calendar day; new Date('YYYY-MM-DD') would parse it as UTC midnight.
+    const date = occurrence?.occurrence_date
+        ? DateUtils.parseLocalDate(occurrence.occurrence_date)
+        : report.updated_at ? new Date(report.updated_at) : undefined
+    return date ? date.toLocaleDateString(locale.value) : '-'
 }
 
 function getReportProgress(report: any) {

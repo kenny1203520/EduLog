@@ -1,10 +1,27 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import { ClassOccurrence } from '@/models/ClassOccurrence'
 import { DateUtils } from '@/utils/DateUtils'
+import { apiV1Client } from '@/services/api/ApiV1Client'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 export class OccurrenceQueryService {
     private static formatDate(date: Date): string {
         return DateUtils.formatLocalDate(date)
+    }
+
+    private static fromApi(row: any): ClassOccurrence {
+        const occurrence = new ClassOccurrence(row)
+        const session = Array.isArray(row?.class_sessions) ? row.class_sessions[0] : row?.class_sessions
+        if (session) {
+            occurrence.sessionName = session.name
+            if (!row.time_zone && DateUtils.isValidTimeZone(session.time_zone)) occurrence.timeZone = session.time_zone
+            const classroom = Array.isArray(session.classrooms) ? session.classrooms[0] : session.classrooms
+            if (classroom) {
+                occurrence.classroomName = classroom.name
+                occurrence.classroomColor = classroom.color
+            }
+        }
+        return occurrence
     }
 
     static async getOccurrencesBySession(
@@ -12,10 +29,14 @@ export class OccurrenceQueryService {
         page: number = 1,
         perPage: number = 50
     ): Promise<{ data: ClassOccurrence[]; count: number }> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.get<any[]>('/occurrences?class_session_id=' + encodeURIComponent(sessionId) + '&limit=' + perPage + '&offset=' + ((page - 1) * perPage) + '&sort=occurrence_date')
+            return { data: (response.data || []).map((row) => new ClassOccurrence(row)), count: Number((response.meta as any)?.total || 0) }
+        }
         const from = (page - 1) * perPage
         const to = from + perPage - 1
 
-        const { data, error, count } = await supabase
+        const { data, error, count } = await apiDataClient
             .from('class_occurrences')
             .select('*', { count: 'exact' })
             .eq('class_session_id', sessionId)
@@ -25,7 +46,7 @@ export class OccurrenceQueryService {
         if (error) throw new Error(`Failed to fetch occurrences: ${error.message}`)
 
         return {
-            data: (data as any[]).map(dto => new ClassOccurrence(dto)),
+            data: (data as any[]).map((dto: any) => new ClassOccurrence(dto)),
             count: count || 0
         }
     }
@@ -35,7 +56,13 @@ export class OccurrenceQueryService {
         endDate: Date,
         sessionIds?: string[]
     ): Promise<ClassOccurrence[]> {
-        let query = supabase
+        if (getApiV1Mode() === 'v1') {
+            const params = new URLSearchParams({ start: this.formatDate(startDate), end: this.formatDate(endDate), limit: '100', offset: '0', sort: 'occurrence_date' })
+            if (sessionIds?.length) params.set('session_ids', sessionIds.join(','))
+            const response = await apiV1Client.get<any[]>(`/occurrences?${params}`)
+            return (response.data || []).map((row) => this.fromApi(row))
+        }
+        let query = apiDataClient
             .from('class_occurrences')
             .select(`
                 *,
@@ -76,12 +103,42 @@ export class OccurrenceQueryService {
         })
     }
 
+    static async getOccurrenceBySessionAndDate(sessionId: string, occurrenceDate: string): Promise<ClassOccurrence | null> {
+        if (getApiV1Mode() === 'v1') {
+            const params = new URLSearchParams({
+                class_session_id: sessionId,
+                date: occurrenceDate,
+                limit: '1',
+                sort: '-created_at'
+            })
+            const response = await apiV1Client.get<any[]>(`/occurrences?${params}`)
+            const row = response.data?.[0]
+            return row ? this.fromApi(row) : null
+        }
+
+        const { data, error } = await apiDataClient
+            .from('class_occurrences')
+            .select('*')
+            .eq('class_session_id', sessionId)
+            .eq('occurrence_date', occurrenceDate)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+
+        if (error) throw new Error(`Failed to fetch occurrence: ${error.message}`)
+        return data ? new ClassOccurrence(data as any) : null
+    }
+
     static async getPreferredOccurrence(
         sessionId: string,
         referenceDate: Date
     ): Promise<ClassOccurrence | null> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.get<any>(`/occurrences/${encodeURIComponent(sessionId)}/preferred?date=${encodeURIComponent(this.formatDate(referenceDate))}`)
+            return response.data ? this.fromApi(response.data) : null
+        }
         const reference = this.formatDate(referenceDate)
-        const { data: previous, error: previousError } = await supabase
+        const { data: previous, error: previousError } = await apiDataClient
             .from('class_occurrences')
             .select('*')
             .eq('class_session_id', sessionId)
@@ -93,7 +150,7 @@ export class OccurrenceQueryService {
         if (previousError) throw new Error(previousError.message)
         if (previous) return new ClassOccurrence(previous as any)
 
-        const { data: next, error: nextError } = await supabase
+        const { data: next, error: nextError } = await apiDataClient
             .from('class_occurrences')
             .select('*')
             .eq('class_session_id', sessionId)
@@ -108,7 +165,11 @@ export class OccurrenceQueryService {
 
     static async getOccurrencesByIds(occurrenceIds: string[]): Promise<ClassOccurrence[]> {
         if (occurrenceIds.length === 0) return []
-        const { data, error } = await supabase
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.get<any[]>(`/occurrences?ids=${encodeURIComponent(occurrenceIds.join(','))}&limit=${Math.min(100, occurrenceIds.length)}&offset=0&sort=occurrence_date`)
+            return (response.data || []).map((row) => this.fromApi(row))
+        }
+        const { data, error } = await apiDataClient
             .from('class_occurrences')
             .select(`
                 *,
@@ -143,8 +204,13 @@ export class OccurrenceQueryService {
         occurrenceDate: Date,
         direction: 'previous' | 'next'
     ): Promise<ClassOccurrence | null> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.get<any>(`/occurrences/${encodeURIComponent(sessionId)}/navigation?date=${encodeURIComponent(this.formatDate(occurrenceDate))}`)
+            const row = direction === 'previous' ? (response.data as any)?.previous : (response.data as any)?.next
+            return row ? this.fromApi(row) : null
+        }
         const date = this.formatDate(occurrenceDate)
-        let query = supabase
+        let query = apiDataClient
             .from('class_occurrences')
             .select('*')
             .eq('class_session_id', sessionId)
@@ -170,7 +236,8 @@ export class OccurrenceQueryService {
     }
 
     static async getOccurrenceById(occurrenceId: string): Promise<ClassOccurrence> {
-        const { data, error } = await supabase
+        if (getApiV1Mode() === 'v1') { const response = await apiV1Client.get<any>('/occurrences/' + encodeURIComponent(occurrenceId)); return this.fromApi(response.data) }
+        const { data, error } = await apiDataClient
             .from('class_occurrences')
             .select('*')
             .eq('id', occurrenceId)
@@ -193,3 +260,4 @@ export class OccurrenceQueryService {
         return this.getOccurrencesByDateRange(today, future)
     }
 }
+

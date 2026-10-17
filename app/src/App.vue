@@ -1,16 +1,46 @@
 <script setup lang="ts">
 import { useAuthStore } from '@/stores/useAuthStore'
-import { onMounted } from 'vue'
+import { onBeforeUnmount, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute, useRouter } from 'vue-router'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import { useAppUpdatePrompt } from '@/composables/useAppUpdatePrompt'
 
 const auth = useAuthStore()
 const { t } = useI18n()
 const updatePrompt = useAppUpdatePrompt()
+const router = useRouter()
+const route = useRoute()
+let authNavigationPending = false
+
+function onAuthSessionExpired() {
+  if (!route.matched.some(record => record.meta.requiresAuth) || authNavigationPending) return
+  authNavigationPending = true
+  auth.clearSession()
+  void router.replace({ name: 'login', query: { redirect: route.fullPath } }).finally(() => { authNavigationPending = false })
+}
+
+function onAccountDisabled() {
+  auth.markAccountDisabled()
+  void router.replace({ name: 'account-disabled' })
+}
+
+function onAuthSessionRefreshed(event: Event) {
+  const user = (event as CustomEvent<Record<string, unknown>>).detail
+  if (user && typeof user.id === 'string') auth.acceptRefreshedUser(user as never)
+}
 
 onMounted(() => {
-  auth.initialize()
+  window.addEventListener('edulog:auth-session-expired', onAuthSessionExpired)
+  window.addEventListener('edulog:account-disabled', onAccountDisabled)
+  window.addEventListener('edulog:auth-session-refreshed', onAuthSessionRefreshed)
+  void auth.initialize()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('edulog:auth-session-expired', onAuthSessionExpired)
+  window.removeEventListener('edulog:account-disabled', onAccountDisabled)
+  window.removeEventListener('edulog:auth-session-refreshed', onAuthSessionRefreshed)
 })
 </script>
 

@@ -1,6 +1,10 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import { ClassSessionFactory } from '@/models/ClassSession'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
+import { apiV1Client } from '@/services/api/ApiV1Client'
+import { apiResourceClient } from '@/services/api/ApiResourceClient'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
+import { normalizeEnrollmentReportRelations } from '@/services/report/ReportQueryService'
 
 export interface TransferConflictDisplayContext {
     occurrenceId: string
@@ -45,10 +49,12 @@ export type SingleLessonTransferReportRow = {
     enrollment_id: string
     class_occurrence_id: string
     version?: number
-    class_occurrence: Array<{
-        occurrence_date: string
-        class_session_id: string
-    }>
+    class_occurrence: TransferReportOccurrence | TransferReportOccurrence[] | null
+}
+
+type TransferReportOccurrence = {
+    occurrence_date: string
+    class_session_id: string
 }
 
 export interface SingleLessonTransferHistoryItem {
@@ -68,6 +74,22 @@ export interface SingleLessonTransferHistoryItem {
     target_classroom_name: string | null
 }
 
+/** One active single-lesson transfer into ('in') or out of ('out') an occurrence. */
+export interface OccurrenceLessonTransfer {
+    direction: 'in' | 'out'
+    transfer_id: string
+    enrollment_id: string
+    student_name: string
+    other_occurrence_id: string
+    other_occurrence_date: string
+    other_start_time: string | null
+    other_end_time: string | null
+    other_session_id: string
+    other_session_name: string | null
+    other_classroom_name: string | null
+    can_cancel: boolean
+}
+
 export interface EffectiveSingleLessonTransferTarget {
     transfer_id: string
     source_occurrence_id: string
@@ -78,15 +100,29 @@ export interface EffectiveSingleLessonTransferTarget {
 
 export class EnrollmentTransferQueryService {
     static async getSingleLessonTransferHistory(enrollmentId: string): Promise<SingleLessonTransferHistoryItem[]> {
-        const { data, error } = await supabase.rpc('get_single_lesson_transfer_history', {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.get<SingleLessonTransferHistoryItem[]>('/enrollments/' + enrollmentId + '/transfer-history')
+            return response.data || []
+        }
+        const { data, error } = await apiDataClient.rpc('get_single_lesson_transfer_history', {
             p_enrollment_id: enrollmentId
         })
         if (error) throw new Error(error.message)
         return (data || []) as SingleLessonTransferHistoryItem[]
     }
 
+    /** Lists the active transfers into and out of one class occurrence. */
+    static async getOccurrenceLessonTransfers(occurrenceId: string): Promise<OccurrenceLessonTransfer[]> {
+        const response = await apiV1Client.get<OccurrenceLessonTransfer[]>('/occurrences/' + encodeURIComponent(occurrenceId) + '/lesson-transfers')
+        return response.data || []
+    }
+
     static async getEffectiveSingleLessonTransferTargets(enrollmentId: string): Promise<EffectiveSingleLessonTransferTarget[]> {
-        const { data, error } = await supabase.rpc('get_effective_single_lesson_transfer_targets', {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.get<EffectiveSingleLessonTransferTarget[]>('/enrollments/' + enrollmentId + '/effective-transfer-targets')
+            return response.data || []
+        }
+        const { data, error } = await apiDataClient.rpc('get_effective_single_lesson_transfer_targets', {
             p_enrollment_id: enrollmentId
         })
         if (error) throw new Error(error.message)
@@ -94,7 +130,11 @@ export class EnrollmentTransferQueryService {
     }
 
     static async repairSingleLessonTransferReport(enrollmentId: string, targetOccurrenceId: string): Promise<string> {
-        const { data, error } = await supabase.rpc('repair_single_lesson_transfer_report', {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.post<{ report_id: string }>('/enrollments/' + enrollmentId + '/repair-transfer-report', { target_occurrence_id: targetOccurrenceId })
+            return response.data.report_id
+        }
+        const { data, error } = await apiDataClient.rpc('repair_single_lesson_transfer_report', {
             p_enrollment_id: enrollmentId,
             p_target_occurrence_id: targetOccurrenceId
         })
@@ -103,7 +143,11 @@ export class EnrollmentTransferQueryService {
     }
 
     static async getEnrollmentSessionInfo(enrollmentId: string): Promise<{ class_session_id: string | null; course_id: string }> {
-        const { data, error } = await supabase
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiResourceClient.get<{ class_session_id: string | null; course_id: string }>('enrollments', enrollmentId, 'v1')
+            return { class_session_id: response.data.class_session_id ?? null, course_id: response.data.course_id }
+        }
+        const { data, error } = await apiDataClient
             .from('enrollments')
             .select('class_session_id, course_id')
             .eq('id', enrollmentId)
@@ -121,7 +165,16 @@ export class EnrollmentTransferQueryService {
         oldSessionId: string | null,
         transferDate: string
     ): Promise<TransferMigrationRow[]> {
-        const { data, error } = await supabase
+        if (getApiV1Mode() === 'v1') {
+            const filters: Array<{ field: string; operator: 'eq' | 'gte'; value: unknown }> = [
+                { field: 'enrollment_id', operator: 'eq', value: enrollmentId },
+                { field: 'class_occurrences.occurrence_date', operator: 'gte', value: transferDate },
+            ]
+            if (oldSessionId) filters.push({ field: 'class_occurrences.class_session_id', operator: 'eq', value: oldSessionId })
+            const response = await apiResourceClient.list<TransferMigrationRow>('reports', { filters, perPage: 100, sort: 'class_occurrences(occurrence_date)', mode: 'v1' })
+            return response.data || []
+        }
+        const { data, error } = await apiDataClient
             .from('occurrence_reports')
             .select(`
                 id,
@@ -157,7 +210,23 @@ export class EnrollmentTransferQueryService {
         enrollmentId: string,
         originalDate: string
     ): Promise<SingleLessonTransferReportRow[]> {
-        const { data, error } = await supabase
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiResourceClient.list<SingleLessonTransferReportRow>('reports', {
+                filters: [
+                    { field: 'enrollment_id', operator: 'eq', value: enrollmentId },
+                    { field: 'class_occurrences.occurrence_date', operator: 'eq', value: originalDate },
+                ],
+                perPage: 100,
+                sort: 'created_at',
+                mode: 'v1'
+            })
+            // The relation filter only narrows the embedded occurrence, not the
+            // report rows, so keep only reports whose occurrence is on that date.
+            return (response.data || [])
+                .map((row) => normalizeEnrollmentReportRelations(row) as SingleLessonTransferReportRow)
+                .filter((row) => !Array.isArray(row.class_occurrence) && row.class_occurrence?.occurrence_date === originalDate)
+        }
+        const { data, error } = await apiDataClient
             .from('occurrence_reports')
             .select(`
                 id,
@@ -177,7 +246,17 @@ export class EnrollmentTransferQueryService {
     }
 
     static async getReportTransferInfo(reportId: string): Promise<SingleLessonTransferReportRow> {
-        const { data, error } = await supabase
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiResourceClient.list<SingleLessonTransferReportRow>('reports', {
+                filters: [{ field: 'id', operator: 'eq', value: reportId }],
+                perPage: 1,
+                mode: 'v1'
+            })
+            const report = response.data?.[0]
+            if (!report) throw new Error('Failed to fetch report for transfer: not found')
+            return normalizeEnrollmentReportRelations(report) as SingleLessonTransferReportRow
+        }
+        const { data, error } = await apiDataClient
             .from('occurrence_reports')
             .select(`
                 id,
@@ -197,7 +276,14 @@ export class EnrollmentTransferQueryService {
     }
 
     static async isSessionScheduledOn(sessionId: string, date: string): Promise<boolean> {
-        const { data, error } = await supabase
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiResourceClient.get<any>('class-sessions', sessionId, 'v1')
+            return ClassSessionFactory.create({
+                ...response.data,
+                schedule_rules: response.data?.schedule_rules || response.data?.class_session_schedule_rules || []
+            }).isScheduledOn(date)
+        }
+        const { data, error } = await apiDataClient
             .from('class_sessions')
             .select('*, class_session_schedule_rules(*)')
             .eq('id', sessionId)
@@ -214,7 +300,11 @@ export class EnrollmentTransferQueryService {
     }
 
     static async getLessonCount(courseId: string, fallbackCount: number): Promise<number> {
-        const { data: lessons } = await supabase
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiResourceClient.list<{ id: string }>('lessons', { filters: [{ field: 'course_id', operator: 'eq', value: courseId }], perPage: 100, mode: 'v1' })
+            return response.data?.length || fallbackCount
+        }
+        const { data: lessons } = await apiDataClient
             .from('lessons')
             .select('id')
             .eq('course_id', courseId)
@@ -223,7 +313,12 @@ export class EnrollmentTransferQueryService {
     }
 
     static async getTargetOccurrences(sessionId: string, targetDate: string): Promise<Array<{ id: string }>> {
-        const { data, error } = await supabase
+        if (getApiV1Mode() === 'v1') {
+            const params = new URLSearchParams({ class_session_id: sessionId, start: targetDate, limit: '100', sort: 'occurrence_date' })
+            const response = await apiV1Client.get<Array<{ id: string }>>(`/occurrences?${params}`)
+            return response.data || []
+        }
+        const { data, error } = await apiDataClient
             .from('class_occurrences')
             .select('id')
             .eq('class_session_id', sessionId)
@@ -241,7 +336,18 @@ export class EnrollmentTransferQueryService {
         enrollmentId: string,
         occurrenceId: string
     ): Promise<{ id: string } | null> {
-        const { data, error } = await supabase
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiResourceClient.list<{ id: string }>('reports', {
+                filters: [
+                    { field: 'enrollment_id', operator: 'eq', value: enrollmentId },
+                    { field: 'class_occurrence_id', operator: 'eq', value: occurrenceId },
+                ],
+                perPage: 1,
+                mode: 'v1'
+            })
+            return response.data?.[0] || null
+        }
+        const { data, error } = await apiDataClient
             .from('occurrence_reports')
             .select('id')
             .eq('enrollment_id', enrollmentId)
@@ -260,7 +366,18 @@ export class EnrollmentTransferQueryService {
         enrollmentId: string,
         occurrenceId: string
     ): Promise<OccurrenceReportDTO | null> {
-        const { data, error } = await supabase
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiResourceClient.list<OccurrenceReportDTO>('reports', {
+                filters: [
+                    { field: 'enrollment_id', operator: 'eq', value: enrollmentId },
+                    { field: 'class_occurrence_id', operator: 'eq', value: occurrenceId },
+                ],
+                perPage: 1,
+                mode: 'v1'
+            })
+            return response.data?.[0] || null
+        }
+        const { data, error } = await apiDataClient
             .from('occurrence_reports')
             .select('*')
             .eq('enrollment_id', enrollmentId)
@@ -279,7 +396,29 @@ export class EnrollmentTransferQueryService {
         occurrenceId: string,
         lessonId?: string | null
     ): Promise<TransferConflictDisplayContext> {
-        const occurrenceQuery = supabase
+        if (getApiV1Mode() === 'v1') {
+            const occurrenceResponse = await apiV1Client.get<any>('/occurrences/' + encodeURIComponent(occurrenceId))
+            const occurrence = occurrenceResponse.data
+            const lesson = lessonId ? (await apiResourceClient.get<any>('lessons', lessonId, 'v1')).data : null
+            if (!occurrence?.id) throw new Error('Failed to fetch occurrence conflict context: not found')
+            const session = Array.isArray(occurrence.class_sessions) ? occurrence.class_sessions[0] : occurrence.class_sessions
+            const classroom = Array.isArray(session?.classrooms) ? session.classrooms[0] : session?.classrooms
+            return {
+                occurrenceId: occurrence.id,
+                occurrenceDate: occurrence.occurrence_date,
+                startTime: occurrence.actual_start_time || occurrence.original_start_time || session?.start_time || null,
+                endTime: occurrence.actual_end_time || occurrence.original_end_time || session?.end_time || null,
+                sessionId: occurrence.class_session_id,
+                sessionName: session?.name || null,
+                sessionTimeZone: session?.time_zone || null,
+                classroomId: session?.classroom_id || null,
+                classroomName: classroom?.name || null,
+                lessonId: lesson?.id || lessonId || null,
+                lessonSequence: lesson?.sequence ?? null,
+                lessonTitle: lesson?.title || null
+            }
+        }
+        const occurrenceQuery = apiDataClient
             .from('class_occurrences')
             .select(`
                 id,
@@ -302,7 +441,7 @@ export class EnrollmentTransferQueryService {
             .eq('id', occurrenceId)
             .single()
         const lessonQuery = lessonId
-            ? supabase.from('lessons').select('id, title, sequence').eq('id', lessonId).maybeSingle()
+            ? apiDataClient.from('lessons').select('id, title, sequence').eq('id', lessonId).maybeSingle()
             : Promise.resolve({ data: null, error: null })
         const [{ data: occurrence, error: occurrenceError }, { data: lesson, error: lessonError }] =
             await Promise.all([occurrenceQuery, lessonQuery])
@@ -338,7 +477,14 @@ export class EnrollmentTransferQueryService {
     }
 
     static async getTargetOccurrenceId(sessionId: string, targetDate: string): Promise<string> {
-        const { data, error } = await supabase
+        if (getApiV1Mode() === 'v1') {
+            const params = new URLSearchParams({ class_session_id: sessionId, date: targetDate, limit: '1', sort: 'occurrence_date' })
+            const response = await apiV1Client.get<Array<{ id: string }>>(`/occurrences?${params}`)
+            const occurrence = response.data?.[0]
+            if (!occurrence?.id) throw new Error('Failed to find target occurrence: not found')
+            return occurrence.id
+        }
+        const { data, error } = await apiDataClient
             .from('class_occurrences')
             .select('id')
             .eq('class_session_id', sessionId)

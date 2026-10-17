@@ -9,6 +9,7 @@ const t = (key: string) => ({
     'report.editor.present': '出席',
     'report.editor.absent': '未出席',
     'report.editor.absence_reasons.sick_or_injured': '生病／受傷',
+    'report.editor.absence_reasons.reason_not_provided': '未告知原因',
     'student.transfer_conflict.not_filled': '未填寫'
 }[key] || key)
 
@@ -53,6 +54,12 @@ describe('TransferReportConflictDisplayService', () => {
         expect(TransferReportConflictDisplayService.formatField(report({
             attendance_status: 'absent', absence_reason: 'sick_or_injured'
         }), context, 'attendance', t)).toMatchObject({ text: '未出席 · 生病／受傷', tone: 'danger' })
+    })
+
+    it('shows legacy localized reason labels without looking them up as translation keys', () => {
+        expect(TransferReportConflictDisplayService.formatField(report({
+            attendance_status: 'absent', absence_reason: '未告知原因'
+        }), context, 'attendance', t)).toMatchObject({ text: '未出席 · 未告知原因', tone: 'danger' })
     })
 
     it('formats ratings, progress, links, rich content, and empty values', () => {

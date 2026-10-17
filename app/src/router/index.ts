@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory, type RouteLocationNormalized } from 'vue-router'
 import { useAuthStore } from '@/stores/useAuthStore'
 import LoginView from '@/views/LoginView.vue'
+import { getSafePostLoginTarget } from './authRedirect'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -16,6 +17,12 @@ const router = createRouter({
       name: 'login',
       component: LoginView,
       meta: { title: 'nav.login', description: 'nav.subtitle' }
+    },
+    {
+      path: '/account-disabled',
+      name: 'account-disabled',
+      component: () => import('@/views/AccountDisabledView.vue'),
+      meta: { title: 'auth.account_disabled_title', description: 'nav.subtitle' }
     },
     {
       path: '/dashboard',
@@ -124,12 +131,16 @@ router.beforeEach(async (to: RouteLocationNormalized) => {
     await authStore.initialize()
   }
 
+  if (authStore.accountDisabled && to.name !== 'account-disabled') {
+    return { name: 'account-disabled' }
+  }
+
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-    return '/login'
+    return { name: 'login', query: { redirect: to.fullPath } }
   }
   
   if (to.path === '/login' && authStore.isAuthenticated) {
-    return '/dashboard'
+    return getSafePostLoginTarget(to.query.redirect, router)
   }
 
   return true

@@ -12,10 +12,10 @@ import attendance from './attendance.json'
 import teacher from './teacher.json'
 import about from './about.json'
 import changelog from './changelog.json'
-import timezones from './timezones.json'
 import settings from './settings.json'
 import editor from './editor.json'
 import errors from './errors.json'
+import rbac from './rbac.json'
 
 export default {
   nav,
@@ -32,8 +32,8 @@ export default {
   teacher,
   about,
   changelog,
-  timezones,
   settings,
   editor,
-  errors
+  errors,
+  rbac
 }

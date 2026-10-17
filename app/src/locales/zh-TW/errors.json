@@ -5,9 +5,11 @@
     "save_outcome_unknown": "\u7121\u6cd5\u78ba\u8a8d\u5132\u5b58\u7d50\u679c\uff0c\u8b8a\u66f4\u4ecd\u5f85\u5132\u5b58\uff0c\u8acb\u91cd\u8a66\u3002",
     "unexpected": "發生未預期的錯誤。如果持續發生，請聯絡支援人員。",
     "conflict": "此資料已被其他人變更，請重新載入後再繼續。",
+    "system_role_assignment_overlap": "此使用者在重疊期間已具有相同的系統角色。",
     "unique_violation": "該值已被使用。",
     "foreign_key_violation": "因為仍有相關資料參照此項目，無法完成此操作。",
     "permission_denied": "您沒有執行此操作的權限。",
+    "permission_required_for_settings": "只有具備系統管理權限的使用者可以修改通知設定。",
     "session_expired": "登入已逾期，請重新登入。",
     "validation_failed": "請檢查標示的欄位後再試一次。",
     "domain": {
@@ -23,6 +25,17 @@
         "COURSE_REQUIRED_FOR_SESSION": "請先選擇課程再選擇班次。",
         "ROLE_NAME_REQUIRED": "請輸入角色名稱。",
         "TRANSFER_CONFLICT_STALE": "此調課衝突已在其他地方被處理，請重新整理。",
+        "SOURCE_OCCURRENCE_NOT_EFFECTIVE": "學生在原始課次已不是有效學員（可能已轉班，或這一堂已經調課到其他課次）。",
+        "TARGET_OCCURRENCE_ALREADY_EFFECTIVE": "學生已經有其他調課調入這個目標課次，請先取消那筆調課。",
+        "TARGET_OCCURRENCE_NOT_EFFECTIVE": "目標課次對這位學生無效。",
+        "SOURCE_AND_TARGET_OCCURRENCES_MATCH": "原始課次與目標課次不能相同。",
+        "SINGLE_LESSON_TRANSFER_FORBIDDEN": "您必須同時是原班與目標班當天的授課老師，才能執行這筆調課。",
+        "SINGLE_LESSON_TRANSFER_ALREADY_EXISTS": "這一堂課已經有生效中的調課紀錄。",
+        "SINGLE_LESSON_TRANSFER_NOT_FOUND": "找不到這筆調課，可能已被取消。",
+        "SOURCE_REPORT_ALREADY_EXISTS": "原始課次已經有這位學生的報告，無法取消調課。",
+        "ORIGINAL_REPORT_NOT_FOUND": "找不到原始課次的報告，請重新整理後再試。",
+        "SOURCE_REPORT_HAS_CONTENT": "原日期已經有這位學生寫了內容的報告，無法取消調課。請先處理那份報告。",
+        "TRANSFER_CHAIN_HAS_MERGED_REPORT": "這堂課之後的調課曾合併過報告，請先取消最後一筆調課。",
         "REPORT_ALREADY_EXISTS": "此課次已存在報告。"
     }
 }

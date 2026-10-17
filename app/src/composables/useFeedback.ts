@@ -1,7 +1,7 @@
 import { useToast } from 'vue-toastification'
 import { useI18n } from 'vue-i18n'
 import { AppError } from '@/services/errors/AppError'
-import { mapDomainError } from '@/services/errors/mapDomainError'
+import { domainErrorCode, mapDomainError } from '@/services/errors/mapDomainError'
 import { mapSupabaseError } from '@/services/errors/mapSupabaseError'
 
 type I18nParams = Record<string, unknown>
@@ -60,8 +60,7 @@ export function useFeedback() {
             return
         }
 
-        const message = extractMessage(error)
-        const domain = mapDomainError(message)
+        const domain = mapDomainError(domainErrorCode(error)) ?? mapDomainError(extractMessage(error))
         if (domain) {
             errorKey(domain.i18nKey)
             return

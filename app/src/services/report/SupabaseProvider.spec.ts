@@ -114,6 +114,26 @@ describe('report SupabaseProvider snapshot versioning', () => {
         }))
         await provider.destroy()
     })
+    it('does not mark a stale snapshot as saved or advance its guarded report version', async () => {
+        const { supabase, rpc } = createSupabaseMock()
+        rpc.mockResolvedValue({ data: false, error: null })
+        const doc = new Y.Doc()
+        const provider = new SupabaseProvider(supabase as any, doc, 'report-1', 7, 'user-1')
+        await provider.ready
+        doc.getText('content').insert(0, 'local draft')
+
+        await expect(provider.saveSnapshot()).resolves.toBe(false)
+        await expect(provider.saveSnapshot()).resolves.toBe(false)
+
+        expect(rpc).toHaveBeenCalledTimes(2)
+        expect(rpc).toHaveBeenLastCalledWith('save_report_collab_snapshot', expect.objectContaining({
+            p_occurrence_report_id: 'report-1',
+            p_base_report_version: 7,
+            p_snapshot_base64: expect.any(String)
+        }))
+        expect(doc.getText('content').toString()).toBe('local draft')
+        await provider.destroy()
+    })
     it('rejects ready when the collaboration document cannot be loaded', async () => {
         const { supabase, query } = createSupabaseMock()
         query.maybeSingle.mockResolvedValue({ data: null, error: { message: 'permission denied' } })
@@ -125,6 +145,35 @@ describe('report SupabaseProvider snapshot versioning', () => {
         await expect(provider.ready).rejects.toThrow('permission denied')
         expect(provider.initialState).toBe('error')
         expect(statuses).toContain('error')
+        await provider.destroy()
+    })
+
+    it('keeps transient channel recovery alive and reloads the snapshot and presence after resubscribe', async () => {
+        const { supabase, channel, query } = createSupabaseMock({ snapshot_base64: encodedTextSnapshot('recovered draft'), base_report_version: 7 })
+        let notify: ((status: string, detail?: string) => void) | undefined
+        channel.subscribe.mockImplementation((callback: (status: string, detail?: string) => void) => {
+            notify = callback
+            return channel
+        })
+        const statuses: string[] = []
+        const provider = new SupabaseProvider(supabase as any, new Y.Doc(), 'report-1', 7, 'user-1', {
+            onStatus: status => statuses.push(status)
+        })
+
+        notify?.('CHANNEL_ERROR', 'upstream interrupted')
+        notify?.('RECONNECTING')
+        expect(statuses).toContain('reconnecting')
+        notify?.('SUBSCRIBED')
+        await provider.ready
+        expect(query.maybeSingle).toHaveBeenCalledOnce()
+        expect(channel.track).toHaveBeenCalledOnce()
+
+        notify?.('OFFLINE')
+        notify?.('SUBSCRIBED')
+        await Promise.resolve()
+        await Promise.resolve()
+        expect(query.maybeSingle).toHaveBeenCalledTimes(2)
+        expect(channel.track).toHaveBeenCalledTimes(2)
         await provider.destroy()
     })
 

@@ -41,16 +41,24 @@
         <!-- Calendar Grid -->
         <div class="grid grid-cols-7" :class="compact ? 'gap-1' : 'gap-3'">
             <div v-for="(day, index) in calendarDays" :key="index" @click="selectDay(day.date)"
-                class="relative cursor-pointer transition-all duration-300 border border-transparent"
+                role="button"
+                :tabindex="isDisabled(day) ? -1 : 0"
+                :aria-disabled="isDisabled(day) || undefined"
+                :aria-pressed="isSelected(day)"
+                :aria-label="dayLabel(day)"
+                @keydown.enter.prevent="selectDay(day.date)"
+                @keydown.space.prevent="selectDay(day.date)"
+                class="relative transition-colors duration-200 border border-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                 :class="[
                     getDayClasses(day),
+                    isDisabled(day) ? 'cursor-not-allowed' : 'cursor-pointer',
                     compact ? 'h-12 p-1 rounded-xl overflow-hidden' : 'aspect-square p-2 rounded-2xl'
                 ]">
                 <!-- Day Number -->
                 <div class="font-black"
                     :class="[
                         compact ? 'text-xs' : 'text-sm',
-                        day.isCurrentMonth ? (day.isToday ? 'text-emerald-600' : 'text-gray-900') : 'text-gray-200'
+                        dayNumberClass(day)
                     ]">
                     {{ day.date.getDate() }}
                 </div>
@@ -80,12 +88,18 @@ interface Props {
     compact?: boolean
     modelValue?: string | Date | null
     initialMonth?: string | Date | null
+    /** Days that cannot be selected (rendered muted, not clickable). */
+    isDateDisabled?: ((date: Date) => boolean) | null
+    /** Extra background/border classes for a day, e.g. to mark class days. */
+    getDayTone?: ((date: Date) => string | null) | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
     compact: false,
     modelValue: null,
-    initialMonth: null
+    initialMonth: null,
+    isDateDisabled: null,
+    getDayTone: null
 })
 
 const emit = defineEmits<{
@@ -201,7 +215,26 @@ function nextMonth() {
     )
 }
 
+function isSelected(day: BaseCalendarDay) {
+    return selectedDate.value?.getTime() === day.date.getTime()
+}
+
+function isDisabled(day: BaseCalendarDay) {
+    return Boolean(props.isDateDisabled?.(day.date)) && !isSelected(day)
+}
+
+function dayLabel(day: BaseCalendarDay) {
+    return day.date.toLocaleDateString(locale.value, { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })
+}
+
+function dayNumberClass(day: BaseCalendarDay) {
+    if (!day.isCurrentMonth) return 'text-gray-300'
+    if (isDisabled(day)) return 'text-gray-300'
+    return day.isToday ? 'text-emerald-600' : 'text-gray-900'
+}
+
 function selectDay(date: Date) {
+    if (props.isDateDisabled?.(date) && selectedDate.value?.getTime() !== date.getTime()) return
     const selected = new Date(date)
     selected.setHours(0, 0, 0, 0)
     selectedDate.value = selected
@@ -210,12 +243,18 @@ function selectDay(date: Date) {
 }
 
 function getDayClasses(day: BaseCalendarDay) {
-    const isSelected = selectedDate.value?.getTime() === day.date.getTime()
-    if (isSelected) {
-        return 'bg-emerald-50 border-emerald-200 ring-2 ring-emerald-500/20'
+    const tone = props.getDayTone?.(day.date) || null
+    if (isSelected(day)) {
+        return `${tone || 'bg-emerald-50 border-emerald-200'} ring-2 ring-emerald-500 ring-offset-1`
     }
     if (!day.isCurrentMonth) {
-        return 'bg-gray-50/50 opacity-50'
+        return `${tone || 'bg-gray-50/50'} opacity-50`
+    }
+    if (isDisabled(day)) {
+        return 'bg-white border-transparent'
+    }
+    if (tone) {
+        return `${tone} hover:brightness-95`
     }
     if (day.isToday) {
         return 'bg-emerald-50/30 border-emerald-100 hover:bg-emerald-50'

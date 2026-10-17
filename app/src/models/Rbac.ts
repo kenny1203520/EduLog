@@ -1,4 +1,5 @@
 export type PolicyEffect = 'allow' | 'deny'
+export type RbacDomain = 'system' | 'teaching'
 export type PolicyScope = 'system' | 'classroom' | 'class_session'
 
 export interface RoleDTO {
@@ -8,6 +9,13 @@ export interface RoleDTO {
     description?: string | null
     is_system: boolean
     sort_order: number
+    domain?: RbacDomain
+    teaching_id?: string | null
+    is_builtin?: boolean
+    is_protected?: boolean
+    parent_role_id?: string | null
+    created_at?: string
+    updated_at?: string | null
 }
 
 export interface PermissionDTO {
@@ -26,10 +34,38 @@ export interface RolePermissionPolicyDTO {
     effect: PolicyEffect
 }
 
+/** Row returned by the canonical role-permission read model. */
+export interface RolePermissionMatrixRow {
+    permission_id: string
+    permission_key: string
+    resource: string
+    action: string
+    local_effect: PolicyEffect | null
+    inherited_effect: PolicyEffect | null
+    inherited_from_role_id?: string | null
+    inherited_from_scope_type?: PolicyScope | null
+    effective_effect: PolicyEffect | null
+    denied: boolean
+    epoch?: number
+}
+
 export interface EffectivePermissionResult {
     effect: PolicyEffect | null
     source: PolicyScope | null
     policy?: RolePermissionPolicyDTO
+}
+
+export interface RbacCapabilities {
+    system?: Record<string, boolean>
+    teaching?: Record<string, boolean>
+    [key: string]: unknown
+}
+
+export interface SettingsOverview {
+    preferences: { time_zone?: string | null; editor_settings?: Record<string, unknown> | null } | null
+    capabilities: RbacCapabilities
+    tabs: { personal: boolean; system: boolean }
+    sections: Record<string, Record<string, boolean>>
 }
 
 export interface PolicyContext {

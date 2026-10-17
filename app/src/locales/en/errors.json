@@ -5,9 +5,11 @@
     "save_outcome_unknown": "The save result could not be confirmed. Your changes are still pending; please retry.",
     "unexpected": "An unexpected error occurred. If this keeps happening, please contact support.",
     "conflict": "This was changed by someone else. Please reload before continuing.",
+    "system_role_assignment_overlap": "This user already has this system role during an overlapping date range.",
     "unique_violation": "That value is already in use.",
     "foreign_key_violation": "This can't be completed because related data still references it.",
     "permission_denied": "You don't have permission to do that.",
+    "permission_required_for_settings": "Only system administrators can change notification settings.",
     "session_expired": "Your session has expired. Please sign in again.",
     "validation_failed": "Please check the highlighted fields and try again.",
     "domain": {
@@ -23,6 +25,17 @@
         "COURSE_REQUIRED_FOR_SESSION": "Select a course before choosing a class.",
         "ROLE_NAME_REQUIRED": "Enter a role name.",
         "TRANSFER_CONFLICT_STALE": "This transfer conflict was already resolved elsewhere. Please refresh.",
+        "SOURCE_OCCURRENCE_NOT_EFFECTIVE": "The student is no longer effective in the original lesson (they may have changed class, or this lesson was already transferred).",
+        "TARGET_OCCURRENCE_ALREADY_EFFECTIVE": "Another transfer already moves this student into the target lesson. Cancel that transfer first.",
+        "TARGET_OCCURRENCE_NOT_EFFECTIVE": "The target lesson is not valid for this student.",
+        "SOURCE_AND_TARGET_OCCURRENCES_MATCH": "The original and target lessons must be different.",
+        "SINGLE_LESSON_TRANSFER_FORBIDDEN": "You must be the assigned teacher of both the original and target class on those dates to make this transfer.",
+        "SINGLE_LESSON_TRANSFER_ALREADY_EXISTS": "This lesson already has an active transfer.",
+        "SINGLE_LESSON_TRANSFER_NOT_FOUND": "This transfer was not found; it may already be cancelled.",
+        "SOURCE_REPORT_ALREADY_EXISTS": "The original lesson already has a report for this student, so the transfer can't be cancelled.",
+        "ORIGINAL_REPORT_NOT_FOUND": "The original lesson's report was not found. Refresh and try again.",
+        "SOURCE_REPORT_HAS_CONTENT": "The original date already has a report with content for this student, so the transfer can't be cancelled. Resolve that report first.",
+        "TRANSFER_CHAIN_HAS_MERGED_REPORT": "A later transfer of this lesson merged reports. Cancel the latest transfer first.",
         "REPORT_ALREADY_EXISTS": "A report already exists for this lesson."
     }
 }

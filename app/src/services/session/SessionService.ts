@@ -1,9 +1,12 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import type { ClassSessionDTO } from '@/models/Classroom'
 import { ClassSessionFactory, type ClassSessionScheduleRuleDTO } from '@/models/ClassSession'
 import { VisibilityPreferenceService } from '../VisibilityPreferenceService'
 import { DateUtils } from '@/utils/DateUtils'
 import { SessionEligibilityPolicy } from '@/models/SessionEligibilityPolicy'
+import { apiResourceClient } from '@/services/api/ApiResourceClient'
+import { apiV1Client } from '@/services/api/ApiV1Client'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 export type SessionVisibilityFilterMode = 'all' | 'visible' | 'hidden'
 
@@ -22,6 +25,15 @@ export class SessionService {
         }
     }
 
+    private static toScheduleRuleInput(rule: ClassSessionScheduleRuleDTO): Omit<ClassSessionScheduleRuleDTO, 'id' | 'class_session_id' | 'created_at' | 'updated_at'> {
+        const input = { ...rule }
+        delete input.id
+        delete input.class_session_id
+        delete input.created_at
+        delete input.updated_at
+        return input
+    }
+
     private static scheduleSelect = '*, class_session_schedule_rules(*)'
 
     static async getClassSessions(
@@ -31,11 +43,17 @@ export class SessionService {
         classroomId?: string | null,
         visibilityMode: SessionVisibilityFilterMode = 'all'
     ): Promise<{ data: ClassSessionDTO[], count: number }> {
+        if (getApiV1Mode() === 'v1' && visibilityMode === 'all') {
+            const response = await apiResourceClient.list<any>('class-sessions', { page, perPage, search, sort: 'name', classroomId: classroomId || undefined, mode: 'v1' })
+            let rows = (response.data || []).map(this.hydrateSession)
+            if (classroomId) rows = rows.filter((row: any) => row.classroom_id === classroomId)
+            return { data: rows, count: Number(response.meta?.total ?? rows.length) }
+        }
         const from = (page - 1) * perPage
         const to = from + perPage - 1
 
         if (visibilityMode === 'all') {
-            let query = supabase
+            let query = apiDataClient
                 .from('class_sessions')
                 .select(this.scheduleSelect, { count: 'exact' })
 
@@ -59,7 +77,7 @@ export class SessionService {
         const allSessions: ClassSessionDTO[] = []
 
         for (let offset = 0; ; offset += chunkSize) {
-            let query = supabase
+            let query = apiDataClient
                 .from('class_sessions')
                 .select(this.scheduleSelect)
 
@@ -100,16 +118,51 @@ export class SessionService {
         }
     }
 
-    static async getClassSessionOptions(page: number = 1, perPage: number = 1000): Promise<{ data: ClassSessionOption[]; count: number }> {
-        const from = (page - 1) * perPage
-        const to = from + perPage - 1
-        const { data, error, count } = await supabase
+    static async getAllClassSessions(search?: string, classroomId?: string | null, visibilityMode: SessionVisibilityFilterMode = 'all'): Promise<{ data: ClassSessionDTO[], count: number }> {
+        const pageSize = 100
+        const sessions: ClassSessionDTO[] = []
+        let page = 1
+        let total = 0
+        do {
+            const result = await this.getClassSessions(page, pageSize, search, classroomId, visibilityMode)
+            sessions.push(...result.data)
+            total = result.count
+            page += 1
+            if (result.data.length === 0) break
+        } while (sessions.length < total)
+        return { data: sessions, count: total }
+    }
+
+    static async getClassSessionOptions(page: number = 1, perPage: number = 100): Promise<{ data: ClassSessionOption[]; count: number }> {
+        const pageSize = Math.min(Math.max(1, Math.trunc(perPage)), 100)
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiResourceClient.list<ClassSessionOption>('class-sessions', { page, perPage: pageSize, sort: 'name', mode: 'v1' })
+            return { data: response.data || [], count: Number(response.meta?.total ?? response.data?.length ?? 0) }
+        }
+        const from = (page - 1) * pageSize
+        const to = from + pageSize - 1
+        const { data, error, count } = await apiDataClient
             .from('class_sessions')
             .select('id, name, classroom_id, course_ids', { count: 'exact' })
             .order('name', { ascending: true })
             .range(from, to)
         if (error) throw new Error(error.message)
         return { data: (data || []) as ClassSessionOption[], count: count || 0 }
+    }
+
+    static async getAllClassSessionOptions(): Promise<{ data: ClassSessionOption[], count: number }> {
+        const pageSize = 100
+        const sessions: ClassSessionOption[] = []
+        let page = 1
+        let total = 0
+        do {
+            const result = await this.getClassSessionOptions(page, pageSize)
+            sessions.push(...result.data)
+            total = result.count
+            page += 1
+            if (result.data.length === 0) break
+        } while (sessions.length < total)
+        return { data: sessions, count: total }
     }
     static async createClassSession(session: Partial<ClassSessionDTO>): Promise<ClassSessionDTO> {
         return this.saveClassSession(session)
@@ -120,6 +173,12 @@ export class SessionService {
     }
 
     static async saveClassSession(session: Partial<ClassSessionDTO>, id?: string): Promise<ClassSessionDTO> {
+        if (getApiV1Mode() === 'v1') {
+            const rules = (session.schedule_rules || session.class_session_schedule_rules || []) as ClassSessionScheduleRuleDTO[]
+            const payload = { name: session.name || '', classroom_id: session.classroom_id || null, course_ids: session.course_ids || [], capacity: session.capacity ?? 10, lesson_number: session.lesson_number ?? null, external_link: session.external_link || null, start_date: session.start_date || null, end_date: session.end_date || null, time_zone: DateUtils.isValidTimeZone(session.time_zone) ? session.time_zone : DateUtils.getDefaultTimeZone(), session_type: session.session_type || 'regular', schedule_mode: session.schedule_mode || (session.session_type === 'camp' ? 'specific_dates' : 'weekly'), schedule_rules: rules.map(this.toScheduleRuleInput) }
+            const response = id ? await apiResourceClient.update<any>('class-sessions', id, payload, 'v1') : await apiResourceClient.create<any>('class-sessions', payload, 'v1')
+            return this.hydrateSession(response.data)
+        }
         const rules = (session.schedule_rules || session.class_session_schedule_rules || []) as ClassSessionScheduleRuleDTO[]
         const payload = {
             name: session.name || '',
@@ -130,7 +189,7 @@ export class SessionService {
             external_link: session.external_link || null,
             start_date: session.start_date || null,
             end_date: session.end_date || null,
-            time_zone: session.time_zone || 'Asia/Taipei',
+            time_zone: DateUtils.isValidTimeZone(session.time_zone) ? session.time_zone : DateUtils.getDefaultTimeZone(),
             session_type: session.session_type || 'regular',
             schedule_mode: session.schedule_mode || (session.session_type === 'camp' ? 'specific_dates' : 'weekly')
         }
@@ -143,9 +202,9 @@ export class SessionService {
         const validationErrors = model.validate()
         if (validationErrors.length > 0) throw new Error(validationErrors[0])
 
-        const { data: savedId, error } = await supabase.rpc('save_class_session_with_schedule', {
+        const { data: savedId, error } = await apiDataClient.rpc('save_class_session_with_schedule', {
             p_session: payload,
-            p_rules: rules.map(rule => ({
+            p_rules: rules.map(rule => this.toScheduleRuleInput(rule)).map(rule => ({
                 schedule_kind: rule.schedule_kind,
                 day_of_week: rule.day_of_week ?? null,
                 day_of_month: rule.day_of_month ?? null,
@@ -160,7 +219,11 @@ export class SessionService {
     }
 
     static async getClassSession(id: string): Promise<ClassSessionDTO> {
-        const { data, error } = await supabase
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiResourceClient.get<any>('class-sessions', id, 'v1')
+            return this.hydrateSession(response.data)
+        }
+        const { data, error } = await apiDataClient
             .from('class_sessions')
             .select(this.scheduleSelect)
             .eq('id', id)
@@ -217,12 +280,20 @@ export class SessionService {
     }
 
     static async deleteClassSession(id: string): Promise<void> {
-        const { error } = await supabase.from('class_sessions').delete().eq('id', id)
+        if (getApiV1Mode() === 'v1') {
+            await apiResourceClient.remove('class-sessions', id, 'v1')
+            return
+        }
+        const { error } = await apiDataClient.from('class_sessions').delete().eq('id', id)
         if (error) throw new Error(error.message)
     }
 
     static async getSessionDetails(sessionId: string) {
-        const { data: session, error: sessionError } = await supabase
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.get<any>('/class-sessions/' + encodeURIComponent(sessionId) + '/details')
+            return response.data
+        }
+        const { data: session, error: sessionError } = await apiDataClient
             .from('class_sessions')
             .select(`
           *,
@@ -234,7 +305,7 @@ export class SessionService {
 
         if (sessionError) throw new Error(sessionError.message)
 
-        const { count, error: countError } = await supabase
+        const { count, error: countError } = await apiDataClient
             .from('enrollments')
             .select('*', { count: 'exact', head: true })
             .eq('class_session_id', sessionId)
@@ -251,7 +322,12 @@ export class SessionService {
     }
 
     static async getMaxEnrollmentInDateRange(sessionId: string, startDate: string, endDate: string): Promise<number> {
-        const { data: occurrences, error } = await supabase
+        if (getApiV1Mode() === 'v1') {
+            const params = new URLSearchParams({ start_date: startDate, end_date: endDate })
+            const response = await apiV1Client.get<{ max_occupancy?: number; max_enrollment?: number }>('/class-sessions/' + encodeURIComponent(sessionId) + '/enrollment-peak?' + params.toString())
+            return Number(response.data?.max_occupancy ?? response.data?.max_enrollment ?? 0)
+        }
+        const { data: occurrences, error } = await apiDataClient
             .from('class_occurrences')
             .select(`
                 id,

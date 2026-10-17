@@ -11,6 +11,12 @@ const roomCardStart = source.indexOf('<div v-for="room in classrooms"')
 const roomCardEnd = source.indexOf('<!-- Card Body -->', roomCardStart)
 const roomCard = source.slice(roomCardStart, roomCardEnd)
 describe('ClassroomManagement session card responsive contract', () => {
+    it('starts with visible classrooms and sessions by default', () => {
+        expect(source).toContain("const displayMode = ref<DisplayMode>('visible')")
+        expect(source).toContain('classroomOverviewCounts')
+        expect(source).toContain("displayMode = 'all'")
+    })
+
     it('uses card width to switch metadata columns without crushing mobile content', () => {
         expect(card).toContain('class="session-card group min-w-0')
         expect(card).toContain('session-card__metadata')

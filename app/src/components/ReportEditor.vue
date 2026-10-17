@@ -12,27 +12,11 @@
         </div>
 
         <!-- Header -->
-        <div v-if="effectiveCollaborationEnabled && collaborationStatus === 'connecting'"
-            class="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700"
-            role="status">
-            {{ $t('report.editor.collaboration_connecting', 'Collaboration is connecting. You can continue editing.') }}
-        </div>
-        <div v-else-if="effectiveCollaborationEnabled && (collaborationStatus === 'error' || collabInitialState === 'error')"
-            class="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 text-xs text-amber-800"
-            role="status">
-            {{ $t('report.editor.collaboration_fallback', 'Collaboration unavailable; switched to single-user editing. Saving remains available.') }}
-            <span v-if="collaborationError" class="sr-only">{{ collaborationError }}</span>
-        </div>
-        <div v-else-if="effectiveCollaborationEnabled && collaborationRecovered"
-            class="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700"
-            role="status">
-            {{ $t('report.editor.collaboration_recovered', 'Real-time collaboration has been restored.') }}
-        </div>
-
         <div class="flex items-center justify-between gap-3">
             <h3 class="text-lg font-semibold text-gray-800">
                 {{ props.title || $t('report.editor.title') }}
             </h3>
+            <div class="flex min-w-0 flex-wrap items-center justify-end gap-2">
             <div v-if="onlineParticipantCount > 0" class="flex items-center gap-1 text-xs text-slate-500" aria-live="polite">
                 <span class="font-semibold text-emerald-700">{{ onlineParticipantCount }} online</span>
                 <span v-for="peer in activePeers.slice(0, 3)" :key="peer.clientId"
@@ -40,6 +24,16 @@
                     :style="{ color: peer.user?.color, backgroundColor: (peer.user?.color || '#94a3b8') + '20' }">
                     {{ peer.user?.name || 'Collaborator' }}<span v-if="peer.activity?.field"> - {{ peer.activity.field }}</span>
                 </span>
+            </div>
+            <RealtimeStatusBadge v-if="effectiveCollaborationEnabled"
+                :tone="collaborationBadge.tone"
+                :label="collaborationBadge.label"
+                :message="collaborationBadge.message"
+                :detail="collaborationError ? `${$t('report.editor.collaboration_error_detail')} ${collaborationError}` : null"
+                :can-retry="collaborationBadge.canRetry"
+                :retry-label="$t('report.editor.collaboration_retry')"
+                :status-label="$t('report.editor.collaboration_badge_aria')"
+                @retry="reconnectCollaboration" />
             </div>
         </div>
 
@@ -156,6 +150,38 @@
                 </div>
                 <BaseDropdown data-collab-field="lesson" v-model="selectedLessonId" :options="lessonOptions" :disabled="disabled"
                     theme="emerald" />
+                <section v-if="progressContextLoading || progressContextError || progressGaps.length || previousProgressReport"
+                    class="mt-3 rounded-xl border px-3 py-3 sm:px-4"
+                    :class="progressContextError ? 'border-rose-200 bg-rose-50' : 'border-amber-200 bg-amber-50'"
+                    :aria-busy="progressContextLoading" aria-live="polite" aria-atomic="true">
+                    <p v-if="progressContextLoading" class="text-sm text-slate-600" role="status">{{ $t('report.editor.progress_check.loading') }}</p>
+                    <div v-else-if="progressContextError" class="flex flex-wrap items-center justify-between gap-2 text-sm text-rose-800" role="status">
+                        <span>{{ $t('report.editor.progress_check.load_error') }}</span>
+                        <button type="button" class="min-h-9 rounded-lg border border-rose-300 bg-white px-3 font-semibold" @click="loadProgressContext">{{ $t('report.editor.progress_check.retry') }}</button>
+                    </div>
+                    <div v-else class="space-y-3 text-sm">
+                        <div v-if="progressGaps.length">
+                            <p class="font-bold text-amber-950">{{ $t('report.editor.progress_check.gaps_title') }}</p>
+                            <ul class="mt-1 flex flex-wrap gap-2">
+                                <li v-for="lesson in progressGaps" :key="lesson.id" class="rounded-full bg-white px-3 py-1 text-amber-900 ring-1 ring-amber-200">
+                                    {{ $t('report.editor.progress_check.lesson', { sequence: lesson.sequence, title: lesson.title }) }}
+                                </li>
+                            </ul>
+                        </div>
+                        <div v-if="previousProgressReport" class="flex flex-wrap items-center justify-between gap-2 border-t border-amber-200 pt-2">
+                            <div class="min-w-0">
+                                <p class="font-bold text-slate-900">{{ $t('report.editor.progress_check.previous_title') }}</p>
+                                <p class="break-words text-slate-700">
+                                    {{ $t('report.editor.progress_check.lesson', { sequence: previousProgressReport.lesson.sequence, title: previousProgressReport.lesson.title }) }}
+                                    <span v-if="previousProgressReport.report.progress_letter"> · {{ previousProgressReport.report.progress_letter }}</span>
+                                    <span> · {{ previousProgressReport.report.is_completed ? $t('report.editor.progress_check.completed') : $t('report.editor.progress_check.incomplete') }}</span>
+                                </p>
+                            </div>
+                            <button type="button" class="min-h-9 shrink-0 rounded-lg border border-amber-300 bg-white px-3 font-semibold text-amber-950 hover:bg-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-700"
+                                @click="viewPreviousProgressReport">{{ $t('report.editor.progress_check.view_report') }}</button>
+                        </div>
+                    </div>
+                </section>
             </div>
 
             <!-- Report External Link Input -->
@@ -191,16 +217,19 @@
             <div data-collab-field="attendance" class="flex items-center gap-4 mb-3">
                 <label class="flex items-center gap-2 cursor-pointer">
                     <input type="radio" value="pending" v-model="attendanceStatus"
+                        :disabled="disabled || isSystemManagedAbsence"
                         class="w-4 h-4 text-gray-400 border-gray-300 focus:ring-gray-400" />
                     <span class="text-sm font-medium text-gray-700">{{ $t('attendance.pending') }}</span>
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer">
                     <input type="radio" value="present" v-model="attendanceStatus"
+                        :disabled="disabled || isSystemManagedAbsence"
                         class="w-4 h-4 text-emerald-600 border-gray-300 focus:ring-emerald-500" />
                     <span class="text-sm font-medium text-gray-700">{{ $t('attendance.present') }}</span>
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer">
                     <input type="radio" value="absent" v-model="attendanceStatus"
+                        :disabled="disabled || isSystemManagedAbsence"
                         class="w-4 h-4 text-red-600 border-gray-300 focus:ring-red-500" />
                     <span class="text-sm font-medium text-gray-700">{{ $t('attendance.absent') }}</span>
                 </label>
@@ -306,7 +335,7 @@
 
         <!-- Editor Font Size Stepper -->
         <div class="flex items-center gap-4 mb-4 justify-end">
-            <div class="flex items-center gap-1 bg-gray-50 border border-gray-100 rounded-xl p-1 shadow-sm select-none">
+            <div class="flex items-center gap-1 bg-gray-50 border border-gray-100 rounded-xl p-1 shadow-sm select-none touch-manipulation">
                 <button @click="preferences.adjustEditorScale(-preferences.STEP)"
                     class="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-500 hover:text-emerald-600 hover:border-emerald-200 hover:bg-emerald-50 transition-all font-bold text-xs shadow-sm">
                     -A
@@ -459,7 +488,10 @@
         </div>
 
         <ReportReferencePanel :show="showReferencePanel" :lesson-id="selectedLessonId"
-            :student-id="props.initialStudentId" :current-report-id="props.reportId" @close="showReferencePanel = false"
+            :student-id="props.initialStudentId" :current-report-id="props.reportId" @close="closeReferencePanel"
+            :focused-report-id="focusedProgressReport?.id" :focused-lesson-sequence="focusedProgressReport?.lesson.sequence"
+            :focused-lesson-title="focusedProgressReport?.lesson.title" :focused-course-name="props.courseDisplayName || props.courseName"
+            :focused-student-name="props.initialStudentName"
             @copy="handleCopyContent" />
 
         <ConfirmModal :is-open="confirmState.isOpen" :title="confirmState.title" :message="confirmState.message"
@@ -640,6 +672,7 @@ import { useAutoSave, type AutoSaveErrorContext } from '@/composables/useAutoSav
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { useAuthStore } from '@/stores/useAuthStore'
 import RatingInput from '@/components/common/RatingInput.vue'
+import RealtimeStatusBadge, { type RealtimeBadgeTone } from '@/components/common/RealtimeStatusBadge.vue'
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
 import TextEditor from '@/components/common/text-editor/TextEditor.vue'
 import CollaborativeTextEditor from '@/components/common/text-editor/CollaborativeTextEditor.vue'
@@ -671,7 +704,9 @@ import {
 import { copyRichTextToClipboard } from '@/utils/clipboard'
 import { formatNumber } from '@/utils/numberFormatting'
 import { safeExternalHref } from '@/utils/safeExternalHref'
+import { normalizeAbsenceReasonCode } from '@/utils/absenceReason'
 import { mergeReportConflict } from '@/services/report/ReportConflictMerge'
+import { findCourseProgressGaps } from '@/utils/courseProgressGaps'
 
 import type { Lesson } from '@/models/Course'
 
@@ -703,8 +738,8 @@ interface Props {
     initialProgressEnd?: string // 進度結束
     initialAttendanceStatus?: 'present' | 'absent' | 'pending' // 出缺勤狀態
     initialAbsenceReason?: string // 缺勤原因
-    initialClassParticipation?: number // 課堂參與
-    initialClassroomBehavior?: number // 課堂秩序
+    initialClassParticipation?: number | null // 課堂參與
+    initialClassroomBehavior?: number | null // 課堂秩序
     initialContactNotes?: string // 聯絡欄
     initialContactNotesDocument?: RichTextDocumentV1 | null
     initialClassNotes?: string // 課堂筆記/紀錄
@@ -744,8 +779,8 @@ const props = withDefaults(defineProps<Props>(), {
     initialProgressEnd: undefined,
     initialAttendanceStatus: 'pending',
     initialAbsenceReason: undefined,
-    initialClassParticipation: 0,
-    initialClassroomBehavior: 0,
+    initialClassParticipation: null,
+    initialClassroomBehavior: null,
     initialContactNotes: '',
     initialContactNotesDocument: null,
     initialClassNotes: '',
@@ -956,7 +991,7 @@ const absenceReasonOptions = computed(() => [
         'other'
     ].map(key => ({
         label: t(`report.editor.absence_reasons.${key}`),
-        value: t(`report.editor.absence_reasons.${key}`)
+        value: key
     })))
 ])
 
@@ -1501,7 +1536,7 @@ async function applyTemplateDraftToReport() {
         try {
             const serverReport = await OccurrenceReportService.getReportById(props.reportId)
             if (serverReport.version !== version.value) {
-                toast.error(t('report.editor.restore_conflict_error', '版本衝突：已有其他使用者修改了此報告。請先重新載入取得最新版本。'))
+                toast.error(t('report.editor.restore_conflict_error'))
                 return
             }
         } catch (e) {
@@ -1571,7 +1606,7 @@ onMounted(() => {
 })
 
 // Collab logic
-const collaborationUser = computed(() => ({ name: authStore.user?.user_metadata?.full_name || 'Teacher', color: '#60A5FA' }))
+const collaborationUser = computed(() => ({ name: authStore.user?.display_name || authStore.user?.nickname || authStore.user?.full_name || 'Teacher', color: '#60A5FA' }))
 
 const reportIdRef = computed(() => props.reportId || '')
 const initialReportVersionRef = computed(() => props.initialVersion)
@@ -1583,6 +1618,7 @@ const {
     initialState: collabInitialState,
     saveSnapshot,
     setBaseReportVersion,
+    reconnect: reconnectCollaboration,
     status: collaborationStatus,
     activePeers,
     onlineParticipantCount,
@@ -1594,21 +1630,6 @@ const {
     presenceEnabled: preferences.editorSettings.collaboration.presenceEnabled
 })))
 
-const collaborationRecovered = ref(false)
-let collaborationHadError = false
-let collaborationRecoveryTimer: ReturnType<typeof setTimeout> | null = null
-watch(collaborationStatus, nextStatus => {
-    if (nextStatus === 'error') collaborationHadError = true
-    if (nextStatus === 'ready' && collaborationHadError) {
-        collaborationHadError = false
-        collaborationRecovered.value = true
-        if (collaborationRecoveryTimer) clearTimeout(collaborationRecoveryTimer)
-        collaborationRecoveryTimer = setTimeout(() => {
-            collaborationRecovered.value = false
-            collaborationRecoveryTimer = null
-        }, 4000)
-    }
-})
 
 const contactNotesEditorRef = ref<TextEditorHandle | null>(null)
 const classNotesEditorRef = ref<TextEditorHandle | null>(null)
@@ -1648,6 +1669,7 @@ function handleCollaborationActivity(field: string, activity: { caret: number; s
 }
 let collabMetaMap: any = null
 let collabMetaObserver: ((event: any) => void) | null = null
+let collabMetaHydratedReportId: string | null = null
 let isApplyingRemoteCollab = false
 
 function cleanupReportCollabBindings() {
@@ -1668,6 +1690,11 @@ function withCollabGuard(fn: () => void) {
     } finally {
         isApplyingRemoteCollab = false
     }
+}
+
+function normalizeReportRating(value: unknown): number | null {
+    const rating = value === null || value === undefined || value === '' ? null : Number(value)
+    return typeof rating === 'number' && Number.isFinite(rating) && rating > 0 ? rating : null
 }
 
 function syncTextRefsFromEditors() {
@@ -1693,8 +1720,9 @@ function setEditorContentSilently(editorRef: { value: TextEditorHandle | null },
 }
 
 function writeReportMeta(metaMap: any) {
-    metaMap.set('attendanceStatus', attendanceStatus.value)
-    metaMap.set('absenceReason', absenceReason.value)
+    const managedReason = canonicalSystemManagedReason()
+    metaMap.set('attendanceStatus', managedReason ? canonicalSystemManagedStatus() : attendanceStatus.value)
+    metaMap.set('absenceReason', managedReason || absenceReason.value)
     metaMap.set('classParticipation', classParticipation.value)
     metaMap.set('classroomBehavior', classroomBehavior.value)
     metaMap.set('isCompleted', isCompleted.value)
@@ -1714,19 +1742,40 @@ watch(ready, (isReady) => {
         const metaMap = ydoc.value.getMap('reportMeta')
         collabMetaMap = metaMap
 
-        // Initialize local fields from map if they exist, otherwise seed them from local state
-        withCollabGuard(() => {
-            if (metaMap.has('attendanceStatus')) attendanceStatus.value = metaMap.get('attendanceStatus') as any
-            else metaMap.set('attendanceStatus', attendanceStatus.value)
+        // A reconnect reuses the same Y.Doc. Do not rehydrate Vue fields from
+        // its map while the editor has local unsaved changes; that would reset
+        // fields such as attendance to an older shared snapshot.
+        const reportKey = props.reportId || ''
+        const shouldHydrateMeta = collabMetaHydratedReportId !== reportKey || !hasUnsavedChanges.value
+        if (shouldHydrateMeta) withCollabGuard(() => {
+            const managedReason = canonicalSystemManagedReason()
+            if (managedReason) {
+                // The API/props are canonical for system-managed attendance;
+                // never hydrate these two fields from a stale Yjs document.
+                attendanceStatus.value = canonicalSystemManagedStatus()
+                absenceReason.value = managedReason
+                metaMap.set('attendanceStatus', attendanceStatus.value)
+                metaMap.set('absenceReason', absenceReason.value)
+            } else {
+                // The API props are the committed report state. A retained Yjs
+                // snapshot can outlive a save or reconnect, so it must not
+                // replace the status shown on the cards with an older value.
+                attendanceStatus.value = props.initialAttendanceStatus || 'pending'
+                metaMap.set('attendanceStatus', attendanceStatus.value)
 
-            if (metaMap.has('absenceReason')) absenceReason.value = metaMap.get('absenceReason') as any
-            else metaMap.set('absenceReason', absenceReason.value)
+                if (metaMap.has('absenceReason')) absenceReason.value = normalizeAbsenceReasonCode(String(metaMap.get('absenceReason') || ''))
+                else metaMap.set('absenceReason', absenceReason.value)
+            }
 
-            if (metaMap.has('classParticipation')) classParticipation.value = Number(metaMap.get('classParticipation') ?? 0)
-            else metaMap.set('classParticipation', classParticipation.value)
+            if (metaMap.has('classParticipation')) {
+                classParticipation.value = normalizeReportRating(metaMap.get('classParticipation'))
+                if (metaMap.get('classParticipation') !== classParticipation.value) metaMap.set('classParticipation', classParticipation.value)
+            } else metaMap.set('classParticipation', classParticipation.value)
 
-            if (metaMap.has('classroomBehavior')) classroomBehavior.value = Number(metaMap.get('classroomBehavior') ?? 0)
-            else metaMap.set('classroomBehavior', classroomBehavior.value)
+            if (metaMap.has('classroomBehavior')) {
+                classroomBehavior.value = normalizeReportRating(metaMap.get('classroomBehavior'))
+                if (metaMap.get('classroomBehavior') !== classroomBehavior.value) metaMap.set('classroomBehavior', classroomBehavior.value)
+            } else metaMap.set('classroomBehavior', classroomBehavior.value)
 
             if (metaMap.has('isCompleted')) isCompleted.value = Boolean(metaMap.get('isCompleted'))
             else metaMap.set('isCompleted', isCompleted.value)
@@ -1753,15 +1802,48 @@ watch(ready, (isReady) => {
                 metaMap.set('version', version.value)
             }
         })
+        if (collabMetaHydratedReportId !== reportKey) collabMetaHydratedReportId = reportKey
         
         collabMetaObserver = (event) => {
             withCollabGuard(() => {
                 event.changes.keys.forEach((_: unknown, key: string) => {
                     const newVal = metaMap.get(key)
-                    if (key === 'attendanceStatus' && newVal !== attendanceStatus.value) attendanceStatus.value = newVal as any
-                    if (key === 'absenceReason' && newVal !== absenceReason.value) absenceReason.value = newVal as any
-                    if (key === 'classParticipation' && Number(newVal ?? 0) !== classParticipation.value) classParticipation.value = Number(newVal ?? 0)
-                    if (key === 'classroomBehavior' && Number(newVal ?? 0) !== classroomBehavior.value) classroomBehavior.value = Number(newVal ?? 0)
+                    if (key === 'attendanceStatus' || key === 'absenceReason') {
+                        const managedReason = canonicalSystemManagedReason()
+                        if (managedReason) {
+                            if (key === 'attendanceStatus') {
+                                const canonicalValue = canonicalSystemManagedStatus()
+                                if (newVal !== canonicalValue) metaMap.set(key, canonicalValue)
+                                if (attendanceStatus.value !== canonicalValue) attendanceStatus.value = canonicalValue
+                            } else {
+                                const canonicalValue = managedReason
+                                if (newVal !== canonicalValue) metaMap.set(key, canonicalValue)
+                                if (absenceReason.value !== canonicalValue) absenceReason.value = canonicalValue
+                            }
+                        } else if (key === 'attendanceStatus' && newVal !== attendanceStatus.value) {
+                            attendanceStatus.value = newVal as any
+                        } else if (key === 'absenceReason' && newVal !== absenceReason.value) {
+                            // A stale collaboration document may contain a
+                            // holiday/suspension marker for a report that the
+                            // canonical API says is user-managed. Ignore it.
+                            if (!normalizeSystemManagedReason(newVal)) {
+                                const normalizedReason = normalizeAbsenceReasonCode(String(newVal || ''))
+                                absenceReason.value = normalizedReason
+                                if (normalizedReason !== newVal) metaMap.set('absenceReason', normalizedReason)
+                            }
+                            else if (metaMap.get('absenceReason') !== (props.initialAbsenceReason || '')) metaMap.set('absenceReason', props.initialAbsenceReason || '')
+                        }
+                    }
+                    if (key === 'classParticipation') {
+                        const rating = normalizeReportRating(newVal)
+                        if (newVal !== rating) metaMap.set(key, rating)
+                        if (rating !== classParticipation.value) classParticipation.value = rating
+                    }
+                    if (key === 'classroomBehavior') {
+                        const rating = normalizeReportRating(newVal)
+                        if (newVal !== rating) metaMap.set(key, rating)
+                        if (rating !== classroomBehavior.value) classroomBehavior.value = rating
+                    }
                     if (key === 'isCompleted' && Boolean(newVal) !== isCompleted.value) isCompleted.value = Boolean(newVal)
                     if (key === 'progressStart' && (newVal || '') !== progressStart.value) progressStart.value = newVal as any || ''
                     if (key === 'progressEnd' && (newVal || '') !== progressEnd.value) progressEnd.value = newVal as any || ''
@@ -1801,6 +1883,17 @@ watch(ready, (isReady) => {
         const setupMapSync = (refVar: any, mapKey: string) => {
             const stop = watch(refVar, (val) => {
                 if (isApplyingRemoteCollab || isInitializing.value) return
+                if (mapKey === 'attendanceStatus' || mapKey === 'absenceReason') {
+                    const managedReason = canonicalSystemManagedReason()
+                    if (managedReason) {
+                        const canonicalValue = mapKey === 'attendanceStatus'
+                            ? canonicalSystemManagedStatus()
+                            : managedReason
+                        if (metaMap.get(mapKey) !== canonicalValue) metaMap.set(mapKey, canonicalValue)
+                        if (val !== canonicalValue) refVar.value = canonicalValue
+                        return
+                    }
+                }
                 if (metaMap.get(mapKey) !== val) {
                     metaMap.set(mapKey, val)
                     handleInput()
@@ -1874,6 +1967,42 @@ watch(ready, (isReady) => {
 
 const authStore = useAuthStore()
 const { t } = useI18n()
+const collaborationConnectingMessage = computed(() => collaborationStatus.value === 'subscribing'
+    ? t('report.editor.collaboration_subscribing')
+    : t('report.editor.collaboration_connecting'))
+// Collaboration is a convenience: editing and saving keep working whatever the
+// state, so the badge only recolors instead of pushing banners into the layout.
+const collaborationBadge = computed<{ tone: RealtimeBadgeTone; label: string; message: string; canRetry: boolean }>(() => {
+    const status = collaborationStatus.value
+    if (collabInitialState.value === 'error' && status !== 'ready') {
+        return { tone: 'paused', label: t('report.editor.collaboration_badge_paused'), message: collaborationStatusMessage.value, canRetry: true }
+    }
+    switch (status) {
+        case 'ready':
+            return { tone: 'live', label: t('report.editor.collaboration_badge_live'), message: t('report.editor.collaboration_live'), canRetry: false }
+        case 'connecting':
+        case 'subscribing':
+            return { tone: 'connecting', label: t('report.editor.collaboration_connecting_short'), message: collaborationConnectingMessage.value, canRetry: false }
+        case 'reconnecting':
+        case 'offline':
+            return { tone: 'warning', label: t(status === 'offline' ? 'report.editor.collaboration_badge_offline' : 'report.editor.collaboration_badge_reconnecting'), message: collaborationStatusMessage.value, canRetry: true }
+        case 'forbidden':
+        case 'auth-expired':
+        case 'account-disabled':
+            return { tone: 'paused', label: t('report.editor.collaboration_badge_paused'), message: collaborationStatusMessage.value, canRetry: false }
+        default:
+            return { tone: 'paused', label: t('report.editor.collaboration_badge_paused'), message: collaborationStatusMessage.value, canRetry: true }
+    }
+})
+const collaborationStatusMessage = computed(() => {
+    switch (collaborationStatus.value) {
+        case 'offline': return t('report.editor.collaboration_offline')
+        case 'forbidden': return t('report.editor.collaboration_forbidden')
+        case 'auth-expired': return t('report.editor.collaboration_auth_expired')
+        case 'account-disabled': return t('report.editor.collaboration_account_disabled')
+        default: return t('report.editor.collaboration_disconnected')
+    }
+})
 
 // Local state
 const initialMainContent = createTextEditorContent(props.initialContentDocument || props.initialContent)
@@ -1900,13 +2029,73 @@ const remoteVersionDrift = ref(false)
 
 // Detailed fields
 const selectedLessonId = ref(props.initialLessonId || '')
+type ProgressContext = Awaited<ReturnType<typeof OccurrenceReportService.getEnrollmentReportProgressContext>>
+const progressContext = ref<ProgressContext | null>(null)
+const progressContextLoading = ref(false)
+const progressContextError = ref(false)
+const focusedProgressReport = ref<{ id: string; lesson: { sequence: number; title: string } } | null>(null)
+let progressContextRequest = 0
+const progressGaps = computed(() => {
+    const lessons = (props.availableLessons || []).filter((lesson): lesson is typeof lesson & { id: string } => Boolean(lesson.id))
+    return findCourseProgressGaps(lessons, progressContext.value?.reports.map((report) => report.lesson_id) || [], selectedLessonId.value)
+})
+const previousProgressReport = computed(() => {
+    const report = progressContext.value?.latest_prior_report
+    if (!report) return null
+    const lesson = props.availableLessons?.find((item) => item.id === report.lesson_id)
+    return lesson ? { report, lesson } : null
+})
+
+async function loadProgressContext() {
+    const requestId = ++progressContextRequest
+    const enrollmentId = props.enrollmentId
+    const occurrenceId = props.classOccurrenceId
+    const reportId = props.reportId
+    if (!enrollmentId || !occurrenceId || !reportId) {
+        progressContext.value = null
+        progressContextError.value = false
+        progressContextLoading.value = false
+        return
+    }
+    progressContext.value = null
+    focusedProgressReport.value = null
+    progressContextError.value = false
+    progressContextLoading.value = true
+    try {
+        const context = await OccurrenceReportService.getEnrollmentReportProgressContext(enrollmentId, occurrenceId, reportId)
+        if (requestId === progressContextRequest) progressContext.value = context
+    } catch {
+        if (requestId === progressContextRequest) progressContextError.value = true
+    } finally {
+        if (requestId === progressContextRequest) progressContextLoading.value = false
+    }
+}
+
+function viewPreviousProgressReport() {
+    if (!previousProgressReport.value) return
+    focusedProgressReport.value = { id: previousProgressReport.value.report.id, lesson: previousProgressReport.value.lesson }
+    showReferencePanel.value = true
+}
+
+function closeReferencePanel() {
+    showReferencePanel.value = false
+    focusedProgressReport.value = null
+}
+
+watch(() => [props.enrollmentId, props.classOccurrenceId, props.reportId] as const, () => { void loadProgressContext() }, { immediate: true })
 const isCompleted = ref(props.initialIsCompleted)
 const progressStart = ref(props.initialProgressStart || '')
 const progressEnd = ref(props.initialProgressEnd || '')
 const attendanceStatus = ref<'present' | 'absent' | 'pending'>(props.initialAttendanceStatus)
-const absenceReason = ref(props.initialAbsenceReason || '')
-const classParticipation = ref(props.initialClassParticipation ?? 0)
-const classroomBehavior = ref(props.initialClassroomBehavior ?? 0)
+const absenceReason = ref(normalizeAbsenceReasonCode(props.initialAbsenceReason))
+// These refs are populated only from canonical API/props data. Collaboration
+// metadata must never be allowed to promote a normal report into a managed one.
+const managedAttendanceReason = ref<'holiday' | 'suspension' | null>(normalizeSystemManagedReason(props.initialAbsenceReason))
+const managedAttendanceStatus = ref<'present' | 'absent' | 'pending' | null>(
+    managedAttendanceReason.value ? (props.initialAttendanceStatus || 'absent') : null
+)
+const classParticipation = ref<number | null>(normalizeReportRating(props.initialClassParticipation))
+const classroomBehavior = ref<number | null>(normalizeReportRating(props.initialClassroomBehavior))
 const contactNotes = ref(initialContactContent.plainText)
 const contactNotesDocument = ref(initialContactContent.richText)
 const classNotes = ref(initialClassContent.plainText)
@@ -1934,8 +2123,8 @@ type ReportSavePayload = {
     progressLetter?: string | null
     attendanceStatus?: AttendanceStatus
     absenceReason?: string | null
-    classParticipation?: number
-    classroomBehavior?: number
+    classParticipation?: number | null
+    classroomBehavior?: number | null
     contactNotes?: string
     contactNotesDocument?: RichTextDocumentV1
     classNotes?: string
@@ -1949,20 +2138,37 @@ function normalizeString(value: string | null | undefined): string {
     return value || ''
 }
 
+function normalizeSystemManagedReason(value: unknown): 'holiday' | 'suspension' | null {
+    const reason = String(value ?? '').trim().toLowerCase()
+    return reason === 'holiday' || reason === 'suspension' ? reason : null
+}
+
+function canonicalSystemManagedReason(): 'holiday' | 'suspension' | null {
+    // The initial API value is authoritative. A collaboration document may
+    // contain stale metadata from before the report became system-managed.
+    return managedAttendanceReason.value
+}
+
+function canonicalSystemManagedStatus(): AttendanceStatus {
+    return managedAttendanceStatus.value || props.initialAttendanceStatus || 'absent'
+}
+
 function normalizeAbsenceReason(status: AttendanceStatus, reason: string | null | undefined): string | null {
     return status === 'absent' ? normalizeString(reason) : null
 }
 
 function buildCurrentSnapshot(overrides: Partial<ReportDraftSnapshot> = {}): ReportDraftSnapshot {
-    const normalizedReason = attendanceStatus.value === 'absent'
-        ? (normalizeString(absenceReason.value) || t('report.editor.absence_reasons.reason_not_provided'))
+    const managedReason = canonicalSystemManagedReason()
+    const snapshotAttendanceStatus = managedReason ? canonicalSystemManagedStatus() : attendanceStatus.value
+    const normalizedReason = snapshotAttendanceStatus === 'absent'
+        ? (managedReason || normalizeAbsenceReasonCode(absenceReason.value) || 'reason_not_provided')
         : null
 
     return {
         lessonId: selectedLessonId.value || '',
         isCompleted: isCompleted.value,
         progressLetter: progressLetter.value || '',
-        attendanceStatus: attendanceStatus.value,
+        attendanceStatus: snapshotAttendanceStatus,
         absenceReason: normalizedReason,
         classParticipation: classParticipation.value,
         classroomBehavior: classroomBehavior.value,
@@ -1979,6 +2185,7 @@ function buildCurrentSnapshot(overrides: Partial<ReportDraftSnapshot> = {}): Rep
 
 function buildSnapshotFromProps(): ReportDraftSnapshot {
     const initialStatus = props.initialAttendanceStatus || 'pending'
+    const managedReason = normalizeSystemManagedReason(props.initialAbsenceReason)
     const initialProgress = props.initialProgressStart && props.initialProgressEnd
         ? `${props.initialProgressStart}-${props.initialProgressEnd}`
         : (props.initialProgressStart || props.initialProgressEnd || '')
@@ -1991,9 +2198,11 @@ function buildSnapshotFromProps(): ReportDraftSnapshot {
         isCompleted: props.initialIsCompleted ?? false,
         progressLetter: initialProgress,
         attendanceStatus: initialStatus,
-        absenceReason: normalizeAbsenceReason(initialStatus, props.initialAbsenceReason),
-        classParticipation: props.initialClassParticipation ?? 0,
-        classroomBehavior: props.initialClassroomBehavior ?? 0,
+        absenceReason: initialStatus === 'absent'
+            ? (managedReason || normalizeAbsenceReasonCode(normalizeAbsenceReason(initialStatus, props.initialAbsenceReason)))
+            : null,
+        classParticipation: normalizeReportRating(props.initialClassParticipation),
+        classroomBehavior: normalizeReportRating(props.initialClassroomBehavior),
         contactNotes: contact.plainText,
         contactNotesDocument: contact.richText,
         classNotes: classNotesContent.plainText,
@@ -2013,9 +2222,10 @@ function buildSnapshotFromDto(report: OccurrenceReportDTO): ReportDraftSnapshot 
         isCompleted: report.is_completed ?? false,
         progressLetter: report.progress_letter || '',
         attendanceStatus: report.attendance_status || 'pending',
-        absenceReason: normalizeAbsenceReason(report.attendance_status || 'pending', report.absence_reason),
-        classParticipation: report.class_participation ?? 0,
-        classroomBehavior: report.classroom_behavior ?? 0,
+        absenceReason: normalizeSystemManagedReason(report.absence_reason)
+            || normalizeAbsenceReasonCode(normalizeAbsenceReason(report.attendance_status || 'pending', report.absence_reason)),
+        classParticipation: normalizeReportRating(report.class_participation),
+        classroomBehavior: normalizeReportRating(report.classroom_behavior),
         contactNotes: contact.plainText,
         contactNotesDocument: contact.richText,
         classNotes: classNotesContent.plainText,
@@ -2050,12 +2260,17 @@ function buildDirtyPayload(current: ReportDraftSnapshot): { keys: Array<keyof Re
     addIfChanged('progressLetter', () => {
         payload.progressLetter = current.progressLetter || null
     })
-    addIfChanged('attendanceStatus', () => {
-        payload.attendanceStatus = current.attendanceStatus
-    })
-    addIfChanged('absenceReason', () => {
-        payload.absenceReason = current.absenceReason
-    })
+    // System-managed attendance is authoritative in the database. Never turn
+    // stale collaboration metadata or a translated fallback reason into a
+    // mutation, and let other editable fields continue to save normally.
+    if (!isSystemManagedAbsence.value) {
+        addIfChanged('attendanceStatus', () => {
+            payload.attendanceStatus = current.attendanceStatus
+        })
+        addIfChanged('absenceReason', () => {
+            payload.absenceReason = current.absenceReason
+        })
+    }
     addIfChanged('classParticipation', () => {
         payload.classParticipation = current.classParticipation
     })
@@ -2107,12 +2322,11 @@ const progressLetter = computed(() => {
 
 // Check if absence reason is system-managed (holiday or suspension)
 const isSystemManagedAbsence = computed(() => {
-    const reason = absenceReason.value?.toLowerCase() || ''
-    return reason === 'holiday' || reason === 'suspension'
+    return canonicalSystemManagedReason() !== null
 })
 
 const getSystemManagedAbsenceLabel = () => {
-    const reason = absenceReason.value?.toLowerCase() || ''
+    const reason = canonicalSystemManagedReason()
     if (reason === 'holiday') {
         return `${t('report.editor.absence_reasons.holiday')} (${t('common.system_managed')})`
     } else if (reason === 'suspension') {
@@ -2261,6 +2475,14 @@ const {
         const newVersion = updatedReport?.version ?? result.newVersion ?? version.value
         version.value = newVersion
         remoteVersionDrift.value = false
+        const canonicalManagedReason = normalizeSystemManagedReason(updatedReport?.absence_reason)
+        if (canonicalManagedReason) {
+            managedAttendanceReason.value = canonicalManagedReason
+            managedAttendanceStatus.value = updatedReport?.attendance_status || 'absent'
+            attendanceStatus.value = managedAttendanceStatus.value
+            absenceReason.value = canonicalManagedReason
+            if (collabMetaMap) writeReportMeta(collabMetaMap)
+        }
         savedReportSnapshot.value = updatedReport ? buildSnapshotFromDto(updatedReport) : snapshot
         setBaseReportVersion(newVersion)
 
@@ -2285,7 +2507,8 @@ const {
             || (errorCode === 'request_timeout' ? 'errors.request_timeout'
                 : errorCode === 'save_outcome_unknown' ? 'errors.save_outcome_unknown'
                     : errorCode === 'permission_denied' ? 'errors.permission_denied'
-                        : errorCode === 'validation_error' ? 'errors.validation_failed'
+                : errorCode === 'validation_error' ? 'errors.validation_failed'
+                            : errorCode === 'system_managed' ? 'report.editor.system_managed_absence_notice'
                             : errorCode === 'conflict' ? 'errors.conflict'
                                 : 'errors.unknown')
         const translated = t(messageKey)
@@ -2354,19 +2577,35 @@ watch(() => props.initialProgressEnd, (newVal) => {
 })
 
 watch(() => props.initialAttendanceStatus, (newVal) => {
+    if (normalizeSystemManagedReason(props.initialAbsenceReason)) {
+        managedAttendanceStatus.value = newVal || 'absent'
+        attendanceStatus.value = newVal || 'absent'
+        return
+    }
     if (!hasUnsavedChanges.value) attendanceStatus.value = newVal
 })
 
 watch(() => props.initialAbsenceReason, (newVal) => {
-    if (!hasUnsavedChanges.value) absenceReason.value = newVal || ''
+    const managedReason = normalizeSystemManagedReason(newVal)
+    if (managedReason) {
+        managedAttendanceReason.value = managedReason
+        managedAttendanceStatus.value = props.initialAttendanceStatus || 'absent'
+        attendanceStatus.value = props.initialAttendanceStatus || 'absent'
+        absenceReason.value = managedReason
+        if (collabMetaMap) writeReportMeta(collabMetaMap)
+        return
+    }
+    managedAttendanceReason.value = null
+    managedAttendanceStatus.value = null
+    if (!hasUnsavedChanges.value) absenceReason.value = normalizeAbsenceReasonCode(newVal)
 })
 
 watch(() => props.initialClassParticipation, (newVal) => {
-    if (!hasUnsavedChanges.value) classParticipation.value = newVal ?? 0
+    if (!hasUnsavedChanges.value) classParticipation.value = normalizeReportRating(newVal)
 })
 
 watch(() => props.initialClassroomBehavior, (newVal) => {
-    if (!hasUnsavedChanges.value) classroomBehavior.value = newVal ?? 0
+    if (!hasUnsavedChanges.value) classroomBehavior.value = normalizeReportRating(newVal)
 })
 
 watch(() => props.initialContactNotes, (newVal) => {
@@ -2431,7 +2670,12 @@ const isInitializing = ref(false)
 
 // Reset auto-save state when switching reports
 watch(() => props.reportId, () => {
+    collabMetaHydratedReportId = null
     isInitializing.value = true
+    managedAttendanceReason.value = normalizeSystemManagedReason(props.initialAbsenceReason)
+    managedAttendanceStatus.value = managedAttendanceReason.value
+        ? (props.initialAttendanceStatus || 'absent')
+        : null
     savedReportSnapshot.value = buildSnapshotFromProps()
     reset()
     // 給予極短時間讓 props 傳遞到 local state
@@ -2544,9 +2788,9 @@ function replaceWithCanonicalReport(report: OccurrenceReportDTO, notifyParent = 
     progressStart.value = report.progress_letter ? report.progress_letter.split('-')[0] : ''
     progressEnd.value = report.progress_letter && report.progress_letter.includes('-') ? report.progress_letter.split('-')[1] : ''
     attendanceStatus.value = report.attendance_status as any
-    absenceReason.value = report.absence_reason || ''
-    classParticipation.value = report.class_participation ?? 0
-    classroomBehavior.value = report.classroom_behavior ?? 0
+    absenceReason.value = normalizeAbsenceReasonCode(report.absence_reason)
+    classParticipation.value = normalizeReportRating(report.class_participation)
+    classroomBehavior.value = normalizeReportRating(report.classroom_behavior)
     contactNotes.value = contact.plainText
     contactNotesDocument.value = contact.richText
     classNotes.value = classNotesContent.plainText
@@ -2642,8 +2886,6 @@ onMounted(() => {
 onBeforeUnmount(async () => {
     reportEditorUnmounted = true
     collabEditorGeneration++
-    if (collaborationRecoveryTimer) clearTimeout(collaborationRecoveryTimer)
-    collaborationRecoveryTimer = null
     window.removeEventListener('pagehide', flushOnPageHide)
     document.removeEventListener('visibilitychange', handleVisibilityChange)
     cleanupReportCollabBindings()

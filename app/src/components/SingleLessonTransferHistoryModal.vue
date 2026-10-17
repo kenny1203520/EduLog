@@ -5,7 +5,8 @@ import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
 import type { SingleLessonTransferHistoryItem } from '@/services/enrollment/EnrollmentTransferQueryService'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { DateUtils } from '@/utils/DateUtils'
-import { mapDomainError } from '@/services/errors/mapDomainError'
+import { domainErrorCode, mapDomainError } from '@/services/errors/mapDomainError'
+import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import { mapSupabaseError } from '@/services/errors/mapSupabaseError'
 
 const props = defineProps<{
@@ -13,7 +14,7 @@ const props = defineProps<{
     enrollmentId: string | null
 }>()
 
-const emit = defineEmits<{ 'update:isOpen': [value: boolean] }>()
+const emit = defineEmits<{ 'update:isOpen': [value: boolean]; changed: [] }>()
 const { t } = useI18n()
 
 // Never show a raw thrown message: a recognized domain sentinel code gets its
@@ -21,7 +22,7 @@ const { t } = useI18n()
 // translated description.
 function describeError(cause: unknown, fallbackKey: string): string {
     const message = cause instanceof Error ? cause.message : undefined
-    const domain = mapDomainError(message)
+    const domain = mapDomainError(domainErrorCode(cause))
     if (domain) return t(domain.i18nKey)
     if (message) return t(fallbackKey)
     return t(mapSupabaseError(cause).i18nKey)
@@ -33,6 +34,9 @@ const isLoading = ref(false)
 const error = ref<string | null>(null)
 const effectiveTargets = ref<Array<{ transfer_id: string; target_occurrence_id: string; is_effective_target: boolean; target_report_id: string | null }>>([])
 const repairingTransferId = ref<string | null>(null)
+const pendingCancel = ref<SingleLessonTransferHistoryItem | null>(null)
+const isCancelling = ref(false)
+const notice = ref<string | null>(null)
 
 const activeHistory = computed(() => history.value.filter(item => !item.cancelled_at))
 const closedHistory = computed(() => history.value.filter(item => item.cancelled_at))
@@ -96,6 +100,32 @@ async function repairTargetReport(item: SingleLessonTransferHistoryItem) {
     }
 }
 
+function requestCancel(item: SingleLessonTransferHistoryItem) {
+    error.value = null
+    notice.value = null
+    pendingCancel.value = item
+}
+
+async function confirmCancel() {
+    const item = pendingCancel.value
+    if (!item || isCancelling.value) return
+    isCancelling.value = true
+    try {
+        const result = await EnrollmentService.cancelSingleLessonTransfer(item.id)
+        notice.value = t(result.targetReportRetained
+            ? 'student.transfer_history.cancelled_target_retained'
+            : 'student.transfer_history.cancelled')
+        pendingCancel.value = null
+        emit('changed')
+        await loadHistory()
+    } catch (cause) {
+        pendingCancel.value = null
+        error.value = describeError(cause, 'student.transfer_history.cancel_error')
+    } finally {
+        isCancelling.value = false
+    }
+}
+
 async function loadHistory() {
     if (!props.enrollmentId) return
     isLoading.value = true
@@ -143,6 +173,7 @@ watch(() => [props.isOpen, props.enrollmentId], ([isOpen]) => {
                 </header>
 
                 <main class="flex-1 overflow-y-auto bg-gray-50/40 p-5 sm:p-6">
+                    <p v-if="notice" role="status" class="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">{{ notice }}</p>
                     <div v-if="isLoading" class="flex flex-col items-center justify-center py-16 text-gray-500">
                         <svg class="mb-3 h-8 w-8 animate-spin text-emerald-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
                         <span class="text-sm font-bold">{{ $t('student.transfer_history.loading') }}</span>
@@ -172,7 +203,8 @@ watch(() => [props.isOpen, props.enrollmentId], ([isOpen]) => {
                                             <div class="flex items-center justify-center text-amber-500"><svg class="h-6 w-6 rotate-90 sm:rotate-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 12h14m-5-5 5 5-5 5" /></svg></div>
                                             <div class="rounded-xl bg-emerald-50/70 p-3"><p class="text-[11px] font-black uppercase tracking-wider text-emerald-600">{{ $t('student.transfer_history.target') }}</p><p class="mt-1 font-bold text-gray-900">{{ occurrenceTitle(item, 'target') }}</p><p class="mt-1 text-sm text-gray-500">{{ formatDate(occurrenceDate(item, 'target')) }} · {{ occurrenceTime(item, 'target') }}</p></div>
                                         </div>
-                                        <div v-if="effectiveTargetFor(item)" class="mt-4 flex flex-wrap items-center justify-end gap-3">
+                                        <div class="mt-4 flex flex-wrap items-center justify-end gap-3">
+                                            <template v-if="effectiveTargetFor(item)">
                                             <span v-if="!isMissingTargetReport(item)" class="text-xs font-bold text-emerald-700">{{ $t('student.transfer_history.report_exists') }}</span>
                                             <template v-else>
                                                 <span class="text-xs font-bold text-amber-700">{{ $t('student.transfer_history.report_missing') }}</span>
@@ -181,6 +213,11 @@ watch(() => [props.isOpen, props.enrollmentId], ([isOpen]) => {
                                                     {{ repairingTransferId === item.id ? $t('student.transfer_history.repairing') : $t('student.transfer_history.repair_report') }}
                                                 </button>
                                             </template>
+                                            </template>
+                                            <button type="button" :disabled="isCancelling" @click="requestCancel(item)"
+                                                class="cursor-pointer rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs font-black text-rose-700 transition-colors hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 disabled:cursor-not-allowed disabled:opacity-60">
+                                                {{ $t('student.transfer_history.cancel_transfer') }}
+                                            </button>
                                         </div>
                                     </div>
                                 </article>
@@ -208,4 +245,19 @@ watch(() => [props.isOpen, props.enrollmentId], ([isOpen]) => {
             </section>
         </div>
     </Teleport>
+    <ConfirmModal
+        :is-open="pendingCancel !== null"
+        :title="$t('student.transfer_history.cancel_confirm_title')"
+        :message="pendingCancel ? $t('student.transfer_history.cancel_confirm_message', {
+            source: [DateUtils.displayDateWithWeekday(pendingCancel.source_occurrence_date, preferences.locale), pendingCancel.source_session_name].filter(Boolean).join(' '),
+            target: [DateUtils.displayDateWithWeekday(pendingCancel.target_occurrence_date, preferences.locale), pendingCancel.target_session_name].filter(Boolean).join(' ')
+        }) : ''"
+        :confirm-text="$t('student.transfer_history.cancel_transfer')"
+        :cancel-text="$t('student.transfer_history.keep_transfer')"
+        :is-dangerous="true"
+        :is-loading="isCancelling"
+        stacked
+        @confirm="confirmCancel"
+        @close="pendingCancel = null"
+    />
 </template>

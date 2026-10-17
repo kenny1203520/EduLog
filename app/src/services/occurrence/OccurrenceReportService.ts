@@ -44,8 +44,8 @@ export class OccurrenceReportService {
             progressLetter?: string | null
             attendanceStatus?: 'present' | 'absent' | 'pending'
             absenceReason?: string | null
-            classParticipation?: number
-            classroomBehavior?: number
+            classParticipation?: number | null
+            classroomBehavior?: number | null
             contactNotes?: string
             contactNotesDocument?: RichTextDocumentV1
             classNotes?: string
@@ -106,6 +106,14 @@ export class OccurrenceReportService {
 
     static async getProgressSummaryReportsByEnrollments(enrollmentIds: string[]): Promise<Map<string, OccurrenceReport[]>> {
         return ReportQueryService.getProgressSummaryReportsByEnrollments(enrollmentIds)
+    }
+
+    static async getProgressGapsByEnrollments(occurrenceId: string, enrollmentIds: string[]) {
+        return ReportQueryService.getProgressGapsByEnrollments(occurrenceId, enrollmentIds)
+    }
+
+    static async getEnrollmentReportProgressContext(enrollmentId: string, occurrenceId: string, reportId: string) {
+        return ReportQueryService.getEnrollmentReportProgressContext(enrollmentId, occurrenceId, reportId)
     }
 
     static async getReportsByOccurrence(

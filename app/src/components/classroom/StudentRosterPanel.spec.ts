@@ -59,6 +59,15 @@ describe('StudentRosterPanel', () => {
         expect(wrapper.findAll('[data-enrollment-id="enrollment-1"]')).toHaveLength(2)
     })
 
+    it('shows the same gap hint in both responsive roster presentations', () => {
+        const wrapper = mountPanel({ items: [{ ...item, progressGaps: [{ id: 'lesson-6', sequence: 6, title: 'Lesson Six' }] }] })
+
+        const cards = wrapper.find('.roster-cards [data-enrollment-id="enrollment-1"]')
+        const tableRow = wrapper.find('.roster-table [data-enrollment-id="enrollment-1"]')
+        expect(cards.text()).toContain('classroom.progress_gap_short')
+        expect(tableRow.text()).toContain('classroom.progress_gap_short')
+    })
+
     it('cycles attendance from the list without coupling it to report actions', async () => {
         const wrapper = mountPanel()
         const attendanceButton = wrapper.find('[data-enrollment-id="enrollment-1"] button[aria-label]')
@@ -106,6 +115,13 @@ describe('StudentRosterPanel', () => {
         expect(editButton.attributes('disabled')).toBeDefined()
         await editButton.trigger('click')
         expect(wrapper.emitted('quick-edit')).toBeUndefined()
+    })
+
+    it('keeps suspended students in the roster and shows the absence reason', () => {
+        const wrapper = mountPanel({ items: [{ ...item, attendanceStatus: 'absent', absenceReason: 'suspension', absenceReasonLabel: 'report.editor.absence_reasons.suspension' }] })
+        const card = wrapper.get('.roster-cards [data-enrollment-id="enrollment-1"]')
+        expect(card.text()).toContain('report.editor.absence_reasons.suspension')
+        expect(card.find('[aria-label]').exists()).toBe(true)
     })
 
     it('does not create an empty profile link when no student account is available', () => {

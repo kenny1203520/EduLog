@@ -5,7 +5,8 @@ import {
     encodeAwarenessUpdate,
     removeAwarenessStates
 } from 'y-protocols/awareness'
-import type { SupabaseClient, RealtimeChannel } from '@supabase/supabase-js'
+import { apiV1Client } from '@/services/api/ApiV1Client'
+import { ApiRealtimeChannel } from './ApiRealtimeChannel'
 
 export const uint8ArrayToBase64 = (u8: Uint8Array): string => {
     let binary = ''
@@ -39,7 +40,7 @@ interface ReportPresencePayload {
 }
 
 export type ReportCollabInitialState = 'none' | 'loaded' | 'legacy' | 'stale' | 'error'
-export type ReportCollabConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
+export type ReportCollabConnectionStatus = 'connecting' | 'subscribing' | 'reconnecting' | 'offline' | 'connected' | 'disconnected' | 'forbidden' | 'auth-expired' | 'account-disabled' | 'error'
 export interface ReportCollabActivity {
     field?: string
     focused?: boolean
@@ -53,8 +54,6 @@ export interface ReportCollabPeer {
 }
 
 const REALTIME_READY_TIMEOUT_MS = 10000
-const SNAPSHOT_REQUEST_TIMEOUT_MS = 10000
-const SNAPSHOT_MAX_ATTEMPTS = 2
 const MAX_YJS_UPDATE_BYTES = 256 * 1024
 const MAX_SNAPSHOT_BYTES = 1024 * 1024
 const MAX_AWARENESS_BYTES = 32 * 1024
@@ -70,13 +69,13 @@ function decodeBoundedBase64(value: string, maxBytes: number): Uint8Array {
 export interface SupabaseProviderOptions {
     snapshotDebounceMs?: number
     presenceEnabled?: boolean
-    onStatus?: (status: ReportCollabConnectionStatus) => void
+    onStatus?: (status: ReportCollabConnectionStatus, detail?: string) => void
 }
 
 export class SupabaseProvider {
     public awareness: Awareness
     public ready: Promise<void>
-    private channel: RealtimeChannel
+    private channel: any
     private isDestroyed = false
     private isSubscribed = false
     private snapshotTimer: ReturnType<typeof setTimeout> | null = null
@@ -93,7 +92,7 @@ export class SupabaseProvider {
     private readonly docUpdateHandler = (update: Uint8Array, origin: any) => {
         if (origin === this || this.isDestroyed) return
 
-        if (this.isSubscribed && this.supabase.realtime.isConnected()) {
+        if (this.isSubscribed && this.isRealtimeConnected()) {
             if (update.byteLength > MAX_YJS_UPDATE_BYTES) {
                 this.onStatus?.('error')
                 return
@@ -116,25 +115,25 @@ export class SupabaseProvider {
         }
     }
 
-    private supabase: SupabaseClient
+    private readonly injectedTransport: any
     public doc: Y.Doc
     private roomId: string
     private userId?: string
     private baseReportVersion: number
     private readonly snapshotDebounceMs: number
     private readonly presenceEnabled: boolean
-    private readonly onStatus?: (status: ReportCollabConnectionStatus) => void
+    private readonly onStatus?: (status: ReportCollabConnectionStatus, detail?: string) => void
     public initialState: ReportCollabInitialState = 'none'
 
     constructor(
-        supabase: SupabaseClient,
+        _transport: unknown,
         doc: Y.Doc,
         roomId: string,
         baseReportVersion: number,
         userId?: string,
         options: SupabaseProviderOptions = {}
     ) {
-        this.supabase = supabase
+        this.injectedTransport = _transport as any
         this.doc = doc
         this.roomId = roomId
         this.baseReportVersion = baseReportVersion
@@ -147,23 +146,25 @@ export class SupabaseProvider {
             this.resolveReady = resolve
             this.rejectReady = reject
         })
-        this.readyTimer = setTimeout(() => {
-            this.failReady(new Error('Realtime collaboration subscription timed out'))
-        }, REALTIME_READY_TIMEOUT_MS)
+        // ApiRealtimeChannel owns socket-open and Phoenix join deadlines and
+        // retries. Keep a fallback deadline only for the legacy injected
+        // transport, whose subscription lifecycle is managed by supabase-js.
+        if (this.injectedTransport) {
+            this.readyTimer = setTimeout(() => {
+                this.failReady(new Error('Realtime collaboration subscription timed out'))
+            }, REALTIME_READY_TIMEOUT_MS)
+        }
 
-        this.channel = this.supabase.channel(`room:${this.roomId}`, {
-            config: {
-                private: true,
-                broadcast: { ack: false },
-                presence: { key: `${this.userId || 'anonymous'}:${this.awareness.clientID}` }
-            }
-        })
+        const presenceKey = `${this.userId || 'anonymous'}:${this.awareness.clientID}`
+        this.channel = typeof this.injectedTransport?.channel === 'function'
+            ? this.injectedTransport.channel(`room:${this.roomId}`, { config: { private: true, broadcast: { ack: false }, presence: { key: presenceKey } } })
+            : new ApiRealtimeChannel(this.roomId, presenceKey)
 
         this.setupYjs()
         this.setupSupabase()
         this.onStatus?.('connecting')
 
-        this.channel.subscribe(async (status) => {
+        this.channel.subscribe(async (status: string, detail?: string) => {
             if (this.isDestroyed) return
 
             if (status === 'SUBSCRIBED') {
@@ -182,11 +183,43 @@ export class SupabaseProvider {
                 }
             } else {
                 this.isSubscribed = false
-                const failed = status === 'CHANNEL_ERROR' || status === 'TIMED_OUT'
-                this.onStatus?.(failed ? 'error' : 'disconnected')
-                if (failed) this.failReady(new Error('Realtime collaboration channel ' + status.toLowerCase()))
+                const retrying = status === 'CHANNEL_ERROR' || status === 'RECONNECTING' || status === 'OFFLINE' || status === 'CONNECTING' || status === 'SUBSCRIBING'
+                const failed = status === 'TIMED_OUT' || status === 'PERMISSION_DENIED' || status === 'AUTH_EXPIRED' || status === 'ACCOUNT_DISABLED'
+                if (retrying && this.readyTimer) {
+                    // The API channel now owns retry/backoff and session renewal.
+                    // Do not let the initial subscription deadline tear it down.
+                    clearTimeout(this.readyTimer)
+                    this.readyTimer = null
+                }
+                const connectionStatus: ReportCollabConnectionStatus = status === 'CONNECTING'
+                    ? 'connecting'
+                    : status === 'SUBSCRIBING'
+                        ? 'subscribing'
+                        : status === 'RECONNECTING' || status === 'CHANNEL_ERROR'
+                            ? 'reconnecting'
+                            : status === 'OFFLINE'
+                                ? 'offline'
+                                : status === 'PERMISSION_DENIED'
+                                    ? 'forbidden'
+                                    : status === 'AUTH_EXPIRED'
+                                        ? 'auth-expired'
+                                        : status === 'ACCOUNT_DISABLED'
+                                            ? 'account-disabled'
+                                            : failed ? 'error' : 'disconnected'
+                this.onStatus?.(connectionStatus, detail)
+                if (failed) {
+                    const failure = new Error(detail || 'Realtime collaboration channel ' + status.toLowerCase()) as Error & { code?: string }
+                    if (status === 'PERMISSION_DENIED') failure.code = 'REALTIME_FORBIDDEN'
+                    if (status === 'AUTH_EXPIRED') failure.code = 'AUTH_EXPIRED'
+                    if (status === 'ACCOUNT_DISABLED') failure.code = 'ACCOUNT_DISABLED'
+                    this.failReady(failure)
+                }
             }
         })
+    }
+
+    private isRealtimeConnected(): boolean {
+        return this.isSubscribed
     }
 
     private setupYjs() {
@@ -195,7 +228,7 @@ export class SupabaseProvider {
     }
 
     private setupSupabase() {
-        this.channel.on('broadcast', { event: 'sync-update' }, (payload) => {
+        this.channel.on('broadcast', { event: 'sync-update' }, (payload: any) => {
             if (this.isDestroyed) return
             const encodedUpdate = payload.payload?.update
             if (typeof encodedUpdate !== 'string') return
@@ -275,45 +308,29 @@ export class SupabaseProvider {
 
     private async loadInitialState() {
         try {
-            const { data, error } = await this.supabase
-                .from('report_collab_docs')
-                .select('snapshot_base64, base_report_version')
-                .eq('occurrence_report_id', this.roomId)
-                .maybeSingle()
-
-            if (error) {
-                console.error('loadInitialState db error:', error)
-                this.initialState = 'error'
-                throw new Error(error.message || 'Failed to load collaboration state')
-            }
-
-            if (!data?.snapshot_base64) {
-                this.initialState = 'none'
-                return
-            }
-
-            if (data.base_report_version === null || data.base_report_version === undefined) {
-                this.initialState = 'legacy'
-                return
-            }
-
-            if (Number(data.base_report_version) !== this.baseReportVersion) {
-                this.initialState = 'stale'
-                return
-            }
-
-            if (data.snapshot_base64) {
-                const update = decodeBoundedBase64(data.snapshot_base64, MAX_SNAPSHOT_BYTES)
-                Y.applyUpdate(this.doc, update, this)
+            if (this.injectedTransport?.from) {
+                const result = await this.injectedTransport.from('report_collab_docs').select('snapshot_base64, base_report_version').eq('occurrence_report_id', this.roomId).maybeSingle()
+                if (result.error) throw new Error(result.error.message || 'Failed to load collaboration state')
+                const data = result.data
+                if (!data?.snapshot_base64) { this.initialState = 'none'; return }
+                if (data.base_report_version === null || data.base_report_version === undefined) { this.initialState = 'legacy'; return }
+                if (Number(data.base_report_version) !== this.baseReportVersion) { this.initialState = 'stale'; return }
+                Y.applyUpdate(this.doc, decodeBoundedBase64(data.snapshot_base64, MAX_SNAPSHOT_BYTES), this)
                 this.initialState = 'loaded'
+                return
             }
-        } catch (err) {
-            console.error('Failed to load document state:', err)
+            const response = await apiV1Client.get<{ snapshot_base64: string | null; base_report_version: number | null }>(`/reports/${this.roomId}/collaboration`)
+            const data = response.data
+            if (!data?.snapshot_base64) { this.initialState = 'none'; return }
+            if (data.base_report_version === null || data.base_report_version === undefined) { this.initialState = 'legacy'; return }
+            if (Number(data.base_report_version) !== this.baseReportVersion) { this.initialState = 'stale'; return }
+            Y.applyUpdate(this.doc, decodeBoundedBase64(data.snapshot_base64, MAX_SNAPSHOT_BYTES), this)
+            this.initialState = 'loaded'
+        } catch (error) {
             this.initialState = 'error'
-            throw err
+            throw error
         }
     }
-
     private failReady(reason: Error): void {
         if (this.isDestroyed) return
         if (this.readyTimer) clearTimeout(this.readyTimer)
@@ -363,37 +380,18 @@ export class SupabaseProvider {
     }
 
     private async persistSnapshot(payload: { key: string; state: string; version: number }): Promise<boolean> {
-        for (let attempt = 0; attempt < SNAPSHOT_MAX_ATTEMPTS; attempt += 1) {
-            const controller = new AbortController()
-            const timeout = setTimeout(() => controller.abort(), SNAPSHOT_REQUEST_TIMEOUT_MS)
-            try {
-                const request: any = this.supabase.rpc('save_report_collab_snapshot', {
-                    p_occurrence_report_id: this.roomId,
-                    p_snapshot_base64: payload.state,
-                    p_base_report_version: payload.version
-                })
-                const query = typeof request?.abortSignal === 'function' ? request.abortSignal(controller.signal) : request
-                const result: any = await Promise.race([
-                    query,
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('snapshot request timeout')), SNAPSHOT_REQUEST_TIMEOUT_MS))
-                ])
-                clearTimeout(timeout)
-                if (result?.error) {
-                    console.error('Failed to save snapshot:', result.error)
-                    return false
-                }
-                return result?.data === true
-            } catch (err) {
-                clearTimeout(timeout)
-                if (attempt + 1 >= SNAPSHOT_MAX_ATTEMPTS) {
-                    console.error('saveSnapshot exception:', err)
-                    return false
-                }
+        try {
+            if (this.injectedTransport?.rpc) {
+                const result = await this.injectedTransport.rpc('save_report_collab_snapshot', { p_occurrence_report_id: this.roomId, p_base_report_version: payload.version, p_snapshot_base64: payload.state })
+                return result?.error ? false : result?.data === true
             }
+            const response = await apiV1Client.post<{ saved: boolean }>(`/reports/${this.roomId}/collaboration`, { snapshot_base64: payload.state, base_report_version: payload.version })
+            return response.data?.saved === true
+        } catch (error) {
+            console.error('Failed to save collaboration snapshot through API:', error)
+            return false
         }
-        return false
     }
-
     /** Advances the canonical version used to guard future snapshot writes. */
     public setBaseReportVersion(version: number) {
         this.baseReportVersion = version
@@ -434,7 +432,7 @@ export class SupabaseProvider {
     }
 
     private async trackLocalAwareness() {
-        if (this.isDestroyed || !this.isSubscribed || !this.supabase.realtime.isConnected()) return
+        if (this.isDestroyed || !this.isSubscribed || !this.isRealtimeConnected()) return
 
         const localState = this.awareness.getLocalState()
         if (!localState) {
@@ -481,7 +479,7 @@ export class SupabaseProvider {
         } catch (err) {
             console.warn('Failed to unsubscribe report collaboration channel:', err)
         }
-        this.supabase.removeChannel(this.channel)
+        if (this.injectedTransport?.removeChannel) this.injectedTransport.removeChannel(this.channel)
         this.awareness.destroy()
         this.remoteClientIds.clear()
         this.onStatus?.('disconnected')

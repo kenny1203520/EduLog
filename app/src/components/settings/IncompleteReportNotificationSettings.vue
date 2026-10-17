@@ -12,8 +12,13 @@ import {
 } from '@/services/rbac/PermissionPolicyService'
 import type { PermissionDTO, PolicyScope, RoleDTO, RolePermissionPolicyDTO } from '@/models/Rbac'
 import ScopedRolePolicyEditor, { type PolicySelection } from '@/components/settings/ScopedRolePolicyEditor.vue'
+import SearchableSelect from '@/components/common/SearchableSelect.vue'
 
 const { t } = useI18n()
+const props = withDefaults(defineProps<{ titleKey?: string; descriptionKey?: string }>(), {
+    titleKey: 'settings.incomplete_notifications.title',
+    descriptionKey: 'settings.incomplete_notifications.description'
+})
 const toast = useToast()
 const { reportError } = useFeedback()
 const scopeType = ref<PolicyScope>('system')
@@ -27,14 +32,20 @@ const policies = ref<RolePermissionPolicyDTO[]>([])
 const selections = ref<Record<string, PolicySelection>>({})
 const loading = ref(false)
 const saving = ref(false)
+const canManageRbac = ref(false)
 
 const filteredSessions = computed(() => !classroomId.value
     ? sessions.value
     : sessions.value.filter(session => session.classroom_id === classroomId.value))
+const classroomOptions = computed(() => classrooms.value.map(room => ({ value: room.id, label: room.name, searchText: room.name })))
+const sessionOptions = computed(() => filteredSessions.value.map(session => {
+    const room = classrooms.value.find(item => item.id === session.classroom_id)
+    return { value: session.id, label: session.name, description: room?.name, searchText: `${session.name} ${room?.name ?? ''}` }
+}))
 const scopeId = computed(() => scopeType.value === 'system'
     ? null
     : scopeType.value === 'classroom' ? classroomId.value : sessionId.value)
-const canSave = computed(() => scopeType.value === 'system' || Boolean(scopeId.value))
+const canSave = computed(() => canManageRbac.value && (scopeType.value === 'system' || Boolean(scopeId.value)))
 
 function isCurrentScope(policy: RolePermissionPolicyDTO) {
     return policy.scope_type === scopeType.value
@@ -52,17 +63,23 @@ function syncSelections() {
 async function load() {
     loading.value = true
     try {
-        const [roleData, permissionData, classroomResult, sessionResult] = await Promise.all([
+        canManageRbac.value = await PermissionPolicyService.canManageRbac()
+        const [roleData, permissionData] = await Promise.all([
             RoleService.getRoles(),
-            PermissionPolicyService.getPermission(INCOMPLETE_REPORT_PERMISSION),
-            ClassroomService.getClassrooms(1, 500),
-            SessionService.getClassSessions(1, 500)
+            PermissionPolicyService.getPermission(INCOMPLETE_REPORT_PERMISSION)
         ])
         roles.value = roleData
         permission.value = permissionData
         policies.value = await PermissionPolicyService.getPolicies(permissionData.id)
-        classrooms.value = classroomResult.data
-        sessions.value = sessionResult.data
+        // Global policy management should remain usable even when the operator
+        // has no permission to browse classroom/session records. These lookups
+        // only populate scope selectors and must not block system scope.
+        const [classroomResult, sessionResult] = await Promise.allSettled([
+            ClassroomService.getAllClassrooms(),
+            SessionService.getAllClassSessions()
+        ])
+        if (classroomResult.status === 'fulfilled') classrooms.value = classroomResult.value.data
+        if (sessionResult.status === 'fulfilled') sessions.value = sessionResult.value.data
         syncSelections()
     } catch (error: any) {
         reportError(error)
@@ -112,8 +129,8 @@ onMounted(load)
 <template>
     <section id="incomplete-notifications" class="overflow-hidden rounded-[2.5rem] border border-gray-100 bg-white shadow-sm">
         <div class="border-b border-gray-50 p-6 sm:p-8">
-            <h3 class="text-2xl font-black tracking-tight text-gray-900">{{ $t('settings.incomplete_notifications.title') }}</h3>
-            <p class="mt-1 text-sm font-bold text-gray-400">{{ $t('settings.incomplete_notifications.description') }}</p>
+            <h3 class="text-2xl font-black tracking-tight text-gray-900">{{ $t(props.titleKey) }}</h3>
+            <p class="mt-1 text-sm font-bold text-gray-400">{{ $t(props.descriptionKey) }}</p>
         </div>
         <div class="space-y-6 p-6 sm:p-8">
             <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -125,29 +142,28 @@ onMounted(load)
                         <option value="class_session">{{ $t('settings.incomplete_notifications.class_session') }}</option>
                     </select>
                 </label>
-                <label v-if="scopeType !== 'system'" class="space-y-2">
+                <div v-if="scopeType !== 'system'" class="space-y-2">
                     <span class="text-xs font-black uppercase tracking-widest text-gray-400">{{ $t('classroom.room') }}</span>
-                    <select v-model="classroomId" class="w-full rounded-xl border-gray-200 bg-gray-50 px-4 py-3 font-bold">
-                        <option value="">{{ $t('common.select_placeholder') }}</option>
-                        <option v-for="room in classrooms" :key="room.id" :value="room.id">{{ room.name }}</option>
-                    </select>
-                </label>
-                <label v-if="scopeType === 'class_session'" class="space-y-2">
+                    <SearchableSelect v-model="classroomId" :options="classroomOptions" :placeholder="$t('common.select_placeholder')" :aria-label="$t('classroom.room')" />
+                </div>
+                <div v-if="scopeType === 'class_session'" class="space-y-2">
                     <span class="text-xs font-black uppercase tracking-widest text-gray-400">{{ $t('classroom.session') }}</span>
-                    <select v-model="sessionId" class="w-full rounded-xl border-gray-200 bg-gray-50 px-4 py-3 font-bold">
-                        <option value="">{{ $t('common.select_placeholder') }}</option>
-                        <option v-for="item in filteredSessions" :key="item.id" :value="item.id">{{ item.name }}</option>
-                    </select>
-                </label>
+                    <SearchableSelect v-model="sessionId" :options="sessionOptions" :placeholder="$t('common.select_placeholder')" :aria-label="$t('classroom.session')" />
+                </div>
             </div>
             <div v-if="loading" class="py-8 text-center font-bold text-gray-400">{{ $t('common.loading') }}</div>
-            <ScopedRolePolicyEditor v-else v-model="selections" :roles="roles" :policies="policies"
-                :scope-type="scopeType" :scope-id="scopeId" :classroom-id="classroomId || null"
-                :class-session-id="sessionId || null" :disabled="!canSave || saving" />
+            <template v-else>
+                <p v-if="!canManageRbac" class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
+                    {{ $t('errors.permission_required_for_settings') }}
+                </p>
+                <ScopedRolePolicyEditor v-model="selections" :roles="roles" :policies="policies"
+                    :scope-type="scopeType" :scope-id="scopeId" :classroom-id="classroomId || null"
+                    :class-session-id="sessionId || null" :disabled="!canSave || saving" />
+            </template>
 
             <div class="flex flex-col gap-3 rounded-2xl bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <p class="text-xs font-bold leading-5 text-amber-800">{{ $t('settings.incomplete_notifications.inheritance_hint') }}</p>
-                <button type="button" @click="save" :disabled="saving || !canSave"
+                <button v-if="canManageRbac" type="button" @click="save" :disabled="saving || !canSave"
                     class="shrink-0 rounded-xl bg-emerald-600 px-6 py-3 font-black text-white transition hover:bg-emerald-700 disabled:opacity-40">
                     {{ saving ? $t('common.loading') : $t('common.save') }}
                 </button>
