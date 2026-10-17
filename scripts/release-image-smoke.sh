@@ -18,6 +18,7 @@ docker run -d --name "$api" --network "$network" --network-alias api \
   -e SUPABASE_SERVICE_ROLE_KEY=release-smoke-service \
   -e COOKIE_SECRET=release-smoke-cookie-secret-at-least-32-characters \
   -e API_ALLOWED_ORIGINS=http://localhost:4173 \
+  -e EDULOG_WEB_BASE_URL=https://edulog.example.test \
   -e RATE_LIMIT_STORE=supabase edulog-release-smoke:api >/dev/null
 docker run -d --name "$frontend" --network "$network" \
   -e VITE_API_V1_MODE=v1 edulog-release-smoke:frontend >/dev/null
