@@ -23,12 +23,15 @@ const props = withDefaults(defineProps<{
     busy?: boolean
     /** Accessible name of the badge button and its popover. */
     statusLabel: string
+    /** Popover edge aligned with the badge: 'end' grows leftward, 'start' grows rightward. */
+    align?: 'start' | 'end'
 }>(), {
     detail: null,
     note: null,
     canRetry: false,
     retryLabel: '',
-    busy: false
+    busy: false,
+    align: 'end'
 })
 
 const emit = defineEmits<{ retry: [] }>()
@@ -89,7 +92,8 @@ onBeforeUnmount(() => { open.value = false })
             </svg>
         </button>
         <div v-if="open" :id="popoverId" role="dialog" :aria-label="statusLabel"
-            class="absolute right-0 top-full z-40 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-2xl border border-gray-200 bg-white p-4 text-left text-sm shadow-xl">
+            :class="align === 'start' ? 'left-0' : 'right-0'"
+            class="absolute top-full z-40 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-2xl border border-gray-200 bg-white p-4 text-left text-sm shadow-xl">
             <p class="font-bold text-gray-900">{{ message }}</p>
             <p v-if="note" class="mt-1 text-xs text-gray-600">{{ note }}</p>
             <p v-if="detail" class="mt-2 break-words text-xs text-gray-600">{{ detail }}</p>
