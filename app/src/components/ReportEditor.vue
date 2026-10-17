@@ -335,7 +335,7 @@
 
         <!-- Editor Font Size Stepper -->
         <div class="flex items-center gap-4 mb-4 justify-end">
-            <div class="flex items-center gap-1 bg-gray-50 border border-gray-100 rounded-xl p-1 shadow-sm select-none">
+            <div class="flex items-center gap-1 bg-gray-50 border border-gray-100 rounded-xl p-1 shadow-sm select-none touch-manipulation">
                 <button @click="preferences.adjustEditorScale(-preferences.STEP)"
                     class="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-500 hover:text-emerald-600 hover:border-emerald-200 hover:bg-emerald-50 transition-all font-bold text-xs shadow-sm">
                     -A
