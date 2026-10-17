@@ -35,7 +35,7 @@
       const reportCell = id && reports?.querySelector(`turbo-frame#report_status_${id}`)?.closest('td')
       const student = reportCell ? studentFor(reportCell) : null
       return {
-        box, id, index, student,
+        box, id, index, student, weekIndex: reportCell ? reportCell.cellIndex : null,
         name: student?.name || header.name || `第 ${index + 1} 位`,
         course: student?.course || header.course,
         lesson: student?.state.scheduledLesson || '',
@@ -49,7 +49,7 @@
   }
 
   // ---- Rendering -------------------------------------------------------------
-  function mount({ doc, scope, form, entries, view = {} }) {
+  function mount({ doc, scope, form, entries, view = {}, extraTool = null }) {
     if (!entries.length) return null
     const { element, listen, mark } = scope
     const win = doc.defaultView
@@ -104,7 +104,12 @@
       details.append(summary, head, grid, bar)
       listen(details, 'toggle', () => { view.quickAttendanceOpen = details.open })
       section.append(details)
-    } else section.append(head, grid, bar)
+      // Folded, the copy action stays reachable next to the summary rather than inside it.
+      if (extraTool) { const after = element('div'); after.className = 'edulog-qa-done-tools'; after.append(extraTool); section.append(after) }
+    } else {
+      if (extraTool) tools.append(extraTool)
+      section.append(head, grid, bar)
+    }
     form.before(section)
     mark(form, 'data-edulog-replaced', '')
 

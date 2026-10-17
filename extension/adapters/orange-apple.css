@@ -637,3 +637,12 @@ html[data-edulog-ui="on"] .edulog-session-cards button.edulog-badge-link:hover {
   html[data-edulog-ui="on"] .edulog-qa-selected { flex:1 1 100%; }
   html[data-edulog-ui="on"] .edulog-qa-bar button { flex:1 1 0; white-space:nowrap; }
 }
+/* 複製出席: copies a plain-text attendance summary; falls back to a selected textarea. */
+html[data-edulog-ui="on"] .edulog-copy-attendance { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+html[data-edulog-ui="on"] .edulog-copy-attendance:has(textarea:not([hidden])) { flex:1 1 100%; }
+html[data-edulog-ui="on"] .edulog-copy-attendance button { display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:6px 14px; border:1px solid var(--edulog-border-strong); border-radius:var(--edulog-radius-sm); background:var(--edulog-surface); color:var(--edulog-primary); font:inherit; font-size:15px; white-space:nowrap; cursor:pointer; transition:background-color var(--edulog-duration), border-color var(--edulog-duration); }
+html[data-edulog-ui="on"] .edulog-copy-attendance button:hover { border-color:var(--edulog-primary); background:var(--edulog-primary-soft); }
+html[data-edulog-ui="on"] .edulog-copy-attendance button:focus-visible, html[data-edulog-ui="on"] .edulog-copy-attendance textarea:focus-visible { outline:3px solid var(--edulog-focus-ring); outline-offset:2px; }
+html[data-edulog-ui="on"] .edulog-copy-attendance textarea { flex:1 1 100%; width:100%; min-width:0; padding:8px 10px; border:1px solid var(--edulog-border-input); border-radius:var(--edulog-radius-sm); font:inherit; font-size:15px; line-height:1.5; color:var(--edulog-text); resize:vertical; }
+html[data-edulog-ui="on"] .edulog-copy-attendance textarea[hidden] { display:none; }
+html[data-edulog-ui="on"] .edulog-qa-done-tools { display:flex; justify-content:flex-end; margin:-6px 0 14px; }
