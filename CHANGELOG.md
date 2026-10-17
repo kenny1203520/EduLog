@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed the class page's live-status popover being clipped by the sidebar.
 - Fixed single-lesson transfer rejections being shown without a reason, and v1 report occurrences not being read.
 - Fixed ownerless enrollments skipping the single-lesson transfer and repair authorization checks.
+- Fixed the release image check starting the API without the required `EDULOG_WEB_BASE_URL`.
 
 ### Tests
 - Added integration fixtures for transfer cancellation, class history, report syncing, transfer RBAC and today's-schedule modes, plus unit coverage for the schedule editor and iOS viewport handling.
