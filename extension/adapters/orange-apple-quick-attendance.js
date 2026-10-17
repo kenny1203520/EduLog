@@ -76,7 +76,8 @@
       const main = element('span'); main.className = 'edulog-qa-main'
       const meta = [entry.lesson && `本堂 ${entry.lesson}`, entry.course].filter(Boolean).join(' · ')
       main.append(text('strong', entry.name))
-      if (meta) main.append(text('span', meta, 'edulog-qa-meta'))
+      // Long course names are clamped to two lines so every tile is the same height.
+      if (meta) { const line = text('span', meta, 'edulog-qa-meta'); line.title = meta; main.append(line) }
       const [tone, word] = MARKS[entry.mark] || ['neutral', '—']
       tile.dataset.mark = entry.mark || 'unknown'
       tile.append(box, main, badge(tone, word))
