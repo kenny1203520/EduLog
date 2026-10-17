@@ -1,6 +1,31 @@
 {
     "entries": [
         {
+            "version": "2.0.0-alpha.2",
+            "date": "2026-10-17",
+            "changes": {
+                "added": [
+                    "Added the browser-extension integration with pairing, revocable credentials, history import, reconciliation and a rebuilt provider view.",
+                    "Added date-effective class transfers with class history, and cancellation of single-lesson transfers.",
+                    "Added today's-schedule visibility per teaching role for the system, classrooms and classes: all classes, assigned classes only, or hidden."
+                ],
+                "changed": [
+                    "Single-lesson transfers are authorized by RBAC as well as teacher assignment.",
+                    "Today's schedule is decided by teaching roles only; system roles no longer show every class.",
+                    "Report placeholders follow the enrollment start date, including back-dated lessons."
+                ],
+                "fixed": [
+                    "Fixed iOS Safari zooming in on focused inputs and staying zoomed.",
+                    "Fixed the class page's live-status popover being clipped by the sidebar.",
+                    "Fixed single-lesson transfer rejections being shown without a reason."
+                ],
+                "deployment": [
+                    "Use matching frontend and API images tagged 2.0.0-alpha.2. Alpha does not update stable image tags.",
+                    "Apply every unapplied migration in filename order through 1000147 before running this version. Back up the database first."
+                ]
+            }
+        },
+        {
             "version": "2.0.0-alpha.1",
             "date": "2026-10-04",
             "changes": {

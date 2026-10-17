@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0-alpha.2] - 2026-10-17
+
+### Added
+- Added the browser-extension integration: PKCE pairing with revocable extension-scoped credentials, a workspace API for catalog and field mappings, and history report import with preview, reconciliation and lifecycle receipts.
+- Rebuilt the extension provider view with a weekly to-do, class roster cards, lesson report cards, quick attendance tiles and a copyable attendance summary.
+- Added date-effective class transfers recorded in a class history, and cancellation of single-lesson transfers from the class page and transfer history.
+- Added per-classroom and per-class today's-schedule visibility for teaching roles: all classes, assigned classes only, or hidden, set beside report notifications under Role settings.
+- Added a Playwright test runner and workflow scaffold.
+
+### Changed
+- Single-lesson transfers are authorized by RBAC (`teaching.enrollments.update` in both classes) in addition to teacher assignment.
+- Report placeholders follow the enrollment start date, and back-dated lessons are filled in before placeholders are synced.
+- Today's schedule is decided by teaching roles only; `system.dashboard.schedule.all` is removed.
+- Student creation and sensitive-data access follow platform and scoped permissions; blank student emails are normalized.
+- Reorganized the API source into config, http, infra, auth, domain, routes (rest, pages, extension), realtime and openapi folders.
+
+### Fixed
+- Fixed iOS Safari zooming in on focused inputs and staying zoomed; pinch zoom still works. The font-size steppers no longer zoom on double tap.
+- Fixed the class page's live-status popover being clipped by the sidebar.
+- Fixed single-lesson transfer rejections being shown without a reason, and v1 report occurrences not being read.
+- Fixed ownerless enrollments skipping the single-lesson transfer and repair authorization checks.
+
+### Tests
+- Added integration fixtures for transfer cancellation, class history, report syncing, transfer RBAC and today's-schedule modes, plus unit coverage for the schedule editor and iOS viewport handling.
+
+### Deployment Notes
+- Publish matching frontend and API images tagged `2.0.0-alpha.2`; do not update stable image aliases for alpha releases.
+- Back up an existing database and apply all unapplied migrations in filename order through `1000147_dashboard_schedule_scoped_visibility.sql`; follow `docs/deployment/rollout-1000142-1000146.md` for 1000142-1000146.
+- After upgrading, system roles no longer widen today's schedule; assign a teaching role set to All classes where needed.
+- The browser extension needs `API_EXTENSION_ALLOWED_ORIGINS` and `EDULOG_WEB_BASE_URL`; see `docs/deployment/web-extension.md`. No production deployment is included.
+- See `.github/releases/v2.0.0-alpha.2.md` for prerequisites and limitations.
+
 ## [2.0.0-alpha.1] - 2026-10-04
 
 ### Added
