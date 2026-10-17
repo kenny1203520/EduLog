@@ -646,3 +646,18 @@ html[data-edulog-ui="on"] .edulog-copy-attendance button:focus-visible, html[dat
 html[data-edulog-ui="on"] .edulog-copy-attendance textarea { flex:1 1 100%; width:100%; min-width:0; padding:8px 10px; border:1px solid var(--edulog-border-input); border-radius:var(--edulog-radius-sm); font:inherit; font-size:15px; line-height:1.5; color:var(--edulog-text); resize:vertical; }
 html[data-edulog-ui="on"] .edulog-copy-attendance textarea[hidden] { display:none; }
 html[data-edulog-ui="on"] .edulog-qa-done-tools { display:flex; justify-content:flex-end; margin:-6px 0 14px; }
+/* 課堂記錄 loads lazily into a turbo-frame. Until it has arrived and been turned into cards,
+   show card-shaped placeholders instead of the native table, so the area does not jump.
+   CSS only: if enhancement fails the theme attribute goes away and the native table shows. */
+html[data-edulog-ui="on"][data-edulog-page="class"] turbo-frame#lesson_reports:is(:not([complete]), :has(#reports):not(:has(.edulog-session-cards))) { display:block; }
+html[data-edulog-ui="on"][data-edulog-page="class"] turbo-frame#lesson_reports:is(:not([complete]), :has(#reports):not(:has(.edulog-session-cards))) > * { display:none !important; }
+html[data-edulog-ui="on"][data-edulog-page="class"] turbo-frame#lesson_reports:is(:not([complete]), :has(#reports):not(:has(.edulog-session-cards)))::before {
+  content:''; display:block; height:404px; margin:12px 0 24px; border-radius:var(--edulog-radius-lg);
+  background:
+    linear-gradient(var(--edulog-surface-muted) 0 0) 0 0 / 40% 24px no-repeat,
+    linear-gradient(var(--edulog-surface-muted) 0 0) 0 44px / 100% 104px no-repeat,
+    linear-gradient(var(--edulog-surface-muted) 0 0) 0 164px / 100% 104px no-repeat,
+    linear-gradient(var(--edulog-surface-muted) 0 0) 0 284px / 100% 104px no-repeat;
+  animation:edulog-pulse 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) { html[data-edulog-ui="on"][data-edulog-page="class"] turbo-frame#lesson_reports::before { animation:none; } }

@@ -145,6 +145,7 @@
       try {
         const result = await message({ type: 'set-ui-preferences', enabled })
         if (result?.error) throw new Error('偏好設定暫時無法儲存。')
+        boot?.store({ enabled, pages: pageModes })
       } catch (error) { showNotice(`${error.message} 主題切換僅作用於當頁，偏好未儲存。`) }
     })
     const pageMode = root.querySelector('.page-mode')
@@ -162,6 +163,7 @@
       try {
         const result = await message({ type: 'set-ui-preferences', page: page.kind, pageMode: mode })
         if (result?.error) throw new Error('偏好設定暫時無法儲存。')
+        boot?.store({ enabled, pages: pageModes })
       } catch (error) { showNotice(`${error.message} 本頁切換僅作用於當頁，偏好未儲存。`) }
     })
     root.querySelector('.menu').addEventListener('click', event => {
@@ -437,16 +439,26 @@
     showNotice('擴充套件已更新，請先儲存正在編輯的內容，再重新整理分頁。')
   })
   bridge.listen(data => {
-    if (data?.type === 'ui-preferences-changed') { revision++; failedPath = null; showNotice(''); enabled = data.enabled !== false; pageModes = data.pages || {}; boot?.remember(enabled); sync() }
+    if (data?.type === 'ui-preferences-changed') { revision++; failedPath = null; showNotice(''); enabled = data.enabled !== false; pageModes = data.pages || {}; boot?.remember(enabled); boot?.store({ enabled, pages: pageModes }); sync() }
   })
   // UI is independent of pairing and backend availability.
   const request = revision
   const initial = boot?.ready || message({ type: 'get-ui-preferences' }).catch(() => ({ enabled: false }))
   void initial.then(prefs => {
     needsPreference = prefs?.reason === 'unknown'
-    if (request === revision) { enabled = boot?.expired ? false : prefs?.enabled !== false; pageModes = prefs?.pages || {} }
-    if (!enabled && !bridge.invalidated && (boot?.expired || ['timeout', 'unavailable'].includes(prefs?.reason))) showNotice('未能及時讀取主題偏好，已保留原站。可在當頁套用清晰主題。')
+    if (request === revision) { enabled = prefs?.enabled !== false; pageModes = prefs?.pages || {} }
+    if (!enabled && !bridge.invalidated && ['timeout', 'unavailable'].includes(prefs?.reason)) showNotice('未能及時讀取主題偏好，已保留原站。可在當頁套用清晰主題。')
     initialized = true
     try { sync() } finally { boot?.release() }
+    return boot?.confirmed
+  }).then(confirmed => {
+    // The background's answer is the source of truth: it arrives late after a timeout, or
+    // differs from the page's cached copy. A choice the teacher made meanwhile wins.
+    if (!confirmed || request !== revision) return
+    const samePages = JSON.stringify(confirmed.pages) === JSON.stringify(pageModes)
+    if (confirmed.enabled === enabled && samePages) return
+    enabled = confirmed.enabled; pageModes = confirmed.pages; failedPath = null
+    showNotice('')
+    sync()
   })
 })()

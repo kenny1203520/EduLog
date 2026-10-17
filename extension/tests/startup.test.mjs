@@ -4,17 +4,18 @@ import { readFileSync } from 'node:fs'
 import { JSDOM, VirtualConsole } from '../../app/node_modules/jsdom/lib/api.js'
 const read = name => readFileSync(new URL(name, import.meta.url), 'utf8')
 const tick = () => new Promise(resolve => setTimeout(resolve, 25))
-function start(path = '/courses/dt/101') {
+function start(path = '/courses/dt/101', { cache } = {}) {
   const errors=[],virtualConsole=new VirtualConsole();virtualConsole.on('jsdomError',error=>errors.push(error))
   const dom = new JSDOM('<!doctype html><html><head></head><body></body></html>', { url: `https://corp.orangeapple.co${path}`, runScripts: 'outside-only', pretendToBeVisual: true, virtualConsole })
   const w = dom.window, doc = w.document
+  if (cache !== undefined) w.localStorage.setItem('edulog:ui-preferences', typeof cache === 'string' ? cache : JSON.stringify(cache))
   let answer, reject, deadline, messages = 0
   const response = new Promise((resolve, fail) => { answer = resolve; reject = fail })
   const timeout = w.setTimeout.bind(w)
   w.requestAnimationFrame = fn => timeout(fn, 0)
   w.cancelAnimationFrame = id => w.clearTimeout(id)
-  w.setTimeout = (fn, ms) => { if (ms === 300) deadline = fn; return timeout(fn, ms) }
-  w.chrome = { runtime: { sendMessage: () => { messages++; return response }, onMessage: { addListener() {} } } }
+  w.setTimeout = (fn, ms) => { if (ms === 300 || ms === 1500) deadline = fn; return timeout(fn, ms) }
+  w.chrome = { runtime: { sendMessage: () => { messages++; return response }, onMessage: { addListener(fn) { w.edulogTestListener = fn } } } }
   for (const file of ['runtime-bridge.js', 'adapters/orange-apple-lexicon.js', 'adapters/orange-apple-model.js', 'adapters/orange-apple.js', 'bootstrap.js']) w.eval(read(`../${file}`))
   const mount = (name = 'class') => {
     const source = new JSDOM(read(`fixtures/${name}.html`))
@@ -44,19 +45,91 @@ test('delayed preference keeps parsed content gated until enhanced', async () =>
   assert.equal(s.doc.documentElement.hasAttribute('data-edulog-pending'), false)
   s.dom.window.close()
 })
-for (const failure of ['reject', 'timeout', 'DOM-timeout']) test(`startup ${failure} fails open and late response cannot switch the painted page`, async () => {
-  const s = start()
-  if (failure === 'DOM-timeout') { s.answer({ enabled: true }); await tick(); s.expire(); s.mount() }
-  else { s.mount(); if (failure === 'reject') s.reject(new Error('offline')); else s.expire() }
-  await tick()
+test('startup reject fails open and the theme can still be applied by hand', async () => {
+  const s = start(); s.mount(); s.reject(new Error('offline')); await tick()
   assert.equal(s.doc.documentElement.hasAttribute('data-edulog-pending'), false)
-  assert.equal(s.doc.documentElement.hasAttribute('data-edulog-ui'), false)
-  s.answer({ enabled: true }); await tick()
   assert.equal(s.doc.documentElement.hasAttribute('data-edulog-ui'), false)
   const draft = s.doc.querySelector('textarea'); draft.value = 'unfinished'
   s.doc.querySelector('#edulog-extension-root').shadowRoot.querySelector('.toggle').click(); await tick()
   assert.equal(s.doc.documentElement.dataset.edulogUi, 'on')
   assert.equal(draft.value, 'unfinished')
+  s.dom.window.close()
+})
+test('a preference that arrives after the timeout applies the theme without a click', async () => {
+  const s = start(); s.mount(); s.expire(); await tick()
+  assert.equal(s.doc.documentElement.hasAttribute('data-edulog-pending'), false)
+  assert.equal(s.doc.documentElement.hasAttribute('data-edulog-ui'), false)
+  const notice = () => s.doc.querySelector('#edulog-extension-root').shadowRoot.querySelector('.notice')
+  assert.match(notice().textContent, /未能及時讀取主題偏好/)
+  const draft = s.doc.querySelector('textarea'); draft.value = 'unfinished'
+  s.answer({ enabled: true }); await tick()
+  assert.equal(s.doc.documentElement.dataset.edulogUi, 'on')
+  assert.ok(s.doc.querySelector('[data-edulog-search]'))
+  assert.equal(draft.value, 'unfinished')
+  assert.equal(notice().hidden, true)
+  assert.deepEqual(JSON.parse(s.w.localStorage.getItem('edulog:ui-preferences')), { v: 1, enabled: true, pages: {} })
+  s.dom.window.close()
+})
+test('a slow page after a known preference is revealed with the theme kept', async () => {
+  const s = start(); s.answer({ enabled: true }); await tick(); s.expire(); s.mount(); await tick()
+  assert.equal(s.doc.documentElement.hasAttribute('data-edulog-pending'), false)
+  assert.equal(s.doc.documentElement.dataset.edulogUi, 'on')
+  assert.ok(s.doc.querySelector('[data-edulog-search]'))
+  s.dom.window.close()
+})
+test('a cached preference paints the theme before the background answers', async () => {
+  const s = start('/courses/dt/101', { cache: { v: 1, enabled: true, pages: {} } })
+  assert.equal(s.doc.documentElement.dataset.edulogUi, 'on')
+  assert.ok(s.doc.documentElement.hasAttribute('data-edulog-pending'))
+  s.mount(); await tick()
+  assert.ok(s.doc.querySelector('[data-edulog-search]'))
+  assert.equal(s.doc.documentElement.hasAttribute('data-edulog-pending'), false)
+  s.answer({ enabled: true }); await tick()
+  assert.equal(s.doc.documentElement.dataset.edulogUi, 'on')
+  s.dom.window.close()
+})
+test('a cached "on" that the background says is "off" switches back to the original page', async () => {
+  const s = start('/courses/dt/101', { cache: { v: 1, enabled: true, pages: {} } }); s.mount(); await tick()
+  assert.equal(s.doc.documentElement.dataset.edulogUi, 'on')
+  s.answer({ enabled: false }); await tick()
+  assert.equal(s.doc.documentElement.hasAttribute('data-edulog-ui'), false)
+  assert.equal(s.doc.querySelector('[data-edulog-search]'), null)
+  assert.equal(JSON.parse(s.w.localStorage.getItem('edulog:ui-preferences')).enabled, false)
+  s.dom.window.close()
+})
+test('a cached "off" or per-page original mode does not gate the page', async () => {
+  for (const cache of [{ v: 1, enabled: false, pages: {} }, { v: 1, enabled: true, pages: { class: 'original' } }]) {
+    const s = start('/courses/dt/101', { cache })
+    assert.equal(s.doc.documentElement.hasAttribute('data-edulog-pending'), false)
+    assert.equal(s.doc.documentElement.hasAttribute('data-edulog-ui'), false)
+    s.dom.window.close()
+  }
+})
+test('a damaged cache falls back to waiting for the background', async () => {
+  for (const cache of ['{not json', JSON.stringify({ v: 2, enabled: true }), JSON.stringify({ v: 1, enabled: 'yes' })]) {
+    const s = start('/courses/dt/101', { cache })
+    assert.equal(s.doc.documentElement.hasAttribute('data-edulog-ui'), false)
+    assert.ok(s.doc.documentElement.hasAttribute('data-edulog-pending'))
+    s.answer({ enabled: true }); await tick()
+    assert.equal(s.doc.documentElement.dataset.edulogUi, 'on')
+    s.dom.window.close()
+  }
+})
+test('a cache that cannot be read or written does not break startup', async () => {
+  const dom = new JSDOM('<!doctype html><html><head></head><body></body></html>', { url: 'https://corp.orangeapple.co/courses/dt/101', runScripts: 'outside-only' })
+  const w = dom.window
+  Object.defineProperty(w, 'localStorage', { configurable: true, get() { throw new Error('blocked') } })
+  w.chrome = { runtime: { sendMessage: async () => ({ enabled: true }), onMessage: { addListener() {} } } }
+  for (const file of ['runtime-bridge.js', 'adapters/orange-apple-lexicon.js', 'adapters/orange-apple-model.js', 'adapters/orange-apple.js', 'bootstrap.js']) w.eval(read(`../${file}`))
+  await tick()
+  assert.equal(w.document.documentElement.dataset.edulogUi, 'on')
+  dom.window.close()
+})
+test('preference changes from another tab refresh the cached copy', async () => {
+  const s = start('/courses/dt/101', { cache: { v: 1, enabled: true, pages: {} } }); s.mount(); s.answer({ enabled: true }); await tick()
+  s.w.edulogTestListener({ type: 'ui-preferences-changed', enabled: true, pages: { class: 'original' } })
+  await tick()
+  assert.deepEqual(JSON.parse(s.w.localStorage.getItem('edulog:ui-preferences')).pages, { class: 'original' })
   s.dom.window.close()
 })
 test('unknown and permission error pages show native content without leftover gates', async () => {
