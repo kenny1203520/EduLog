@@ -125,7 +125,7 @@ async function handleLogout() {
 
             <!-- Font Size Switcher in Sidebar -->
             <div class="px-6 py-2">
-                <div class="flex items-center justify-between bg-gray-100 rounded-xl p-1 gap-1 select-none">
+                <div class="flex items-center justify-between bg-gray-100 rounded-xl p-1 gap-1 select-none touch-manipulation">
                     <button @click="preferences.adjustGlobalScale(-preferences.STEP)"
                         class="w-10 h-10 flex items-center justify-center rounded-lg bg-white shadow-sm text-gray-600 hover:text-emerald-600 hover:bg-emerald-50 transition-all font-bold text-sm">
                         -A
