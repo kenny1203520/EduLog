@@ -223,7 +223,18 @@
       const chips = cardsApi?.createChips({ doc, scope, onSelect: chip => { view.reportFilter = chip; view.reportFilterChosen = true; refreshReports() } })
       if (chips) box.append(chips.element)
       // Single-session mode shows extension cards; the native table stays in the DOM, hidden.
-      const cards = cardsApi?.mountCards({ doc, scope, anchor: reportScrollRegion, onChange: () => { if (cards?.element.isConnected) refreshReports() } })
+      // 本週快速點名 becomes a tile grid; the provider's form stays hidden and does the saving.
+      const quickApi = globalThis.edulogSiteQuickAttendance, quickForm = content.querySelector(lexicon.selectors.quickAttendanceForm)
+      // 複製出席: the quick-attendance copy is always that block's week; the toolbar copy follows the view.
+      const exportApi = globalThis.edulogSiteAttendanceExport
+      const copyWeeks = list => list.length ? exportApi.collect({ reports, weeks: list }) : []
+      if (exportApi && weeks.length) weekButtons.append(exportApi.mountButton({ doc, scope, getWeeks: () => copyWeeks((view.reportMode || 'single') === 'compare' ? weeks : weeks.filter(week => week.index === (view.week ?? selected?.index))) }))
+      const quickEntries = quickApi && quickForm ? quickApi.read({ form: quickForm, reports, roster, notStarted: label => model.sessionStarted(label, classStart) === false }) : []
+      const quickWeek = weeks.find(week => week.index === quickEntries.find(entry => entry.weekIndex !== null)?.weekIndex)
+      const quickCopy = exportApi && quickWeek ? exportApi.mountButton({ doc, scope, getWeeks: () => copyWeeks([quickWeek]) }) : null
+      const quick = quickEntries.length ? quickApi.mount({ doc, scope, form: quickForm, view, entries: quickEntries, extraTool: quickCopy }) : null
+      const revealAttendance = quick && { target: row => quick.targetFor(row), reveal: row => quick.reveal(row) }
+      const cards = cardsApi?.mountCards({ doc, scope, anchor: reportScrollRegion, revealAttendance, onChange: () => { if (cards?.element.isConnected) refreshReports() } })
       if (cards) box.append(cardsApi.createDensityToggle({ scope, key: 'reports', target: cards.element, view }))
       refreshReports = () => {
         const rows = [...reports.rows].filter(row => row.hasAttribute('data-edulog-report-row'))

@@ -42,6 +42,10 @@
     // The "請先點名…" alert with "顯示本週上課 / 顯示全部"; the filter chips replace it.
     reportAlert: '.alert',
     reportAlertToggle: '.reports_show',
+    // "本週快速點名": one report_ids[] checkbox per this-week report, saved by type=0/1 buttons.
+    quickAttendanceForm: 'form[action$="/update_attendance"]',
+    quickAttendanceBox: 'input[type=checkbox][name="report_ids[]"]',
+    quickAttendanceSubmit: 'button[name="type"]',
     calendarDayPane: '.tab-pane[id*="-weekday-"]',
   })
   // Student learning-account modal (/students/:id/accounts, opened in remote_modal).

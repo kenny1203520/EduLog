@@ -596,3 +596,53 @@ html[data-edulog-ui="on"] .edulog-density-toggle { display:none; }
   html[data-edulog-ui="on"] [data-edulog-density="compact"] .edulog-session-card .edulog-card-status { grid-column:auto; grid-row:1; grid-column-start:2; }
   html[data-edulog-ui="on"] [data-edulog-density="compact"] .edulog-card-status li { min-height:36px; padding:2px 8px; }
 }
+/* 本週快速點名: tile grid over the provider's hidden form; the provider's buttons still save. */
+html[data-edulog-ui="on"] .edulog-quick-attendance { margin:12px 0 20px; padding:14px 16px 0; border:1px solid var(--edulog-border); border-radius:var(--edulog-radius-lg); background:var(--edulog-surface); }
+html[data-edulog-ui="on"] .edulog-qa-head { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px; margin-bottom:12px; }
+html[data-edulog-ui="on"] .edulog-qa-head h3 { margin:0; font-size:18px; font-weight:700; color:var(--edulog-text); }
+html[data-edulog-ui="on"] .edulog-qa-counts { flex:1 1 auto; margin:0; font-size:14px; color:var(--edulog-text-muted); }
+html[data-edulog-ui="on"] .edulog-qa-tools { display:flex; gap:6px; }
+html[data-edulog-ui="on"] :is(.edulog-qa-tools,.edulog-qa-bar) button { display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:6px 14px; border:1px solid var(--edulog-border-strong); border-radius:var(--edulog-radius-sm); background:var(--edulog-surface); color:var(--edulog-primary); font:inherit; font-size:15px; cursor:pointer; transition:background-color var(--edulog-duration), border-color var(--edulog-duration); }
+html[data-edulog-ui="on"] .edulog-qa-tools button:hover { border-color:var(--edulog-primary); background:var(--edulog-primary-soft); }
+html[data-edulog-ui="on"] .edulog-qa-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); grid-auto-rows:1fr; gap:8px; margin:0; padding:0; list-style:none; }
+html[data-edulog-ui="on"] .edulog-qa-grid > li { display:flex; }
+html[data-edulog-ui="on"] .edulog-qa-tile { display:grid; flex:1 1 auto; grid-template-columns:22px minmax(0,1fr); grid-template-rows:1fr auto; grid-template-areas:"box main" "box status"; column-gap:10px; row-gap:6px; align-items:start; min-height:44px; margin:0; padding:10px 12px; border:1px solid var(--edulog-border-strong); border-radius:var(--edulog-radius); background:var(--edulog-surface); font-weight:400; cursor:pointer; transition:background-color var(--edulog-duration), border-color var(--edulog-duration), box-shadow var(--edulog-duration); }
+html[data-edulog-ui="on"] .edulog-qa-tile:hover { border-color:var(--edulog-primary); }
+html[data-edulog-ui="on"] .edulog-qa-tile[data-selected="true"] { border-color:var(--edulog-primary); background:var(--edulog-primary-soft); box-shadow:inset 0 0 0 1px var(--edulog-primary); }
+html[data-edulog-ui="on"] .edulog-qa-tile input { grid-area:box; width:20px; height:20px; margin:2px 0 0; accent-color:var(--edulog-primary); cursor:pointer; }
+html[data-edulog-ui="on"] .edulog-qa-tile:has(input:focus-visible) { outline:3px solid var(--edulog-focus-ring); outline-offset:2px; }
+html[data-edulog-ui="on"] .edulog-qa-main { grid-area:main; display:flex; flex-direction:column; min-width:0; }
+html[data-edulog-ui="on"] .edulog-qa-main strong { font-size:16px; color:var(--edulog-text); overflow-wrap:anywhere; }
+html[data-edulog-ui="on"] .edulog-qa-meta { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; line-clamp:2; overflow:hidden; font-size:13px; line-height:1.4; color:var(--edulog-text-muted); overflow-wrap:anywhere; }
+html[data-edulog-ui="on"] .edulog-qa-tile > .edulog-badge { grid-area:status; justify-self:start; font-size:13px; }
+html[data-edulog-ui="on"] .edulog-qa-tile[data-edulog-flash] { border-color:var(--edulog-status-warn); box-shadow:0 0 0 4px var(--edulog-status-warn-soft); }
+/* Sticky at the bottom of the viewport while the grid scrolls past on a phone or tablet. */
+html[data-edulog-ui="on"] .edulog-qa-bar { position:sticky; bottom:0; z-index:var(--edulog-z-sticky); display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:12px -16px 0; padding:10px 16px; border-top:1px solid var(--edulog-border); border-radius:0 0 var(--edulog-radius-lg) var(--edulog-radius-lg); background:var(--edulog-surface); }
+html[data-edulog-ui="on"] .edulog-qa-bar[data-active="true"] { box-shadow:0 -4px 12px #1720331a; }
+html[data-edulog-ui="on"] .edulog-qa-selected { flex:1 1 auto; font-size:14px; color:var(--edulog-text-secondary); }
+html[data-edulog-ui="on"] .edulog-qa-bar[data-active="true"] .edulog-qa-selected { font-weight:600; color:var(--edulog-text); }
+html[data-edulog-ui="on"] .edulog-qa-bar .edulog-qa-present { background:var(--edulog-primary); border-color:var(--edulog-primary); color:var(--edulog-surface); font-weight:600; }
+html[data-edulog-ui="on"] .edulog-qa-bar .edulog-qa-present:hover:not(:disabled) { background:var(--edulog-primary-bright); }
+html[data-edulog-ui="on"] .edulog-qa-bar .edulog-qa-absent { border-color:var(--edulog-status-danger); color:var(--edulog-status-danger-text); }
+html[data-edulog-ui="on"] .edulog-qa-bar .edulog-qa-absent:hover:not(:disabled) { background:var(--edulog-status-danger-soft); }
+html[data-edulog-ui="on"] .edulog-qa-bar button:disabled { opacity:.5; cursor:not-allowed; }
+html[data-edulog-ui="on"] .edulog-quick-attendance :is(button,summary):focus-visible { outline:3px solid var(--edulog-focus-ring); outline-offset:2px; }
+html[data-edulog-ui="on"] .edulog-qa-done > summary { display:flex; align-items:center; gap:8px; min-height:44px; margin-bottom:14px; font-weight:600; color:var(--edulog-text); cursor:pointer; }
+html[data-edulog-ui="on"] .edulog-session-cards button.edulog-badge-link { min-height:44px; font:inherit; font-size:14px; cursor:pointer; text-decoration:underline; text-underline-offset:3px; }
+html[data-edulog-ui="on"] .edulog-session-cards button.edulog-badge-link:hover { border-color:var(--edulog-primary); }
+@media (max-width:480px) {
+  html[data-edulog-ui="on"] .edulog-qa-grid { grid-template-columns:minmax(0,1fr); }
+  html[data-edulog-ui="on"] .edulog-qa-tools { flex:1 1 100%; }
+  html[data-edulog-ui="on"] .edulog-qa-tools button { flex:1 1 0; }
+  html[data-edulog-ui="on"] .edulog-qa-selected { flex:1 1 100%; }
+  html[data-edulog-ui="on"] .edulog-qa-bar button { flex:1 1 0; white-space:nowrap; }
+}
+/* 複製出席: copies a plain-text attendance summary; falls back to a selected textarea. */
+html[data-edulog-ui="on"] .edulog-copy-attendance { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+html[data-edulog-ui="on"] .edulog-copy-attendance:has(textarea:not([hidden])) { flex:1 1 100%; }
+html[data-edulog-ui="on"] .edulog-copy-attendance button { display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:6px 14px; border:1px solid var(--edulog-border-strong); border-radius:var(--edulog-radius-sm); background:var(--edulog-surface); color:var(--edulog-primary); font:inherit; font-size:15px; white-space:nowrap; cursor:pointer; transition:background-color var(--edulog-duration), border-color var(--edulog-duration); }
+html[data-edulog-ui="on"] .edulog-copy-attendance button:hover { border-color:var(--edulog-primary); background:var(--edulog-primary-soft); }
+html[data-edulog-ui="on"] .edulog-copy-attendance button:focus-visible, html[data-edulog-ui="on"] .edulog-copy-attendance textarea:focus-visible { outline:3px solid var(--edulog-focus-ring); outline-offset:2px; }
+html[data-edulog-ui="on"] .edulog-copy-attendance textarea { flex:1 1 100%; width:100%; min-width:0; padding:8px 10px; border:1px solid var(--edulog-border-input); border-radius:var(--edulog-radius-sm); font:inherit; font-size:15px; line-height:1.5; color:var(--edulog-text); resize:vertical; }
+html[data-edulog-ui="on"] .edulog-copy-attendance textarea[hidden] { display:none; }
+html[data-edulog-ui="on"] .edulog-qa-done-tools { display:flex; justify-content:flex-end; margin:-6px 0 14px; }

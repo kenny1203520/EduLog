@@ -179,7 +179,7 @@
     return { li, update(cards) { summary.textContent = label(cards.length); list.replaceChildren(...cards) } }
   }
 
-  function mountCards({ doc, scope, anchor, onChange }) {
+  function mountCards({ doc, scope, anchor, onChange, revealAttendance }) {
     const { element, listen } = scope
     const section = scope.add(element('section'))
     section.className = 'edulog-session-cards'; section.setAttribute('aria-label', '本堂學生')
@@ -245,7 +245,16 @@
       if (student.state.enabledLesson && student.state.enabledLesson !== '已啟用') main.append(dataText('span', `已啟用 ${student.state.enabledLesson}`, 'edulog-todo-meta'))
       const strip = statusStrip(student)
       const badges = element('div'); badges.className = 'edulog-card-badges'
-      for (const issue of student.issues) badges.append(badge(issue.tone, issue.icon, issue.label))
+      for (const issue of student.issues) {
+        const node = badge(issue.tone, issue.icon, issue.label)
+        // 尚未點名 leads to the student's quick-attendance tile when that block is on the page.
+        if (issue.label === '尚未點名' && revealAttendance?.target(student.row)) {
+          const jump = element('button'); jump.type = 'button'; jump.className = 'edulog-badge edulog-badge-link'; jump.dataset.tone = issue.tone
+          jump.append(...node.childNodes); jump.setAttribute('aria-label', `${student.name} 尚未點名，前往快速點名`)
+          listen(jump, 'click', () => revealAttendance.reveal(student.row))
+          badges.append(jump)
+        } else badges.append(node)
+      }
       if (noteIsNew(student)) {
         const alert = element('button'); alert.type = 'button'; alert.className = 'edulog-badge edulog-note-alert'; alert.dataset.tone = 'info'
         alert.append(icon(doc, 'note'), dataText('span', '新教學備註'))
