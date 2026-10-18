@@ -107,6 +107,8 @@
         "view_external_report": "View External Report",
         "report_link_label": "Report Link",
         "view_report_link": "Open report link",
+        "open_source_report": "Open / edit on source site",
+        "open_source_report_hint": "Open this report on the source site in a new tab",
         "unrated": "Not rated",
         "clear_rating": "Clear rating",
         "rate_half_star": "Rate {value} out of 5 stars",

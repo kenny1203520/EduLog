@@ -337,6 +337,7 @@
                             :initial-progress-start="selectedReport.progressStart"
                             :initial-progress-end="selectedReport.progressEnd"
                             :initial-report-external-link="selectedReport.externalLink"
+                            :source-identity="selectedReport.sourceIdentity"
                             :initial-student-id="selectedReport.fullStudent?.id" @save-success="handleSaveSuccess"
                             @save-error="handleSaveError" @restored="handleReportRestored"
                             class="!rounded-none !shadow-none !border-none" />
@@ -392,6 +393,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch, onBeforeUnmount } from 'vue'
 import { ReportQueryService } from '@/services/report/ReportQueryService'
+import { sourceIdentityFromRow } from '@/utils/sourceReportLink'
 import ReportEditor from '@/components/ReportEditor.vue'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import BasePageHeader from '@/components/common/BasePageHeader.vue'
@@ -484,6 +486,7 @@ async function loadReports(refreshEditor = true) {
                 progressStart: start,
                 progressEnd: end,
                 externalLink: r.externalLink || r.external_link,
+                sourceIdentity: sourceIdentityFromRow(r),
                 updatedAt: r.updatedAt || r.updated_at,
                 isCompleted: r.isCompleted || r.is_completed,
                 fullStudent: r.fullStudent
