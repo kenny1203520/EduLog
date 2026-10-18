@@ -16,11 +16,11 @@ function start(path = '/courses/dt/101', { cache } = {}) {
   w.cancelAnimationFrame = id => w.clearTimeout(id)
   w.setTimeout = (fn, ms) => { if (ms === 300 || ms === 1500) deadline = fn; return timeout(fn, ms) }
   w.chrome = { runtime: { sendMessage: () => { messages++; return response }, onMessage: { addListener(fn) { w.edulogTestListener = fn } } } }
-  for (const file of ['runtime-bridge.js', 'adapters/orange-apple-lexicon.js', 'adapters/orange-apple-model.js', 'adapters/orange-apple.js', 'bootstrap.js']) w.eval(read(`../${file}`))
+  for (const file of ['shared/runtime-bridge.js', 'sites/orange-apple/orange-apple-lexicon.js', 'sites/orange-apple/orange-apple-model.js', 'sites/orange-apple/orange-apple.js', 'content/bootstrap.js']) w.eval(read(`../${file}`))
   const mount = (name = 'class') => {
     const source = new JSDOM(read(`fixtures/${name}.html`))
     doc.body.innerHTML = source.window.document.body.innerHTML; source.window.close()
-    for (const file of ['connection-ui.js', 'integration-ui.js', 'adapters/orange-apple-workflows.js', 'content.js']) w.eval(read(`../${file}`))
+    for (const file of ['shared/connection-ui.js', 'shared/integration-ui.js', 'sites/orange-apple/orange-apple-workflows.js', 'content/content.js']) w.eval(read(`../${file}`))
   }
   return { dom, w, doc, answer, reject, mount, expire: () => deadline?.(), messages: () => messages, errors }
 }
@@ -120,7 +120,7 @@ test('a cache that cannot be read or written does not break startup', async () =
   const w = dom.window
   Object.defineProperty(w, 'localStorage', { configurable: true, get() { throw new Error('blocked') } })
   w.chrome = { runtime: { sendMessage: async () => ({ enabled: true }), onMessage: { addListener() {} } } }
-  for (const file of ['runtime-bridge.js', 'adapters/orange-apple-lexicon.js', 'adapters/orange-apple-model.js', 'adapters/orange-apple.js', 'bootstrap.js']) w.eval(read(`../${file}`))
+  for (const file of ['shared/runtime-bridge.js', 'sites/orange-apple/orange-apple-lexicon.js', 'sites/orange-apple/orange-apple-model.js', 'sites/orange-apple/orange-apple.js', 'content/bootstrap.js']) w.eval(read(`../${file}`))
   await tick()
   assert.equal(w.document.documentElement.dataset.edulogUi, 'on')
   dom.window.close()

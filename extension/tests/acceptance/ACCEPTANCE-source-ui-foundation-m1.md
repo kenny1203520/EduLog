@@ -4,9 +4,9 @@
 
 原站改版方案 v2 的基礎里程碑，外觀與既有行為不變：
 
-- `edulog-tokens.css`：共用語意 tokens（只有自訂屬性，可安全注入原站，並由工具列 Shadow DOM 繼承）。站點 CSS、工具列、整合面板、popup、編輯器預填改用 tokens；`ui-tokens.css` 的 `--ui-*` 對應到 `--edulog-*`。僅淺色；兩個近似色合併（`#526176`→`#475569`、`#f0f5ff`→`#eff4ff`）。
-- `adapters/orange-apple-lexicon.js`：路由、結構選擇器、狀態用語、頁面探針集中一處。
-- `adapters/orange-apple-model.js`：`matchPage`、`sessionText`、`classifySession`、`readWeekColumns`、`pickWeek`、`checkPage`。報告頁的週欄位與課次狀態判斷（adapter 與 workflows）改由此讀取。
+- `styles/edulog-tokens.css`：共用語意 tokens（只有自訂屬性，可安全注入原站，並由工具列 Shadow DOM 繼承）。站點 CSS、工具列、整合面板、popup、編輯器預填改用 tokens；`styles/ui-tokens.css` 的 `--ui-*` 對應到 `--edulog-*`。僅淺色；兩個近似色合併（`#526176`→`#475569`、`#f0f5ff`→`#eff4ff`）。
+- `sites/orange-apple/orange-apple-lexicon.js`：路由、結構選擇器、狀態用語、頁面探針集中一處。
+- `sites/orange-apple/orange-apple-model.js`：`matchPage`、`sessionText`、`classifySession`、`readWeekColumns`、`pickWeek`、`checkPage`。報告頁的週欄位與課次狀態判斷（adapter 與 workflows）改由此讀取。
 - 健康檢查：增強前檢查探針。權限頁維持原狀；結構不符時該頁保留原站畫面，工具列顯示「此頁暫用原站畫面：原站版面可能已更新…」。
 - 每頁原版：工具列「本頁看原版／本頁套用 EduLog」，按頁面種類記住。偏好存為 `edulogUiPreferences[adapterId].pages[kind] = 'original'`；空時不寫入，舊格式不變。啟動時原版頁直接釋放，不閃爍主題。
 

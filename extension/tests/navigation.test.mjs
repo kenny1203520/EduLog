@@ -11,8 +11,8 @@ function page(path = '/courses/dt/101', { saturday = true, extraClasses = '' } =
   const w = dom.window, original = w.document.body.outerHTML
   // Pin "today" so the 今天 mark is deterministic (2026-10-17 is a Saturday).
   if (saturday) w.eval("{ const Real = Date; globalThis.Date = class extends Real { constructor(...a) { super(...(a.length ? a : ['2026-10-17T09:00:00+08:00'])) } } }")
-  for (const file of ['lexicon', 'model', 'navigation', 'workflows']) w.eval(read(`../adapters/orange-apple-${file}.js`))
-  w.eval(read('../adapters/orange-apple.js'))
+  for (const file of ['lexicon', 'model', 'navigation', 'workflows']) w.eval(read(`../sites/orange-apple/orange-apple-${file}.js`))
+  w.eval(read('../sites/orange-apple/orange-apple.js'))
   const view = {}
   const result = w.edulogSiteAdapter.enhancePage(w.document, view)
   return { dom, w, doc: w.document, view, result, original }
@@ -63,8 +63,8 @@ test('work links, hidden empty modules, moved search and proxied account actions
 test('module groups appear only when the provider gave them entries', () => {
   const dom = new JSDOM(read('fixtures/real-sidebar.html').replace('<div class="collapse" id="teaching-menu"><ul class="btn-toggle-nav list-unstyled"></ul>', '<div class="collapse" id="teaching-menu"><ul class="btn-toggle-nav list-unstyled"><li><a href="/teaching/plans">教案管理</a></li></ul>'), { url: 'https://corp.orangeapple.co/courses/dt/101', runScripts: 'outside-only' })
   const w = dom.window
-  for (const file of ['lexicon', 'model', 'navigation', 'workflows']) w.eval(read(`../adapters/orange-apple-${file}.js`))
-  w.eval(read('../adapters/orange-apple.js'))
+  for (const file of ['lexicon', 'model', 'navigation', 'workflows']) w.eval(read(`../sites/orange-apple/orange-apple-${file}.js`))
+  w.eval(read('../sites/orange-apple/orange-apple.js'))
   w.edulogSiteAdapter.enhancePage(w.document, {})
   assert.equal([...w.document.querySelectorAll('.edulog-nav-heading')].map(node => node.textContent).join('|'), '我的班級|工作|師資模組')
   dom.window.close()
@@ -74,8 +74,8 @@ test('pending counts other views computed show next to the class', () => {
   const dom = new JSDOM(read('fixtures/real-sidebar.html'), { url: 'https://corp.orangeapple.co/courses/dt/101', runScripts: 'outside-only' })
   const w = dom.window
   w.eval("globalThis.edulogClassPending = new Map([['/courses/dt/102', 3]])")
-  for (const file of ['lexicon', 'model', 'navigation', 'workflows']) w.eval(read(`../adapters/orange-apple-${file}.js`))
-  w.eval(read('../adapters/orange-apple.js'))
+  for (const file of ['lexicon', 'model', 'navigation', 'workflows']) w.eval(read(`../sites/orange-apple/orange-apple-${file}.js`))
+  w.eval(read('../sites/orange-apple/orange-apple.js'))
   w.edulogSiteAdapter.enhancePage(w.document, {})
   const count = w.document.querySelector('.edulog-nav-class[href="/courses/dt/102"] .edulog-nav-count')
   assert.equal(count.textContent, '3')

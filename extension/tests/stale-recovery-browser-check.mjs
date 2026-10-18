@@ -22,8 +22,8 @@ globalThis.recoveryTest={
 };`
 const server=createServer((req,res)=>{
  const name=new URL(req.url,'http://localhost').pathname.slice(1)
- if(!/^[a-z0-9.-]+$/.test(name)){res.writeHead(404).end();return}
- try{let content=readFileSync(new URL(name,root),'utf8');if(name==='workspace.js')content+=accessors;res.setHeader('Content-Type',name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':'text/html; charset=utf-8');res.end(content)}catch{res.writeHead(404).end()}
+ if(!/^(?:[a-z0-9-]+\/)*[a-z0-9.-]+$/.test(name)){res.writeHead(404).end();return}
+ try{let content=readFileSync(new URL(name,root),'utf8');if(name==='workspace/workspace.js')content+=accessors;res.setHeader('Content-Type',name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':'text/html; charset=utf-8');res.end(content)}catch{res.writeHead(404).end()}
 })
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve))
 const results=[]
@@ -52,7 +52,7 @@ try{
      return{data:{}}
     }},storage:{local:{get:async()=>({}),set:async()=>{}}}}
    })
-   await page.goto(`http://127.0.0.1:${server.address().port}/workspace.html?source=10`)
+   await page.goto(`http://127.0.0.1:${server.address().port}/workspace/workspace.html?source=10`)
    await page.waitForFunction(()=>window.recoveryTest&&document.getElementById('workspace').getAttribute('aria-busy')!=='true')
    assert.equal(await page.locator('#workspace').isVisible(),true,await page.locator('#diagnostic').textContent())
    for(const trusted of [false,true]){

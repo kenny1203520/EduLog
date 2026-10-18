@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { courseIdentity, admissionIdentity, classifyAdmissionIdentityChange, groupCourses, rankCandidates, mergeRecords } from '../mapping-core.js'
+import { courseIdentity, admissionIdentity, classifyAdmissionIdentityChange, groupCourses, rankCandidates, mergeRecords } from '../workspace/mapping-core.js'
 test('course rules distinguish identities, exact labels and unknown admissions',()=>{
   const rows=[{kind:'enrollment',source_id:'1',source_course_id:'9',sourceCourseLabel:'A'},{kind:'enrollment',source_id:'2',sourceCourseLabel:'A'},{kind:'enrollment',source_id:'3',sourceCourseLabel:' A '},{kind:'enrollment',source_id:'4'},{kind:'enrollment',source_id:'5'}]
   assert.equal(groupCourses(rows).length,4);assert.equal(courseIdentity(rows[0]),'id:9');assert.equal(groupCourses(rows)[1].rows.length,2)

@@ -10,7 +10,7 @@
 
 ## Startup regression follow-up
 
-- Fixed the duplicate top-level `workHistory` declaration in `workspace.js` and the extra closing brace in `repeatWork()`. Both prevented the complete workbench module from parsing, so none of its entry flows could initialize.
+- Fixed the duplicate top-level `workHistory` declaration in `workspace/workspace.js` and the extra closing brace in `repeatWork()`. Both prevented the complete workbench module from parsing, so none of its entry flows could initialize.
 - Added a test that runs `node --check` over every published JavaScript source and adapter, rather than checking only extracted functions.
 - The side-load packaging script now parses every staged JavaScript file before replacing the archive. A syntax error stops packaging and leaves the previous archive intact.
 - Chrome and Edge synthetic checks passed for import, prefill, and work-history entries without a source tab. Full workbench import and prefill flows passed at 360, 390, 768, 1024, 1200, 1440, and 1920 px, with no page errors or unhandled promise rejections reported.

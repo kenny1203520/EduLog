@@ -10,7 +10,7 @@ const { chromium } = await loadPlaywright(process.argv.slice(2).find(arg => !arg
 const output = process.argv[3] || mkdtempSync(join(tmpdir(), 'edulog-ui-'))
 mkdirSync(output, { recursive: true })
 const read = file => readFileSync(new URL(file, import.meta.url), 'utf8')
-const css = read('../edulog-tokens.css') + read('../adapters/orange-apple.css') + read('../dialog-layout.css')
+const css = read('../styles/edulog-tokens.css') + read('../sites/orange-apple/orange-apple.css') + read('../content/dialog-layout.css')
 let nativeCss = read('fixtures/native-bootstrap-dialog.css')
 if (process.argv[4]) {
   const dir = process.argv[4]
@@ -23,14 +23,14 @@ for (const [browserName, launchOptions] of executables) {  const browser = awai
   try {
     for (const state of ['not-connected', 'pending', 'connected', 'unavailable']) {
       const page = await browser.newPage({ locale:'zh-TW', viewport: { width: 390, height: 600 } })
-      await page.setContent(read('../popup.html').replace('</head>', `<style>${read('../edulog-tokens.css')}</style><style>${read('../popup.css')}</style></head>`))
+      await page.setContent(read('../popup/popup.html').replace('</head>', `<style>${read('../styles/edulog-tokens.css')}</style><style>${read('../popup/popup.css')}</style></head>`))
       await page.evaluate(state => {
         window.chrome = {
           storage: { local: { get: async () => ({ edulogExtension: { origin: 'http://localhost:5173', pending: state === 'pending' ? { expiresAt: new Date(Date.now() + 60000).toISOString() } : null } }) } },
           runtime: { sendMessage: async data => data.type === 'get-edulog-installation' ? { installation_id: '11111111-1111-4111-8111-111111111111', device_name: '教室筆電', browser_name: 'Chrome', platform_name: 'Windows', extension_version: '0.1.0' } : data.type === 'get-ui-preferences' ? { enabled: true } : { status: state, deviceName: '教室筆電 · Chrome', origin: 'http://localhost:5173', settingsUrl: 'http://localhost:5173/dashboard/settings?tab=integrations', lastVerifiedAt: new Date().toISOString() } },
         }
       }, state)
-      for (const file of ['runtime-bridge.js', 'ui-core.js', 'ui-messages.js', 'connection-ui.js', 'integration-ui.js', 'popup.js']) await page.addScriptTag({ content: read(`../${file}`) })
+      for (const file of ['shared/runtime-bridge.js', 'shared/ui-core.js', 'shared/ui-messages.js', 'shared/connection-ui.js', 'shared/integration-ui.js', 'popup/popup.js']) await page.addScriptTag({ content: read(`../${file}`) })
       await page.locator(`[data-state="${state}"]`).waitFor()
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${browserName} popup overflow`)
       assert.equal(await page.locator('html').evaluate(el => Math.round(el.getBoundingClientRect().width)), 390, `${browserName} popup target width`)
@@ -61,22 +61,22 @@ for (const [browserName, launchOptions] of executables) {  const browser = awai
       await page.evaluate(() => {
         window.chrome = { runtime: { sendMessage: async data => ({ enabled: data.enabled ?? true }), onMessage: { addListener(fn) { window.edulogTestListener = fn } } } }
       })
-      for (const file of ['lexicon', 'model']) await page.addScriptTag({ content: read(`../adapters/orange-apple-${file}.js`) })
-      await page.addScriptTag({ content: read('../adapters/orange-apple-todo.js') })
-      await page.addScriptTag({ content: read('../adapters/orange-apple-session-cards.js') })
-      await page.addScriptTag({ content: read('../adapters/orange-apple-attendance-export.js') })
-      await page.addScriptTag({ content: read('../adapters/orange-apple-quick-attendance.js') })
-      await page.addScriptTag({ content: read('../adapters/orange-apple-accounts.js') })
-      await page.addScriptTag({ content: read('../adapters/orange-apple-navigation.js') })
-      await page.addScriptTag({ content: read('../adapters/orange-apple-report-editor.js') })
-      await page.addScriptTag({ content: read('../adapters/orange-apple-roster.js') })
-      await page.addScriptTag({ content: read('../adapters/orange-apple-workflows.js') })
-      await page.addScriptTag({ content: read('../adapters/orange-apple.js') })
-      await page.addScriptTag({ content: read('../runtime-bridge.js') });await page.addScriptTag({ content: read('../ui-core.js') });await page.addScriptTag({ content: read('../ui-messages.js') })
-      await page.addScriptTag({ content: read('../bootstrap.js') })
-      await page.addScriptTag({ content: read('../connection-ui.js') })
-      await page.addScriptTag({ content: read('../integration-ui.js') })
-      await page.addScriptTag({ content: read('../content.js') })
+      for (const file of ['lexicon', 'model']) await page.addScriptTag({ content: read(`../sites/orange-apple/orange-apple-${file}.js`) })
+      await page.addScriptTag({ content: read('../sites/orange-apple/orange-apple-todo.js') })
+      await page.addScriptTag({ content: read('../sites/orange-apple/orange-apple-session-cards.js') })
+      await page.addScriptTag({ content: read('../sites/orange-apple/orange-apple-attendance-export.js') })
+      await page.addScriptTag({ content: read('../sites/orange-apple/orange-apple-quick-attendance.js') })
+      await page.addScriptTag({ content: read('../sites/orange-apple/orange-apple-accounts.js') })
+      await page.addScriptTag({ content: read('../sites/orange-apple/orange-apple-navigation.js') })
+      await page.addScriptTag({ content: read('../sites/orange-apple/orange-apple-report-editor.js') })
+      await page.addScriptTag({ content: read('../sites/orange-apple/orange-apple-roster.js') })
+      await page.addScriptTag({ content: read('../sites/orange-apple/orange-apple-workflows.js') })
+      await page.addScriptTag({ content: read('../sites/orange-apple/orange-apple.js') })
+      await page.addScriptTag({ content: read('../shared/runtime-bridge.js') });await page.addScriptTag({ content: read('../shared/ui-core.js') });await page.addScriptTag({ content: read('../shared/ui-messages.js') })
+      await page.addScriptTag({ content: read('../content/bootstrap.js') })
+      await page.addScriptTag({ content: read('../shared/connection-ui.js') })
+      await page.addScriptTag({ content: read('../shared/integration-ui.js') })
+      await page.addScriptTag({ content: read('../content/content.js') })
       await page.locator('html[data-edulog-ui=on]').waitFor()
       assert.equal(await page.locator('#edulog-extension-root').count(), 1)
       await page.waitForTimeout(80)

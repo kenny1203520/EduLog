@@ -2,7 +2,7 @@
 
 ## 本次範圍
 
-新模組 `adapters/orange-apple-roster.js`，由 adapter 既有的名單區（`#students-table`）呼叫：
+新模組 `sites/orange-apple/orange-apple-roster.js`，由 adapter 既有的名單區（`#students-table`）呼叫：
 
 - 每筆報名一張卡片：姓名（有教學備註時加圖示）、年級與課程、上課期間（尚未開課改顯示「預計 YYYY/MM/DD 開課」）、「剩餘 x / y 堂」與進度條、補課數。≥1024px 每張卡片一橫列且欄位對齊。
 - 徽章（顏色＋圖示＋文字）：剩餘 0 堂（紅）、剩餘 1–2 堂（琥珀）、尚未開課・預計日期、本週試聽、已試聽、調課、進度較慢、同名 N 筆報名。

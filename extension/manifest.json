@@ -6,10 +6,10 @@
   "minimum_chrome_version": "116",
   "action": {
     "default_title": "EduLog",
-    "default_popup": "popup.html"
+    "default_popup": "popup/popup.html"
   },
   "background": {
-    "service_worker": "service-worker.js",
+    "service_worker": "background/service-worker.js",
     "type": "module"
   },
   "permissions": [
@@ -30,15 +30,15 @@
         "https://corp.orangeapple.co/*"
       ],
       "js": [
-        "runtime-bridge.js",
-        "adapters/orange-apple-lexicon.js",
-        "adapters/orange-apple-model.js",
-        "adapters/orange-apple.js",
-        "bootstrap.js"
+        "shared/runtime-bridge.js",
+        "sites/orange-apple/orange-apple-lexicon.js",
+        "sites/orange-apple/orange-apple-model.js",
+        "sites/orange-apple/orange-apple.js",
+        "content/bootstrap.js"
       ],
       "css": [
-        "edulog-tokens.css",
-        "adapters/orange-apple.css"
+        "styles/edulog-tokens.css",
+        "sites/orange-apple/orange-apple.css"
       ],
       "run_at": "document_start"
     },
@@ -47,29 +47,29 @@
         "https://corp.orangeapple.co/*"
       ],
       "js": [
-        "ui-core.js",
-        "ui-messages.js",
-        "source-date.js",
-        "field-mappings.js",
-        "field-mapping-ui.js",
-        "connection-ui.js",
-        "integration-ui.js",
-        "adapters/orange-apple-todo.js",
-        "adapters/orange-apple-session-cards.js",
-        "adapters/orange-apple-attendance-export.js",
-        "adapters/orange-apple-quick-attendance.js",
-        "adapters/orange-apple-accounts.js",
-        "adapters/orange-apple-navigation.js",
-        "adapters/orange-apple-report-editor.js",
-        "adapters/orange-apple-roster.js",
-        "adapters/orange-apple-workflows.js",
-        "adapters/orange-apple-integration.js",
-        "editor-prefill.js",
-        "content.js"
+        "shared/ui-core.js",
+        "shared/ui-messages.js",
+        "shared/source-date.js",
+        "shared/field-mappings.js",
+        "shared/field-mapping-ui.js",
+        "shared/connection-ui.js",
+        "shared/integration-ui.js",
+        "sites/orange-apple/orange-apple-todo.js",
+        "sites/orange-apple/orange-apple-session-cards.js",
+        "sites/orange-apple/orange-apple-attendance-export.js",
+        "sites/orange-apple/orange-apple-quick-attendance.js",
+        "sites/orange-apple/orange-apple-accounts.js",
+        "sites/orange-apple/orange-apple-navigation.js",
+        "sites/orange-apple/orange-apple-report-editor.js",
+        "sites/orange-apple/orange-apple-roster.js",
+        "sites/orange-apple/orange-apple-workflows.js",
+        "sites/orange-apple/orange-apple-integration.js",
+        "content/editor-prefill.js",
+        "content/content.js"
       ],
       "css": [
-        "dialog-layout.css",
-        "editor-prefill.css"
+        "content/dialog-layout.css",
+        "content/editor-prefill.css"
       ],
       "run_at": "document_end"
     }

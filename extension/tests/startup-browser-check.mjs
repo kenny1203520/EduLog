@@ -8,9 +8,9 @@ const { chromium } = await loadPlaywright(process.argv.slice(2).find(arg => !arg
 const output = process.argv[3]
 mkdirSync(output, { recursive: true })
 const read = file => readFileSync(new URL(file, import.meta.url), 'utf8')
-const early = ['runtime-bridge.js', 'adapters/orange-apple-lexicon.js', 'adapters/orange-apple-model.js', 'adapters/orange-apple.js', 'bootstrap.js'].map(file => read(`../${file}`)).join('\n;\n')
-const main = ['connection-ui.js', 'integration-ui.js', 'adapters/orange-apple-workflows.js', 'content.js'].map(file => read(`../${file}`)).join('\n;\n')
-const css = read('../edulog-tokens.css') + read('../adapters/orange-apple.css')
+const early = ['shared/runtime-bridge.js', 'sites/orange-apple/orange-apple-lexicon.js', 'sites/orange-apple/orange-apple-model.js', 'sites/orange-apple/orange-apple.js', 'content/bootstrap.js'].map(file => read(`../${file}`)).join('\n;\n')
+const main = ['shared/connection-ui.js', 'shared/integration-ui.js', 'sites/orange-apple/orange-apple-workflows.js', 'content/content.js'].map(file => read(`../${file}`)).join('\n;\n')
+const css = read('../styles/edulog-tokens.css') + read('../sites/orange-apple/orange-apple.css')
 const fixture = name => read(`fixtures/${name}.html`)
 const cases = [
   { name: 'enabled', delay: 0, enabled: true },

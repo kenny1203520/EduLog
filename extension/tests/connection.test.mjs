@@ -17,7 +17,7 @@ test.afterEach(async () => {
 })
 
 test('pairing includes named installation metadata and blocks duplicate submission', async () => {
-  const dom = trackedDom(read('../popup.html'), { url: 'https://extension.example/popup.html', runScripts: 'outside-only' })
+  const dom = trackedDom(read('../popup/popup.html'), { url: 'https://extension.example/popup/popup.html', runScripts: 'outside-only' })
   const w = dom.window, stored = {}, requests = [], opened = []
   const installation = { installation_id: '11111111-1111-4111-8111-111111111111', device_name: 'Chrome · Windows', browser_name: 'Chrome', platform_name: 'Windows', extension_version: '0.1.0' }
   let finish
@@ -29,7 +29,7 @@ test('pairing includes named installation metadata and blocks duplicate submissi
     permissions: { request: async () => true }, tabs: { create: async value => opened.push(value) },
   }
   w.fetch = async (url, options) => { requests.push({ url, body: JSON.parse(options.body) }); return new Promise(resolve => { finish = resolve }) }
-  for (const file of ['runtime-bridge.js','connection-ui.js','integration-ui.js','popup.js']) w.eval(read(`../${file}`))
+  for (const file of ['shared/runtime-bridge.js','shared/connection-ui.js','shared/integration-ui.js','popup/popup.js']) w.eval(read(`../${file}`))
   await wait()
   const get = id => w.document.getElementById(id)
   get('instance').value = 'http://localhost:5173'; get('device-name').value = 'Teaching laptop'
@@ -54,7 +54,7 @@ for (const failure of ['sync', 'async', 'listener']) test(`invalidated ${failure
   let calls = 0
   const fail = () => { throw new Error('Extension context invalidated.') }
   w.chrome = { runtime: { sendMessage() { calls++; return failure === 'async' ? Promise.reject(new Error('Extension context invalidated.')) : fail() }, onMessage: { addListener() { if (failure === 'listener') fail() } } } }
-  for (const file of ['runtime-bridge.js', 'connection-ui.js', 'integration-ui.js', 'adapters/orange-apple-lexicon.js', 'adapters/orange-apple-model.js', 'adapters/orange-apple-workflows.js', 'adapters/orange-apple.js', 'bootstrap.js', 'content.js']) w.eval(read(`../${file}`))
+  for (const file of ['shared/runtime-bridge.js', 'shared/connection-ui.js', 'shared/integration-ui.js', 'sites/orange-apple/orange-apple-lexicon.js', 'sites/orange-apple/orange-apple-model.js', 'sites/orange-apple/orange-apple-workflows.js', 'sites/orange-apple/orange-apple.js', 'content/bootstrap.js', 'content/content.js']) w.eval(read(`../${file}`))
   await wait()
   const draft = w.document.querySelector('textarea')
   draft.value = 'unsaved draft'
@@ -78,7 +78,7 @@ test('transient bridge rejection permits retry', async () => {
   const dom = trackedDom('', { runScripts: 'outside-only' })
   let calls = 0
   dom.window.chrome = { runtime: { sendMessage() { return ++calls === 1 ? Promise.reject(new Error('Receiving end does not exist')) : Promise.resolve({ enabled: true }) } } }
-  dom.window.eval(read('../runtime-bridge.js'))
+  dom.window.eval(read('../shared/runtime-bridge.js'))
   await assert.rejects(dom.window.edulogRuntime.send({}), error => error.code === 'BRIDGE_NO_RECEIVER' && error.cause?.message === 'Receiving end does not exist')
   assert.equal(dom.window.edulogRuntime.invalidated, false)
   assert.equal((await dom.window.edulogRuntime.send({})).enabled, true)
@@ -92,19 +92,19 @@ test('bridge preserves safe classifications for channel closure and oversized me
   ]) {
     const dom = trackedDom('', { runScripts: 'outside-only' })
     dom.window.chrome = { runtime: { sendMessage: async () => { throw new Error(message) } } }
-    dom.window.eval(read('../runtime-bridge.js'))
+    dom.window.eval(read('../shared/runtime-bridge.js'))
     await assert.rejects(dom.window.edulogRuntime.send({}), error => error.code === code && error.cause?.message === message && !error.message.includes(message))
     dom.window.close()
   }
 })
 
 for (const state of ['not-connected', 'pending', 'pairing-expired', 'connected', 'expired', 'revoked', 'unavailable', 'forbidden']) test(`popup renders ${state}, independent UI preferences`, async () => {
-  const dom = trackedDom(read('../popup.html'), { url: 'https://extension.example/popup.html', runScripts: 'outside-only' })
+  const dom = trackedDom(read('../popup/popup.html'), { url: 'https://extension.example/popup/popup.html', runScripts: 'outside-only' })
   const w = dom.window
   const stored = { origin: 'http://localhost:5173', token: 'private-token', pending: state === 'pending' ? { expiresAt: new Date(Date.now() + 60000).toISOString(), authorizeUrl: 'http://localhost:5173/dashboard/settings?extension_pair=id' } : undefined }
   const opened = []
   w.chrome = { storage: { local: { get: async () => ({ edulogExtension: stored }), set: async () => assert.fail('Unexpected storage write') } }, runtime: { sendMessage: async data => data.type === 'get-edulog-installation' ? { installation_id: '11111111-1111-4111-8111-111111111111', device_name: 'Test browser', browser_name: 'Chrome', platform_name: 'Windows', extension_version: '0.1.0' } : data.type === 'get-ui-preferences' ? { enabled: false } : data.type === 'set-ui-preferences' ? { enabled: data.enabled } : { status: state, origin: stored.origin, settingsUrl: 'http://localhost:5173/dashboard/settings?tab=integrations', lastVerifiedAt: '2026-10-01T00:00:00Z' } }, tabs: { create: async value => opened.push(value) } }
-  for (const file of ['runtime-bridge.js', 'connection-ui.js', 'integration-ui.js', 'popup.js']) w.eval(read(`../${file}`))
+  for (const file of ['shared/runtime-bridge.js', 'shared/connection-ui.js', 'shared/integration-ui.js', 'popup/popup.js']) w.eval(read(`../${file}`))
   await wait()
   const get = id => w.document.getElementById(id)
   assert.equal(get('connection-card').dataset.state, state)

@@ -3,13 +3,13 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { webcrypto } from 'node:crypto'
 import { JSDOM } from '../../app/node_modules/jsdom/lib/api.js'
-import { splitBatches, validateBatches, workspaceErrorMessage, isUnsupportedReportEvidencePathValidation, suggestedValue, plainText } from '../workspace-model.js'
+import { splitBatches, validateBatches, workspaceErrorMessage, isUnsupportedReportEvidencePathValidation, suggestedValue, plainText } from '../workspace/workspace-model.js'
 function adapter(html, pathname = '/courses/dt/11') {
   const dom = new JSDOM(html, { url: `https://corp.orangeapple.co${pathname}`, runScripts: 'outside-only' })
   Object.defineProperty(dom.window, 'crypto', { value: webcrypto }); dom.window.TextEncoder = TextEncoder
-  dom.window.eval(readFileSync(new URL('../source-date.js', import.meta.url), 'utf8'))
-  dom.window.eval(readFileSync(new URL('../field-mappings.js', import.meta.url), 'utf8'))
-  dom.window.eval(readFileSync(new URL('../adapters/orange-apple-integration.js', import.meta.url), 'utf8'))
+  dom.window.eval(readFileSync(new URL('../shared/source-date.js', import.meta.url), 'utf8'))
+  dom.window.eval(readFileSync(new URL('../shared/field-mappings.js', import.meta.url), 'utf8'))
+  dom.window.eval(readFileSync(new URL('../sites/orange-apple/orange-apple-integration.js', import.meta.url), 'utf8'))
   return { dom, doc: dom.window.document, api: dom.window.edulogSourceIntegration }
 }
 const source = `<div id="page-body"><div class="content"><h2>測試班級</h2><table id="reports"><tbody>

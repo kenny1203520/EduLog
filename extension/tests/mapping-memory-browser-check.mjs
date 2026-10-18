@@ -5,7 +5,7 @@ import { createServer } from 'node:http'
 import assert from 'node:assert/strict'
 const { chromium } = await loadPlaywright(process.argv.slice(2).find(arg => !arg.startsWith('--')))
 const root=new URL('../',import.meta.url),output=new URL('artifacts/mapping/',import.meta.url);mkdirSync(output,{recursive:true})
-const server=createServer((req,res)=>{const name=new URL(req.url,'http://localhost').pathname.slice(1);if(!/^[a-z0-9.-]+$/.test(name)){res.writeHead(404).end();return}try{res.setHeader('content-type',name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':'text/html');res.end(readFileSync(new URL(name,root)))}catch{res.writeHead(404).end()}})
+const server=createServer((req,res)=>{const name=new URL(req.url,'http://localhost').pathname.slice(1);if(!/^(?:[a-z0-9-]+\/)*[a-z0-9.-]+$/.test(name)){res.writeHead(404).end();return}try{res.setHeader('content-type',name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':'text/html');res.end(readFileSync(new URL(name,root)))}catch{res.writeHead(404).end()}})
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const base=`http://127.0.0.1:${server.address().port}`
 function mock() {
   const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`,version='a'.repeat(32),origin='https://corp.orangeapple.co',store=new Map()
@@ -71,7 +71,7 @@ try{
     try{for(const width of(process.argv.includes('--focused')?[390,1440]:[360,390,768,1024,1200,1440,1920,720])){
       const context=await browser.newContext({viewport:{width,height:900},deviceScaleFactor:width===720?2:1}),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.addInitScript(mock)
       const collect=async()=>{await page.locator('#read-history').uncheck();await page.locator('#collect').click();await page.locator('#mapping').waitFor({state:'visible'})}
-      await page.goto(`${base}/workspace.html?source=10${process.argv.includes('--reconciliation')?'&reconciliation=1':''}`);await collect()
+      await page.goto(`${base}/workspace/workspace.html?source=10${process.argv.includes('--reconciliation')?'&reconciliation=1':''}`);await collect()
       assert.equal(await page.evaluate(()=>testCalls.some(m=>m.operation==='context')),false)
       await page.locator('#classroom').selectOption(id(1));await page.locator('#class-session').selectOption(id(3));await page.locator('#remember-destination').click();await page.waitForFunction(()=>document.querySelector('#notice').textContent.includes('已保存'))
       const choose=async(section,index)=>{
@@ -210,7 +210,7 @@ try{
         assert.equal(await action.evaluate(n=>{const r=n.getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight}),true,'short viewport final action and focus are visible')
         assert.equal(await page.locator('#start-301').inputValue(),'2026-01-01');await page.setViewportSize({width,height:900})
       }
-      await page.goto(`${base}/workspace.html?source=10&changed=1`);await collect();assert.match(await page.locator('#mapping-summary').textContent(),/衝突 1/)
+      await page.goto(`${base}/workspace/workspace.html?source=10&changed=1`);await collect();assert.match(await page.locator('#mapping-summary').textContent(),/衝突 1/)
       console.log(`PASS ${name} ${width}: master/detail, focus/scroll, inline failure, targeted revisions, evidence, safe frontend links, multilingual statuses, multi-course reuse and supplement`);await context.close()
     }}finally{await browser.close()}
   }

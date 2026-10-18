@@ -11,8 +11,8 @@ function broker(fetchImpl, getStatus = async () => ({ status: 'connected' }), ti
   if(sourceHandler)chrome.tabs.sendMessage=async(n,m)=>{calls.push({tab:n,...m});return sourceHandler(m)}
   const adapter = { matchesTeachingPage: p => /^\/courses\/dt\/\d+$/.test(p), matchesIntegrationPage: p => /^\/courses\/dt\/\d+$/.test(p) || /^\/dt_admissions\/\d+\/reports\/\d+\/edit$/.test(p), matchPage: p => /^\/dt_admissions\/\d+\/reports\/\d+\/edit$/.test(p) ? { kind:'report-editor' } : /^\/courses\/dt\/\d+$/.test(p) ? { kind:'class' } : null }
   const context = vm.createContext({ chrome, workStore, crypto:webcrypto, Intl, URL, AbortSignal, AbortController, TextEncoder, setTimeout: timers.setTimeout || setTimeout, clearTimeout: timers.clearTimeout || clearTimeout, getStatus, fetch: fetchImpl || (async (url, options) => { calls.push({ url, ...options }); return { ok: true, headers: { get: () => null }, json: async () => ({ data: {} }) } }), edulogSiteAdapter: adapter })
-  vm.runInContext(readFileSync(new URL('../workspace-broker.js', import.meta.url), 'utf8').replace(/^import[^\n]*\n/gm, '').replace('export function', 'function') + '\ninstallWorkspaceBroker(getStatus)', context)
-  const trusted = { id, url: `chrome-extension://${id}/workspace.html?flow=import` }, site = { id, url: tabs[0].url, tab: tabs[0] }
+  vm.runInContext(readFileSync(new URL('../background/workspace-broker.js', import.meta.url), 'utf8').replace(/^import[^\n]*\n/gm, '').replace('export function', 'function') + '\ninstallWorkspaceBroker(getStatus)', context)
+  const trusted = { id, url: `chrome-extension://${id}/workspace/workspace.html?flow=import` }, site = { id, url: tabs[0].url, tab: tabs[0] }
   return { send: (m, s = trusted) => new Promise(resolve => { const result = listener(m, s, resolve); if (!result) resolve(undefined) }), binding, calls, settings, tabs, rows, changed, site, trusted }
 }
 test('only the workspace can broker API/storage/source actions, and every action requires instance/user binding', async () => {

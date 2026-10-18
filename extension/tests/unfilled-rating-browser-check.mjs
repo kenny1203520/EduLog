@@ -24,17 +24,17 @@ try{
         const page=await browser.newPage({viewport:{width,height:560},deviceScaleFactor:2}),errors=[]
         page.on('pageerror',error=>errors.push(error.message))
         await page.goto(`${origin}/admissions/unfilled_report`)
-        await page.addStyleTag({path:fileURLToPath(new URL('edulog-tokens.css',extensionRoot))})
-        await page.addStyleTag({path:fileURLToPath(new URL('adapters/orange-apple.css',extensionRoot))})
+        await page.addStyleTag({path:fileURLToPath(new URL('styles/edulog-tokens.css',extensionRoot))})
+        await page.addStyleTag({path:fileURLToPath(new URL('sites/orange-apple/orange-apple.css',extensionRoot))})
         await page.addStyleTag({content:`
           body{margin:0}.content{padding:16px}.rating{float:left}.rating input{position:absolute;left:-9999px}
           .rating label{float:right;position:static;width:24px;height:28px;color:#ddd}
           .rating label:before{content:'★'}.rating label.half:before{content:'★';position:absolute;top:100%;left:0}
           .form-section{padding:12px}.col-md-6{width:50%}
         `})
-        for(const file of ['lexicon','model'])await page.addScriptTag({path:fileURLToPath(new URL(`adapters/orange-apple-${file}.js`,extensionRoot))})
-        await page.addScriptTag({path:fileURLToPath(new URL('adapters/orange-apple-workflows.js',extensionRoot))})
-        await page.addScriptTag({path:fileURLToPath(new URL('adapters/orange-apple.js',extensionRoot))})
+        for(const file of ['lexicon','model'])await page.addScriptTag({path:fileURLToPath(new URL(`sites/orange-apple/orange-apple-${file}.js`,extensionRoot))})
+        await page.addScriptTag({path:fileURLToPath(new URL('sites/orange-apple/orange-apple-workflows.js',extensionRoot))})
+        await page.addScriptTag({path:fileURLToPath(new URL('sites/orange-apple/orange-apple.js',extensionRoot))})
         await page.evaluate(()=>{
           document.documentElement.dataset.edulogUi='on'
           const modal=document.createElement('div');modal.id='lesson-report-modal';modal.innerHTML='<div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h4 class="modal-title">測試報告</h4></div><div class="modal-body"><form><div class="row"><div class="col-md-6"><fieldset class="rating"></fieldset></div><div class="col-md-6"><fieldset class="rating"></fieldset></div></div><textarea id="lesson_report_feedback"></textarea><input type="submit" value="更新"></form></div></div></div>';document.body.append(modal)

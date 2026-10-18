@@ -18,8 +18,8 @@ function classPage({ roster, mutate } = {}) {
   const w = dom.window
   w.document.querySelector('.alert').insertAdjacentHTML('afterend', quickForm(roster))
   mutate?.(w.document)
-  for (const file of ['lexicon', 'model', 'session-cards', 'quick-attendance', 'workflows']) w.eval(read(`../adapters/orange-apple-${file}.js`))
-  w.eval(read('../adapters/orange-apple.js'))
+  for (const file of ['lexicon', 'model', 'session-cards', 'quick-attendance', 'workflows']) w.eval(read(`../sites/orange-apple/orange-apple-${file}.js`))
+  w.eval(read('../sites/orange-apple/orange-apple.js'))
   const submitted = []
   for (const button of w.document.querySelectorAll('form button[name=type]')) button.addEventListener('click', event => {
     event.preventDefault()

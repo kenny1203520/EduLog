@@ -1,6 +1,6 @@
-import './adapters/orange-apple-lexicon.js'
-import './adapters/orange-apple-model.js'
-import './adapters/orange-apple.js'
+import '../sites/orange-apple/orange-apple-lexicon.js'
+import '../sites/orange-apple/orange-apple-model.js'
+import '../sites/orange-apple/orange-apple.js'
 import './installation.js'
 import { installWorkspaceBroker } from './workspace-broker.js'
 
@@ -195,7 +195,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (!fromPopup && !isTeachingPage(sender.url)) return
   if (message?.type === 'get-edulog-integration-status') {
-    const force = sender.url === chrome.runtime.getURL('popup.html') && message.force === true
+    const force = sender.url === chrome.runtime.getURL('popup/popup.html') && message.force === true
     void getIntegrationStatus({ force }).then(sendResponse, () => sendResponse({ status: 'unavailable' }))
     return true
   }

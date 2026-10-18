@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { JSDOM } from '../../app/node_modules/jsdom/lib/api.js'
 
 test('workspace locale translates existing and dynamic text, preserves new source text, and restores Chinese', async()=>{
-  const source=readFileSync(new URL('../workspace-i18n.js',import.meta.url),'utf8').replace('export function initWorkspaceI18n','function initWorkspaceI18n')
+  const source=readFileSync(new URL('../workspace/workspace-i18n.js',import.meta.url),'utf8').replace('export function initWorkspaceI18n','function initWorkspaceI18n')
   const dom=new JSDOM('<html lang="zh-Hant"><body><label for="workspace-locale">介面語言</label><select id="workspace-locale"><option value="zh-TW">繁體中文</option><option value="en">English</option></select><h1>教學資料匯入</h1><input id="search" placeholder="姓名、課程或報名 ID…"><select data-source-raw-options="true"><option>選擇目標課程</option><option>出席</option></select><p id="status"></p><p class="source-evidence" id="raw">出席</p></body></html>',{runScripts:'outside-only'})
   const w=dom.window,listeners=[];w.chrome={storage:{local:{get:async()=>({edulogWorkspaceLocale:'en'}),set:async()=>{}},onChanged:{addListener:fn=>listeners.push(fn)}}};w.eval(source+';initWorkspaceI18n()')
   await new Promise(resolve=>setTimeout(resolve,0));assert.equal(w.document.querySelector('h1').textContent,'Teaching data import');assert.equal(w.document.querySelector('label').textContent,'Interface language');assert.equal(w.document.getElementById('search').placeholder,'Name, course, or enrollment ID…');assert.equal(w.document.querySelector('[data-source-raw-options] option:nth-child(2)').textContent,'出席')
@@ -14,7 +14,7 @@ test('workspace locale translates existing and dynamic text, preserves new sourc
 })
 
 test('workspace locale falls back to browser language when extension storage is unavailable', async()=>{
-  const source=readFileSync(new URL('../workspace-i18n.js',import.meta.url),'utf8').replace('export function initWorkspaceI18n','function initWorkspaceI18n')
+  const source=readFileSync(new URL('../workspace/workspace-i18n.js',import.meta.url),'utf8').replace('export function initWorkspaceI18n','function initWorkspaceI18n')
   const dom=new JSDOM('<html lang="zh-Hant"><body><select id="workspace-locale"><option value="zh-TW">繁體中文</option><option value="en">English</option></select><h1>教學資料匯入</h1></body></html>',{runScripts:'outside-only'})
   dom.window.eval(source+';initWorkspaceI18n()')
   await new Promise(resolve=>setTimeout(resolve,0))
@@ -24,7 +24,7 @@ test('workspace locale falls back to browser language when extension storage is 
 })
 
 test('dynamic review progress and issue guidance are translated in place',async()=>{
-  const source=readFileSync(new URL('../workspace-i18n.js',import.meta.url),'utf8').replace('export function initWorkspaceI18n','function initWorkspaceI18n')
+  const source=readFileSync(new URL('../workspace/workspace-i18n.js',import.meta.url),'utf8').replace('export function initWorkspaceI18n','function initWorkspaceI18n')
   const dom=new JSDOM('<html lang="zh-Hant"><body><select id="workspace-locale"><option value="zh-TW">繁體中文</option><option value="en">English</option></select><p id="count"></p><p id="issue"></p><p id="saved"></p></body></html>',{runScripts:'outside-only'})
   const w=dom.window;w.chrome={storage:{local:{get:async()=>({edulogWorkspaceLocale:'zh-TW'}),set:async()=>{}},onChanged:{addListener:()=>{}}}};w.eval(source+';initWorkspaceI18n()');await new Promise(resolve=>setTimeout(resolve,0))
   w.document.getElementById('count').textContent='待處理報告 2 份 · 問題 3 項 · 可同步 4 份';w.document.getElementById('issue').textContent='待處理問題 · 2 項';w.document.getElementById('saved').textContent='已記住：「出席」→「present」；套用範圍：Python。';await new Promise(resolve=>setTimeout(resolve,0))
@@ -34,7 +34,7 @@ test('dynamic review progress and issue guidance are translated in place',async(
 })
 
 test('stale import recovery messages translate their reason and restore the source-language text',async()=>{
-  const source=readFileSync(new URL('../workspace-i18n.js',import.meta.url),'utf8').replace('export function initWorkspaceI18n','function initWorkspaceI18n')
+  const source=readFileSync(new URL('../workspace/workspace-i18n.js',import.meta.url),'utf8').replace('export function initWorkspaceI18n','function initWorkspaceI18n')
   const dom=new JSDOM('<html lang="zh-Hant"><body><select id="workspace-locale"><option value="zh-TW">繁體中文</option><option value="en">English</option></select><p id="title"></p><p id="detail"></p></body></html>',{runScripts:'outside-only'})
   const w=dom.window;w.chrome={storage:{local:{get:async()=>({edulogWorkspaceLocale:'zh-TW'}),set:async()=>{}},onChanged:{addListener:()=>{}}}};w.eval(source+';initWorkspaceI18n()');await new Promise(resolve=>setTimeout(resolve,0))
   const title=w.document.getElementById('title'),detail=w.document.getElementById('detail')
@@ -45,7 +45,7 @@ test('stale import recovery messages translate their reason and restore the sour
   assert.equal(title.textContent,'同步受阻，預覽已失效');assert.match(detail.textContent,/目標資料已更新/);dom.window.close()
 })
 test('saved history result counts translate in both known and legacy states',async()=>{
-  const source=readFileSync(new URL('../workspace-i18n.js',import.meta.url),'utf8').replace('export function initWorkspaceI18n','function initWorkspaceI18n')
+  const source=readFileSync(new URL('../workspace/workspace-i18n.js',import.meta.url),'utf8').replace('export function initWorkspaceI18n','function initWorkspaceI18n')
   const dom=new JSDOM('<html lang="zh-Hant"><body><select id="workspace-locale"><option value="zh-TW">繁體中文</option><option value="en">English</option></select><p id="status"></p></body></html>',{runScripts:'outside-only'}),w=dom.window
   w.chrome={storage:{local:{get:async()=>({edulogWorkspaceLocale:'en'}),set:async()=>{}},onChanged:{addListener:()=>{}}}}
   w.eval(source+';initWorkspaceI18n()');await new Promise(resolve=>setTimeout(resolve,0))

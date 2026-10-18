@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import vm from 'node:vm'
 import { readFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
-const code = readFileSync(new URL('../installation.js', import.meta.url), 'utf8')
+const code = readFileSync(new URL('../background/installation.js', import.meta.url), 'utf8')
 function installation(storage, ua = 'Edg/123 Chrome/123') {
   const context = vm.createContext({ crypto: { randomUUID }, navigator: { platform: 'Win32', userAgent: ua }, chrome: { runtime: { getManifest: () => ({ version: '0.1.0' }) }, storage: { local: { get: async () => ({ edulogInstallation: storage.value }), set: async data => { storage.value = data.edulogInstallation } } } } })
   vm.runInContext(code, context)

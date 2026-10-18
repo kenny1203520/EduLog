@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { planHistory, bindingStillMatches } from '../history-sync.js'
-import { mergeClearToken, mergeSignature } from '../history-merge.js'
+import { planHistory, bindingStillMatches } from '../workspace/history-sync.js'
+import { mergeClearToken, mergeSignature } from '../workspace/history-merge.js'
 const record=(extra={})=>({kind:'report',enrollment_source_id:'301',source_id:'401',historyKey:'report:401',sourceClassId:'11',date:'2026-10-04',sourceFields:[{key:'content',label:'評語',type:'text',value:''}],data:{is_completed:false,class_participation:0,classroom_behavior:4.5,content:''},...extra})
 const target=new Map([['301',{id:'enrollment',courseId:'course',name:'測試學生'}]])
 const occurrence={id:'sunday-occurrence',class_session_id:'sunday-session',class_name:'週日班',occurrence_date:'2026-10-04',can_write:true}

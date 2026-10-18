@@ -7,8 +7,8 @@ import { publishRelease, releaseState, renderReceipt, readReceipt, createStoreCl
 
 const key = config.sideloadPublicKey, item = extensionId(key)
 function fixture() {
-  const manifest = { manifest_version: 3, name: 'EduLog BETA', version: '0.1.1.1', version_name: '0.1.1-beta.1', key, action: { default_popup: 'popup.html' }, background: { service_worker: 'worker.js', type: 'module' } }
-  const files = new Map([['manifest.json', Buffer.from(JSON.stringify(manifest))], ['popup.html', Buffer.from('<script src="popup.js"></script>')], ['popup.js', Buffer.from('const value = 1')], ['worker.js', Buffer.from('export const ready = true')]])
+  const manifest = { manifest_version: 3, name: 'EduLog BETA', version: '0.1.1.1', version_name: '0.1.1-beta.1', key, action: { default_popup: 'popup/popup.html' }, background: { service_worker: 'background/worker.js', type: 'module' } }
+  const files = new Map([['manifest.json', Buffer.from(JSON.stringify(manifest))], ['popup/popup.html', Buffer.from('<script src="popup.js"></script>')], ['popup/popup.js', Buffer.from('const value = 1')], ['background/worker.js', Buffer.from('export const ready = true')]])
   const archive = zipFiles(files)
   return { archive, files, metadata: { channel: 'beta', distribution: 'store', version: manifest.version, versionName: manifest.version_name, extensionId: item, sha256: sha256(archive), files: Object.fromEntries([...files].map(([name, data]) => [name, sha256(data)])) } }
 }
@@ -38,11 +38,11 @@ test('deterministic ZIP rejects traversal, corruption and truncation', () => {
 test('runtime validation rejects missing dependencies, syntax errors and unexpected files', () => {
   const { files } = fixture()
   validateRuntime(files)
-  const missing = new Map(files); missing.delete('popup.js')
+  const missing = new Map(files); missing.delete('popup/popup.js')
   assert.throws(() => validateRuntime(missing), /missing file/)
-  const broken = new Map(files); broken.set('worker.js', Buffer.from('const incomplete ='))
+  const broken = new Map(files); broken.set('background/worker.js', Buffer.from('const incomplete ='))
   assert.throws(() => validateRuntime(broken), /syntax failure/)
-  const external = new Map(files); external.set('worker.js', Buffer.from("import 'external-package'"))
+  const external = new Map(files); external.set('background/worker.js', Buffer.from("import 'external-package'"))
   assert.throws(() => validateRuntime(external), /bundled/)
   const secret = new Map(files); secret.set('.env', Buffer.from('secret'))
   assert.throws(() => validateRuntime(secret), /Unexpected/)
@@ -61,7 +61,7 @@ test('packaging is reproducible from pinned committed Git objects and excludes n
   assert.deepEqual(first.archive, second.archive)
   assert.equal(second.metadata.commit, commit)
   assert.equal(second.metadata.distribution, 'zip')
-  assert.deepEqual(second.files.get('service-worker.js'), git(['show', commit + ':extension/service-worker.js']))
+  assert.deepEqual(second.files.get('background/service-worker.js'), git(['show', commit + ':extension/background/service-worker.js']))
   for (const name of second.files.keys()) assert.doesNotMatch(name, /(^|\/)(tests|dist|node_modules)|README|package\.json|\.pem$|\.env/)
   assert.throws(() => buildRelease({ ...args, channel: 'stable', version: '0.1.1' }), /configured store/)
   assert.throws(() => buildRelease({ ...args, distribution: 'store' }), /CWS_PUBLIC_KEY/)

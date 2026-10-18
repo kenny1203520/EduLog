@@ -10,11 +10,11 @@ function worker(extraCapabilities = {}) {
     runtime:{ id:extensionId, getURL:path=>`chrome-extension://${extensionId}/${path}`, onInstalled:{addListener(){}}, onMessage:{addListener(fn){listeners.runtime=fn}} },
     storage:{ onChanged:{addListener(fn){changes.push(fn)}}, local:{setAccessLevel:async()=>{},get:async()=>structuredClone(stored),set:async values=>{const old=structuredClone(stored.edulogExtension);Object.assign(stored,values);for(const fn of changes)fn({edulogExtension:{oldValue:old,newValue:structuredClone(stored.edulogExtension)}},'local')}} },
   }
-  const source=readFileSync(new URL('../service-worker.js',import.meta.url),'utf8').replace(/^import[^\n]*\n/gm,'')+'\n'
+  const source=readFileSync(new URL('../background/service-worker.js',import.meta.url),'utf8').replace(/^import[^\n]*\n/gm,'')+'\n'
   const context=vm.createContext({chrome,URL,Date,AbortSignal,fetch:async()=>{fetchCount++;await new Promise(resolve=>setTimeout(resolve,5));return{ok:true,json:async()=>({data:{user_id:'user-a',settings_url:'https://edulog.example/dashboard/settings?tab=integrations',connection:{installation_id:'installation-a',device_name:'Test device'},capabilities:{teaching_data_import:true,report_prefill:true,catalog_v1:true,...extraCapabilities},integration_limits:{batch_bytes:180000}}})}},globalThis:null,installWorkspaceBroker(){},edulogSiteAdapter:{id:'orange-apple',matchesHost:()=>true,matchesTeachingPage:()=>true},edulogInstallation:{load:async()=>({})},setTimeout,clearTimeout})
   context.globalThis=context
   vm.runInContext(source,context)
-  const send=(force=false)=>new Promise(resolve=>listeners.runtime({type:'get-edulog-integration-status',force},{id:extensionId,url:`chrome-extension://${extensionId}/popup.html`},resolve))
+  const send=(force=false)=>new Promise(resolve=>listeners.runtime({type:'get-edulog-integration-status',force},{id:extensionId,url:`chrome-extension://${extensionId}/popup/popup.html`},resolve))
   return{send,getFetchCount:()=>fetchCount,stored}
 }
 

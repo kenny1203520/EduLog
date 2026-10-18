@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {readHistoryWork} from '../history-reader.js'
+import {readHistoryWork} from '../workspace/history-reader.js'
 const record=(id)=>({kind:'report',source_id:id,enrollment_source_id:'1',date:'2026-10-01',evidenceKey:id,data:{}})
 const fixture=()=>({id:'work',history:{paths:['/dt_admissions/1','/dt_admissions/2'],next:0},snapshot:{records:[]},dateFrom:'2026-01-01',dateTo:'2026-12-31'})
 test('closed source pauses at its checkpoint; resuming does not reread completed reports',async()=>{

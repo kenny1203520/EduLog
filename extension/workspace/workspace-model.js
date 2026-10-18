@@ -1,4 +1,4 @@
-import './field-mappings.js'
+import '../shared/field-mappings.js'
 export const labels = { student: '學生', course: '課程', class_session: '班級', enrollment: '報名', occurrence: '課次', history_report: '歷史報告', report: '課次報告', added: '新增', updated: '更新', unchanged: '無變更', conflict: '保留 EduLog', needs: '需處理' }
 /** Start a new reconciliation without altering the committed job or its keys. */
 export function retryHistoryWork(previous) {

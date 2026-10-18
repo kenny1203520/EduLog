@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
 import {JSDOM} from '../../app/node_modules/jsdom/lib/api.js'
 const field={key:'attendance_status',type:'select',value:'yes',options:[{value:'yes',label:'出席',disabled:false},{value:'no',label:'不出席',disabled:false}]}
-function setup(rules,confirm,isCurrent=()=>true,changed){const dom=new JSDOM('<main></main>',{runScripts:'outside-only'});for(const f of ['field-mappings.js','field-mapping-ui.js'])dom.window.eval(readFileSync(new URL('../'+f,import.meta.url),'utf8'));dom.window.edulogFieldMappingUI.attach(dom.window.document.querySelector('main'),field,{attendance_status:'present'},rules,{enabled:true,confirm,isCurrent,changed});return dom}
+function setup(rules,confirm,isCurrent=()=>true,changed){const dom=new JSDOM('<main></main>',{runScripts:'outside-only'});for(const f of ['shared/field-mappings.js','shared/field-mapping-ui.js'])dom.window.eval(readFileSync(new URL('../'+f,import.meta.url),'utf8'));dom.window.edulogFieldMappingUI.attach(dom.window.document.querySelector('main'),field,{attendance_status:'present'},rules,{enabled:true,confirm,isCurrent,changed});return dom}
 const tick=()=>new Promise(resolve=>setTimeout(resolve,0))
 test('explicit confirmation uses returned revision; clearing leaves original field untouched',async()=>{
  const rules=[],calls=[],changes=[];const dom=setup(rules,async input=>{calls.push(input);return{items:input.action==='confirm'?[{...input,revision:'rev-1',valid:true}]:[{cleared:true}]}},()=>true,(_rules,change)=>changes.push(change)),doc=dom.window.document
@@ -22,7 +22,7 @@ test('late confirmations do not write memory after the target changes',async()=>
  const rules=[];let resolve,current=true;const dom=setup(rules,()=>new Promise(r=>resolve=r),()=>current);dom.window.document.querySelector('button').click();current=false;resolve({items:[{field_key:field.key,source_value:'yes',revision:'late'}]});await tick();assert.equal(rules.length,0);dom.window.close()
 })
 test('lesson choices sort by numeric sequence, then title and id, with missing sequence last',()=>{
- const dom=new JSDOM('<main></main>',{runScripts:'outside-only'});dom.window.eval(readFileSync(new URL('../field-mapping-ui.js',import.meta.url),'utf8'))
+ const dom=new JSDOM('<main></main>',{runScripts:'outside-only'});dom.window.eval(readFileSync(new URL('../shared/field-mapping-ui.js',import.meta.url),'utf8'))
  const lessons=[{id:'z',sequence:10,title:'ten'},{id:'b',sequence:2,title:'Beta'},{id:'a',sequence:2,title:'Alpha'},{id:'one',sequence:1,title:'One'},{id:'missing',title:'Missing'}]
  assert.deepEqual([...dom.window.edulogFieldMappingUI.sortLessons(lessons)].map(row=>row.id),['one','a','b','z','missing']);dom.window.close()
 })

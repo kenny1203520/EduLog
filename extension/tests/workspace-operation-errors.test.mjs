@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {workspaceInterfaceFailure} from '../workspace-operation-errors.js'
+import {workspaceInterfaceFailure} from '../workspace/workspace-operation-errors.js'
 
 test('interface errors retain safe exception identity without leaking arbitrary report text',()=>{
   const error=new ReferenceError('t is not defined')

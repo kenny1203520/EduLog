@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {JSDOM} from '../../app/node_modules/jsdom/lib/api.js'
-import {comparison,decisionResult,semanticValue,paragraphChanges} from '../review-ui.js'
+import {comparison,decisionResult,semanticValue,paragraphChanges} from '../workspace/review-ui.js'
 test('semantic comparison keeps false, zero, blank and half-star meanings distinct',()=>{
   assert.equal(semanticValue('is_completed',false),'未完成');assert.equal(semanticValue('is_completed',null),'未填');assert.equal(semanticValue('class_participation',0),'0 星');assert.equal(semanticValue('class_participation',4.5),'4.5 星')
   assert.equal(semanticValue('lesson_id','same-name',()=>({sequence:3,title:'Same title'})),'Lesson 3 · Same title')

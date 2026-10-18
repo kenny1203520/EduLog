@@ -14,8 +14,8 @@ function classPage({ roster, clipboard } = {}) {
   w.document.querySelector('.alert').insertAdjacentHTML('afterend', quickForm(roster))
   const copied = []
   if (clipboard !== false) Object.defineProperty(w.navigator, 'clipboard', { configurable: true, value: { writeText: async text => { if (clipboard === 'reject') throw new Error('denied'); copied.push(text) } } })
-  for (const file of ['lexicon', 'model', 'session-cards', 'attendance-export', 'quick-attendance', 'workflows']) w.eval(read(`../adapters/orange-apple-${file}.js`))
-  w.eval(read('../adapters/orange-apple.js'))
+  for (const file of ['lexicon', 'model', 'session-cards', 'attendance-export', 'quick-attendance', 'workflows']) w.eval(read(`../sites/orange-apple/orange-apple-${file}.js`))
+  w.eval(read('../sites/orange-apple/orange-apple.js'))
   const view = {}
   const result = w.edulogSiteAdapter.enhancePage(w.document, view)
   return { dom, w, doc: w.document, view, result, copied }

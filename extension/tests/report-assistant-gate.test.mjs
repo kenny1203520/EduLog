@@ -27,7 +27,7 @@ function editor({ status, lookup = null, collapsed = false }) {
   const form = w.document.querySelector('form[action^="/dt_admissions/"]')
   const sourceForm = { formId: 'f1', fingerprint: 'fp', action: '/dt_admissions/9001/reports/7001', admissionId: '9001', reportId: '7001', title: '學生甲 課堂紀錄', date: '2026-10-17', dateInfo: {}, supplement: null, fields: [] }
   w.edulogSourceIntegration = { getForm: doc => doc?.contains?.(form) ? form : null, readForm: async () => sourceForm }
-  w.eval(read('../editor-prefill.js'))
+  w.eval(read('../content/editor-prefill.js'))
   const change = async next => { state.status = next; for (const fn of listeners) fn({ edulogExtension: { newValue: {} } }, 'local'); await settle(w) }
   return { dom, w, doc: w.document, sent, store, change, sourceForm }
 }

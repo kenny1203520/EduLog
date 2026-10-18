@@ -10,8 +10,8 @@ function modalPage(name) {
   const dom = new JSDOM(read(`fixtures/${name}.html`), { url: 'https://corp.orangeapple.co/courses/dt/101', runScripts: 'outside-only', pretendToBeVisual: true })
   const w = dom.window, original = w.document.body.outerHTML, copied = []
   Object.defineProperty(w.navigator, 'clipboard', { value: { writeText: async text => { copied.push(text) } }, configurable: true })
-  for (const file of ['lexicon', 'model', 'accounts', 'workflows']) w.eval(read(`../adapters/orange-apple-${file}.js`))
-  w.eval(read('../adapters/orange-apple.js'))
+  for (const file of ['lexicon', 'model', 'accounts', 'workflows']) w.eval(read(`../sites/orange-apple/orange-apple-${file}.js`))
+  w.eval(read('../sites/orange-apple/orange-apple.js'))
   const enhancement = w.edulogSiteAdapter.enhanceDialogs(w.document, {})
   return { dom, w, doc: w.document, original, copied, enhancement }
 }

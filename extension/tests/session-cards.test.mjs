@@ -11,8 +11,8 @@ const read = name => readFileSync(new URL(name, import.meta.url), 'utf8')
 function classPage() {
   const dom = new JSDOM(read('fixtures/real-class.html'), { url: 'https://corp.orangeapple.co/courses/dt/101', runScripts: 'outside-only', pretendToBeVisual: true })
   const w = dom.window, original = w.document.body.outerHTML
-  for (const file of ['lexicon', 'model', 'session-cards', 'workflows']) w.eval(read(`../adapters/orange-apple-${file}.js`))
-  w.eval(read('../adapters/orange-apple.js'))
+  for (const file of ['lexicon', 'model', 'session-cards', 'workflows']) w.eval(read(`../sites/orange-apple/orange-apple-${file}.js`))
+  w.eval(read('../sites/orange-apple/orange-apple.js'))
   const view = {}
   const result = w.edulogSiteAdapter.enhancePage(w.document, view)
   return { dom, w, doc: w.document, view, result, original }
@@ -143,8 +143,8 @@ function withNotes(store, html = read('fixtures/real-class.html')) {
     if (message.type === 'get-notes-seen') return { seen: Object.fromEntries(message.ids.map(id => [id, store[id] || null])) }
     if (message.type === 'note-seen') { store[message.id] = message.hash; return { ok: true } }
   } }
-  for (const file of ['lexicon', 'model', 'session-cards', 'workflows']) w.eval(read(`../adapters/orange-apple-${file}.js`))
-  w.eval(read('../adapters/orange-apple.js'))
+  for (const file of ['lexicon', 'model', 'session-cards', 'workflows']) w.eval(read(`../sites/orange-apple/orange-apple-${file}.js`))
+  w.eval(read('../sites/orange-apple/orange-apple.js'))
   const view = {}
   const result = w.edulogSiteAdapter.enhancePage(w.document, view)
   return { dom, w, doc: w.document, calls, result }

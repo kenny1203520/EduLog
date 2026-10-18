@@ -9,8 +9,8 @@ const read = name => readFileSync(new URL(name, import.meta.url), 'utf8')
 function editor() {
   const dom = new JSDOM(read('fixtures/real-report-editor.html'), { url: 'https://corp.orangeapple.co/courses/dt/101', runScripts: 'outside-only', pretendToBeVisual: true })
   const w = dom.window, original = w.document.body.outerHTML
-  for (const file of ['lexicon', 'model', 'report-editor', 'workflows']) w.eval(read(`../adapters/orange-apple-${file}.js`))
-  w.eval(read('../adapters/orange-apple.js'))
+  for (const file of ['lexicon', 'model', 'report-editor', 'workflows']) w.eval(read(`../sites/orange-apple/orange-apple-${file}.js`))
+  w.eval(read('../sites/orange-apple/orange-apple.js'))
   const enhancement = w.edulogSiteAdapter.enhanceDialogs(w.document, {})
   const doc = w.document
   const set = (selector, value) => { const node = doc.querySelector(selector); node.value = value; node.dispatchEvent(new w.Event('change', { bubbles: true })) }

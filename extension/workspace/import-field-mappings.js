@@ -1,5 +1,5 @@
-import './field-mappings.js'
-import './field-mapping-ui.js'
+import '../shared/field-mappings.js'
+import '../shared/field-mapping-ui.js'
 
 // Metadata stays in the trusted snapshot. Only returned canonical data enters an import.
 export function fieldChoicesForCourse(record, courseId) {

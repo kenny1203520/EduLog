@@ -155,7 +155,7 @@ describe('workspace API contract', () => {
     expect(pendingPush.safeParse({ status: 'confirmed' }).success).toBe(false)
   })
   it('accepts extension-built reversed dependencies and still rejects duplicate source identities', async () => {
-    const modelUrl = new URL('../../../../extension/workspace-model.js', import.meta.url)
+    const modelUrl = new URL('../../../../extension/workspace/workspace-model.js', import.meta.url)
     const { splitBatches } = await import(modelUrl.href)
     const enrollment = { source_id: '277332', target_id: '00000000-0000-4000-8000-000000000002', overwrite: [], record: { kind: 'enrollment', data: { student_id: id, course_id: id, class_session_id: id, classroom_id: id, status: 'regular', start_date: '2026-01-01', time_zone: 'Asia/Taipei' } } }
     const batches = splitBatches([enrollment, row, structuredClone(enrollment)])

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { fieldChoicesForCourse, mappedReport } from '../import-field-mappings.js'
+import { fieldChoicesForCourse, mappedReport } from '../workspace/import-field-mappings.js'
 const m=globalThis.edulogFieldMappings
 const select=(key,value,options)=>({key,type:'select',label:key,value,options:options.map(([value,label])=>({value,label,disabled:false}))})
 const attendance=()=>select('attendance_status','attended',[['attended','出席'],['away','不出席']])

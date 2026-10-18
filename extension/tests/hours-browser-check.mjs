@@ -10,9 +10,9 @@ mkdirSync(output, { recursive: true })
 const read = name => readFileSync(new URL(name, import.meta.url), 'utf8')
 const dir = process.argv[4]
 const nativeCss = dir ? readdirSync(dir).filter(name => name.startsWith('application-') && name.endsWith('.css')).map(name => readFileSync(join(dir, name), 'utf8')).join('\n') : ''
-const body = read('fixtures/hours-nested.html').replace('</head>', `<style>${nativeCss}</style><style>${read('../edulog-tokens.css')}</style><style>${read('../adapters/orange-apple.css')}</style></head>`)
-const early = ['runtime-bridge.js', 'adapters/orange-apple-lexicon.js', 'adapters/orange-apple-model.js', 'adapters/orange-apple.js', 'bootstrap.js'].map(file => read(`../${file}`))
-const late = ['adapters/orange-apple-workflows.js', 'connection-ui.js', 'integration-ui.js'].map(file => read(`../${file}`))
+const body = read('fixtures/hours-nested.html').replace('</head>', `<style>${nativeCss}</style><style>${read('../styles/edulog-tokens.css')}</style><style>${read('../sites/orange-apple/orange-apple.css')}</style></head>`)
+const early = ['shared/runtime-bridge.js', 'sites/orange-apple/orange-apple-lexicon.js', 'sites/orange-apple/orange-apple-model.js', 'sites/orange-apple/orange-apple.js', 'content/bootstrap.js'].map(file => read(`../${file}`))
+const late = ['sites/orange-apple/orange-apple-workflows.js', 'shared/connection-ui.js', 'shared/integration-ui.js'].map(file => read(`../${file}`))
 const results = []
 for (const [name, launchOptions] of browserTargets()) {
     const browser = await chromium.launch(launchOptions)
@@ -43,7 +43,7 @@ for (const [name, launchOptions] of browserTargets()) {
           yearNode.addEventListener('change', () => nativeChanges++)
           ;(0, eval)(content)
         })
-      }, { early, late, content: read('../content.js'), failed })
+      }, { early, late, content: read('../content/content.js'), failed })
       await page.goto('https://corp.orangeapple.co/my/hour')
       await page.locator('#edulog-extension-root').waitFor()
       const toggle = page.getByRole('button', { name: '套用清晰主題', exact: true })

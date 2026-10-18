@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildLineMerge, lineMergeText, mergeClearToken, mergeSignature, regenerateLineMerge } from '../history-merge.js'
+import { buildLineMerge, lineMergeText, mergeClearToken, mergeSignature, regenerateLineMerge } from '../workspace/history-merge.js'
 
 test('mixed lines keep existing content by default and preserve duplicate line positions',()=>{
  const merge=buildLineMerge('same\nsource addition\nsame','old target\nsame')

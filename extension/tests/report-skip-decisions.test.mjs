@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { fingerprintReport } from '../report-skip-decisions.js'
-import { createReportSkipController } from '../report-skip-controller.js'
+import { fingerprintReport } from '../workspace/report-skip-decisions.js'
+import { createReportSkipController } from '../workspace/report-skip-controller.js'
 
 test('report fingerprints distinguish missing, blank, zero, false and half-star values',async()=>{
  const base={enrollment_source_id:'12',source_id:'34',date:'2026-10-04',sourceFields:[{key:'class_participation',value:0},{key:'is_completed',value:false},{key:'content',value:''}]}

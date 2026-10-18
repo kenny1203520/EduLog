@@ -6,7 +6,7 @@ import { JSDOM } from '../../app/node_modules/jsdom/lib/api.js'
 const read = name => readFileSync(new URL(name, import.meta.url), 'utf8')
 function load(html = '<!doctype html><body></body>', path = '/') {
   const dom = new JSDOM(html, { url: `https://corp.orangeapple.co${path}`, runScripts: 'outside-only' })
-  for (const file of ['lexicon', 'model']) dom.window.eval(read(`../adapters/orange-apple-${file}.js`))
+  for (const file of ['lexicon', 'model']) dom.window.eval(read(`../sites/orange-apple/orange-apple-${file}.js`))
   return { dom, doc: dom.window.document, model: dom.window.edulogSiteModel, lexicon: dom.window.edulogSiteLexicon }
 }
 

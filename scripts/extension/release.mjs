@@ -28,7 +28,7 @@ export function extensionId(key) {
   return sha256(bytes).slice(0, 32).replace(/[0-9a-f]/g, c => String.fromCharCode(97 + parseInt(c, 16)))
 }
 export function runtimePath(path) {
-  return path === 'manifest.json' || /^[^/.][^/]*\.(js|css|html)$/.test(path) || /^(adapters|icons|assets)\/(?!.*(?:^|\/)[.])[^\s]+\.(js|css|html|json|png|svg|jpg|jpeg|webp|woff2?)$/.test(path)
+  return path === 'manifest.json' || /^(background|content|popup|shared|sites|styles|workspace|icons|assets)\/(?!.*(?:^|\/)[.])[^\s]+\.(js|css|html|json|png|svg|jpg|jpeg|webp|woff2?)$/.test(path)
 }
 function reference(files, source, value) {
   if (!value || /^(?:[a-z]+:|#|\/\/)/i.test(value)) return

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
 const extensionRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
-const runtimeDirectories = [extensionRoot, join(extensionRoot, 'adapters')]
+const runtimeDirectories = ['background', 'content', 'popup', 'shared', 'sites/orange-apple', 'styles', 'workspace'].map(directory => join(extensionRoot, directory))
 const scripts = runtimeDirectories.flatMap(directory => readdirSync(directory, { withFileTypes: true })
   .filter(entry => entry.isFile() && entry.name.endsWith('.js'))
   .map(entry => join(directory, entry.name)))

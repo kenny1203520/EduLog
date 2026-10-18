@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {workflowState,combineWorkRecords} from '../workflow-state.js'
+import {workflowState,combineWorkRecords} from '../workspace/workflow-state.js'
 test('visiting steps cannot mark them complete; partial transactions keep attention separate',()=>{
   assert.deepEqual(workflowState('import').available,[true,false,false,false])
   const work={type:'import',snapshot:{},history:{next:1,paths:['a','b']},jobId:'job',batches:[{},{}],done:0,status:'previewed'}

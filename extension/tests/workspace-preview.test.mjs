@@ -3,13 +3,13 @@ import assert from 'node:assert/strict'
 import vm from 'node:vm'
 import { readFileSync } from 'node:fs'
 import { JSDOM } from '../../app/node_modules/jsdom/lib/api.js'
-import { labels, splitBatches, validateBatches, importBatchRequest } from '../workspace-model.js'
-import { bindingStillMatches, historyIdentity } from '../history-sync.js'
-import { prepareStaleReviewBatchRefresh } from '../history-review-batches.js'
-import { workspaceInterfaceFailure } from '../workspace-operation-errors.js'
+import { labels, splitBatches, validateBatches, importBatchRequest } from '../workspace/workspace-model.js'
+import { bindingStillMatches, historyIdentity } from '../workspace/history-sync.js'
+import { prepareStaleReviewBatchRefresh } from '../workspace/history-review-batches.js'
+import { workspaceInterfaceFailure } from '../workspace/workspace-operation-errors.js'
 
 // Exercise the real preview orchestration with isolated API/storage effects.
-const script = readFileSync(new URL('../workspace.js', import.meta.url), 'utf8')
+const script = readFileSync(new URL('../workspace/workspace.js', import.meta.url), 'utf8')
 const prepareScript = script.slice(script.indexOf('function prepareRows()'), script.indexOf('async function preview('))
 const previewScript = script.slice(script.indexOf('async function preview('), script.indexOf('function renderNoopSummary('))
 const staleScript = script.slice(script.indexOf('function refreshStaleReviewBatchRows()'), script.indexOf('function summarizeImportRows('))

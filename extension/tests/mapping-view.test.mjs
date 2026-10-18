@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { JSDOM } from '../../app/node_modules/jsdom/lib/api.js'
-import { createMappingView } from '../mapping-view.js'
+import { createMappingView } from '../workspace/mapping-view.js'
 
 function fixture(t, mobile = false) {
   const dom = new JSDOM(`<section id="mapping"><div id="mapping-workbench"><button data-mapping-section="courses">課程</button><button data-mapping-section="admissions">報名</button><input id="mapping-search"><select id="mapping-filter"><option value="pending">待處理</option><option value="all">全部</option></select><div id="mapping-items"></div><div id="mapping-list-empty"></div><div id="mapping-editor-pane"><h2 id="mapping-editor-title" tabindex="-1"></h2><p id="mapping-editor-subtitle"></p><div id="mapping-empty"></div><div id="course-mappings"></div><div id="student-mappings"></div></div><button id="mapping-back">返回</button></div></section>`)

@@ -4,8 +4,8 @@ import { readFileSync } from 'node:fs'
 import { JSDOM } from '../../app/node_modules/jsdom/lib/api.js'
 
 const read = name => readFileSync(new URL(name, import.meta.url), 'utf8')
-const adapterCode = read('../adapters/orange-apple.js')
-const contentCode = read('../content.js')
+const adapterCode = read('../sites/orange-apple/orange-apple.js')
+const contentCode = read('../content/content.js')
 const wait = () => new Promise(resolve => setTimeout(resolve, 140))
 test('class summary is idle until requested and failed reads can be retried', async () => {
   const dom=fixture('reports','/courses/dt/101/lesson_reports'),doc=dom.window.document,view={}
@@ -25,8 +25,8 @@ test('class summary is idle until requested and failed reads can be retried', as
 })
 function fixture(name, path) {
   const dom = new JSDOM(read(`fixtures/${name}.html`), { url: `https://corp.orangeapple.co${path}`, runScripts: 'outside-only' })
-  for (const file of ['lexicon', 'model', 'session-cards']) dom.window.eval(read(`../adapters/orange-apple-${file}.js`))
-  dom.window.eval(read('../adapters/orange-apple-workflows.js'))
+  for (const file of ['lexicon', 'model', 'session-cards']) dom.window.eval(read(`../sites/orange-apple/orange-apple-${file}.js`))
+  dom.window.eval(read('../sites/orange-apple/orange-apple-workflows.js'))
   dom.window.eval(adapterCode)
   return dom
 }
@@ -36,10 +36,10 @@ function start(dom, enabled = true, pages = undefined) {
     sendMessage: async data => { messages.push(data); return data.type === 'get-ui-preferences' ? { enabled, pages } : { enabled: data.enabled } },
     onMessage: { addListener: fn => listeners.push(fn) },
   } }
-  dom.window.eval(read('../runtime-bridge.js'))
-  dom.window.eval(read('../bootstrap.js'))
-  dom.window.eval(read('../connection-ui.js'))
-  dom.window.eval(read('../integration-ui.js'))
+  dom.window.eval(read('../shared/runtime-bridge.js'))
+  dom.window.eval(read('../content/bootstrap.js'))
+  dom.window.eval(read('../shared/connection-ui.js'))
+  dom.window.eval(read('../shared/integration-ui.js'))
   dom.window.eval(contentCode)
   return { messages, listeners }
 }

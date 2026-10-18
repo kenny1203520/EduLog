@@ -29,8 +29,8 @@ function overview(responses = pages()) {
     if (body === undefined) return { ok: false, headers: { get: () => 'text/html' }, text: async () => '' }
     return { ok: true, headers: { get: () => 'text/html; charset=utf-8' }, text: async () => body }
   }
-  for (const file of ['lexicon', 'model', 'todo', 'workflows']) w.eval(read(`../adapters/orange-apple-${file}.js`))
-  w.eval(read('../adapters/orange-apple.js'))
+  for (const file of ['lexicon', 'model', 'todo', 'workflows']) w.eval(read(`../sites/orange-apple/orange-apple-${file}.js`))
+  w.eval(read('../sites/orange-apple/orange-apple.js'))
   w.edulogSiteTodo.clearCache()
   return { dom, w, doc: w.document, requests, enhance: (view = {}) => { const result = w.edulogSiteAdapter.enhancePage(w.document, view); return { result, view } } }
 }
@@ -166,8 +166,8 @@ function manyClasses() {
   // Thursday 2026-10-15 12:00: the Thursday class has started, the Saturday class has not.
   w.eval("{ const Real = Date; globalThis.Date = class extends Real { constructor(...a) { super(...(a.length ? a : ['2026-10-15T12:00:00+08:00'])) } static now() { return new Real('2026-10-15T12:00:00+08:00').getTime() } } }")
   w.fetch = async url => { const path = new URL(url).pathname; requests.push(path); const body = responses[path]; return body === undefined ? { ok: false, headers: { get: () => 'text/html' }, text: async () => '' } : { ok: true, headers: { get: () => 'text/html' }, text: async () => body } }
-  for (const file of ['lexicon', 'model', 'todo', 'session-cards', 'navigation', 'workflows']) w.eval(read(`../adapters/orange-apple-${file}.js`))
-  w.eval(read('../adapters/orange-apple.js'))
+  for (const file of ['lexicon', 'model', 'todo', 'session-cards', 'navigation', 'workflows']) w.eval(read(`../sites/orange-apple/orange-apple-${file}.js`))
+  w.eval(read('../sites/orange-apple/orange-apple.js'))
   w.edulogSiteTodo.clearCache()
   return { dom, w, doc: w.document, requests }
 }

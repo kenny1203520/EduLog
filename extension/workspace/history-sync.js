@@ -1,6 +1,6 @@
 import { mappedReport } from './import-field-mappings.js'
 import { mergeClearToken, mergeSignature } from './history-merge.js'
-import './field-mappings.js'
+import '../shared/field-mappings.js'
 
 export const teachingFields = ['lesson_id','is_completed','progress_letter','attendance_status','absence_reason','class_participation','classroom_behavior','content','contact_notes','class_notes','external_link']
 // The source reportId is the report identity. Rows without one are attendance

@@ -11,8 +11,8 @@ const { chromium } = await loadPlaywright(process.argv.slice(2).find(arg => !arg
 const output = process.argv[3] || mkdtempSync(join(tmpdir(), 'edulog-editor-'))
 mkdirSync(output, { recursive: true })
 const read = file => readFileSync(new URL(file, import.meta.url), 'utf8')
-const css = read('../edulog-tokens.css') + read('../adapters/orange-apple.css') + read('../dialog-layout.css') + read('fixtures/native-bootstrap-dialog.css')
-const scripts = ['../adapters/orange-apple-lexicon.js', '../adapters/orange-apple-model.js', '../adapters/orange-apple-report-editor.js', '../adapters/orange-apple-workflows.js', '../adapters/orange-apple.js']
+const css = read('../styles/edulog-tokens.css') + read('../sites/orange-apple/orange-apple.css') + read('../content/dialog-layout.css') + read('fixtures/native-bootstrap-dialog.css')
+const scripts = ['../sites/orange-apple/orange-apple-lexicon.js', '../sites/orange-apple/orange-apple-model.js', '../sites/orange-apple/orange-apple-report-editor.js', '../sites/orange-apple/orange-apple-workflows.js', '../sites/orange-apple/orange-apple.js']
 const browser = await launchBrowser(chromium)
 try {
   for (const width of [360, 390, 768, 1024, 1440]) {

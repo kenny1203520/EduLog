@@ -6,7 +6,7 @@ import { JSDOM } from '../../app/node_modules/jsdom/lib/api.js'
 function fixture(){
  const dom=new JSDOM('<body></body>',{url:'https://corp.orangeapple.co/courses/dt/11',runScripts:'outside-only'}),w=dom.window
  Object.defineProperty(w,'crypto',{value:webcrypto});w.TextEncoder=TextEncoder;w.AbortSignal.timeout=()=>undefined
- for(const path of ['source-date.js','field-mappings.js','adapters/orange-apple-integration.js'])w.eval(readFileSync(new URL('../'+path,import.meta.url),'utf8'))
+ for(const path of ['shared/source-date.js','shared/field-mappings.js','sites/orange-apple/orange-apple-integration.js'])w.eval(readFileSync(new URL('../'+path,import.meta.url),'utf8'))
  const pages=new Map(),calls=[];w.fetch=async(url,options)=>{calls.push({url,options});const html=pages.get(new URL(url).pathname);return{ok:html!==undefined,headers:{get:()=> 'text/html'},text:async()=>html||''}}
  return{dom,pages,calls,api:w.edulogSourceIntegration}
 }

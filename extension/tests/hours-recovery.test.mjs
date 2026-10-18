@@ -8,7 +8,7 @@ function fixture(name = 'hours-nested') {
   const jsdomErrors=[],virtualConsole=new VirtualConsole();virtualConsole.on('jsdomError',error=>jsdomErrors.push(error))
   const dom = new JSDOM(read(`fixtures/${name}.html`), { url: 'https://corp.orangeapple.co/my/hour', runScripts: 'outside-only', pretendToBeVisual: true, virtualConsole })
   const w = dom.window, doc = w.document
-  for (const file of ['adapters/orange-apple-lexicon.js', 'adapters/orange-apple-model.js', 'adapters/orange-apple-workflows.js', 'adapters/orange-apple.js']) w.eval(read(`../${file}`))
+  for (const file of ['sites/orange-apple/orange-apple-lexicon.js', 'sites/orange-apple/orange-apple-model.js', 'sites/orange-apple/orange-apple-workflows.js', 'sites/orange-apple/orange-apple.js']) w.eval(read(`../${file}`))
   return { dom, w, doc, jsdomErrors, enhance: () => w.edulogSiteAdapter.enhancePage(doc) }
 }
 for (const name of ['hours', 'hours-nested']) test(`${name}: preserves native query, events and exact restore across repeat applications`, () => {
@@ -98,7 +98,7 @@ async function controller(failAt = 'apply') {
     return { ...result, refresh() { result?.refresh?.(); if (fault === 'refresh') throw new Error('synthetic refresh failure') } }
   } }
   s.w.chrome = { runtime: { sendMessage: async data => { sent.push(data); return { enabled: data.enabled ?? true } }, onMessage: { addListener() {} } } }
-  for (const file of ['runtime-bridge.js', 'bootstrap.js', 'connection-ui.js', 'integration-ui.js', 'content.js']) s.w.eval(read(`../${file}`))
+  for (const file of ['shared/runtime-bridge.js', 'content/bootstrap.js', 'shared/connection-ui.js', 'shared/integration-ui.js', 'content/content.js']) s.w.eval(read(`../${file}`))
   await tick()
   return { ...s, draft, sent, errors, attempts: () => attempts, clearFault: () => { fault = null }, async close() {
     s.doc.dispatchEvent(new s.w.Event('turbo:before-cache'))

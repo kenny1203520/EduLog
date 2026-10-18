@@ -8,8 +8,8 @@ const root=new URL('../',import.meta.url),output=new URL('artifacts/editor-date/
 const fixture=readFileSync(new URL('fixtures/report-modal.html',import.meta.url),'utf8')
 const server=createServer((req,res)=>{
  const path=new URL(req.url,'http://localhost').pathname
- if(path==='/fixture'){res.setHeader('content-type','text/html;charset=utf-8');res.end(`<!doctype html><html lang="zh-Hant" data-edulog-ui="on"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/edulog-tokens.css"><link rel="stylesheet" href="/adapters/orange-apple.css"><link rel="stylesheet" href="/dialog-layout.css"><link rel="stylesheet" href="/editor-prefill.css"><style>body{margin:0}.modal{position:fixed;inset:0;overflow:auto}.modal-dialog{margin:auto}.modal-content{background:white;border:1px solid #ccc}.modal-header{padding:16px;display:flex;justify-content:space-between}.modal-body{padding:16px}.modal-title{margin:0}.row{display:flex;flex-wrap:wrap;gap:12px}.form-group{margin:12px 0}textarea{width:100%;min-height:110px}form{min-width:0}select{max-width:100%}</style></head><body><table id="reports"><tr><th>學生</th><th>課程</th><th>本週(10/04)</th></tr><tr><td>學生甲</td><td>課程甲</td><td><a href="https://corp.orangeapple.co/dt_admissions/301/reports/401/edit">記錄</a></td></tr></table>${fixture}</body></html>`);return}
- if(!/^\/(?:[\w.-]+|adapters\/[\w.-]+)$/.test(path)){res.writeHead(404).end();return}
+ if(path==='/fixture'){res.setHeader('content-type','text/html;charset=utf-8');res.end(`<!doctype html><html lang="zh-Hant" data-edulog-ui="on"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/styles/edulog-tokens.css"><link rel="stylesheet" href="/sites/orange-apple/orange-apple.css"><link rel="stylesheet" href="/content/dialog-layout.css"><link rel="stylesheet" href="/content/editor-prefill.css"><style>body{margin:0}.modal{position:fixed;inset:0;overflow:auto}.modal-dialog{margin:auto}.modal-content{background:white;border:1px solid #ccc}.modal-header{padding:16px;display:flex;justify-content:space-between}.modal-body{padding:16px}.modal-title{margin:0}.row{display:flex;flex-wrap:wrap;gap:12px}.form-group{margin:12px 0}textarea{width:100%;min-height:110px}form{min-width:0}select{max-width:100%}</style></head><body><table id="reports"><tr><th>學生</th><th>課程</th><th>本週(10/04)</th></tr><tr><td>學生甲</td><td>課程甲</td><td><a href="https://corp.orangeapple.co/dt_admissions/301/reports/401/edit">記錄</a></td></tr></table>${fixture}</body></html>`);return}
+ if(!/^\/(?:[\w-]+\/)*[\w.-]+$/.test(path)){res.writeHead(404).end();return}
  try{res.setHeader('content-type',path.endsWith('.css')?'text/css':'text/javascript');res.end(readFileSync(new URL(path.slice(1),root)))}catch{res.writeHead(404).end()}
 })
 await new Promise(r=>server.listen(0,'127.0.0.1',r));const url=`http://127.0.0.1:${server.address().port}/fixture`
@@ -19,7 +19,7 @@ try{
   try{
    for(const width of [360,390,768,1024,1200,1440,1920]){
     const page=await browser.newPage({locale:'zh-TW',viewport:{width,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message))
-    await page.goto(url);await page.addStyleTag({content:'.modal{z-index:1050}'});await page.addScriptTag({url:new URL('/source-date.js',url).href});await page.addScriptTag({url:new URL('/field-mappings.js',url).href});await page.addScriptTag({url:new URL('/field-mapping-ui.js',url).href});await page.addScriptTag({url:new URL('/adapters/orange-apple-integration.js',url).href})
+    await page.goto(url);await page.addStyleTag({content:'.modal{z-index:1050}'});await page.addScriptTag({url:new URL('/shared/source-date.js',url).href});await page.addScriptTag({url:new URL('/shared/field-mappings.js',url).href});await page.addScriptTag({url:new URL('/shared/field-mapping-ui.js',url).href});await page.addScriptTag({url:new URL('/sites/orange-apple/orange-apple-integration.js',url).href})
     await page.evaluate(()=>{
      const a=document.querySelector('#reports a');a.addEventListener('click',e=>e.preventDefault());a.click()
      window.originalForm=document.querySelector('form');window.originalForm.sentinel='native';window.submitCount=0;window.editorCalls=[];window.editorDelayed=[];window.delayDetails=false
@@ -41,7 +41,7 @@ try{
       return{data:{reports:[],items:[],next_cursor:null}}
      }}
     })
-    await page.addScriptTag({url:new URL('/ui-core.js',url).href});await page.addScriptTag({url:new URL('/ui-messages.js',url).href});await page.addScriptTag({url:new URL('/editor-prefill.js',url).href})
+    await page.addScriptTag({url:new URL('/shared/ui-core.js',url).href});await page.addScriptTag({url:new URL('/shared/ui-messages.js',url).href});await page.addScriptTag({url:new URL('/content/editor-prefill.js',url).href})
     const helper=page.locator('aside[data-edulog-owned]'),shadow=selector=>helper.locator(selector)
     if(width<1200){await page.locator('.edulog-editor-native').waitFor({state:'visible'});await page.locator('button[data-view=assistant]').click()}
     const openGroups=()=>helper.evaluate(n=>n.shadowRoot.querySelectorAll('.field-group').forEach(d=>d.open=true))

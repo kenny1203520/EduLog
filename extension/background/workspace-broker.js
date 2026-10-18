@@ -1,4 +1,4 @@
-import { workStore } from './work-store.js'
+import { workStore } from '../shared/work-store.js'
 const supported = url => { try { const u = new URL(url), adapter = globalThis.edulogSiteAdapter; return u.origin === 'https://corp.orangeapple.co' && Boolean(adapter.matchesIntegrationPage?.(u.pathname) ?? adapter.matchesTeachingPage(u.pathname)) } catch { return false } }
 const fail = (message, code) => { const error=new Error(message);if(code)error.code=code;throw error }
 function validationFields(fields) {
@@ -13,8 +13,8 @@ export function installWorkspaceBroker(getStatus) {
     const change = changes.edulogExtension
     if (area === 'local' && change && (change.oldValue?.origin !== change.newValue?.origin || change.oldValue?.token !== change.newValue?.token || change.oldValue?.userId !== change.newValue?.userId)) for (const request of requests) request.controller.abort('connection-changed')
   })
-  const trusted = sender => sender.id === chrome.runtime.id && sender.url?.split('?')[0] === chrome.runtime.getURL('workspace.html')
-  const entry = sender => sender.id === chrome.runtime.id && (sender.url === chrome.runtime.getURL('popup.html') || supported(sender.url))
+  const trusted = sender => sender.id === chrome.runtime.id && sender.url?.split('?')[0] === chrome.runtime.getURL('workspace/workspace.html')
+  const entry = sender => sender.id === chrome.runtime.id && (sender.url === chrome.runtime.getURL('popup/popup.html') || supported(sender.url))
   async function binding(expected) {
     const status = await getStatus(), current = (await chrome.storage.local.get('edulogExtension')).edulogExtension
     if (status.status !== 'connected' || !current?.userId) fail('請先連接並驗證你的 EduLog。')
@@ -95,7 +95,7 @@ export function installWorkspaceBroker(getStatus) {
     return {enrollmentId,studentId:enrollment.student_id,studentName:enrollment.student_name,courseId:enrollment.course_id,courseName:enrollment.course_name,classSessionId:enrollment.class_session_id,className:enrollment.class_name,userConfirmed:Boolean(manual)}
   }
   chrome.runtime.onMessage.addListener((message, sender, respond) => {
-    if (message?.type === 'get-integration-work-summary' && sender.id === chrome.runtime.id && sender.url === chrome.runtime.getURL('popup.html')) {
+    if (message?.type === 'get-integration-work-summary' && sender.id === chrome.runtime.id && sender.url === chrome.runtime.getURL('popup/popup.html')) {
       void binding().then(async bound => {
         const rows = await workStore.list({ instance: bound.instance, userId: bound.userId })
         return { count: rows.filter(r => !['complete','cancelled'].includes(r.status)).length }
@@ -107,14 +107,14 @@ export function installWorkspaceBroker(getStatus) {
         const tab = sender.tab || (await chrome.tabs.query({ active: true, currentWindow: true }))[0]
         const flow=message.flow === 'prefill' ? 'prefill' : message.flow === 'work' ? 'work' : 'import'
         const sourceTab=tab?.id&&supported(tab.url)?{id:tab.id,path:new URL(tab.url).pathname}:null
-        const workspaces=await chrome.tabs.query({url:`${chrome.runtime.getURL('workspace.html')}*`})
+        const workspaces=await chrome.tabs.query({url:`${chrome.runtime.getURL('workspace/workspace.html')}*`})
         const existing=workspaces.find(candidate=>candidate.id!==sender.tab?.id)
         if(existing?.id){
           const bound=await binding()
           const reply=await chrome.tabs.sendMessage(existing.id,{type:'workspace-focus',flow,sourceTab,binding:{instance:bound.instance,userId:bound.userId}}).catch(()=>null)
           if(reply?.ok){await chrome.tabs.update(existing.id,{active:true});return{opened:true,reused:true}}
         }
-        const url = new URL(chrome.runtime.getURL('workspace.html'))
+        const url = new URL(chrome.runtime.getURL('workspace/workspace.html'))
         url.searchParams.set('flow', flow)
         if (sourceTab) url.searchParams.set('source', String(sourceTab.id))
         await chrome.tabs.create({ url: url.href, active: true })

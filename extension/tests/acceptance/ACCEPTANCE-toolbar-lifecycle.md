@@ -7,7 +7,7 @@
 - 擴充功能自動測試：**218 項通過，0 項失敗**。
 - 新增 Turbo 快取移除工具列及移除後立即重建兩種回歸情境；確認只保留一個有效工具列，舊 observer 不會操作新面板。
 - 連線及網站流程測試透過 JSDOM `VirtualConsole` 收集非同步錯誤，測試結束等待後將未預期錯誤列為失敗；本次未預期 JSDOM 錯誤為 **0**。
-- `content.js` 語法檢查與 `git diff --check` 通過。
+- `content/content.js` 語法檢查與 `git diff --check` 通過。
 
 ## 尚待瀏覽器驗收
 

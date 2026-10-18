@@ -5,7 +5,7 @@ import {readFileSync,mkdirSync} from 'node:fs'
 import assert from 'node:assert/strict'
 const { chromium } = await loadPlaywright(process.argv.slice(2).find(arg => !arg.startsWith('--')))
 const root=new URL('../',import.meta.url),output=new URL('artifacts/history/',import.meta.url);mkdirSync(output,{recursive:true})
-const server=createServer((req,res)=>{const name=new URL(req.url,'http://localhost').pathname.slice(1);if(!/^[a-z0-9.-]+$/.test(name)){res.writeHead(404).end();return}try{let content=readFileSync(new URL(name,root),'utf8');if(name==='workspace.html')content=content.replace(/<script[\s\S]*?<\/script>/g,'');res.setHeader('Content-Type',name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':'text/html; charset=utf-8');res.end(content)}catch{res.writeHead(404).end()}})
+const server=createServer((req,res)=>{const name=new URL(req.url,'http://localhost').pathname.slice(1);if(!/^(?:[a-z0-9-]+\/)*[a-z0-9.-]+$/.test(name)){res.writeHead(404).end();return}try{let content=readFileSync(new URL(name,root),'utf8');if(name==='workspace/workspace.html')content=content.replace(/<script[\s\S]*?<\/script>/g,'');res.setHeader('Content-Type',name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':'text/html; charset=utf-8');res.end(content)}catch{res.writeHead(404).end()}})
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve))
 try{
  for (const [name, launchOptions] of browserTargets()) {
@@ -13,9 +13,9 @@ try{
   try{
    for(const [width,height] of [[360,900],[390,900],[768,900],[1024,900],[1200,900],[1440,900],[1920,900],[1440,480]]) {
     const page=await browser.newPage({viewport:{width,height}}),errors=[];page.on('pageerror',e=>errors.push(e.message))
-    await page.goto(`http://127.0.0.1:${server.address().port}/workspace.html`)
+    await page.goto(`http://127.0.0.1:${server.address().port}/workspace/workspace.html`)
     await page.evaluate(async()=>{
-     const {createHistoryWorkbench}=await import('/history-workbench.js')
+     const {createHistoryWorkbench}=await import('/workspace/history-workbench.js')
      document.getElementById('workspace').hidden=false;document.getElementById('import-view').hidden=false;document.getElementById('mapping').hidden=false;document.getElementById('import-scope').hidden=true;document.getElementById('identity-review').open=false;for(let node=document.getElementById('history-sync');node&&node.id!=='mapping';node=node.parentElement)node.hidden=false
      const work={id:'synthetic'},items=Array.from({length:70},(_,i)=>({key:String(301+i),category:'needs',reason:'需要確認來源課程；報名關係不變。',target:{id:'enrollment',name:`測試學生 ${i+1}`,courseName:'長課程名稱 · 程式設計與教學紀錄核對'},record:{enrollment_source_id:String(301+i),date:'2026-10-04',...(i===1?{skipDecision:{status:'review'}}:{}),sourceEvidence:[{sourcePath:'/dt_admissions/301',table:'歷史紀錄',row:1,fields:[{label:'評語',text:'允許的來源教學原文。'.repeat(30)}]}]}}))
      let view

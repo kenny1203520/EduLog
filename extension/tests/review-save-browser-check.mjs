@@ -24,7 +24,7 @@ globalThis.reviewTest={
  refreshBatch(){work.staleReviewPending=[];work.snapshot.records[0].staleReviewFields=[];refreshStaleReviewBatchRows()},
  async update(){return run(()=>preview(true),{label:'更新差異',readOnly:true})}
 };`
-const server=createServer((req,res)=>{const name=new URL(req.url,'http://localhost').pathname.slice(1);if(!/^[a-z0-9.-]+$/.test(name)){res.writeHead(404).end();return}try{let content=readFileSync(new URL(name,root),'utf8');if(name==='workspace.js')content+=accessors;res.setHeader('Content-Type',name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':'text/html; charset=utf-8');res.end(content)}catch{res.writeHead(404).end()}})
+const server=createServer((req,res)=>{const name=new URL(req.url,'http://localhost').pathname.slice(1);if(!/^(?:[a-z0-9-]+\/)*[a-z0-9.-]+$/.test(name)){res.writeHead(404).end();return}try{let content=readFileSync(new URL(name,root),'utf8');if(name==='workspace/workspace.js')content+=accessors;res.setHeader('Content-Type',name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':'text/html; charset=utf-8');res.end(content)}catch{res.writeHead(404).end()}})
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const results=[]
 try{
  for (const [name, launchOptions] of browserTargets()) {
@@ -44,7 +44,7 @@ try{
      return {data:{}}
     }},storage:{local:{get:async()=>({}),set:async()=>{}}}};
    })
-   await page.goto(`http://127.0.0.1:${server.address().port}/workspace.html`);await page.waitForFunction(()=>window.reviewTest&&document.getElementById('workspace').getAttribute('aria-busy')!=='true')
+   await page.goto(`http://127.0.0.1:${server.address().port}/workspace/workspace.html`);await page.waitForFunction(()=>window.reviewTest&&document.getElementById('workspace').getAttribute('aria-busy')!=='true')
    await page.evaluate(()=>edulogUi.setLocale('zh-TW'));await page.evaluate(()=>reviewTest.setup())
    await page.locator('[data-stale-review-open]').click()
    assert.equal(await page.locator('#mapping').isVisible(),true);assert.equal(await page.locator('#history-detail').isVisible(),true)

@@ -19,12 +19,12 @@ function worker(fetchImpl = async () => { throw new Error('offline') }) {
   }
   const context = vm.createContext({ chrome, URL, AbortSignal, fetch: fetchImpl, installWorkspaceBroker() {}, crypto: { randomUUID: () => '11111111-1111-4111-8111-111111111111' }, navigator: { platform: 'Win32', userAgent: 'Chrome' } })
   const read = file => readFileSync(new URL(file, import.meta.url), 'utf8')
-  for (const file of ['lexicon', 'model']) vm.runInContext(read(`../adapters/orange-apple-${file}.js`), context)
-  vm.runInContext(read('../adapters/orange-apple.js'), context)
-  vm.runInContext(read('../installation.js'), context)
-  vm.runInContext(read('../service-worker.js').replace(/^import[^\n]*\n/gm, ''), context)
+  for (const file of ['lexicon', 'model']) vm.runInContext(read(`../sites/orange-apple/orange-apple-${file}.js`), context)
+  vm.runInContext(read('../sites/orange-apple/orange-apple.js'), context)
+  vm.runInContext(read('../background/installation.js'), context)
+  vm.runInContext(read('../background/service-worker.js').replace(/^import[^\n]*\n/gm, ''), context)
   const send = (message, sender) => new Promise(resolve => listener(message, sender, resolve))
-  return { storage, broadcasts, opened, listener, send, popup: { id, url: `chrome-extension://${id}/popup.html` }, site: { id, url: 'https://corp.orangeapple.co/' } }
+  return { storage, broadcasts, opened, listener, send, popup: { id, url: `chrome-extension://${id}/popup/popup.html` }, site: { id, url: 'https://corp.orangeapple.co/' } }
 }
 test('UI preference defaults on without pairing and persists only non-secret settings', async () => {
   const w = worker()

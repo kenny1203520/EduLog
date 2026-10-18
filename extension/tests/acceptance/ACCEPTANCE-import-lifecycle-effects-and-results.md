@@ -15,7 +15,7 @@ The workspace derives current pending, explicitly skipped, excluded, and unfille
 - Cross-batch case: both previews are made before the first apply; the later batch applies using the same-job receipt without changing its request or key.
 - External-edit case: changing a report after receipt creation invalidates the receipt and the later batch remains stale.
 - `node --test extension/tests/workspace-preview.test.mjs` checks explicit skip accounting, applied-batch result persistence, and report-ID deduplication.
-- `node --check extension/workspace.js` and `node --check extension/workspace-i18n.js` check the original ES modules.
+- `node --check extension/workspace/workspace.js` and `node --check extension/workspace/workspace-i18n.js` check the original ES modules.
 
 ## Verification limits
 

@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {frontendUrl, sourceUrl, statusLabel, enrollmentLabel, displayDate, sourceName, mergeEvidence, scheduleLabel,sessionLabel,enrollmentDifferences,canMapEnrollmentAcrossSession,legacyCourse,reportMatchesReconciliation} from '../mapping-presentation.js'
+import {frontendUrl, sourceUrl, statusLabel, enrollmentLabel, displayDate, sourceName, mergeEvidence, scheduleLabel,sessionLabel,enrollmentDifferences,canMapEnrollmentAcrossSession,legacyCourse,reportMatchesReconciliation} from '../workspace/mapping-presentation.js'
 import {JSDOM} from '../../app/node_modules/jsdom/lib/api.js'
-import {evidenceDetails} from '../mapping-view.js'
+import {evidenceDetails} from '../workspace/mapping-view.js'
 
 test('report reconciliation blocks moved sources, unknown results and superseded or wrong-date targets',()=>{
   const transfer={source_occurrence_id:'old',source_date:'2026-10-01',source_class_session_id:'class-a',target_occurrence_id:'new',target_date:'2026-10-02',target_class_session_id:'class-b',is_effective_target:true}

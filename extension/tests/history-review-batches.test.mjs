@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { prepareStaleReviewBatchRefresh } from '../history-review-batches.js'
+import { prepareStaleReviewBatchRefresh } from '../workspace/history-review-batches.js'
 
 function fixture(){
   const rows=['report-a','report-b'].map(source_id=>({source_id,target_id:`history-${source_id}`,overwrite:['content'],record:{kind:'history_report',data:{content:'old'}},history_reconciliation:{key:`reconcile-${source_id}`,class_occurrence_id:'lesson',overwrite:['content']}}))

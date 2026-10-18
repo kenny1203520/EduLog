@@ -2,7 +2,7 @@
 
 ## 本次範圍
 
-新模組 `adapters/orange-apple-report-editor.js`，由既有 `enhanceDialog`（欄位分區）呼叫：
+新模組 `sites/orange-apple/orange-apple-report-editor.js`，由既有 `enhanceDialog`（欄位分區）呼叫：
 
 - 頂部「四項狀態」列（出席｜完成狀況｜內部紀錄｜學習表現），隨欄位即時更新，與課堂紀錄卡片的狀態列一致；完成狀況區分「完整完成／章節未填／尚未完成／未填」。
 - 不出席：課程與專案進度、課堂評量、內部紀錄與學習表現標為不適用而隱藏，只留不出席原因與聯絡欄，並顯示說明；改回出席即恢復。

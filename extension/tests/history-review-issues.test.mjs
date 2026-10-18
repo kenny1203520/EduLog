@@ -2,11 +2,11 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
 import {JSDOM} from '../../app/node_modules/jsdom/lib/api.js'
-import {renderReviewBlockers} from '../history-review-issues.js'
+import {renderReviewBlockers} from '../workspace/history-review-issues.js'
 
 test('blockers identify reports, localize actions, and open only the exact report without changing decisions',async()=>{
   const dom=new JSDOM('<body><section id="host"></section></body>',{runScripts:'outside-only'}),w=dom.window
-  w.eval(readFileSync(new URL('../ui-core.js',import.meta.url),'utf8'));await new Promise(resolve=>setTimeout(resolve,0));w.edulogUi.setLocale('zh-TW')
+  w.eval(readFileSync(new URL('../shared/ui-core.js',import.meta.url),'utf8'));await new Promise(resolve=>setTimeout(resolve,0));w.edulogUi.setLocale('zh-TW')
   const original=globalThis.edulogUi;globalThis.edulogUi=w.edulogUi
   try{
     const issues=[{source_id:'a',batchKey:'batch',reason:'mapping',targets:[{field:'lesson_id'}]},{source_id:'missing',batchKey:'batch',reason:'report-missing'}],items=[{key:'a',category:'needs',record:{sourceStudentName:'合成學生',sourceCourseLabel:'Python',date:'2026-10-04',enrollment_source_id:'admission'},reason:'請核對教材'}],before=structuredClone({issues,items}),calls=[]

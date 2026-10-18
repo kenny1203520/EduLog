@@ -1,9 +1,8 @@
 # EduLog 設計系統（MASTER）
 
 適用：擴充功能 popup、整合工作台、原站（corp.orangeapple.co）改造頁、報告 modal 助手。
-實作來源：`extension/edulog-tokens.css`（`--edulog-*`）與 `extension/ui-tokens.css`（`--ui-*` 別名）。
+實作來源：`extension/styles/edulog-tokens.css`（`--edulog-*`）與 `extension/styles/ui-tokens.css`（`--ui-*` 別名）。
 互動原型：`docs/design/prototype/index.html`。
-產生器原始輸出（ui-ux-pro-max，僅供參考）：`docs/design/design-system/edulog/MASTER.md`。
 
 > 本檔是唯一事實來源。頁面若需偏離，寫在 `docs/design/pages/<page>.md`，並註明理由。
 

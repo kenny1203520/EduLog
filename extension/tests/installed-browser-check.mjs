@@ -31,7 +31,7 @@ try {
   const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker')
   assert.equal(new URL(worker.url()).hostname, metadata.extensionId)
   const popup = await context.newPage()
-  await popup.goto('chrome-extension://' + metadata.extensionId + '/popup.html')
+  await popup.goto('chrome-extension://' + metadata.extensionId + '/popup/popup.html')
   const message = payload => popup.evaluate(value => chrome.runtime.sendMessage(value), payload)
   const installation = await message({ type: 'get-edulog-installation' })
   assert.match(installation.installation_id, /^[0-9a-f-]{36}$/)
@@ -40,7 +40,7 @@ try {
   assert.equal((await message({ type: 'set-ui-preferences', enabled: false })).enabled, false)
   await popup.evaluate(() => chrome.storage.local.set({ releaseSmokeDraft: { revision: 1, workId: 'synthetic-only' } }))
   await popup.evaluate(async () => {
-    const { workStore } = await import(chrome.runtime.getURL('work-store.js'))
+    const { workStore } = await import(chrome.runtime.getURL('shared/work-store.js'))
     await workStore.put({ id: 'release-smoke', revision: 1, status: 'draft', snapshot: { content: 'synthetic draft' } }, { instance: 'https://test.example', userId: 'synthetic-user' })
   })
   const source = await context.newPage()
@@ -50,13 +50,13 @@ try {
   assert.equal(await source.evaluate(() => Boolean(window.chrome?.storage)), false)
   await context.close(); context = await launch()
   const resumed = await context.newPage()
-  await resumed.goto('chrome-extension://' + metadata.extensionId + '/popup.html')
+  await resumed.goto('chrome-extension://' + metadata.extensionId + '/popup/popup.html')
   const preferences = await resumed.evaluate(() => chrome.runtime.sendMessage({ type: 'get-ui-preferences' }))
   assert.equal(preferences.enabled, false)
   assert.equal((await resumed.evaluate(() => chrome.runtime.sendMessage({ type: 'get-edulog-installation' }))).installation_id, installation.installation_id)
   assert.deepEqual(await resumed.evaluate(() => chrome.storage.local.get('releaseSmokeDraft')), { releaseSmokeDraft: { revision: 1, workId: 'synthetic-only' } })
   assert.equal(await resumed.evaluate(async () => {
-    const { workStore } = await import(chrome.runtime.getURL('work-store.js'))
+    const { workStore } = await import(chrome.runtime.getURL('shared/work-store.js'))
     const work = await workStore.get('release-smoke', { instance: 'https://test.example', userId: 'synthetic-user' })
     return work.snapshot.content
   }), 'synthetic draft')
