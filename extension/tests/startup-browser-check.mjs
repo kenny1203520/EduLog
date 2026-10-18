@@ -1,10 +1,10 @@
+import { loadPlaywright, browserTargets } from './browser-runtime.mjs'
 // Synthetic startup/renderer recording: scripts run while the HTML is parsing.
 // Does not read a user's profile or contact the real website.
 import assert from 'node:assert/strict'
 import { readFileSync, mkdirSync, existsSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { pathToFileURL } from 'node:url'
-const { chromium } = await import(pathToFileURL(process.argv[2]).href)
+const { chromium } = await loadPlaywright(process.argv.slice(2).find(arg => !arg.startsWith('--')))
 const output = process.argv[3]
 mkdirSync(output, { recursive: true })
 const read = file => readFileSync(new URL(file, import.meta.url), 'utf8')
@@ -22,12 +22,8 @@ const cases = [
   { name: 'denied', delay: 0, enabled: true, denied: true },
 ]
 const results = []
-for (const [browserName, executablePath] of [
-  ['chrome', 'C:/Program Files/Google/Chrome/Application/chrome.exe'],
-  ['edge', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'],
-]) {
-  if (!existsSync(executablePath)) throw new Error(`${browserName} executable missing`)
-  const browser = await chromium.launch({ headless: true, executablePath })
+for (const [browserName, launchOptions] of browserTargets()) {
+    const browser = await chromium.launch(launchOptions)
   try {
     for (const width of [390, 1440]) for (const scenario of cases) {
       const context = await browser.newContext({ viewport: { width, height: 900 }, recordVideo: { dir: output, size: { width, height: 900 } } })
@@ -37,7 +33,7 @@ for (const [browserName, executablePath] of [
         if (scenario.denied) html = '<html><head></head><body><div id="page-body"><div class="content"><h1>沒有存取權限</h1></div></div></body></html>'
         html = html.replace('</head>', `<style>${css}</style></head>`)
         // Early scripts are parser-blocking; body is not constructed yet.
-        const mock = `window.__beforeBody = !document.querySelector('#page-body'); window.chrome={runtime:{sendMessage:()=>new Promise((resolve,reject)=>setTimeout(()=>${scenario.reject ? "reject(new Error('offline'))" : `resolve({enabled:${scenario.enabled}})`},${scenario.delay})),onMessage:{addListener(){}}}};`
+        const mock = `window.__beforeBody = !document.querySelector('#page-body'); window.chrome={runtime:{sendMessage:()=>new Promise((resolve,reject)=>setTimeout(()=>{window.__preferenceAt=performance.now();${scenario.reject ? "reject(new Error('offline'))" : `resolve({enabled:${scenario.enabled}})`}},${scenario.delay})),onMessage:{addListener(){}}}};`
         const sample = `window.__frames=[];function sample(){const h=document.documentElement,p=document.querySelector('#page-body');window.__frames.push({t:performance.now(),pending:h.hasAttribute('data-edulog-pending'),mode:h.dataset.edulogUi||null,visible:!!p&&getComputedStyle(p).visibility!=='hidden',enhanced:!!document.querySelector('[data-edulog-search]'),toolbar:document.querySelectorAll('#edulog-extension-root').length});requestAnimationFrame(sample)}requestAnimationFrame(sample);`
         html = html.replace('<head>', `<head><script>${mock}${early};${sample}</script>`).replace('</body>', `<script>${main}</script></body>`)
         return route.fulfill({ contentType: 'text/html; charset=utf-8', body: html })
@@ -46,17 +42,21 @@ for (const [browserName, executablePath] of [
       page.on('pageerror', error => errors.push(error.message))
       const url = `https://corp.orangeapple.co${scenario.path || '/courses/dt/101'}`
       await page.goto(url); await page.waitForTimeout(600)
-      const capture = async () => page.evaluate(() => ({ beforeBody: window.__beforeBody, frames: window.__frames, pending: document.documentElement.hasAttribute('data-edulog-pending'), mode: document.documentElement.dataset.edulogUi || null }))
+      const capture = async () => page.evaluate(() => ({ beforeBody: window.__beforeBody, preferenceAt: window.__preferenceAt, frames: window.__frames, pending: document.documentElement.hasAttribute('data-edulog-pending'), mode: document.documentElement.dataset.edulogUi || null }))
       let check = await capture()
       assert.ok(check.beforeBody, `${browserName}/${width}/${scenario.name}: ${errors.join('; ')}`)
       assert.ok(check.frames.length > 10)
       assert.equal(check.pending, false)
-      const enhanced = ['enabled', 'delayed'].includes(scenario.name)
-      assert.equal(check.mode, enhanced ? 'on' : null)
+      const enhanced = ['enabled', 'delayed', 'timeout-late'].includes(scenario.name)
+      assert.equal(check.mode, enhanced ? 'on' : null, `${browserName}/${width}/${scenario.name}: final theme`)
       for (const f of check.frames) {
-        if (enhanced && f.visible) { assert.equal(f.mode, 'on', `${browserName}/${width}/${scenario.name}: visible native frame`); assert.ok(f.enhanced) }
+        if (enhanced && scenario.name !== 'timeout-late' && f.visible) { assert.equal(f.mode, 'on', `${browserName}/${width}/${scenario.name}: visible native frame`); assert.ok(f.enhanced) }
         if (!enhanced && f.visible) assert.equal(f.mode, null)
         assert.ok(f.toolbar <= 1)
+      }
+      if (scenario.name === 'timeout-late') {
+        assert.ok(check.frames.some(f => f.visible && f.mode === null && f.t < check.preferenceAt), 'preference timeout reveals the native page')
+        assert.ok(check.frames.some(f => f.visible && f.mode === 'on' && f.enhanced && f.t >= check.preferenceAt), 'late preference applies automatically without user input')
       }
       const pendingFrames = check.frames.filter(f => f.pending)
       if (pendingFrames.length) assert.ok(pendingFrames.at(-1).t - pendingFrames[0].t < 350, 'loading gate exceeded deadline')

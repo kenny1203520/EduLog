@@ -1,3 +1,4 @@
+import { loadPlaywright, launchBrowser } from './browser-runtime.mjs'
 // Optional visual check for the student learning-account modal. Local de-identified
 // fixtures only; no real site requests.
 // node tests/accounts-browser-check.mjs <playwright/index.mjs> [screenshots-dir]
@@ -5,15 +6,14 @@ import assert from 'node:assert/strict'
 import { readFileSync, mkdirSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { pathToFileURL } from 'node:url'
 
-const { chromium } = await import(pathToFileURL(process.argv[2]).href)
+const { chromium } = await loadPlaywright(process.argv.slice(2).find(arg => !arg.startsWith('--')))
 const output = process.argv[3] || mkdtempSync(join(tmpdir(), 'edulog-accounts-'))
 mkdirSync(output, { recursive: true })
 const read = file => readFileSync(new URL(file, import.meta.url), 'utf8')
 const css = read('../edulog-tokens.css') + read('../adapters/orange-apple.css') + read('../dialog-layout.css') + read('fixtures/native-bootstrap-dialog.css')
 const scripts = ['../adapters/orange-apple-lexicon.js', '../adapters/orange-apple-model.js', '../adapters/orange-apple-accounts.js', '../adapters/orange-apple-workflows.js', '../adapters/orange-apple.js']
-const browser = await chromium.launch()
+const browser = await launchBrowser(chromium)
 try {
   for (const fixture of ['accounts-basic', 'accounts-exam']) for (const width of [360, 390, 768, 1024, 1440]) {
     const page = await browser.newPage({ viewport: { width, height: 900 } })

@@ -1,10 +1,9 @@
+import { loadPlaywright, browserTargets, fileURLToPath } from './browser-runtime.mjs'
 // Synthetic UI verification in installed Chrome/Edge; no live site/API writes.
 import { readFileSync, mkdirSync } from 'node:fs'
 import { createServer } from 'node:http'
-import { pathToFileURL } from 'node:url'
 import assert from 'node:assert/strict'
-const playwrightPath=process.argv.slice(2).find(arg=>!arg.startsWith('--'))
-const { chromium } = await import(pathToFileURL(playwrightPath || 'C:/Users/kenny/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs').href)
+const { chromium } = await loadPlaywright(process.argv.slice(2).find(arg => !arg.startsWith('--')))
 const editorOnly=process.argv.includes('--editor-only')
 const inlineOnly=process.argv.includes('--inline-only')
 const root = new URL('../', import.meta.url), output = new URL('artifacts/workspace/', import.meta.url); mkdirSync(output, { recursive: true })
@@ -54,8 +53,8 @@ const mock = () => {
   },onMessage:{addListener(){}}},action:{openPopup:async()=>{}}}
 }
 try {
-  for (const [name, executablePath] of ((editorOnly||inlineOnly)?[['chrome','C:/Program Files/Google/Chrome/Application/chrome.exe']]:[['chrome','C:/Program Files/Google/Chrome/Application/chrome.exe'],['edge','C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe']])) {
-    const browser = await chromium.launch({ executablePath, headless: true })
+  for (const [name, launchOptions] of browserTargets()) {
+    const browser = await chromium.launch(launchOptions)
     try {
       if(!inlineOnly){
       for(const flow of ['import','prefill','work']){
@@ -210,7 +209,7 @@ try {
       await page.evaluate(()=>edulogUi.setLocale('en'));await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))))
       assert.equal(await page.locator('#apply').textContent(),'Confirm and import batches')
       await page.evaluate(()=>edulogUi.setLocale('zh-TW'));await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))))
-      await page.screenshot({path:new URL(`${name}-${width}-import.png`,output).pathname.replace(/^\//,'')})
+      await page.screenshot({path:fileURLToPath(new URL(`${name}-${width}-import.png`,output))})
       await page.locator('#apply').click(); await page.waitForFunction(()=>document.querySelector('#notice').textContent.includes('已核對'))
       assert.equal(await page.evaluate(()=>testCalls.filter(m=>m.operation==='apply').length),1)
       await page.locator('[data-flow=prefill]').click(); await page.locator('#read-form').click(); await page.locator('#target-summary').waitFor({state:'visible'})
@@ -219,7 +218,7 @@ try {
       assert.equal(await page.locator('[data-key=class_notes] [data-include]').isChecked(),false)
       assert.equal(await page.locator('#report-completeness').textContent().then(s=>s.includes('未齊備')&&s.includes('課程已完成')),true)
       assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`${name} ${width}: prefill overflow`)
-      await page.screenshot({path:new URL(`${name}-${width}-prefill.png`,output).pathname.replace(/^\//,'')})
+      await page.screenshot({path:fileURLToPath(new URL(`${name}-${width}-prefill.png`,output))})
       await page.locator('#prefill').click(); await page.locator('#prefill-result').waitFor({state:'visible'})
       const fields = await page.evaluate(()=>testCalls.find(m=>m.type==='workspace-source'&&m.action==='apply').input.fields); assert.deepEqual(fields.map(f=>f.key),['attendance_status'])
       await page.locator('[data-flow=work]').click(); await page.locator('#work-view').waitFor({state:'visible'}); await page.waitForFunction(()=>document.querySelector('#work-count').textContent.trim().length>0)

@@ -1,10 +1,10 @@
+import { loadPlaywright, browserTargets } from './browser-runtime.mjs'
 // Isolated synthetic site only. No account access or real salary data.
 // node tests/hours-browser-check.mjs <playwright/index.mjs> <output> <native-css-dir>
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync, mkdirSync, writeFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { pathToFileURL } from 'node:url'
-const { chromium } = await import(pathToFileURL(process.argv[2]).href)
+const { chromium } = await loadPlaywright(process.argv.slice(2).find(arg => !arg.startsWith('--')))
 const output = process.argv[3]
 mkdirSync(output, { recursive: true })
 const read = name => readFileSync(new URL(name, import.meta.url), 'utf8')
@@ -14,9 +14,8 @@ const body = read('fixtures/hours-nested.html').replace('</head>', `<style>${nat
 const early = ['runtime-bridge.js', 'adapters/orange-apple-lexicon.js', 'adapters/orange-apple-model.js', 'adapters/orange-apple.js', 'bootstrap.js'].map(file => read(`../${file}`))
 const late = ['adapters/orange-apple-workflows.js', 'connection-ui.js', 'integration-ui.js'].map(file => read(`../${file}`))
 const results = []
-for (const [name, executablePath] of [['chrome', 'C:/Program Files/Google/Chrome/Application/chrome.exe'], ['edge', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe']]) {
-  assert.ok(existsSync(executablePath), `${name} executable required`)
-  const browser = await chromium.launch({ executablePath, headless: true })
+for (const [name, launchOptions] of browserTargets()) {
+    const browser = await chromium.launch(launchOptions)
   try {
     for (const width of [360, 390, 768, 1440]) for (const failed of [false, true]) {
       const page = await browser.newPage({ viewport: { width, height: 900 } })
@@ -48,6 +47,11 @@ for (const [name, executablePath] of [['chrome', 'C:/Program Files/Google/Chrome
       await page.goto('https://corp.orangeapple.co/my/hour')
       await page.locator('#edulog-extension-root').waitFor()
       const toggle = page.getByRole('button', { name: '套用清晰主題', exact: true })
+      const openPreferences = async () => {
+        await page.getByRole('button', { name: 'EduLog 功能', exact: true }).click()
+        const summary = page.locator('.preferences summary')
+        if (!await summary.evaluate(el => el.parentElement.open)) await summary.click()
+      }
       if (failed) {
         assert.equal(await page.locator('html[data-edulog-ui]').count(), 0)
         assert.equal(await page.locator('[data-edulog-pending]').count(), 0)
@@ -60,6 +64,7 @@ for (const [name, executablePath] of [['chrome', 'C:/Program Files/Google/Chrome
         }), 'fallback notice fits viewport')
         await page.screenshot({ path: join(output, `${name}-${width}-fallback.png`), fullPage: true })
         await page.evaluate(() => { window.syntheticFault = false })
+        await openPreferences()
         await toggle.click()
       }
       await page.locator('html[data-edulog-ui=on]').waitFor()
@@ -78,9 +83,11 @@ for (const [name, executablePath] of [['chrome', 'C:/Program Files/Google/Chrome
         return r.left >= 0 && r.right <= innerWidth && r.width > 0 && r.height >= 44
       }), `${name} ${width}: ${selector} usable`)
       await page.screenshot({ path: join(output, `${name}-${width}-${failed ? 'recovered' : 'hours'}.png`), fullPage: true })
+      await openPreferences()
       await page.getByRole('button', { name: '使用原站主題', exact: true }).click()
       assert.equal(await page.evaluate(() => nativeForm.outerHTML === nativeMarkup), true)
       assert.equal(await page.locator('[name=year]').inputValue(), '2025')
+      await openPreferences()
       await toggle.click()
       await page.evaluate(async () => {
         document.dispatchEvent(new Event('turbo:before-cache'))

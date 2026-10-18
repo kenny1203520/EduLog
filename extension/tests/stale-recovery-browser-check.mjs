@@ -1,10 +1,10 @@
+import { loadPlaywright, browserTargets, fileURLToPath } from './browser-runtime.mjs'
 // Original workspace ES module and DOM; all source/API data is synthetic.
 // Accessors are served only by this test server and never enter the side-load.
 import {createServer} from 'node:http'
 import {readFileSync,mkdirSync,writeFileSync} from 'node:fs'
-import {pathToFileURL} from 'node:url'
 import assert from 'node:assert/strict'
-const {chromium}=await import(pathToFileURL(process.argv[2]||'C:/Users/kenny/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs').href)
+const { chromium } = await loadPlaywright(process.argv.slice(2).find(arg => !arg.startsWith('--')))
 const root=new URL('../',import.meta.url),out=new URL('artifacts/stale-recovery/',import.meta.url)
 mkdirSync(out,{recursive:true})
 const accessors=`
@@ -28,8 +28,8 @@ const server=createServer((req,res)=>{
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve))
 const results=[]
 try{
- for(const [name,path] of [['chrome','C:/Program Files/Google/Chrome/Application/chrome.exe'],['edge','C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe']]){
-  const browser=await chromium.launch({executablePath:path,headless:true})
+ for (const [name, launchOptions] of browserTargets()) {
+    const browser = await chromium.launch(launchOptions)
   try{for(const [width,height] of [[390,900],[1440,480]]){
    const page=await browser.newPage({viewport:{width,height}}),errors=[]
    page.on('pageerror',error=>errors.push(error.message))
@@ -76,7 +76,7 @@ try{
    assert.equal(await page.locator('#workspace').getAttribute('aria-busy'),null)
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true)
    const hit=await page.locator('#retry-work-recovery').boundingBox();assert.ok(hit.width>=44&&hit.height>=44)
-   await page.screenshot({path:new URL(`${name}-${width}-${height}-error.png`,out).pathname.replace(/^\//,'')})
+   await page.screenshot({path:fileURLToPath(new URL(`${name}-${width}-${height}-error.png`,out))})
    await page.evaluate(()=>edulogUi.setLocale('en'))
    assert.match(await page.locator('#operation-title').innerText(),/Workspace interface error/)
    assert.match(await page.locator('#retry-work-recovery').innerText(),/Reopen and review work/)
@@ -91,7 +91,7 @@ try{
    assert.ok(requests.some(m=>m.operation==='import-info'));assert.ok(requests.filter(m=>m.operation==='preview').every(m=>m.key==='original-key'))
    assert.deepEqual(errors,[]);assert.deepEqual(await page.evaluate(()=>testFailures),[])
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true)
-   await page.screenshot({path:new URL(`${name}-${width}-${height}.png`,out).pathname.replace(/^\//,'')})
+   await page.screenshot({path:fileURLToPath(new URL(`${name}-${width}-${height}.png`,out))})
    results.push({browser:name,width,height,passed:true,teachingWrites:0})
    console.log(`PASS ${name} ${width}x${height}: original ES module, stale draft recovery, trusted/legacy diagnostics, error retry and zero teaching writes`)
    await page.close()

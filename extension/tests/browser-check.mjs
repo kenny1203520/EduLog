@@ -1,12 +1,12 @@
+import { loadPlaywright, browserTargets } from './browser-runtime.mjs'
 // Optional visual/keyboard check. No real site requests or personal fixtures.
 // node tests/browser-check.mjs <playwright/index.mjs> [screenshots-dir] [native-css-dir]
 import assert from 'node:assert/strict'
 import { readFileSync, existsSync, readdirSync, mkdirSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { pathToFileURL } from 'node:url'
 
-const { chromium } = process.argv[2] ? await import(pathToFileURL(process.argv[2]).href) : await import('playwright')
+const { chromium } = await loadPlaywright(process.argv.slice(2).find(arg => !arg.startsWith('--')))
 const output = process.argv[3] || mkdtempSync(join(tmpdir(), 'edulog-ui-'))
 mkdirSync(output, { recursive: true })
 const read = file => readFileSync(new URL(file, import.meta.url), 'utf8')
@@ -18,13 +18,8 @@ if (process.argv[4]) {
   nativeCss = [application, 'flatpickr.min.css', 'style.min.css', 'all.css', 'jquery.dataTables.min.css', 'bootstrap-table.min.css', 'selectize.bootstrap5.min.css']
     .filter(n => n && existsSync(join(dir, n))).map(n => readFileSync(join(dir, n), 'utf8')).join('\n')
 }
-const executables = process.platform === 'win32' ? [
-  ['chrome', 'C:/Program Files/Google/Chrome/Application/chrome.exe'],
-  ['edge', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'],
-] : [['chromium', undefined]]
-for (const [browserName, executablePath] of executables) {
-  if (executablePath && !existsSync(executablePath)) continue
-  const browser = await chromium.launch({ headless: true, executablePath })
+const executables = browserTargets()
+for (const [browserName, launchOptions] of executables) {  const browser = await chromium.launch(launchOptions)
   try {
     for (const state of ['not-connected', 'pending', 'connected', 'unavailable']) {
       const page = await browser.newPage({ locale:'zh-TW', viewport: { width: 390, height: 600 } })
@@ -216,13 +211,13 @@ for (const [browserName, executablePath] of executables) {
       }
       await page.screenshot({ path: join(output, `${browserName}-${name}-${width}.png`), fullPage: true })
       // Verify keyboard focus and unchanged native form state on toggle.
-      if (name === 'class') await page.locator('textarea').fill('未送出的內容')
+      if (name === 'class') await page.locator('textarea[name="content"]').fill('未送出的內容')
       await page.getByRole('button',{name:'EduLog 功能',exact:true}).click()
       await page.locator('.preferences summary').click()
       const toggle = page.getByRole('button', { name: '使用原站主題' })
       await toggle.focus(); await page.keyboard.press('Enter')
       assert.equal(await page.locator('html[data-edulog-ui]').count(), 0)
-      if (name === 'class') assert.equal(await page.locator('textarea').inputValue(), '未送出的內容')
+      if (name === 'class') assert.equal(await page.locator('textarea[name="content"]').inputValue(), '未送出的內容')
       if (name === 'profile-edit') assert.equal(await page.locator('#employee_skill').inputValue(),'保留的個人資料草稿')
       await page.getByRole('button',{name:'EduLog 功能',exact:true}).click()
       await page.locator('.preferences summary').click()
@@ -232,7 +227,7 @@ for (const [browserName, executablePath] of executables) {
         await page.evaluate(() => { chrome.runtime.sendMessage = () => { throw new Error('Extension context invalidated.') } })
         await page.getByRole('button', { name: 'EduLog 功能' }).click()
         await page.getByText('擴充套件已更新，請先儲存正在編輯的內容，再重新整理分頁。', { exact: true }).waitFor()
-        assert.equal(await page.locator('textarea').inputValue(), '未送出的內容')
+        assert.equal(await page.locator('textarea[name="content"]').inputValue(), '未送出的內容')
       }
       console.log(`${browserName} ${name} ${width}: passed`)
       await page.close()
