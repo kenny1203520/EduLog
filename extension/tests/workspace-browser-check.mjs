@@ -201,7 +201,7 @@ try {
       await page.locator('#preview').click();
       try { await page.locator('#preview-section').waitFor({state:'visible',timeout:5000}) }
       catch { throw new Error(`${name} ${width}: preview did not render; review=${await page.locator('#review-301').isChecked()} notice=${await page.locator('#notice').textContent()} diagnostics=${await page.locator('#diagnostic').textContent()} operation=${await page.locator('#operation-detail').textContent()} calls=${JSON.stringify(await page.evaluate(()=>testCalls.slice(-8)))}`) }
-      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`${name} ${width}: preview overflow`)
+      {const wide=await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth?[]:[...document.querySelectorAll("body *")].filter(n=>n.getBoundingClientRect().right>innerWidth+1&&n.children.length===0).slice(0,8).map(n=>`${n.tagName.toLowerCase()}${n.id?"#"+n.id:""}.${n.className}: ${(n.textContent||n.value||"").trim().slice(0,60)}`));assert.deepEqual(wide,[],`${name} ${width}: preview overflow`)}
       await page.evaluate(()=>{window.previewNode=document.querySelector('#diff-list');window.nativeDraftNode=document.querySelector('#status-301')})
       await page.locator('[data-flow=prefill]').click();await page.locator('[data-flow=import]').click()
       assert.equal(await page.locator('#preview-section').isVisible(),true,'return to the actual preview stage')

@@ -7,7 +7,7 @@ test('workspace locale translates existing and dynamic text, preserves new sourc
   const source=readFileSync(new URL('../workspace/workspace-i18n.js',import.meta.url),'utf8').replace('export function initWorkspaceI18n','function initWorkspaceI18n')
   const dom=new JSDOM('<html lang="zh-Hant"><body><label for="workspace-locale">介面語言</label><select id="workspace-locale"><option value="zh-TW">繁體中文</option><option value="en">English</option></select><h1>教學資料匯入</h1><input id="search" placeholder="姓名、課程或報名 ID…"><select data-source-raw-options="true"><option>選擇目標課程</option><option>出席</option></select><p id="status"></p><p class="source-evidence" id="raw">出席</p></body></html>',{runScripts:'outside-only'})
   const w=dom.window,listeners=[];w.chrome={storage:{local:{get:async()=>({edulogWorkspaceLocale:'en'}),set:async()=>{}},onChanged:{addListener:fn=>listeners.push(fn)}}};w.eval(source+';initWorkspaceI18n()')
-  await new Promise(resolve=>setTimeout(resolve,0));assert.equal(w.document.querySelector('h1').textContent,'Teaching data import');assert.equal(w.document.querySelector('label').textContent,'Interface language');assert.equal(w.document.getElementById('search').placeholder,'Name, course, or enrollment ID…');assert.equal(w.document.querySelector('[data-source-raw-options] option:nth-child(2)').textContent,'出席')
+  await new Promise(resolve=>setTimeout(resolve,0));assert.equal(w.document.querySelector('h1').textContent,'Import data');assert.equal(w.document.querySelector('label').textContent,'Language');assert.equal(w.document.getElementById('search').placeholder,'Name, course, or enrollment ID…');assert.equal(w.document.querySelector('[data-source-raw-options] option:nth-child(2)').textContent,'出席')
   w.document.getElementById('status').textContent='操作未完成';await new Promise(resolve=>setTimeout(resolve,0));assert.equal(w.document.getElementById('status').textContent,'Action incomplete')
   w.document.getElementById('raw').textContent='出席';await new Promise(resolve=>setTimeout(resolve,0));assert.equal(w.document.getElementById('raw').textContent,'出席')
   listeners[0]({edulogWorkspaceLocale:{newValue:'zh-TW'}},'local');assert.equal(w.document.querySelector('h1').textContent,'教學資料匯入');assert.equal(w.document.getElementById('status').textContent,'操作未完成');dom.window.close()
@@ -19,7 +19,7 @@ test('workspace locale falls back to browser language when extension storage is 
   dom.window.eval(source+';initWorkspaceI18n()')
   await new Promise(resolve=>setTimeout(resolve,0))
   assert.equal(dom.window.document.getElementById('workspace-locale').value,'en')
-  assert.equal(dom.window.document.querySelector('h1').textContent,'Teaching data import')
+  assert.equal(dom.window.document.querySelector('h1').textContent,'Import data')
   dom.window.close()
 })
 

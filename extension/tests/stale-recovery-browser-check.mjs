@@ -79,7 +79,7 @@ try{
    await page.screenshot({path:fileURLToPath(new URL(`${name}-${width}-${height}-error.png`,out))})
    await page.evaluate(()=>edulogUi.setLocale('en'))
    assert.match(await page.locator('#operation-title').innerText(),/Workspace interface error/)
-   assert.match(await page.locator('#retry-work-recovery').innerText(),/Reopen and review work/)
+   assert.match(await page.locator('#retry-work-recovery').innerText(),/Reopen & review/)
    await page.locator('#retry-work-recovery').focus();await page.keyboard.press('Enter')
    await page.waitForFunction(()=>document.getElementById('workspace').getAttribute('aria-busy')!=='true')
    assert.equal(await page.locator('#preview-section').isVisible(),true)

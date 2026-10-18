@@ -35,3 +35,4 @@ main,body>header,body>nav{max-width:1600px}body{font-size:16px}main{padding-bott
 #work-detail .work-detail-actions label{display:grid;gap:4px;min-width:min(100%,220px)}
 @media(min-width:768px){#work-detail-back{display:none}}
 #history-workbench aside:focus-visible{outline:3px solid #2563eb;outline-offset:2px}
+@media(max-width:480px){body>nav{overflow:visible}body>nav button{flex:1 1 0;min-width:0;padding-inline:8px;white-space:normal;text-align:center;line-height:1.25}}
