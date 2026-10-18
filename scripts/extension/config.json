@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "sideloadPublicKey": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAkjfG2c+DzVLSBHLIzJ7wl8Y2ZXcJYhr/8Vvo4gcz9EXofUbkpp8i10uu0a80oY8OuDcrx/XrJJ1900DB59aWgJX9wPPyqbffj0lFaP2SNmbspm4c5OIbu8r8yCL8hPRO7rjf0mjLTwNVk4eIcpejGhK9mHWZglAd7Oi3GK4b8uMEqawLgcgeF/Zb3IKXJWEP/dDHS8sBNtsAVXVYTQpjq6k5uUBr5tJyui6GzU7RXM0jf25Beod7K+Nd6FNeKRQMOXeUwjC1B/4Iy4bYHTZCe9uftjOg63djl+g7yo41/VfXBXTNkRQSTfK3UmtdwOZp5opTd1YF4ngMGZ/dhDSvmQIDAQAB",
+  "minimumMigration": "1000141",
+  "requiredCapabilities": [
+    "connection_management", "teaching_data_import", "report_prefill", "catalog_v1",
+    "multi_course_import", "mapping_memory", "student_enrollment_catalog",
+    "enrollment_reconciliation", "enrollment_history_reports", "per_occurrence_report_routing",
+    "field_mapping_memory", "global_progress_mapping", "sync_field_preferences",
+    "work_record_metadata", "report_skip_decisions", "history_binding_field_mask",
+    "transferred_occurrence_import", "nearest_report_candidates"
+  ]
+}

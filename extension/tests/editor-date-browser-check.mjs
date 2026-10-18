@@ -1,9 +1,9 @@
+import { loadPlaywright, browserTargets, fileURLToPath } from './browser-runtime.mjs'
 // Actual native DOM + injected scripts, isolated mock broker; never contacts the source site.
 import {readFileSync,mkdirSync} from 'node:fs'
 import {createServer} from 'node:http'
-import {pathToFileURL} from 'node:url'
 import assert from 'node:assert/strict'
-const {chromium}=await import(process.argv[2]?pathToFileURL(process.argv[2]).href:'playwright')
+const { chromium } = await loadPlaywright(process.argv.slice(2).find(arg => !arg.startsWith('--')))
 const root=new URL('../',import.meta.url),output=new URL('artifacts/editor-date/',import.meta.url);mkdirSync(output,{recursive:true})
 const fixture=readFileSync(new URL('fixtures/report-modal.html',import.meta.url),'utf8')
 const server=createServer((req,res)=>{
@@ -14,8 +14,8 @@ const server=createServer((req,res)=>{
 })
 await new Promise(r=>server.listen(0,'127.0.0.1',r));const url=`http://127.0.0.1:${server.address().port}/fixture`
 try{
- for(const channel of ['chrome','msedge']){
-  const browser=await chromium.launch({channel,headless:true})
+ for(const [channel, launchOptions] of browserTargets()){
+  const browser=await chromium.launch(launchOptions)
   try{
    for(const width of [360,390,768,1024,1200,1440,1920]){
     const page=await browser.newPage({locale:'zh-TW',viewport:{width,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message))
@@ -104,7 +104,7 @@ try{
     await page.waitForFunction(()=>document.querySelector('aside').shadowRoot.querySelector('[role=status]').textContent.includes('已套用'))
     assert.equal(await page.locator('#lesson_report_feedback').inputValue(),'助手草稿\n保留段落');assert.equal(await page.locator('#nothing').isChecked(),false);assert.equal(await page.evaluate(()=>submitCount),0)
     assert.equal(await page.locator('#lesson_report_comment').inputValue(),'')
-    await shadow('.fields-result details summary').last().click();await page.screenshot({path:new URL(`${channel}-${width}.png`,output).pathname.replace(/^\//,'')})
+    await shadow('.fields-result details summary').last().click();await page.screenshot({path:fileURLToPath(new URL(`${channel}-${width}.png`,output))})
     await helper.evaluate(n=>[...n.shadowRoot.querySelectorAll('header button')].find(b=>b.textContent==='收合助手').click())
     assert.equal(await page.locator('.modal[data-edulog-prefill]').count(),0)
     assert.equal(await page.evaluate(()=>originalForm===document.querySelector('form')),true)

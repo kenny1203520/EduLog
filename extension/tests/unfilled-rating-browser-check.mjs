@@ -1,9 +1,10 @@
+import { loadPlaywright, browserTargets } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
 import {createServer} from 'node:http'
 import {fileURLToPath,pathToFileURL} from 'node:url'
 
-const {chromium}=await import(process.argv[2]?pathToFileURL(process.argv[2]).href:'playwright')
+const { chromium } = await loadPlaywright(process.argv.slice(2).find(arg => !arg.startsWith('--')))
 const extensionRoot=new URL('../',import.meta.url)
 const fixture=readFileSync(new URL('fixtures/unfilled-current.html',import.meta.url),'utf8')
 const server=createServer((req,res)=>{
@@ -16,8 +17,8 @@ const server=createServer((req,res)=>{
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve))
 const origin=`http://127.0.0.1:${server.address().port}`
 try{
-  for(const channel of ['chrome','msedge']){
-    const browser=await chromium.launch({channel,headless:true})
+  for(const [channel, launchOptions] of browserTargets()){
+    const browser=await chromium.launch(launchOptions)
     try{
       for(const width of [360,390,768,1024,1200,1440,1920]){
         const page=await browser.newPage({viewport:{width,height:560},deviceScaleFactor:2}),errors=[]

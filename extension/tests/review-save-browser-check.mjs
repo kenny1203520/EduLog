@@ -1,10 +1,10 @@
+import { loadPlaywright, browserTargets, fileURLToPath } from './browser-runtime.mjs'
 // Full original workspace ES module/DOM with synthetic runtime responses only.
 // Test accessors are appended by this HTTP server, never shipped in the extension.
 import {createServer} from 'node:http'
 import {readFileSync,mkdirSync,writeFileSync} from 'node:fs'
-import {pathToFileURL} from 'node:url'
 import assert from 'node:assert/strict'
-const {chromium}=await import(pathToFileURL(process.argv[2]||'C:/Users/kenny/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs').href)
+const { chromium } = await loadPlaywright(process.argv.slice(2).find(arg => !arg.startsWith('--')))
 const root=new URL('../',import.meta.url),out=new URL('artifacts/review-save/',import.meta.url);mkdirSync(out,{recursive:true})
 const accessors=`
 globalThis.reviewTest={
@@ -27,8 +27,8 @@ globalThis.reviewTest={
 const server=createServer((req,res)=>{const name=new URL(req.url,'http://localhost').pathname.slice(1);if(!/^[a-z0-9.-]+$/.test(name)){res.writeHead(404).end();return}try{let content=readFileSync(new URL(name,root),'utf8');if(name==='workspace.js')content+=accessors;res.setHeader('Content-Type',name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':'text/html; charset=utf-8');res.end(content)}catch{res.writeHead(404).end()}})
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const results=[]
 try{
- for(const [name,path] of [['chrome','C:/Program Files/Google/Chrome/Application/chrome.exe'],['edge','C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe']]){
-  const browser=await chromium.launch({executablePath:path,headless:true})
+ for (const [name, launchOptions] of browserTargets()) {
+    const browser = await chromium.launch(launchOptions)
   try{for(const [width,height] of [[390,900],[1440,480]]){
    const page=await browser.newPage({viewport:{width,height}}),errors=[];page.on('pageerror',error=>errors.push(error.message))
    await page.addInitScript(()=>{
@@ -73,7 +73,7 @@ try{
    const writes=await page.evaluate(()=>testRequests.filter(request=>request.type==='workspace-api'&&['apply','history-bind-apply','job'].includes(request.operation)))
    assert.deepEqual(writes,[]);assert.deepEqual(await page.evaluate(()=>testFailures),[]);assert.deepEqual(errors,[])
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true)
-   await page.screenshot({path:new URL(`${name}-${width}-${height}.png`,out).pathname.replace(/^\//,'')})
+   await page.screenshot({path:fileURLToPath(new URL(`${name}-${width}-${height}.png`,out))})
    results.push({browser:name,width,height,passed:true,teachingWrites:0});console.log(`PASS ${name} ${width}x${height}: original workspace module, durable save race, localized saving, actionable blockers, exact navigation, zero teaching writes`);await page.close()
   }}finally{await browser.close()}
  }

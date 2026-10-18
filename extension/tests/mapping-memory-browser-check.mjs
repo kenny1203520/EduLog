@@ -1,9 +1,9 @@
+import { loadPlaywright, browserTargets, fileURLToPath } from './browser-runtime.mjs'
 // Isolated browser scenarios. No real site, user credentials or database writes.
 import { readFileSync, mkdirSync } from 'node:fs'
 import { createServer } from 'node:http'
-import { pathToFileURL } from 'node:url'
 import assert from 'node:assert/strict'
-const {chromium}=await import(pathToFileURL(process.argv.slice(2).find(a=>!a.startsWith('--'))||'C:/Users/kenny/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs').href)
+const { chromium } = await loadPlaywright(process.argv.slice(2).find(arg => !arg.startsWith('--')))
 const root=new URL('../',import.meta.url),output=new URL('artifacts/mapping/',import.meta.url);mkdirSync(output,{recursive:true})
 const server=createServer((req,res)=>{const name=new URL(req.url,'http://localhost').pathname.slice(1);if(!/^[a-z0-9.-]+$/.test(name)){res.writeHead(404).end();return}try{res.setHeader('content-type',name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':'text/html');res.end(readFileSync(new URL(name,root)))}catch{res.writeHead(404).end()}})
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const base=`http://127.0.0.1:${server.address().port}`
@@ -23,8 +23,9 @@ function mock() {
   window.testCatalog=catalog;window.testSnapshot=snapshot;window.syntheticTransfers=[]
   window.testCalls=[];window.chrome={runtime:{sendMessage:async m=>{
     window.testCalls.push(m)
-    if(m.type==='workspace-init')return{data:{binding:{instance:'http://localhost:3000',userId:id(8)},status:{status:'connected',settingsUrl:'https://web.example:8443/edulog/dashboard/settings?tab=integrations',capabilities:{teaching_data_import:true,report_prefill:true,catalog_v1:true,mapping_memory:true,multi_course_import:true,student_enrollment_catalog:true,enrollment_reconciliation:true,transferred_occurrence_import:true,enrollment_history_reports:true}},tabs:[{id:10,title:'來源班級',path:snapshot.sourcePath}]}}
+    if(m.type==='workspace-init')return{data:{binding:{instance:'http://localhost:3000',userId:id(8)},status:{status:'connected',settingsUrl:'https://web.example:8443/edulog/dashboard/settings?tab=integrations',capabilities:{teaching_data_import:true,report_prefill:true,catalog_v1:true,mapping_memory:true,multi_course_import:true,student_enrollment_catalog:true,enrollment_reconciliation:true,transferred_occurrence_import:true,enrollment_history_reports:true,per_occurrence_report_routing:true}},tabs:[{id:10,title:'來源班級',path:snapshot.sourcePath}]}}
     if(m.type==='workspace-source')return{data:m.action==='context'?{sourceOrigin:origin,sourcePath:snapshot.sourcePath,classId:'11',title:snapshot.title}:structuredClone(snapshot)}
+    if(m.type==='workspace-store-authorize')return{data:{instance:'http://localhost:3000',userId:id(8),action:m.action,workId:m.workId,revision:m.revision}}
     if(m.type==='workspace-store'){if(m.action==='list')return{data:[...store.values()]};if(m.action==='get')return{data:store.get(m.id)};const w=structuredClone(m.work);w.updatedAt=Date.now();store.set(w.id,w);return{data:w}}
     if(m.type==='workspace-check-source')return{data:{closed:false}}
     if(m.type==='workspace-api'){
@@ -65,8 +66,8 @@ function mock() {
 }
 const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`
 try{
-  for(const [name,executablePath]of[['chrome','C:/Program Files/Google/Chrome/Application/chrome.exe'],['edge','C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe']]){
-    const browser=await chromium.launch({executablePath,headless:true})
+  for (const [name, launchOptions] of browserTargets()) {
+    const browser = await chromium.launch(launchOptions)
     try{for(const width of(process.argv.includes('--focused')?[390,1440]:[360,390,768,1024,1200,1440,1920,720])){
       const context=await browser.newContext({viewport:{width,height:900},deviceScaleFactor:width===720?2:1}),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.addInitScript(mock)
       const collect=async()=>{await page.locator('#read-history').uncheck();await page.locator('#collect').click();await page.locator('#mapping').waitFor({state:'visible'})}
@@ -94,35 +95,36 @@ try{
         const row=page.locator('.mapping-row:visible'),query=page.locator('#more-enrollments-301')
         await page.evaluate(()=>window.enrollmentFailure=true);await query.click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));assert.match(await page.locator('#enrollment-status-301').textContent(),/查詢失敗/)
         await query.click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'))
-        assert.match(await row.locator('.enrollment-results').textContent(),/班級不一致/);assert.match(await row.locator('.enrollment-results').textContent(),/週日 14:00–16:00/)
+        assert.match(await row.locator('.enrollment-results').textContent(),/報名所屬班次不同/);assert.match(await row.locator('.enrollment-results').textContent(),/週日 14:00–16:00/)
         assert.equal(await row.getByRole('button',{name:'使用此報名（逐堂核對）',exact:true}).count(),1)
         const crossQuery=await page.evaluate(()=>testCalls.filter(m=>m.operation==='catalog'&&m.query.student_id).at(-1).query);assert.equal(crossQuery.class_session_id,undefined);assert.equal(crossQuery.course_id,undefined)
         assert.equal(await page.locator('#class-session').inputValue(),id(3),'an individual mismatch never changes the work class')
         assert.equal(await row.getByRole('link',{name:'前往 EduLog 核對／處理異動（新分頁）'}).getAttribute('href'),`https://web.example:8443/edulog/dashboard/reports/${id(44)}`)
         await row.getByRole('button',{name:'核對此報名的調課紀錄',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));assert.match(await row.locator('.enrollment-results').textContent(),/不能據此判定未曾轉班/)
         await page.locator('#mapping-workbench').scrollIntoViewIfNeeded();await page.locator('#mapping-editor-pane').evaluate(n=>n.scrollTop=0)
-        await page.screenshot({path:new URL(`${name}-${width}-enrollment-review.png`,output).pathname.replace(/^\//,'')})
+        await page.screenshot({path:fileURLToPath(new URL(`${name}-${width}-enrollment-review.png`,output))})
         await row.getByRole('button',{name:'使用此報名（逐堂核對）',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));assert.equal(await page.locator('#enrollment-301').inputValue(),id(44))
         await row.locator('.mapping-actions>.primary').click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));assert.match(await row.locator('.mapping-feedback').textContent(),/已記住/)
         assert.equal(await page.locator('#class-session').inputValue(),id(3),'remembering a one-time cross-class enrollment must not change the selected work session')
         assert.equal(await page.evaluate(()=>testCalls.filter(m=>m.operation==='confirm').at(-1).body.items.find(i=>i.kind==='admission').class_session_id),id(23),'memory stores the enrollment original session')
-        await row.locator('.mapping-actions>.primary').click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));assert.match(await row.locator('.mapping-feedback').textContent(),/已記住/)
+        assert.equal(await row.locator('.mapping-actions>.primary').isDisabled(),true,'a remembered unchanged mapping cannot be submitted twice')
         await row.locator('.mapping-more>summary').click();await row.getByRole('button',{name:'保留 EduLog 並略過此筆',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));assert.match(await row.locator('[data-row-state]').textContent(),/已略過/)
         await choose('admissions',1);await page.locator('#student-102').selectOption(id(14));await page.locator('#enrollment-course-302').selectOption(id(2));await page.locator('#more-enrollments-302').click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'))
         await page.locator('.mapping-row:visible').getByRole('button',{name:'使用符合的既有報名',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));await page.locator('.mapping-row:visible .mapping-actions>.primary').click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'))
         await page.evaluate(()=>testSnapshot.records.find(r=>r.kind==='enrollment'&&r.source_id==='301').student_source_id=null)
         await page.locator('#reread-source').click();await page.waitForFunction(()=>!document.querySelector('#workspace').hasAttribute('aria-busy'))
-        await choose('admissions',0);assert.match(await page.locator('.mapping-row:visible').textContent(),/無學生 ID/)
+        await choose('admissions',0);assert.match(await page.locator('.mapping-row:visible').textContent(),/來源學生：同名學生 · ID 101/,'an incomplete reread does not erase a reliable source identity')
         await choose('admissions',1);assert.equal(await page.locator('#student-102').inputValue(),id(14),'source reread preserves unaffected choices')
-        await page.locator('.report-mapping-section>summary').click()
-        await page.locator('#occurrence-2026-10-01').selectOption(id(52));await page.locator('#more-reports-501').click();await page.waitForFunction(()=>!document.querySelector('#workspace').hasAttribute('aria-busy'))
-        await page.locator('#report-501').selectOption(id(53))
-        await page.evaluate(()=>{const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;syntheticTransfers.push({source_occurrence_id:id(52),source_date:'2026-10-01',source_class_session_id:id(3),target_occurrence_id:id(54),target_date:'2026-10-02',target_class_session_id:id(23),is_effective_target:true})})
-        await page.locator('#preview').click();await page.locator('#preview-section').waitFor({state:'visible'})
-        const written=await page.evaluate(()=>testCalls.find(m=>m.operation==='preview').body.rows);assert.equal(written.some(r=>r.source_id==='301'),false);assert.equal(written.some(r=>r.source_id==='302'),true);assert.equal(written.some(r=>r.source_id==='501'),false,'a transferred source lesson is not imported even with a remembered enrollment')
+        // Reports now use the history workbench, replacing the legacy per-occurrence picker.
+        // Effective transferred-occurrence eligibility is exercised by the executable DB contract.
+        await page.locator('[data-review-pane=reports]').click()
+        assert.equal(await page.locator('#history-sync').isVisible(),true)
+        assert.equal(await page.locator('#identity-pane').isVisible(),false)
+        assert.equal(await page.evaluate(()=>testCalls.some(m=>['preview','apply'].includes(m.operation))),false,'reading and selecting cross-class relationships cannot submit teaching records')
+        assert.equal(await page.evaluate(()=>testSnapshot.records.find(r=>r.source_id==='501').data.content),'測試教學文字','report source evidence is preserved until explicit report review')
         assert.equal(await page.evaluate(()=>testCalls.some(m=>m.operation?.includes('transfer'))),false)
         assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);assert.deepEqual(errors,[])
-        await page.screenshot({path:new URL(`${name}-${width}-reconciliation.png`,output).pathname.replace(/^\//,'')})
+        await page.screenshot({path:fileURLToPath(new URL(`${name}-${width}-reconciliation.png`,output))})
         console.log(`PASS ${name} ${width}: cross-class results, weekend identity, error/retry, external correction/recheck, no duplicate default, per-row skip and no transfer writes`);await context.close();continue
       }
       for(const [i,target]of[[0,id(2)],[1,id(12)]]){
@@ -162,8 +164,8 @@ try{
         assert.equal(await page.locator('#source-course-1').inputValue(),id(12));assert.match(await page.locator('.course-group').first().locator('.mapping-feedback').textContent(),/已記住此課程/)
         await page.evaluate(()=>window.confirmDelay=600);await choose('admissions',3)
       }
-      if(width<=768){await page.locator('#mapping-back').click();await page.locator('#mapping-search').fill('304');await page.locator('#mapping-items button[aria-current=true]').click();await page.locator('#mapping-back').click();assert.equal(await page.locator('#mapping-search').inputValue(),'304');await page.locator('#mapping-search').fill('');await page.locator('#mapping-items button[aria-current=true]').click()}
-      await page.locator('#mapping-workbench').scrollIntoViewIfNeeded();await page.locator('#mapping-editor-pane').evaluate(n=>n.scrollTop=0);await page.screenshot({path:new URL(`${name}-${width}-mapping.png`,output).pathname.replace(/^\//,'')})
+      if(await page.locator('#mapping-back').isVisible()){await page.locator('#mapping-back').click();await page.locator('#mapping-search').fill('304');await page.locator('#mapping-items button[aria-current=true]').click();await page.locator('#mapping-back').click();assert.equal(await page.locator('#mapping-search').inputValue(),'304');await page.locator('#mapping-search').fill('');await page.locator('#mapping-items button[aria-current=true]').click()}
+      await page.locator('#mapping-workbench').scrollIntoViewIfNeeded();await page.locator('#mapping-editor-pane').evaluate(n=>n.scrollTop=0);await page.screenshot({path:fileURLToPath(new URL(`${name}-${width}-mapping.png`,output))})
       // Remount twice and alternate tabs: no stale buttons or cross-tab editor.
       for(let repeat=0;repeat<2;repeat++){
         await page.locator('#reread-source').click();await page.waitForFunction(()=>!document.querySelector('#workspace').hasAttribute('aria-busy'))
@@ -188,7 +190,7 @@ try{
       if(width===390){
         await page.evaluate(()=>window.previewFailure=true);await page.locator('#preview').click();await page.waitForFunction(()=>!document.querySelector('#workspace').hasAttribute('aria-busy'))
         assert.match(await page.locator('#operation-title').textContent(),/差異核對失敗/)
-        assert.match(await page.locator('#operation-detail').textContent(),/請重試核對/);assert.match(await page.locator('#diagnostic').textContent(),/重複來源 ID|Duplicate source IDs/);assert.match(await page.locator('#diagnostic').textContent(),/edulog-synthetic-duplicate/)
+        assert.match(await page.locator('#operation-detail').textContent(),/請重新產生差異/);assert.match(await page.locator('#diagnostic').textContent(),/重複來源 ID|Duplicate source IDs/);assert.match(await page.locator('#diagnostic').textContent(),/edulog-synthetic-duplicate/)
         assert.equal(await page.locator('#start-301').inputValue(),'2026-01-01');assert.equal(await page.locator('#apply').isDisabled(),true)
       }
       await page.locator('#preview').click();await page.waitForFunction(()=>!document.querySelector('#workspace').hasAttribute('aria-busy'));assert.equal(await page.locator('#preview-section').isVisible(),true,await page.locator('#operation-detail').textContent())

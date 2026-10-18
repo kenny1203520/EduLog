@@ -1,16 +1,15 @@
+import { loadPlaywright, browserTargets, fileURLToPath } from './browser-runtime.mjs'
 // Installed-browser checks against the actual workbench DOM/CSS. Synthetic data only.
 import {createServer} from 'node:http'
 import {readFileSync,mkdirSync} from 'node:fs'
-import {pathToFileURL} from 'node:url'
 import assert from 'node:assert/strict'
-const playwrightPath=process.argv[2]||'C:/Users/kenny/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs'
-const {chromium}=await import(pathToFileURL(playwrightPath).href)
+const { chromium } = await loadPlaywright(process.argv.slice(2).find(arg => !arg.startsWith('--')))
 const root=new URL('../',import.meta.url),output=new URL('artifacts/history/',import.meta.url);mkdirSync(output,{recursive:true})
 const server=createServer((req,res)=>{const name=new URL(req.url,'http://localhost').pathname.slice(1);if(!/^[a-z0-9.-]+$/.test(name)){res.writeHead(404).end();return}try{let content=readFileSync(new URL(name,root),'utf8');if(name==='workspace.html')content=content.replace(/<script[\s\S]*?<\/script>/g,'');res.setHeader('Content-Type',name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':'text/html; charset=utf-8');res.end(content)}catch{res.writeHead(404).end()}})
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve))
 try{
- for(const [name,path] of [['chrome','C:/Program Files/Google/Chrome/Application/chrome.exe'],['edge','C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe']]) {
-  const browser=await chromium.launch({executablePath:path,headless:true})
+ for (const [name, launchOptions] of browserTargets()) {
+    const browser = await chromium.launch(launchOptions)
   try{
    for(const [width,height] of [[360,900],[390,900],[768,900],[1024,900],[1200,900],[1440,900],[1920,900],[1440,480]]) {
     const page=await browser.newPage({viewport:{width,height}}),errors=[];page.on('pageerror',e=>errors.push(e.message))
@@ -97,7 +96,7 @@ try{
     assert.equal(await page.evaluate(()=>window.historyTest.view.selectedKey()),'',`${name} ${width}: clearing search resets the current queue cursor`)
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`${name} ${width}: horizontal overflow`)
     assert.deepEqual(errors,[])
-    if(width===390||width===1440&&height===480)await page.screenshot({path:new URL(`${name}-${width}-${height}.png`,output).pathname.replace(/^\//,'')})
+    if(width===390||width===1440&&height===480)await page.screenshot({path:fileURLToPath(new URL(`${name}-${width}-${height}.png`,output))})
     console.log(`PASS ${name} ${width}x${height}: left-list wheel/keyboard scroll, scroll restore, history search, draft/focus and no overflow`)
     await page.close()
    }

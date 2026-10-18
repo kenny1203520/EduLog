@@ -1,0 +1,31 @@
+# Reproducible release output and local dependencies
+/dist/
+/node_modules/
+*.zip
+*.crx
+*.sha256
+
+# Browser screenshots, recordings, reports and temporary profiles
+/tests/artifacts/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
+/.cache/
+
+# Local configuration and private credentials; public examples remain versioned
+.env
+.env.*
+!.env.example
+.npmrc
+*.local
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local logs and operating-system metadata
+*.log
+.DS_Store
+Thumbs.db

@@ -1,5 +1,13 @@
 # EduLog Teaching Systems extension
 
+## Test delivery and releases (current)
+
+The authoritative release is the source commit in `release.json`, not one of the historical ZIP filenames below. Run `npm --prefix extension run package -- --channel beta --version 0.1.1.2` from the repository root to package committed runtime files with a fixed sideload ID. Output: `extension/dist/beta/` (ZIP, SHA-256, release metadata and tester instructions). Version/name/key are injected into the archive; the source manifest remains shared.
+
+See [tester installation and updates](../docs/deployment/extension-testing.md), [CI/CD and store setup](../docs/deployment/extension-release.md), [credential handling and security setup](../docs/deployment/extension-security.md), and [store listing preparation](../CHROMEWEBSTORE.md). Historical acceptance entries below describe individual changes, not the latest distributable or the current full migration chain.
+
+Release archives, checksums, browser recordings/screenshots and local credentials are excluded by `.gitignore`; runtime source, synthetic test fixtures and acceptance documents remain versioned. Historical ZIPs and `scripts/package-side-load.ps1` have been removed from the current tree. Use the Node.js packaging command above for new deliveries; references to the old script in earlier acceptance records describe their original verification only.
+
 ## Current build: precise stale-preview recovery (0.1.0)
 
 Stale-preview diagnostics now use the same target-version calculation as preview and apply, so unchanged earlier rows are not mislabeled when a later row changed. History-to-session reconciliation reports a changed occurrence only when it can identify it safely. Recovery checks the server checkpoint first, then rechecks the original unsubmitted batches with their existing keys; it never applies automatically. Apply migration **1000137** and deploy the matching API. See [acceptance record](tests/ACCEPTANCE-preview-stale-precision.md). Package: `extension/dist/EduLog-Teaching-Tools-0.1.0-preview-stale-precision.zip`.
