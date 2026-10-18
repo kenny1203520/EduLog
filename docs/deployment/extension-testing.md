@@ -7,7 +7,7 @@
 需求：Git、Node.js 26。封裝本身不需要 npm 依賴。在專案根目錄執行：
 
 ```powershell
-rtk proxy npm --prefix extension run package -- --channel beta --version 0.1.1.1
+rtk proxy npm --prefix extension run package -- --channel beta --version 0.1.1.2
 rtk proxy npm --prefix extension run verify-package
 rtk proxy npm --prefix extension run scan-secrets
 ```
@@ -51,7 +51,7 @@ CI 會用精確 extension origin 與專用配對 token 呼叫 `/api/extension/v1
 可在交付資料夾核對下載檔案：
 
 ```powershell
-Get-FileHash -Algorithm SHA256 .\EduLog-Teaching-Tools-beta-0.1.1.1.zip
+Get-FileHash -Algorithm SHA256 .\EduLog-Teaching-Tools-beta-0.1.1.2.zip
 ```
 
 將結果與 `.sha256` 檔比較。
