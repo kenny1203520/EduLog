@@ -2,7 +2,7 @@ import express from 'express'
 import request from 'supertest'
 import { describe, expect, it, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { createExtensionWorkspaceRouter, importBatch, importRow, pendingPush, importJob, memoryConfirmation, fieldMappingResolve, fieldMappingConfirm, reportDecisionResolve, reportDecisionConfirm } from './extensionWorkspaceRouter.js'
+import { createExtensionWorkspaceRouter, importBatch, importRow, pendingPush, importJob, memoryConfirmation, fieldMappingResolve, fieldMappingConfirm, reportDecisionResolve, reportDecisionConfirm, attendanceEvidence, sourceReportConflictsQuery } from './extensionWorkspaceRouter.js'
 import { errorHandler } from '../../http/errors.js'
 const id = '00000000-0000-4000-8000-000000000001'
 const row = { source_id: '101', target_id: id, overwrite: [], record: { kind: 'student', data: { name: 'Test A' } } }
@@ -283,6 +283,41 @@ describe('workspace API contract', () => {
     const legacy=appWith(null,{message:'PREVIEW_STALE',details:JSON.stringify({kind:'student',source_id:'101',field:'target_version',reason:'TARGET_VERSION_CHANGED'})},true).app
     const legacyResponse=await request(legacy).post(`/api/extension/v1/imports/${id}/apply`).set('Authorization',`Bearer ${'a'.repeat(64)}`).send(body)
     expect(legacyResponse.status).toBe(409);expect(legacyResponse.body.error.fields).toBeUndefined();expect(legacyResponse.body.error.diagnostic_source).toBeUndefined()
+  })
+  it('records bounded attendance evidence for rows without a source report identity',async()=>{
+    const item={enrollment_id:id,source_admission_id:'6001',source_class_id:'4773',evidence_date:'2026-10-04',attendance_count:2,present_count:1,absent_count:1}
+    const body={source_origin:'https://corp.orangeapple.co',items:[item]}
+    expect(attendanceEvidence.safeParse(body).success).toBe(true)
+    for(const invalid of [{...body,items:[]},{...body,items:Array(51).fill(item)},{...body,items:[{...item,present_count:2}]},{...body,items:[{...item,attendance_count:0}]},{...body,items:[{...item,source_report_id:'401'}]},{...body,items:[{...item,source_admission_id:'../1'}]},{...body,source_origin:'https://other.example'}])
+      expect(attendanceEvidence.safeParse(invalid).success).toBe(false)
+    const {app,rpc}=appWith({items:[item]})
+    const saved=await request(app).post('/api/extension/v1/attendance-evidence').set('Authorization','Bearer test').send(body)
+    expect(saved.status).toBe(200);expect(rpc.mock.calls[0]![0]).toBe('web_extension_attendance_evidence');expect(rpc.mock.calls[0]![1]).toMatchObject({p_operation:'record',p_input:body})
+    const listed=await request(app).get(`/api/extension/v1/attendance-evidence?enrollment_id=${id}&before_date=2026-10-05&limit=20`).set('Authorization','Bearer test')
+    expect(listed.status).toBe(200);expect(rpc.mock.calls[1]![1]).toMatchObject({p_operation:'list',p_input:{enrollment_id:id,before_date:'2026-10-05',limit:20}})
+    expect((await request(app).get('/api/extension/v1/attendance-evidence?enrollment_id=bad').set('Authorization','Bearer test')).status).toBe(400)
+  })
+  it('lists the source report conflict report with bounded filters and pagination',async()=>{
+    expect(sourceReportConflictsQuery.safeParse({action:'superseded',limit:'10',cursor:id}).success).toBe(true)
+    for(const invalid of [{action:'deleted'},{limit:'51'},{cursor:'../x'},{user_id:id}])expect(sourceReportConflictsQuery.safeParse(invalid).success).toBe(false)
+    const {app,rpc}=appWith({summary:{kept:1,superseded:1},items:[],next_cursor:null})
+    const response=await request(app).get('/api/extension/v1/source-report-conflicts?action=superseded&limit=10').set('Authorization','Bearer test')
+    expect(response.status).toBe(200);expect(response.body.data.summary.superseded).toBe(1)
+    expect(rpc.mock.calls[0]![0]).toBe('web_extension_source_report_conflicts');expect(rpc.mock.calls[0]![1]).toMatchObject({p_operation:'list',p_input:{action:'superseded',limit:10}})
+  })
+  it('names the row and reason of a source report identity conflict without raw details',async()=>{
+    const body={key:id,rows:[row]}
+    const details=JSON.stringify({kind:'history_report',source_id:'301:report:401',field:'source_report_id',reason:'SOURCE_REPORT_ALREADY_IMPORTED'})
+    const {app}=appWith(null,{message:'SOURCE_MAPPING_CONFLICT',details},true)
+    const response=await request(app).post(`/api/extension/v1/imports/${id}/preview`).set('Authorization',`Bearer ${'a'.repeat(64)}`).send(body)
+    expect(response.status).toBe(409);expect(response.body.error.code).toBe('SOURCE_MAPPING_CONFLICT')
+    expect(response.body.error.fields).toEqual({'rows.history_report.301:report:401.source_report_id':['SOURCE_REPORT_ALREADY_IMPORTED']})
+    const required=appWith(null,{message:'INVALID_IMPORT',details:JSON.stringify({kind:'history_report',source_id:'301:evidence',field:'source_report_id',reason:'REPORT_IDENTITY_REQUIRED'})},true).app
+    const missing=await request(required).post(`/api/extension/v1/imports/${id}/preview`).set('Authorization',`Bearer ${'a'.repeat(64)}`).send(body)
+    expect(missing.status).toBe(422);expect(missing.body.error.fields).toEqual({'rows.history_report.301:evidence.source_report_id':['REPORT_IDENTITY_REQUIRED']})
+    const unsafe=appWith(null,{message:'SOURCE_MAPPING_CONFLICT',details:JSON.stringify({kind:'history_report',source_id:'301',field:'source_report_id',reason:'SELECT secret'})},true).app
+    const fallback=await request(unsafe).post(`/api/extension/v1/imports/${id}/preview`).set('Authorization',`Bearer ${'a'.repeat(64)}`).send(body)
+    expect(fallback.status).toBe(409);expect(fallback.body.error.fields).toBeUndefined()
   })
   it('does not expose a client confirmation endpoint', async () => {
     const { app, rpc } = appWith({}); const response = await request(app).post('/api/extension/v1/report-pushes/confirm').set('Authorization', `Bearer ${'a'.repeat(64)}`).send({ status: 'confirmed' })
