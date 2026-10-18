@@ -274,7 +274,7 @@
         if (reportIds.has(reportId)) continue
         reportIds.add(reportId)
         const dateNeeds=dateEvidence.dateInfo.conflict?'來源日期欄頭、儲存格與課程期間不一致，請核對日期。':!date?dateEvidence.dateInfo.reason||'缺少可確認年份的日期依據，請核對日期。':null
-        records.push({ kind: 'report', source_id: reportId, enrollment_source_id: admission, date, dateRaw:dateEvidence.dateRaw,dateInfo:{...dateEvidence.dateInfo,raw:[...dateEvidence.headers,dateEvidence.cellText,...dateEvidence.courseRange].filter(Boolean)},dateEvidence:{explicit:link.node.getAttribute('data-date')||'',headers:dateEvidence.headers,cellText:dateEvidence.cellText,courseRange:dateEvidence.courseRange}, sourceEvidence: [evidence(row, sourcePath, [['admission_id','來源報名 ID',admission],['report_id','來源報告 ID',reportId],['date','課次日期',date||''],['date_header','日期欄頭',dateEvidence.headers.join(' | ')],['date_cell','日期儲存格原文',dateEvidence.cellText],['course_date_range','同列課程期間',dateEvidence.courseRange.join(' ~ ')],['date_resolution','日期判定',dateNeeds||'已由日期欄頭及課程期間確認']])], data: { external_link: `${ORIGIN}${link.path}` }, needs: ['既有報告欄位', ...(dateNeeds?[dateNeeds]:[])] })
+        records.push({ kind: 'report', source_id: reportId, enrollment_source_id: admission, sourceClassId: classId, sourceClassBasis: 'class-page', date, dateRaw:dateEvidence.dateRaw,dateInfo:{...dateEvidence.dateInfo,raw:[...dateEvidence.headers,dateEvidence.cellText,...dateEvidence.courseRange].filter(Boolean)},dateEvidence:{explicit:link.node.getAttribute('data-date')||'',headers:dateEvidence.headers,cellText:dateEvidence.cellText,courseRange:dateEvidence.courseRange}, sourceEvidence: [evidence(row, sourcePath, [['admission_id','來源報名 ID',admission],['report_id','來源報告 ID',reportId],['date','課次日期',date||''],['date_header','日期欄頭',dateEvidence.headers.join(' | ')],['date_cell','日期儲存格原文',dateEvidence.cellText],['course_date_range','同列課程期間',dateEvidence.courseRange.join(' ~ ')],['date_resolution','日期判定',dateNeeds||'已由日期欄頭及課程期間確認']])], data: { external_link: `${ORIGIN}${link.path}` }, needs: ['既有報告欄位', ...(dateNeeds?[dateNeeds]:[])] })
       }
     }
     for (const r of admissions.values()) if (!r.student_source_id) issues.push({ kind: 'enrollment', source_id: r.source_id, reason: `${r.sourceStudentName || '姓名尚未辨識'}：缺少可靠學生 ID，可指定既有學生；不能新建學生。` })
@@ -330,15 +330,40 @@
       const sessionOrdinal=sessionRaw.match(/\d+/)?.[0]||null
       const sameAdmission=ownerAdmission===admissionId
       results.push({kind:'report',source_id:reportId,enrollment_source_id:ownerAdmission||admissionId,sourceOwnerAdmissionId:ownerAdmission,sourceAdmissionContextVerified:sameAdmission,sourceRowType:rowType,sourceRowReason:isPreviousAdmission&&!ownerRef?'無法從原生報告連結確認前一報名。':undefined,sourceLookupReportId:lookupReportIds.length===1?lookupReportIds[0]:null,sourceLookupReportIds:lookupReportIds,sourceAttendanceAction:attendanceAction,sourceStudentName:sameAdmission?student.sourceStudentName:'',student_source_id:sameAdmission?student.student_source_id:null,date,dateRaw,sourceSessionOrdinal:sessionOrdinal,sourceSessionLabel:sessionRaw,sourceCourseName:sameAdmission?course.sourceCourseName:'',sourceCourseCode:sameAdmission?course.sourceCourseCode:null,sourceCourseLabel:sameAdmission?course.sourceCourseLabel:null,sourceLessonSequence:stageNumber,
-        evidenceKey:`${admissionId}:${row.rowIndex}`,identityUnverified:!ownerRef,
+        identityUnverified:!reportId,
         sourceEvidence:[evidence(row,`/dt_admissions/${admissionId}`,[['admission_id','目前頁面報名 ID',admissionId],['owner_admission_id','列所屬報名 ID',ownerAdmission],['student_id','來源學生 ID',sameAdmission?student.student_source_id:null],['student_name','學生姓名原文',sameAdmission?student.sourceStudentName:''],['report_id','原生報告編輯 ID',reportId],['attendance_lookup_id','設為不出席連結查找 ID',lookupReportIds.join(',')],['course_name','來源課程名稱',sameAdmission?course.sourceCourseName:''],['course_code','來源課程代碼',sameAdmission?course.sourceCourseCode:''],['date','課次日期原文',dateRaw],['row_type','來源列類型',rowType],...sourceFields.map(f=>[f.key,f.label,f.value])])],
         sourceFields,sourceLessonLabel:stageLabel||stageRaw||undefined,sourceLessonSequence:lessonStage(stageLabel||stageRaw||''),sourceLearningStatus:sourceFields.find(f=>f.learningStatus)?.learningStatus||null,sourceLearningStatusRaw:sourceFields.find(f=>f.label==='學習狀態原文')?.value||'',sourceInternalNotes:sourceFields.filter(f=>f.internal&&!f.learningStatus).map(f=>f.value).join('\n'),
         data:{...data,...(editPath?{external_link:ORIGIN+editPath}:{})},sourceReadStatus:'list',
         needs:[...(!date&&rowType==='report'?['完整上課日期待確認']:[]),...(reportId?['待讀取已儲存報告欄位']:[])]})
     }
-    const unique=new Map()
-    for(const record of results){const key=record.source_id?`report:${record.enrollment_source_id}:${record.source_id}`:record.evidenceKey,old=unique.get(key);if(!old){unique.set(key,record);continue}old.sourceEvidence=mergeEvidence(old.sourceEvidence,record.sourceEvidence);old.historyDateValues=[...new Set([...(old.historyDateValues||[old.dateRaw]),record.dateRaw])];if(!old.data.content&&record.data.content)old.data.content=record.data.content}
-    return [...unique.values()]
+    // Only a reportId identifies a report; rows without one stay separate evidence.
+    const unique=new Map(),rows=[]
+    for(const record of results){if(!record.source_id){rows.push(record);continue}const key=`report:${record.source_id}`,old=unique.get(key);if(!old){unique.set(key,record);rows.push(record);continue}old.sourceEvidence=mergeEvidence(old.sourceEvidence,record.sourceEvidence);old.historyDateValues=[...new Set([...(old.historyDateValues||[old.dateRaw]),record.dateRaw])];if(!old.data.content&&record.data.content)old.data.content=record.data.content}
+    return rows
+  }
+  // The report editor's own 學習紀錄節次 link. The admission's current 梯次/節次
+  // and navigation menus are never a report's class.
+  function reportSessionClass(doc) {
+    const ids=new Set()
+    for(const node of doc.querySelectorAll('label,strong,b,dt,th,span,li,p,td')){
+      if(node.closest('#admission-data,nav,.dropdown-menu,.sidebar,[data-edulog-owned]'))continue
+      const own=[...node.childNodes].filter(n=>n.nodeType===3||n.nodeType===1&&!n.matches('a')).map(n=>n.textContent).join('').replace(/\s+/g,'')
+      if(!/^(?:學習紀錄)?節次[：:]?$/.test(own))continue
+      const scope=node.querySelector('a[href]')?node:node.parentElement
+      for(const a of scope?.querySelectorAll('a[href]')||[]){const id=path(a.getAttribute('href')).match(/^\/courses\/dt\/(\d+)$/)?.[1];if(id)ids.add(id)}
+    }
+    return ids.size===1?[...ids][0]:null
+  }
+  // Rows without a reportId are attendance evidence: date, count and class.
+  function attendanceEvidence(records) {
+    const days=new Map()
+    for(const record of records){
+      if(record.kind!=='report'||record.source_id||!record.date||!['report','unfilled'].includes(record.sourceRowType))continue
+      const key=`${record.enrollment_source_id}:${record.date}`,day=days.get(key)||{kind:'attendance',source_id:`attendance:${key}`,enrollment_source_id:record.enrollment_source_id,date:record.date,attendance_count:0,present_count:0,absent_count:0,sourceClassId:null,sourceEvidence:[]}
+      day.attendance_count++;if(record.data?.attendance_status==='present')day.present_count++;if(record.data?.attendance_status==='absent')day.absent_count++
+      day.sourceEvidence=mergeEvidence(day.sourceEvidence,record.sourceEvidence||[]);days.set(key,day)
+    }
+    return [...days.values()]
   }
   async function readReport(record, suppliedUrl, confirmedDate) {
     const editPath=path(suppliedUrl||record.data?.external_link),match=editPath.match(/^\/dt_admissions\/(\d+)\/reports\/(\d+)\/edit$/)
@@ -348,6 +373,7 @@
     const native=[...doc.querySelectorAll('form')].filter(f=>path(f.getAttribute('action'))===action)
     if(native.length!==1)throw new Error('編輯頁未提供唯一且符合目標的原生報告表單。')
     const saved=await readForm(doc,native[0])
+    const sourceReportClassId=reportSessionClass(doc)
     const ownDates=[...doc.querySelectorAll('[data-date],input[type=date]')].filter(n=>!n.closest('form')||n.closest('form')===native[0]).map(n=>n.getAttribute('data-date')||n.value)
     const storedDateEvidence=record.dateEvidence||{}
     const dateInfo=dates.resolve([record.date||'',record.dateRaw||'',...record.historyDateValues||[],storedDateEvidence.explicit||'',...storedDateEvidence.headers||[],storedDateEvidence.cellText||'',saved.title,...ownDates],storedDateEvidence.courseRange?.length===2?[storedDateEvidence.courseRange]:[])
@@ -383,7 +409,9 @@
     for(const f of saved.fields.filter(f=>f.key!=='class_notes')){const i=mergedFields.findIndex(old=>old.key===f.key);if(i<0)mergedFields.push(f);else mergedFields[i]={...mergedFields[i],...f}}
     for(const f of saved.fields.filter(f=>f.key==='class_notes')){const i=mergedFields.findIndex(old=>old.key==='class_notes'&&old.label==='內部紀錄');if(i<0)mergedFields.push(f);else mergedFields[i]={...mergedFields[i],...f}}
     if(sourceLearningStatusRaw&&!sourceLearningStatus)needs.push('原站學習狀態無法辨識，請選擇原站實際選項。')
+    const classFromPage=record.sourceClassBasis==='class-page'&&record.sourceClassId
     return {...record,source_id:match[2],date,dateInfo:{...dateInfo,basis:confirmedDate?'user_confirmed':dateInfo.basis},identityUnverified:false,sourceReadStatus:'complete',sourceFields:mergedFields,sourceFieldConflicts,
+      sourceReportClassId,sourceClassId:classFromPage?record.sourceClassId:sourceReportClassId||null,sourceClassBasis:classFromPage?'class-page':sourceReportClassId?'report-page':null,
       sourceLessonLabel,sourceLearningStatus,sourceLearningStatusRaw,sourceInternalNotes:internalNotes,data,needs:[...(!date?['完整上課日期待確認']:[]),...needs],
       sourceEvidence:mergeEvidence(record.sourceEvidence||[],[{sourcePath:editPath,table:'已儲存報告欄位',row:1,capturedAt:new Date().toISOString(),fields:raw}])}
   }
@@ -409,16 +437,13 @@
         for(const record of rows){record.sourceRowType='other-admission';record.sourceAdmissionContextVerified=false;record.sourceRowReason='無法讀取前一報名以確認學生與課程歸屬。'}
       }
     }
-    for(const record of records){
-      record.historyKey=record.source_id?`report:${record.enrollment_source_id}:${record.source_id}`:`evidence:${await digest([record.enrollment_source_id,record.sourceLookupReportId||null,record.date||record.dateRaw,record.sourceSessionOrdinal,record.sourceRowType,record.sourceFields.map(f=>[f.key,f.value])])}`
-      if(!record.source_id)record.evidenceKey=`${record.enrollment_source_id}:${record.historyKey}`
-    }
-    const unique=new Map();for(const record of records){const key=`${record.enrollment_source_id}:${record.historyKey}`,old=unique.get(key);if(old)old.sourceEvidence=mergeEvidence(old.sourceEvidence,record.sourceEvidence);else unique.set(key,record)}records=[...unique.values()]
+    for(const record of records)if(record.source_id)record.historyKey=`report:${record.enrollment_source_id}:${record.source_id}`
+    records=[...records,...attendanceEvidence(records)]
     if(input.listOnly)return records
     for(let i=0;i<records.length;i++){
       const record=records[i]
       if(input.dateFrom&&record.date&&record.date<input.dateFrom||input.dateTo&&record.date&&record.date>input.dateTo){record.outsideRange=true;continue}
-      if(!record.source_id||!['report','previous-admission'].includes(record.sourceRowType))continue
+      if(record.kind!=='report'||!record.source_id||!['report','previous-admission'].includes(record.sourceRowType))continue
       try{records[i]=await readReport(record)}catch(e){record.sourceReadStatus='failed';record.needs=[e.message]}
     }
     return records
@@ -486,8 +511,11 @@
     if(input.history)for(const sourcePath of snapshot.admissionPaths){
       if(doc.location.pathname!==initialPath)throw new Error('來源頁已導覽，工作已暫停。')
       try{for(const record of await readHistory(sourcePath,input)){
+        if(record.kind==='attendance')record.sourceClassId=snapshot.classId
         const index=record.source_id?snapshot.records.findIndex(r=>r.kind===record.kind&&r.source_id===record.source_id):-1
-        if(index<0)snapshot.records.push(record);else snapshot.records[index]={...snapshot.records[index],...record,sourceEvidence:mergeEvidence(snapshot.records[index].sourceEvidence||[],record.sourceEvidence||[])}
+        if(index<0){snapshot.records.push(record);continue}
+        const previous=snapshot.records[index],classPage=previous.sourceClassBasis==='class-page'
+        snapshot.records[index]={...previous,...record,...(classPage?{sourceClassId:previous.sourceClassId,sourceClassBasis:'class-page'}:{}),sourceEvidence:mergeEvidence(previous.sourceEvidence||[],record.sourceEvidence||[])}
       }}catch(e){snapshot.issues.push({kind:'report',source_id:sourcePath.split('/').pop(),reason:e.message})}
     }
     return snapshot

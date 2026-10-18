@@ -31,13 +31,15 @@ export function rankCandidates(rows, name, label = r => r.name) {
   const exact = value => String(value || '').trim() === String(name || '').trim()
   return [...rows].sort((a,b) => Number(exact(label(b))) - Number(exact(label(a))) || String(label(a)).localeCompare(String(label(b)), 'zh-Hant') || a.id.localeCompare(b.id))
 }
+// Reports merge by reportId alone. Rows without one are never merged by
+// content or position; they only carry attendance evidence.
 export function mergeRecords(existing, incoming) {
-  const identity=r=>`${r.kind}:${r.source_id||`${r.enrollment_source_id}:${r.historyKey||r.evidenceKey}`}`
-  const records = new Map(existing.map(r => [identity(r), r]))
-  for (const row of incoming) {
-    const key = identity(row), old = records.get(key)
-    if (!old) records.set(key,row)
-    else records.set(key, { ...old, ...Object.fromEntries(Object.entries(row).filter(([,v]) => v != null && v !== '')), data: { ...old.data, ...row.data }, sourceEvidence: mergeEvidence(old.sourceEvidence || [], row.sourceEvidence || []) })
-  }
-  return [...records.values()]
+  const identity=r=>r.kind==='report'?(r.source_id?`report:${r.source_id}`:null):`${r.kind}:${r.source_id}`
+  const records = new Map(), loose = []
+  const add = row => { const key = identity(row); if (!key) { loose.push(row); return } const old = records.get(key); if (!old) { records.set(key, row); return }
+    const classPage = old.sourceClassBasis === 'class-page' && row.sourceClassBasis !== 'class-page'
+    records.set(key, { ...old, ...Object.fromEntries(Object.entries(row).filter(([,v]) => v != null && v !== '')), ...(classPage ? { sourceClassId: old.sourceClassId, sourceClassBasis: 'class-page' } : {}), data: { ...old.data, ...row.data }, sourceEvidence: mergeEvidence(old.sourceEvidence || [], row.sourceEvidence || []) }) }
+  for (const row of existing) add(row)
+  for (const row of incoming) add(row)
+  return [...records.values(), ...loose]
 }

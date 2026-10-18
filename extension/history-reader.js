@@ -78,15 +78,15 @@ export async function readHistoryWork(work, hooks, retryPath) {
         if(record.date&&(record.date<work.dateFrom||record.date>work.dateTo)){checkpoint.next++;await persist();continue}
         hooks.progress(`正在讀取報名 #${record.enrollment_source_id} 的報告；已讀取 ${history.reportCount} 份。`)
         let incoming=record
-        if(record.source_id) {
-          try {incoming=await read('history-report',{historyPath,input:{reportId:record.source_id,evidenceKey:record.evidenceKey}});history.reportCount++}
+        if(record.kind==='report'&&record.source_id) {
+          try {incoming=await read('history-report',{historyPath,input:{reportId:record.source_id}});history.reportCount++}
           catch(error){if(interruptionCodes.has(error.code))throw error;incoming={...record,sourceReadStatus:'failed',needs:[error.message]}}
         }
         if(incoming.sourceReadStatus!=='failed')history.lastSourceReadAt=Math.max(Date.now(),(history.lastSourceReadAt||0)+1)
-        history.issues=history.issues.filter(r=>r.evidenceKey!==incoming.evidenceKey)
-        if(!incoming.date||incoming.sourceReadStatus==='failed')history.issues.push(incoming)
+        // Only identified reports need a teacher fix; other rows are evidence.
+        if(incoming.kind==='report'&&incoming.source_id){history.issues=history.issues.filter(r=>r.listFailed||r.source_id!==incoming.source_id);if(!incoming.date||incoming.sourceReadStatus==='failed')history.issues.push(incoming)}
         work.snapshot.records=hooks.merge(work.snapshot.records,[incoming])
-        if(!incoming.source_id)history.reportCount++
+        if(incoming.kind==='report'&&!incoming.source_id)history.reportCount++
         checkpoint.next++;await persist()
         hooks.progress(`已讀取 ${history.reportCount} 份報告；已檢查 ${checkpoint.next}／${checkpoint.records.length} 筆本生歷史紀錄。`)
       }
