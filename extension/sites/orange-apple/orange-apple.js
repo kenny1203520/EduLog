@@ -202,6 +202,8 @@
       }
       function selectWeek(index, forceProjection = false) {
         const changed=view.week!==index
+        // Each week opens on its own default filter (due weeks on 待處理, next week on 全部).
+        if(changed)view.reportFilterChosen=false
         view.week = index
         for (const button of weekButtons.querySelectorAll('[data-week]')) button.setAttribute('aria-pressed', String(Number(button.dataset.week) === index))
         for (const row of reports.rows) for (const [column, cell] of [...row.cells].entries()) {
@@ -247,7 +249,7 @@
         const byRow=new Map(session.students.map(student=>[student.row,student]))
         const counts=cardsApi?cardsApi.countChips(session.students):{}
         // Until the teacher picks a chip, show what needs action, or everyone once nothing does.
-        if(!view.reportFilterChosen||!cardsApi?.CHIPS.some(([chip])=>chip===view.reportFilter))view.reportFilter=cardsApi?cardsApi.defaultChip(counts):'all'
+        if(!view.reportFilterChosen||!cardsApi?.CHIPS.some(([chip])=>chip===view.reportFilter))view.reportFilter=cardsApi?cardsApi.defaultChip(counts,session):'all'
         const query=input.value.trim().toLocaleLowerCase(),visible=new Set()
         for (const row of rows) {
           const student=byRow.get(row)

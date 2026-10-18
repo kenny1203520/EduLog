@@ -6,7 +6,9 @@ import {fileURLToPath,pathToFileURL} from 'node:url'
 
 const { chromium } = await loadPlaywright(process.argv.slice(2).find(arg => !arg.startsWith('--')))
 const extensionRoot=new URL('../',import.meta.url)
-const fixture=readFileSync(new URL('fixtures/unfilled-current.html',import.meta.url),'utf8')
+// One overdue row with a phone number, as the provider shows it, next to the two plain rows.
+const fixture=readFileSync(new URL('fixtures/unfilled-current.html',import.meta.url),'utf8').replace('<tbody>','<tbody><tr><td><a href="/dt_admissions/303">學生丙</a><small>課程丙</small> 0912-345-678</td><td>週日第 1 時段 (10:00 ~ 12:00)</td><td>週日第 1 時段 (10:00 ~ 12:00)</td><td><a class="btn btn-danger" href="/courses/dt/101/lesson_reports?student_id=303">請儘速填寫</a></td></tr>')
+const output=process.argv.slice(2).find(arg=>!arg.startsWith('--')&&!arg.endsWith('.mjs'))
 const server=createServer((req,res)=>{
   const path=new URL(req.url,'http://localhost').pathname
   if(path==='/admissions/unfilled_report'){res.setHeader('content-type','text/html;charset=utf-8');res.end(fixture);return}
@@ -42,12 +44,20 @@ try{
           window.pageEnhancement=edulogSiteAdapter.enhancePage(document)
           window.dialogEnhancement=edulogSiteAdapter.enhanceDialog(document,{})
         })
-        const viewport=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,cards:[...document.querySelectorAll('[data-edulog-unfilled-card]')].map(row=>getComputedStyle(row).display),actions:[...document.querySelectorAll('[data-edulog-unfilled-action]')].map(n=>n.getBoundingClientRect().height)}))
+        const viewport=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,fills:[...document.querySelectorAll('[data-edulog-unfilled-fill]')].map(n=>n.getBoundingClientRect().height),heads:[...document.querySelectorAll('.edulog-unfilled-head')].map(n=>n.textContent)}))
         assert.ok(viewport.scroll<=viewport.width+1,`${channel} ${width}: no page-level horizontal overflow (${viewport.scroll}/${viewport.width})`)
-        assert.equal(await page.locator('[data-edulog-unfilled-card]').count(),2)
+        assert.equal(await page.locator('[data-edulog-unfilled-card]').count(),3)
+        assert.equal(await page.locator('table[data-edulog-unfilled-current]').isVisible(),false,'native table hidden behind the grouped list')
+        assert.equal(await page.locator('.edulog-unfilled-row').count(),3)
+        assert.match(viewport.heads[0],/逾期未填/,'overdue group first')
+        assert.equal(await page.locator('.edulog-unfilled-row').first().evaluate(row=>getComputedStyle(row,'::before').backgroundColor),'rgb(185, 28, 28)','overdue rows carry the red bar')
         assert.ok((await page.locator('[data-edulog-unfilled-action]').first().evaluate(el=>el.isConnected)),'original record link remains connected')
-        if(width<=767){assert.ok(viewport.cards.every(display=>display==='grid'));assert.ok(viewport.actions.every(height=>height>=44))}
-        else assert.ok(viewport.cards.every(display=>display==='table-row'))
+        assert.equal(await page.locator('.edulog-unfilled-list').evaluate(el=>el.textContent.includes('0912-345-678')),false,'phone hidden until clicked')
+        if(width<=767)assert.ok(viewport.fills.every(height=>height>=44))
+        else assert.ok(viewport.fills.every(height=>height>=36))
+        if(output&&[390,1440].includes(width))await page.locator('.edulog-unfilled-list').screenshot({path:`${output}/${channel}-unfilled-${width}.png`})
+        await page.locator('button.edulog-phone').first().click()
+        assert.equal(await page.locator('a.edulog-phone').first().getAttribute('href'),'tel:0912345678')
         for(const rating of await page.locator('[data-edulog-rating-stars]').all()){
           const box=await rating.boundingBox(),halves=await rating.locator('[data-edulog-rating-half]').all()
           assert.ok(box&&box.height>=30,`${channel} ${width}: rating has a containing block`)
@@ -56,11 +66,11 @@ try{
         const select=page.locator('.edulog-rating-control select').first(),selectBox=await select.boundingBox(),ratingBox=await page.locator('[data-edulog-rating-stars]').first().boundingBox()
         assert.ok(selectBox.y>=ratingBox.y+ratingBox.height-1,`${channel} ${width}: numeric score does not overlap stars`)
         await page.locator('.edulog-table-tools input[type=search]').fill('學生乙')
-        assert.equal(await page.locator('[data-edulog-unfilled-card]:visible').count(),1)
+        assert.equal(await page.locator('.edulog-unfilled-row').count(),1)
         await page.locator('.edulog-table-tools input[type=search]').fill('')
         const field=page.locator('#lesson_report_feedback');await field.focus();await page.keyboard.press('Tab')
         assert.deepEqual(errors,[])
-        console.log(`PASS ${channel} ${width} @2x: unfilled list, native actions, contained half stars, responsive layout`)
+        console.log(`PASS ${channel} ${width} @2x: grouped unfilled list, native actions, contained half stars, responsive layout`)
         await page.close()
       }
     }finally{await browser.close()}

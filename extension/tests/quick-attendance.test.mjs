@@ -118,9 +118,10 @@ test('a checkbox whose report is not in the table still gets a tile from the hea
 
 test('the 尚未點名 badge on a student card jumps to that student\'s tile', () => {
   const s = classPage()
-  const card = [...s.doc.querySelectorAll('.edulog-session-card')].find(item => item.querySelector('.edulog-card-main strong').textContent === '學生甲')
-  const jump = [...card.querySelectorAll('button.edulog-badge')].find(item => item.textContent === '尚未點名')
+  const card = [...s.doc.querySelectorAll('.edulog-session-card')].find(item => item.querySelector('.edulog-row-name').textContent === '學生甲')
+  const jump = card.querySelector('[data-status="attendance"] button.edulog-status-jump')
   assert.ok(jump)
+  assert.equal(jump.getAttribute('aria-label'), '學生甲 尚未點名，前往快速點名')
   let scrolled = null
   const target = tile(s.doc, '學生甲'); target.scrollIntoView = options => { scrolled = options }
   jump.click()

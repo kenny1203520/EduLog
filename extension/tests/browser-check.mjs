@@ -19,29 +19,38 @@ if (process.argv[4]) {
     .filter(n => n && existsSync(join(dir, n))).map(n => readFileSync(join(dir, n), 'utf8')).join('\n')
 }
 const executables = browserTargets()
-for (const [browserName, launchOptions] of executables) {  const browser = await chromium.launch(launchOptions)
+for (const [browserName, launchOptions] of executables) {
+  const browser = await chromium.launch(launchOptions)
   try {
-    for (const state of ['not-connected', 'pending', 'connected', 'unavailable']) {
-      const page = await browser.newPage({ locale:'zh-TW', viewport: { width: 390, height: 600 } })
-      await page.setContent(read('../popup/popup.html').replace('</head>', `<style>${read('../styles/edulog-tokens.css')}</style><style>${read('../popup/popup.css')}</style></head>`))
-      await page.evaluate(state => {
+    // Popup: connection chip, one primary action per tab context, settings behind the gear.
+    const popupCases = [
+      ['not-connected', 'not-connected', null], ['pending', 'pending', null], ['unavailable', 'unavailable', null],
+      ['class', 'connected', 'https://corp.orangeapple.co/courses/dt/1024'], ['report', 'connected', 'https://corp.orangeapple.co/dt_admissions/301/reports/401/edit'],
+      ['other', 'connected', 'https://corp.orangeapple.co/admissions'], ['settings', 'connected', 'https://corp.orangeapple.co/courses/dt/1024'],
+    ]
+    for (const [name, state, tabUrl] of popupCases) {
+      const page = await browser.newPage({ locale:'zh-TW', viewport: { width: 360, height: 600 } })
+      await page.setContent(read('../popup/popup.html').replace('</head>', `<style>${read('../styles/edulog-tokens.css')}</style><style>${read('../popup/popup.css')}</style></head>`).replace(/<script[^>]*src=[^>]*><\/script>/g, ''))
+      await page.evaluate(({ state, tabUrl }) => {
         window.chrome = {
           storage: { local: { get: async () => ({ edulogExtension: { origin: 'http://localhost:5173', pending: state === 'pending' ? { expiresAt: new Date(Date.now() + 60000).toISOString() } : null } }) } },
-          runtime: { sendMessage: async data => data.type === 'get-edulog-installation' ? { installation_id: '11111111-1111-4111-8111-111111111111', device_name: '教室筆電', browser_name: 'Chrome', platform_name: 'Windows', extension_version: '0.1.0' } : data.type === 'get-ui-preferences' ? { enabled: true } : { status: state, deviceName: '教室筆電 · Chrome', origin: 'http://localhost:5173', settingsUrl: 'http://localhost:5173/dashboard/settings?tab=integrations', lastVerifiedAt: new Date().toISOString() } },
+          tabs: { query: async () => tabUrl ? [{ url: tabUrl, title: tabUrl.includes('/courses/') ? '初階程式 A 班 | 橘子蘋果' : '學生甲 第 8 堂 | 橘子蘋果' }] : [] },
+          runtime: { sendMessage: async data => data.type === 'get-edulog-installation' ? { installation_id: '11111111-1111-4111-8111-111111111111', device_name: '教室筆電', browser_name: 'Chrome', platform_name: 'Windows', extension_version: '0.1.0' } : data.type === 'get-ui-preferences' ? { enabled: true } : data.type === 'get-integration-work-summary' ? { count: 3 } : { status: state, capabilities: { teaching_data_import: true, report_prefill: true }, deviceName: '教室筆電 · Chrome', origin: 'http://localhost:5173', settingsUrl: 'http://localhost:5173/dashboard/settings?tab=integrations', lastVerifiedAt: new Date().toISOString() } },
         }
-      }, state)
-      for (const file of ['shared/runtime-bridge.js', 'shared/ui-core.js', 'shared/ui-messages.js', 'shared/connection-ui.js', 'shared/integration-ui.js', 'popup/popup.js']) await page.addScriptTag({ content: read(`../${file}`) })
+      }, { state, tabUrl })
+      for (const file of ['shared/runtime-bridge.js', 'shared/ui-core.js', 'shared/ui-messages.js', 'sites/orange-apple/orange-apple-lexicon.js', 'shared/connection-ui.js', 'popup/popup.js']) await page.addScriptTag({ content: read(`../${file}`) })
       await page.locator(`[data-state="${state}"]`).waitFor()
-      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${browserName} popup overflow`)
-      assert.equal(await page.locator('html').evaluate(el => Math.round(el.getBoundingClientRect().width)), 390, `${browserName} popup target width`)
-      await page.screenshot({ path: join(output, `${browserName}-popup-${state}.png`), fullPage: true })
-      const flow = page.locator('.edulog-flow details').first()
-      await flow.locator('summary').focus()
-      await page.keyboard.press('Enter')
-      assert.equal(await flow.evaluate(element => element.open), true)
-      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${browserName} expanded integration overflow`)
-      if (state === 'connected') await page.screenshot({ path: join(output, `${browserName}-popup-integration-expanded.png`), fullPage: true })
-      console.log(`${browserName} popup ${state}: passed`)
+      if (name === 'settings') { await page.locator('#open-settings-panel').focus(); await page.keyboard.press('Enter'); await page.locator('#settings-view').waitFor() }
+      await page.waitForTimeout(50)
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${browserName} popup ${name} overflow`)
+      assert.equal(await page.locator('html').evaluate(el => Math.round(el.getBoundingClientRect().width)), 360, `${browserName} popup target width`)
+      assert.ok(await page.evaluate(() => [...document.querySelectorAll('.btn-primary')].filter(button => button.offsetParent).length <= 1), `${browserName} popup ${name}: one primary action`)
+      assert.equal(await page.evaluate(() => /[\u{1F300}-\u{1FAFF}✅⚠⚙]/u.test(document.body.innerText)), false, `${browserName} popup ${name}: no emoji icons`)
+      if (['class', 'report', 'other'].includes(name)) assert.equal(await page.locator('#primary-label').textContent(), { class: '同步本班', report: '預填本報告', other: '開啟工作台' }[name])
+      if (state === 'connected' && name !== 'settings') assert.equal(await page.locator('#work-count').textContent(), '3')
+      for (const button of await page.locator('.btn-block:visible').all()) assert.ok((await button.boundingBox()).height >= 44, `${browserName} popup ${name}: primary touch target`)
+      await page.screenshot({ path: join(output, `${browserName}-popup-${name}.png`), fullPage: true })
+      console.log(`${browserName} popup ${name}: passed`)
       await page.close()
     }
     // 720 CSS px at DPR 2 is a layout surrogate; native browser 200% zoom remains pending.
@@ -107,12 +116,28 @@ for (const [browserName, launchOptions] of executables) {  const browser = awai
         assert.equal(await page.locator('#reports').getAttribute('data-edulog-week-mode'),'single')
       }
       if (name === 'reports' || name === 'real-class') {
-        // Single-session mode: extension cards replace the native table.
-        assert.equal(await page.locator('[data-edulog-report-region]').isVisible(), false, `${browserName} ${name} ${width}: native table hidden behind cards`)
+        // Single-session mode: extension rows replace the native table.
+        assert.equal(await page.locator('[data-edulog-report-region]').isVisible(), false, `${browserName} ${name} ${width}: native table hidden behind rows`)
         const cardsFit = await page.locator('.edulog-session-cards').evaluate(el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.left >= 0 && r.right <= innerWidth + 1 })
-        assert.ok(cardsFit, `${browserName} ${name} ${width}: cards fit the viewport`)
-        const smallTargets = await page.locator('.edulog-session-cards button:visible, .edulog-session-cards summary:visible, .edulog-filter-chips button:visible').evaluateAll(els => els.filter(el => el.getBoundingClientRect().height < 44).length)
-        assert.equal(smallTargets, 0, `${browserName} ${name} ${width}: card and chip targets are at least 44px`)
+        assert.ok(cardsFit, `${browserName} ${name} ${width}: rows fit the viewport`)
+        // Desktop is dense (32–36px controls); touch widths need 44px.
+        const minTarget = width < 768 ? 44 : 30
+        const smallTargets = await page.locator('.edulog-session-cards button:visible, .edulog-session-cards summary:visible, .edulog-filter-chips button:visible, .edulog-filter-chips summary:visible').evaluateAll((els, min) => els.filter(el => el.getBoundingClientRect().height < min).length, minTarget)
+        assert.equal(smallTargets, 0, `${browserName} ${name} ${width}: row and chip targets are at least ${minTarget}px`)
+        if (name === 'real-class') {
+          for (const [week, label] of [['3', 'past'], ['5', 'future'], ['4', 'today']]) {
+            await page.locator(`.edulog-week-tools [data-week="${week}"]`).click()
+            const shown = await page.locator('.edulog-session-card:visible').evaluateAll(rows => rows.map(row => ({ statuses: row.querySelectorAll('.edulog-card-status li').length, filled: getComputedStyle(row).backgroundColor, other: row.querySelector('.edulog-badge')?.textContent === '非本堂' })))
+            assert.ok(shown.length > 0, `${browserName} ${name} ${width} ${label}: rows listed`)
+            assert.ok(shown.every(row => row.other || row.statuses === 4), `${browserName} ${name} ${width} ${label}: four statuses on every row`)
+            assert.ok(shown.every(row => !/rgb\(254, 243, 199\)|rgb\(254, 242, 242\)/.test(row.filled)), `${browserName} ${name} ${width} ${label}: no amber or red row fills`)
+            if (label === 'future') {
+              assert.equal(await page.locator('[data-chip="all"]').getAttribute('aria-pressed'), 'true', 'next week opens on 全部')
+              assert.equal(await page.locator('.edulog-card-status li[data-tone="warn"]:visible').count(), 0, 'next week has no amber statuses')
+            }
+            if ([390, 1440].includes(width)) await page.locator('.edulog-session-cards').screenshot({ path: join(output, `${browserName}-class-${label}-${width}.png`) })
+          }
+        }
         if (width === 390) {
           await page.getByRole('button', { name: /上週/ }).click()
           assert.match(await page.locator('#reports th[data-edulog-week-selected]').textContent(), /上週/)

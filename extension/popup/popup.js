@@ -6,12 +6,11 @@ const presentation = globalThis.edulogConnectionUi
 const ui = id => document.getElementById(id)
 const STORAGE_KEY = 'edulogExtension'
 let settings = {}, connection = { status: 'checking' }, busy = false, editing = false, generation = 0, expirationTimer
-const featureUi = globalThis.edulogIntegrationUi.mount(ui('feature-list'))
-const workButton = document.createElement('button'); workButton.type = 'button'; workButton.textContent = '開啟工作紀錄'; ui('feature-list').append(workButton)
-workButton.addEventListener('click', async () => {
-  try { const result = await bridge.send({ type: 'open-integration-workspace', flow: 'work' }); if (!result?.opened) throw new Error(result?.error?.message || '無法開啟工作紀錄。') }
-  catch (error) { showError(error) }
-})
+// The active tab decides the one primary action; unknown or unreadable tabs fall back to the workspace.
+let context = { kind: 'other', supported: false }, tabTitle = ''
+void bridge.call(() => chrome.tabs.query({ active: true, currentWindow: true })).then(([tab] = []) => {
+  context = presentation.pageContext(tab?.url); tabTitle = presentation.tabHeading(tab?.title)
+}).catch(() => {}).finally(() => render())
 let installation
 const installationReady = bridge.send({ type: 'get-edulog-installation' }).then(value => {
   if (!value?.installation_id) throw new Error('無法辨識瀏覽器安裝，請重新開啟擴充套件。')
@@ -56,12 +55,28 @@ function showError(error) {
   if (error.code === 'CONTEXT_INVALIDATED') connection = { ...connection, status: 'context-invalidated' }
   render()
 }
+const useIcon = (node, name) => node.setAttribute('href', `#i-${name}`)
+const connectForm = state => ['not-connected', 'expired', 'revoked', 'pairing-expired'].includes(state)
+function renderContext(state, display) {
+  let icon = 'plug', title = display.label, detail = display.detail
+  if (editing) { title = '變更伺服器'; detail = '連接新的伺服器後需重新配對。' }
+  else if (state === 'connected' && context.kind === 'class') { icon = 'users'; title = tabTitle || '本班'; detail = '同步學生、報告與出席紀錄到 EduLog；不會修改原站。' }
+  else if (state === 'connected' && context.kind === 'report') { icon = 'file'; title = tabTitle || '本報告'; detail = '以 EduLog 的課堂紀錄預填欄位，送出前由你檢查。' }
+  else if (state === 'connected') { icon = 'dashboard'; title = '這一頁沒有可同步的班級'; detail = '到工作台從「我的班級」挑一班同步。' }
+  else if (['unavailable', 'forbidden'].includes(state)) icon = 'alert'
+  else if (state === 'pending') icon = 'clock'
+  useIcon(ui('context-use'), icon)
+  ui('context-title').textContent = title
+  ui('state-detail').textContent = detail
+}
 function render() {
   const state = connection.status
   const display = presentation.describe(state)
-  ui('state-badge').textContent = display.label; ui('state-badge').dataset.tone = display.tone
-  ui('state-detail').textContent = display.detail
+  ui('state-label').textContent = display.chip; ui('state-badge').dataset.tone = display.tone
+  ui('state-badge').setAttribute('aria-label', `連線狀態：${display.label}`)
   ui('connection-card').dataset.state = state
+  ui('connection-card').dataset.context = context.kind
+  renderContext(state, display)
   ui('server-row').hidden = !connection.origin
   ui('server-value').textContent = connection.origin || ''
   ui('verified-row').hidden = !connection.lastVerifiedAt
@@ -69,17 +84,25 @@ function render() {
   ui('open-settings').hidden = state !== 'connected'
   ui('open-settings').disabled = busy || !connection.settingsUrl
   ui('settings-hint').hidden = state !== 'connected' || Boolean(connection.settingsUrl)
-  ui('retry').hidden = !['connected', 'unavailable', 'forbidden'].includes(state)
+  ui('retry').hidden = editing || !['unavailable', 'forbidden'].includes(state)
   ui('retry').disabled = busy
   ui('change').hidden = editing || !settings.origin || !['connected', 'unavailable', 'forbidden', 'pending'].includes(state)
   ui('change').disabled = busy
-  featureUi.update(connection)
-  workButton.hidden = state !== 'connected'
   ui('device-row').hidden = !connection.deviceName
   ui('device-value').textContent = connection.deviceName || ''
-  ui('server-form').hidden = !editing && !['not-connected', 'expired', 'revoked', 'pairing-expired'].includes(state)
-  ui('form-title').textContent = editing ? '變更伺服器' : '連接你的 EduLog'
-  ui('pair').textContent = busy ? '處理中…' : editing ? '連接新的伺服器' : ['expired', 'revoked', 'pairing-expired'].includes(state) ? '重新連接 EduLog' : '連接 EduLog'
+  // Connected: one primary action for this tab, plus the workspace as a quiet link on class pages.
+  const action = presentation.primaryAction(context, connection.capabilities)
+  ui('feature-list').hidden = editing || state !== 'connected'
+  ui('primary-label').textContent = action.label; useIcon(ui('primary-icon'), action.icon)
+  ui('primary-action').dataset.flow = action.flow
+  ui('primary-action').disabled = busy || !action.ready
+  ui('open-workspace').hidden = context.kind !== 'class'
+  ui('feature-hint').hidden = action.ready
+  ui('feature-hint').textContent = action.ready ? '' : '此操作未就緒：這個連線未提供這項功能，請重新檢查連線或查看診斷。'
+  ui('work-row').hidden = state !== 'connected'
+  ui('server-form').hidden = !editing && !connectForm(state)
+  ui('form-title').hidden = !editing
+  ui('pair-label').textContent = busy ? '處理中…' : editing ? '連接新的伺服器' : ['expired', 'revoked', 'pairing-expired'].includes(state) ? '重新連接 EduLog' : '連接 EduLog'
   ui('pair').disabled = busy || state === 'checking'
   ui('instance').disabled = busy
   ui('device-name').disabled = busy
@@ -114,7 +137,13 @@ async function verify(force = false) {
   }
   if (current === generation) render()
   if (connection.status === 'connected') {
-    try { const summary = await bridge.send({ type: 'get-integration-work-summary' }); if (current === generation && summary?.count != null) workButton.textContent = summary.count ? `工作紀錄 · ${summary.count} 個未完成工作` : '開啟工作紀錄' } catch { /* Connection remains usable when the summary is temporarily unavailable. */ }
+    try {
+      const summary = await bridge.send({ type: 'get-integration-work-summary' })
+      if (current === generation && summary?.count != null) {
+        ui('work-count').hidden = !summary.count; ui('work-count').textContent = String(summary.count)
+        ui('work-count').setAttribute('aria-label', `${summary.count} 個未完成工作`)
+      }
+    } catch { /* Connection remains usable when the summary is temporarily unavailable. */ }
   }
 }
 async function startPairing() {
@@ -127,7 +156,7 @@ async function startPairing() {
     if (!await permission) throw new Error('需要允許擴充套件連接此 EduLog 網址。')
     await installationReady
     const deviceName = ui('device-name').value.trim()
-    if (!deviceName || deviceName.length > 80) { ui('device-name').focus(); throw new Error('請輸入 1–80 字的瀏覽器連線名稱。') }
+    if (!deviceName || deviceName.length > 80) { ui('device-name').closest('details').open = true; ui('device-name').focus(); throw new Error('請輸入 1–80 字的瀏覽器連線名稱。') }
     const old = await readSettings()
     const verifier = Array.from(crypto.getRandomValues(new Uint8Array(32)), byte => byte.toString(16).padStart(2, '0')).join('')
     const challenge = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))), byte => byte.toString(16).padStart(2, '0')).join('')
@@ -159,10 +188,26 @@ async function finishPairing() {
   } catch (error) { showError(error) }
   finally { busy = false; render() }
 }
+// The worker reads the active tab itself, so a class or report tab becomes the workspace source.
+async function openWorkspace(flow, button) {
+  button.disabled = true
+  try { const result = await bridge.send({ type: 'open-integration-workspace', flow }); if (!result?.opened) throw new Error(result?.error?.message || '無法開啟整合工作台。') }
+  catch (error) { showError(error) }
+  finally { button.disabled = false; render() }
+}
+function showSettings(open) {
+  ui('settings-view').hidden = !open; ui('main-view').hidden = open
+  ;(open ? ui('close-settings') : ui('open-settings-panel')).focus()
+}
 ui('server-form').addEventListener('submit', event => { event.preventDefault(); void startPairing() })
 ui('finish').addEventListener('click', () => { void finishPairing() })
 ui('retry').addEventListener('click', () => { void verify(true) })
-ui('change').addEventListener('click', () => { editing = true; ui('instance').value = settings.origin || ''; notice(); render(); ui('instance').focus() })
+ui('primary-action').addEventListener('click', () => { void openWorkspace(ui('primary-action').dataset.flow, ui('primary-action')) })
+ui('open-workspace').addEventListener('click', () => { void openWorkspace('import', ui('open-workspace')) })
+ui('open-work').addEventListener('click', () => { void openWorkspace('work', ui('open-work')) })
+ui('open-settings-panel').addEventListener('click', () => showSettings(true))
+ui('close-settings').addEventListener('click', () => showSettings(false))
+ui('change').addEventListener('click', () => { editing = true; ui('instance').value = settings.origin || ''; notice(); showSettings(false); render(); ui('instance').focus() })
 ui('cancel').addEventListener('click', () => { editing = false; ui('instance').value = settings.origin || ''; ui('device-name').value = connection.deviceName || installation?.device_name || ''; notice(); render() })
 ui('open-approval').addEventListener('click', async () => {
   try {

@@ -18,39 +18,50 @@ function classPage() {
   return { dom, w, doc: w.document, view, result, original }
 }
 const cards = doc => [...doc.querySelectorAll('.edulog-session-card:not([hidden])')]
-const names = doc => cards(doc).map(card => card.querySelector('.edulog-card-main strong').textContent)
-const card = (doc, name) => cards(doc).find(item => item.querySelector('.edulog-card-main strong').textContent === name)
+const names = doc => cards(doc).map(card => card.querySelector('.edulog-row-name').textContent)
+const card = (doc, name) => cards(doc).find(item => item.querySelector('.edulog-row-name').textContent === name)
 const chip = (doc, key) => doc.querySelector(`[data-chip="${key}"]`)
 const chipCounts = doc => Object.fromEntries([...doc.querySelectorAll('[data-chip]')].map(button => [button.dataset.chip, button.querySelector('.edulog-chip-count').textContent]))
 const rowFor = (doc, name) => [...doc.querySelectorAll('#reports tbody tr')].find(row => row.cells[0]?.querySelector(':scope > span')?.textContent === name)
 
 const statusOf = (doc, name) => [...card(doc, name).querySelectorAll('.edulog-card-status li')].map(item => `${item.dataset.tone}:${item.querySelector('.edulog-card-status-value').textContent}`).join(' ')
+const tagsOf = (doc, name) => [...card(doc, name).querySelectorAll('.edulog-card-badges .edulog-badge')].map(node => node.textContent).join('|')
 
-test('single-session mode opens on the whole class, exceptions first, and hides the native table and alert', () => {
+test('single-session mode opens on 待處理 for a due week and hides the native table and alert', () => {
   const s = classPage()
   assert.equal(s.doc.querySelector('.edulog-session-cards').hidden, false)
   assert.equal(s.doc.querySelector('[data-edulog-report-region]').getAttribute('data-edulog-cards'), 'on')
   assert.equal(s.doc.querySelector('.alert').hasAttribute('data-edulog-replaced'), true)
-  assert.equal(JSON.stringify(chipCounts(s.doc)), JSON.stringify({ pending: '4', attention: '3', unmarked: '1', incomplete: '2', all: '7', other: '1' }))
-  assert.equal(chip(s.doc, 'all').getAttribute('aria-pressed'), 'true')
+  assert.equal(JSON.stringify(chipCounts(s.doc)), JSON.stringify({ pending: '3', unmarked: '1', incomplete: '3', all: '7', attention: '3', leave: '1', done: '2', closed: '1', other: '1' }))
+  assert.equal(chip(s.doc, 'pending').getAttribute('aria-pressed'), 'true')
+  assert.equal(names(s.doc).join('|'), '學生甲|學生乙|學生辛')
+  chip(s.doc, 'all').click()
   assert.equal(names(s.doc).join('|'), '學生丙|學生戊|學生庚|學生甲|學生乙|學生辛|學生丁')
-  chip(s.doc, 'pending').click()
-  assert.equal(names(s.doc).join('|'), '學生庚|學生甲|學生乙|學生辛')
   assert.equal(card(s.doc, '學生庚').dataset.group, 'danger')
+  assert.equal(card(s.doc, '學生甲').dataset.group, 'warn')
   assert.equal(s.doc.querySelector('.edulog-session-cards').querySelectorAll('table').length, 0)
   s.dom.window.close()
 })
 
-test('chips separate what to fill in from student concerns, with concerns first', () => {
+test('four persistent chips; the rest live under 更多 and name the active filter', () => {
   const s = classPage()
-  chip(s.doc, 'all').click()
-  assert.equal(names(s.doc).join('|'), '學生丙|學生戊|學生庚|學生甲|學生乙|學生辛|學生丁')
+  const bar = s.doc.querySelector('.edulog-filter-chips')
+  assert.deepEqual([...bar.querySelectorAll(':scope > button')].map(button => button.dataset.chip), ['pending', 'unmarked', 'incomplete', 'all'])
+  const more = bar.querySelector('.edulog-chip-more')
+  assert.deepEqual([...more.querySelectorAll('[data-chip]')].map(button => button.dataset.chip), ['attention', 'leave', 'done', 'closed', 'other'])
+  assert.equal(more.querySelector('summary').textContent, '更多')
   chip(s.doc, 'attention').click()
   assert.equal(names(s.doc).join('|'), '學生丙|學生戊|學生庚')
-  assert.equal([...card(s.doc, '學生庚').querySelectorAll('.edulog-badge')].map(node => node.textContent).join('|'), '跟不上進度|剩餘 1 堂')
-  assert.match(card(s.doc, '學生戊').textContent, /課程已到期/)
+  assert.equal(more.querySelector('summary').textContent, '需關注')
+  assert.equal(more.open, false)
+  assert.equal(tagsOf(s.doc, '學生庚'), '跟不上進度|剩餘 1 堂')
+  assert.equal(tagsOf(s.doc, '學生戊'), '課程已到期|暫停課程|原站未開放')
   chip(s.doc, 'incomplete').click()
-  assert.equal(names(s.doc).join('|'), '學生乙|學生辛')
+  assert.equal(names(s.doc).join('|'), '學生甲|學生乙|學生辛')
+  chip(s.doc, 'leave').click()
+  assert.equal(names(s.doc).join('|'), '學生丙')
+  chip(s.doc, 'closed').click()
+  assert.equal(names(s.doc).join('|'), '學生戊')
   chip(s.doc, 'other').click()
   assert.equal(names(s.doc).join('|'), '學生己')
   s.doc.querySelector('[data-edulog-search="reports"]').value = '不存在'
@@ -59,17 +70,21 @@ test('chips separate what to fill in from student concerns, with concerns first'
   s.dom.window.close()
 })
 
-test('the four-cell status row reads the confirmed icon meanings', () => {
+test('the four statuses are always shown as small indicators with words', () => {
   const s = classPage()
   chip(s.doc, 'all').click()
-  assert.equal(statusOf(s.doc, '學生乙'), 'ok:出席 warn:待確認 ok:跟得上 warn:未完成')
-  assert.equal(statusOf(s.doc, '學生辛'), 'ok:出席 warn:未填 warn:未選 ok:已完成')
-  assert.equal(statusOf(s.doc, '學生庚'), 'ok:出席 ok:完整完成 danger:跟不上 ok:已完成')
+  assert.equal(statusOf(s.doc, '學生乙'), 'ok:已點名 warn:待確認 ok:已填 warn:未填')
+  assert.equal(statusOf(s.doc, '學生辛'), 'ok:已點名 warn:未填 warn:未填 ok:已填')
+  assert.equal(statusOf(s.doc, '學生庚'), 'ok:已點名 ok:已填 danger:跟不上 ok:已填')
   assert.equal(statusOf(s.doc, '學生丙'), 'danger:缺席 neutral:不適用 neutral:不適用 neutral:不適用')
-  assert.equal(statusOf(s.doc, '學生甲'), 'warn:未點名 neutral:— neutral:— neutral:—')
+  // Before attendance the report fields still show what is open.
+  assert.equal(statusOf(s.doc, '學生甲'), 'warn:未點名 warn:未填 warn:未填 warn:未填')
+  // No provider edit link: 原站未開放, never hidden.
+  assert.equal(statusOf(s.doc, '學生戊'), 'neutral:原站未開放 neutral:原站未開放 neutral:原站未開放 neutral:原站未開放')
   assert.equal(card(s.doc, '學生丁').querySelector('.edulog-card-status').dataset.calm, 'true')
-  assert.equal(card(s.doc, '學生戊').querySelector('.edulog-card-status'), null)
   assert.equal(card(s.doc, '學生乙').querySelector('.edulog-card-status').getAttribute('aria-label'), '學生乙 本堂狀態')
+  assert.equal(card(s.doc, '學生乙').querySelector('[data-status="completion"]').getAttribute('aria-label'), '完成狀況：待確認')
+  assert.deepEqual([...card(s.doc, '學生乙').querySelectorAll('.edulog-card-status-label')].map(node => node.textContent), ['出席', '完成狀況', '內部紀錄', '學習表現'])
   s.dom.window.close()
 })
 
@@ -85,12 +100,14 @@ test('the main action follows the session state and clicks the native control', 
   assert.equal(primary('學生乙').textContent, '填寫紀錄')
   assert.equal(primary('學生丙').textContent, '查看紀錄')
   assert.equal(primary('學生丙').className, 'edulog-card-secondary')
+  for (const item of cards(s.doc)) assert.ok(item.querySelectorAll('.edulog-card-primary').length <= 1, 'one primary action per row')
   primary('學生甲').click()
   assert.equal(clicks.at(-1), rowFor(s.doc, '學生甲').cells[4].querySelector('a[href$="/edit"]').getAttribute('href'))
   const enable = [...card(s.doc, '學生乙').querySelectorAll('button')].find(button => button.textContent === '啟用 L3')
   enable.click()
   assert.equal(clicks.at(-1), '啟用 L3')
   assert.equal(card(s.doc, '學生戊').querySelector('.edulog-card-actions > button'), null)
+  assert.equal(card(s.doc, '學生戊').querySelector('.edulog-card-none').getAttribute('aria-label'), '學生戊 原站未開放填寫')
   s.dom.window.close()
 })
 
@@ -111,16 +128,35 @@ test('the more menu proxies secondary provider actions and shows attendance stat
   s.dom.window.close()
 })
 
-test('next week and compare mode: upcoming sessions are not pending; compare shows the native table', () => {
+test('next week keeps statuses and fill actions, greys what is not due and opens on 全部', () => {
   const s = classPage()
   s.doc.querySelector('.edulog-week-tools [data-week="5"]').click()
-  assert.equal(JSON.stringify(chipCounts(s.doc)), JSON.stringify({ pending: '0', attention: '1', unmarked: '0', incomplete: '0', all: '6', other: '2' }))
+  assert.equal(JSON.stringify(chipCounts(s.doc)), JSON.stringify({ pending: '0', unmarked: '5', incomplete: '5', all: '6', attention: '1', leave: '0', done: '0', closed: '1', other: '2' }))
   assert.equal(chip(s.doc, 'all').getAttribute('aria-pressed'), 'true')
-  assert.match(s.doc.querySelector('.edulog-cards-status').textContent, /下週課次尚未開始/)
-  assert.ok(card(s.doc, '學生甲'), 'the whole class is listed for next week too')
+  assert.equal(s.doc.querySelector('.edulog-session-cards').dataset.week, 'future')
+  assert.match(s.doc.querySelector('.edulog-cards-status').textContent, /下週課次：可以先填寫紀錄/)
+  assert.equal(statusOf(s.doc, '學生甲'), 'neutral:未點名 neutral:未填 neutral:未填 neutral:未填')
+  assert.equal(card(s.doc, '學生甲').dataset.group, 'ok', 'nothing due next week: no amber bar')
+  assert.equal(card(s.doc, '學生甲').querySelector('.edulog-card-actions > button').textContent, '點名與紀錄')
+  assert.equal(s.doc.querySelectorAll('.edulog-session-card:not([hidden]) .edulog-card-status').length, 6)
+  // Back to a due week: its own default (待處理) again.
+  s.doc.querySelector('.edulog-week-tools [data-week="4"]').click()
+  assert.equal(chip(s.doc, 'pending').getAttribute('aria-pressed'), 'true')
   s.doc.querySelector('[data-report-mode="compare"]').click()
   assert.equal(s.doc.querySelector('.edulog-session-cards').hidden, true)
   assert.equal(s.doc.querySelector('[data-edulog-report-region]').hasAttribute('data-edulog-cards'), false)
+  s.dom.window.close()
+})
+
+test('a lesson that has not started yet is still due: statuses, actions and 待處理 stay', () => {
+  const s = classPage()
+  const session = s.w.edulogSiteSessionCards.readSession(s.doc.querySelector('#reports'), { index: 4, label: '本週(10/17)' }, new Map(), { notStarted: true })
+  assert.equal(session.upcoming, false)
+  assert.equal(session.notStarted, true)
+  const counts = s.w.edulogSiteSessionCards.countChips(session.students)
+  assert.equal(counts.pending, 3)
+  assert.equal(s.w.edulogSiteSessionCards.defaultChip(counts, session), 'pending')
+  assert.equal(s.doc.body.textContent.includes('本堂還沒開始上課'), false)
   s.dom.window.close()
 })
 
@@ -132,7 +168,6 @@ test('restore returns the exact original page, including the moved last-teaching
   assert.equal(s.doc.body.outerHTML, s.original)
   s.dom.window.close()
 })
-
 // Teaching-note reminders need the runtime bridge and Web Crypto; both are stubbed here.
 function withNotes(store, html = read('fixtures/real-class.html')) {
   const dom = new JSDOM(html, { url: 'https://corp.orangeapple.co/courses/dt/101', runScripts: 'outside-only', pretendToBeVisual: true })
@@ -181,6 +216,7 @@ test('a teaching note with unseen content shows a reminder until it is opened', 
 
 test('the lesson report page lists every student: no folded 狀態正常 row', () => {
   const s = classPage()
+  chip(s.doc, 'all').click()
   assert.equal(s.doc.querySelector('.edulog-session-cards .edulog-calm-group'), null)
   const calm = cards(s.doc).filter(item => item.dataset.group === 'ok')
   assert.ok(calm.length > 0, 'calm students are shown as cards')
