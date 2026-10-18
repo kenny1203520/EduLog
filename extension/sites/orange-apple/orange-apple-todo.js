@@ -124,12 +124,12 @@
   function describeClasses(classes, now = new Date()) {
     const nav = globalThis.edulogSiteNavigation
     const parsed = classes.map(item => ({ ...item, ...(nav ? nav.parseClassName(item.title) : { primary: item.title, secondary: '', weekday: 7, start: '' }), title: item.title }))
-    return (nav ? nav.placeLabels(parsed) : parsed).map(item => ({ ...item, today: item.weekday === now.getDay() }))
+    return (nav ? nav.placeLabels(parsed) : parsed).map(item => ({ ...item, today: item.weekday === model.siteParts(now).weekday }))
   }
   // Read today's classes first, then those already taught this week, then the rest.
   const weekOrder = weekday => weekday === 0 ? 7 : weekday
   function prioritise(classes, now = new Date()) {
-    const today = weekOrder(now.getDay())
+    const today = weekOrder(model.siteParts(now).weekday)
     const rank = item => item.weekday === undefined || item.weekday === 7 || item.weekday < 0 ? 2 : weekOrder(item.weekday) === today ? 0 : weekOrder(item.weekday) < today ? 1 : 2
     return classes.map((item, index) => ({ item, index })).sort((a, b) => rank(a.item) - rank(b.item) || a.index - b.index).map(entry => entry.item)
   }
@@ -304,7 +304,7 @@
         target.body.replaceChildren(rows, note)
       },
       schedule(target, days) {
-        const today = new Date(), todayKey = `${today.getMonth() + 1}/${today.getDate()}`
+        const today = model.siteParts(), todayKey = `${today.month + 1}/${today.day}`
         const withEntries = days.filter(day => day.entries.length)
         if (!withEntries.length) { target.count.textContent = ''; const node = element('p', classes.length ? '本週行事曆沒有你的班級課程。' : '本週行事曆沒有排定課程。'); node.className = 'edulog-todo-empty'; return target.body.replaceChildren(node) }
         target.count.textContent = String(withEntries.reduce((sum, day) => sum + day.entries.length, 0))

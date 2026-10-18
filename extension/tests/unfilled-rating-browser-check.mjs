@@ -8,7 +8,7 @@ const { chromium } = await loadPlaywright(process.argv.slice(2).find(arg => !arg
 const extensionRoot=new URL('../',import.meta.url)
 // One overdue row with a phone number, as the provider shows it, next to the two plain rows.
 const fixture=readFileSync(new URL('fixtures/unfilled-current.html',import.meta.url),'utf8').replace('<tbody>','<tbody><tr><td><a href="/dt_admissions/303">學生丙</a><small>課程丙</small> 0912-345-678</td><td>週日第 1 時段 (10:00 ~ 12:00)</td><td>週日第 1 時段 (10:00 ~ 12:00)</td><td><a class="btn btn-danger" href="/courses/dt/101/lesson_reports?student_id=303">請儘速填寫</a></td></tr>')
-const output=process.argv.slice(2).find(arg=>!arg.startsWith('--')&&!arg.endsWith('.mjs'))
+const output=process.argv.slice(3).find(arg=>!arg.startsWith('--'))
 const server=createServer((req,res)=>{
   const path=new URL(req.url,'http://localhost').pathname
   if(path==='/admissions/unfilled_report'){res.setHeader('content-type','text/html;charset=utf-8');res.end(fixture);return}

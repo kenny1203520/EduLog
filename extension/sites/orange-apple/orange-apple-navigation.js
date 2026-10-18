@@ -27,7 +27,7 @@
   const weekOrder = weekday => weekday === 0 ? 7 : weekday
   function readClasses(sidebar, doc) {
     const here = pathOf(doc.location.pathname)
-    const today = new Date().getDay()
+    const today = globalThis.edulogSiteModel?.siteParts().weekday ?? new Date().getDay()
     const seen = new Set()
     const items = [...sidebar.querySelectorAll(config.classLinks)].map(link => {
       const path = pathOf(link.getAttribute('href'))

@@ -100,20 +100,27 @@
     const place = match[1].split('_').filter(Boolean)
     return { weekday: lexicon.navigation.weekdays.indexOf(match[2]), weekdayLabel: match[2], start: match[3].padStart(5, '0'), end: match[4].padStart(5, '0'), branch: place.slice(0, -1).join(' '), room: place.at(-1) || match[1] }
   }
+  // The source site schedules classes in Taiwan time (UTC+8, no daylight saving), whatever the browser's time zone.
+  const SITE_OFFSET = 8 * 3600e3
+  function siteParts(now = new Date()) {
+    const d = new Date(now.getTime() + SITE_OFFSET)
+    return { year: d.getUTCFullYear(), month: d.getUTCMonth(), day: d.getUTCDate(), weekday: d.getUTCDay() }
+  }
+  const siteTime = (year, month, day, hours = 0, minutes = 0) => new Date(Date.UTC(year, month, day, hours, minutes) - SITE_OFFSET)
   // A week header such as "本週(10/17)" names the session's date; the year is the one closest to now.
   function weekDate(label, now = new Date()) {
     const match = /(\d{1,2})\/(\d{1,2})/.exec(collapse(label))
     if (!match) return null
-    const month = Number(match[1]) - 1, day = Number(match[2])
-    const candidates = [-1, 0, 1].map(offset => new Date(now.getFullYear() + offset, month, day)).filter(date => date.getMonth() === month)
+    const month = Number(match[1]) - 1, day = Number(match[2]), year = siteParts(now).year
+    const candidates = [-1, 0, 1].map(offset => siteTime(year + offset, month, day)).filter(date => siteParts(date).month === month)
     return candidates.sort((a, b) => Math.abs(a - now) - Math.abs(b - now))[0] || null
   }
   // true once the session's start time has passed; null when the date or time is unknown.
   function sessionStarted(label, start, now = new Date()) {
     const date = weekDate(label, now), time = /^(\d{1,2}):(\d{2})$/.exec(start || '')
     if (!date || !time) return null
-    date.setHours(Number(time[1]), Number(time[2]), 0, 0)
-    return now >= date
+    const { year, month, day } = siteParts(date)
+    return now >= siteTime(year, month, day, Number(time[1]), Number(time[2]))
   }
-  globalThis.edulogSiteModel = Object.freeze({ matchPage, sessionText, classifySession, readSessionCell, readWeekColumns, pickWeek, checkPage, classSchedule, weekDate, sessionStarted })
+  globalThis.edulogSiteModel = Object.freeze({ matchPage, sessionText, classifySession, readSessionCell, readWeekColumns, pickWeek, checkPage, classSchedule, weekDate, sessionStarted, siteParts })
 })()
