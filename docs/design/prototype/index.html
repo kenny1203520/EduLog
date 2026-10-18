@@ -1,0 +1,675 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EduLog 介面原型</title>
+<!-- P1 clickable prototype. Single file, fake data only. Tokens below are a copy of
+     extension/edulog-tokens.css; spec lives in docs/design/MASTER.md. -->
+<style>
+:root{
+  --edulog-canvas:#f4f6fa;--edulog-surface:#fff;--edulog-surface-subtle:#f8fafc;--edulog-surface-muted:#f1f5f9;--edulog-surface-disabled:#e2e8f0;
+  --edulog-text-strong:#0f172a;--edulog-text:#172033;--edulog-text-secondary:#334155;--edulog-text-muted:#475569;--edulog-text-subtle:#64748b;--edulog-text-on-primary:#fff;
+  --edulog-border-soft:#eef2f7;--edulog-border:#dbe3ee;--edulog-border-strong:#cbd5e1;--edulog-border-input:#94a3b8;
+  --edulog-primary:#1e40af;--edulog-primary-bright:#2563eb;--edulog-primary-soft:#eff4ff;--edulog-primary-soft-strong:#e0e9ff;--edulog-primary-border:#bfdbfe;--edulog-focus-ring:#2563eb;
+  --edulog-status-ok:#047857;--edulog-status-ok-soft:#e8f7ef;--edulog-status-ok-text:#166534;
+  --edulog-status-warn:#d97706;--edulog-status-warn-soft:#fef3c7;--edulog-status-warn-text:#78350f;
+  --edulog-status-notice:#ea580c;--edulog-status-notice-soft:#fff7ed;--edulog-status-notice-text:#9a3412;
+  --edulog-status-danger:#b91c1c;--edulog-status-danger-soft:#fef2f2;--edulog-status-danger-text:#991b1b;
+  --edulog-status-info:#2563eb;--edulog-status-info-soft:#eff4ff;--edulog-status-info-text:#1e40af;
+  --edulog-status-neutral:#94a3b8;--edulog-status-neutral-soft:#f1f5f9;--edulog-status-neutral-text:#475569;
+  --edulog-status-bar-width:3px;--edulog-status-dot:8px;
+  --edulog-shadow-bar:0 2px 8px #1720330a;--edulog-shadow-popover:0 12px 32px #17203320;--edulog-shadow-modal:0 24px 48px #17203329;
+  --edulog-font:system-ui,-apple-system,"Segoe UI","Noto Sans TC","Microsoft JhengHei",sans-serif;
+  --edulog-text-xs:12px;--edulog-text-sm:13px;--edulog-text-md:14px;--edulog-text-base:16px;--edulog-text-lg:18px;--edulog-text-xl:22px;
+  --edulog-leading:1.5;--edulog-leading-tight:1.35;
+  --edulog-radius-xs:4px;--edulog-radius-sm:6px;--edulog-radius:8px;--edulog-radius-lg:12px;--edulog-radius-pill:999px;
+  --edulog-space-1:4px;--edulog-space-2:8px;--edulog-space-3:12px;--edulog-space-4:16px;--edulog-space-5:20px;--edulog-space-6:24px;--edulog-space-7:32px;--edulog-space-8:40px;
+  --edulog-control-height:36px;--edulog-touch-target:44px;--edulog-row-min-height:52px;--edulog-icon-sm:16px;--edulog-icon:20px;
+  --edulog-z-sticky:20;--edulog-z-overlay:30;--edulog-duration:160ms;--edulog-ease:cubic-bezier(.2,0,0,1);
+  color-scheme:light;
+}
+@media (prefers-reduced-motion:reduce){:root{--edulog-duration:0ms}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--edulog-canvas);color:var(--edulog-text);font:var(--edulog-text-md)/var(--edulog-leading) var(--edulog-font);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4,p{margin:0}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--edulog-focus-ring);outline-offset:2px}
+[hidden]{display:none!important}
+.ic{width:var(--edulog-icon-sm);height:var(--edulog-icon-sm);flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ic-lg{width:var(--edulog-icon);height:var(--edulog-icon)}
+.ic-xl{width:24px;height:24px}
+
+/* ---------- Prototype chrome ---------- */
+.proto-top{position:sticky;top:0;z-index:50;background:var(--edulog-surface);border-bottom:1px solid var(--edulog-border);box-shadow:var(--edulog-shadow-bar)}
+.proto-top-inner{max-width:1280px;margin:0 auto;padding:10px 16px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px}
+.proto-title{display:flex;align-items:center;gap:8px;font-weight:700;color:var(--edulog-text-strong);font-size:var(--edulog-text-base)}
+.proto-title small{font-weight:500;color:var(--edulog-text-muted);font-size:var(--edulog-text-xs);background:var(--edulog-surface-muted);padding:2px 8px;border-radius:var(--edulog-radius-pill)}
+.proto-nav{display:flex;flex-wrap:wrap;gap:4px;margin-left:auto}
+.proto-nav button{border:0;background:none;padding:6px 10px;border-radius:var(--edulog-radius-sm);color:var(--edulog-text-muted);font-weight:500;cursor:pointer;min-height:36px;transition:background var(--edulog-duration),color var(--edulog-duration)}
+.proto-nav button:hover{background:var(--edulog-surface-muted);color:var(--edulog-text-strong)}
+.proto-nav button[aria-current=page]{background:var(--edulog-primary-soft-strong);color:var(--edulog-primary)}
+.proto-states{max-width:1280px;margin:0 auto;padding:12px 16px 0;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.proto-states-label{font-size:var(--edulog-text-xs);font-weight:600;color:var(--edulog-text-muted);margin-right:4px}
+.proto-states button{border:1px dashed var(--edulog-border-input);background:var(--edulog-surface);border-radius:var(--edulog-radius-pill);padding:4px 12px;min-height:32px;cursor:pointer;color:var(--edulog-text-secondary);font-size:var(--edulog-text-sm)}
+.proto-states button[aria-pressed=true]{border-style:solid;border-color:var(--edulog-text-strong);background:var(--edulog-text-strong);color:#fff}
+.proto-note{max-width:1280px;margin:8px auto 0;padding:0 16px;font-size:var(--edulog-text-sm);color:var(--edulog-text-muted)}
+.stage{max-width:1280px;margin:0 auto;padding:16px 16px 48px}
+.url-bar{display:flex;align-items:center;gap:8px;font-size:var(--edulog-text-xs);color:var(--edulog-text-muted);background:var(--edulog-surface);border:1px solid var(--edulog-border);border-radius:var(--edulog-radius-pill);padding:4px 12px;margin-bottom:12px;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+
+/* ---------- Buttons ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:var(--edulog-control-height);padding:0 14px;border-radius:var(--edulog-radius-sm);border:1px solid transparent;font-weight:600;font-size:var(--edulog-text-md);cursor:pointer;white-space:nowrap;text-decoration:none;transition:background var(--edulog-duration),border-color var(--edulog-duration),color var(--edulog-duration)}
+.btn-primary{background:var(--edulog-primary-bright);color:var(--edulog-text-on-primary)}
+.btn-primary:hover{background:var(--edulog-primary)}
+.btn-secondary{background:var(--edulog-surface);border-color:var(--edulog-border-strong);color:var(--edulog-text)}
+.btn-secondary:hover{background:var(--edulog-surface-muted)}
+.btn-ghost{background:none;color:var(--edulog-primary);padding:0 8px}
+.btn-ghost:hover{background:var(--edulog-primary-soft)}
+.btn-sm{min-height:30px;padding:0 10px;font-size:var(--edulog-text-sm)}
+.btn-block{width:100%;min-height:var(--edulog-touch-target)}
+.btn-icon{width:36px;padding:0;color:var(--edulog-text-muted);background:none}
+.btn-icon:hover{background:var(--edulog-surface-muted);color:var(--edulog-text-strong)}
+.btn:disabled{background:var(--edulog-surface-disabled);color:var(--edulog-text-subtle);border-color:transparent;cursor:default}
+
+/* ---------- Tags, chips, dots ---------- */
+.tag{display:inline-flex;align-items:center;gap:4px;font-size:var(--edulog-text-xs);font-weight:500;line-height:1;padding:4px 6px;border-radius:var(--edulog-radius-xs);white-space:nowrap}
+.tag-ok{background:var(--edulog-status-ok-soft);color:var(--edulog-status-ok-text)}
+.tag-warn{background:var(--edulog-status-warn-soft);color:var(--edulog-status-warn-text)}
+.tag-notice{background:var(--edulog-status-notice-soft);color:var(--edulog-status-notice-text)}
+.tag-danger{background:var(--edulog-status-danger-soft);color:var(--edulog-status-danger-text)}
+.tag-info{background:var(--edulog-status-info-soft);color:var(--edulog-status-info-text)}
+.tag-neutral{background:var(--edulog-status-neutral-soft);color:var(--edulog-status-neutral-text)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.chip{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 12px;border-radius:var(--edulog-radius-pill);border:1px solid var(--edulog-border-strong);background:var(--edulog-surface);color:var(--edulog-text-secondary);font-weight:500;cursor:pointer;font-size:var(--edulog-text-sm);transition:background var(--edulog-duration)}
+.chip:hover{background:var(--edulog-surface-muted)}
+.chip[aria-pressed=true]{background:var(--edulog-primary-soft-strong);border-color:var(--edulog-primary-border);color:var(--edulog-primary)}
+.chip .count{font-size:var(--edulog-text-xs);background:var(--edulog-surface-muted);border-radius:var(--edulog-radius-pill);padding:0 6px;min-width:20px;text-align:center}
+.chip[aria-pressed=true] .count{background:var(--edulog-surface)}
+.dot{width:var(--edulog-status-dot);height:var(--edulog-status-dot);border-radius:50%;flex:none;background:var(--edulog-status-neutral)}
+.dot-ok{background:var(--edulog-status-ok)}.dot-warn{background:var(--edulog-status-warn)}.dot-danger{background:var(--edulog-status-danger)}.dot-notice{background:var(--edulog-status-notice)}.dot-info{background:var(--edulog-status-info)}
+.dot-neutral{background:none;border:1.5px solid var(--edulog-status-neutral)}
+
+/* ---------- Panels, list rows ---------- */
+.panel{background:var(--edulog-surface);border:1px solid var(--edulog-border);border-radius:var(--edulog-radius)}
+.panel-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:12px 16px;border-bottom:1px solid var(--edulog-border)}
+.panel-head h2{font-size:var(--edulog-text-lg);font-weight:600;color:var(--edulog-text-strong);line-height:var(--edulog-leading-tight)}
+.panel-head .sub{font-size:var(--edulog-text-sm);color:var(--edulog-text-muted)}
+.list{list-style:none;margin:0;padding:0}
+.row{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:8px 16px;min-height:var(--edulog-row-min-height);padding:8px 16px 8px 19px;border-top:1px solid var(--edulog-border-soft);transition:background var(--edulog-duration)}
+.row:first-child{border-top:0}
+.row:hover{background:var(--edulog-surface-subtle)}
+.row::before{content:"";position:absolute;left:0;top:0;bottom:0;width:var(--edulog-status-bar-width);background:transparent}
+.row[data-bar=warn]::before{background:var(--edulog-status-warn)}
+.row[data-bar=danger]::before{background:var(--edulog-status-danger)}
+.row[data-bar=notice]::before{background:var(--edulog-status-notice)}
+.row[data-bar=info]::before{background:var(--edulog-status-info)}
+.row-main{min-width:0}
+.row-title{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-weight:600;color:var(--edulog-text-strong);line-height:var(--edulog-leading-tight)}
+.row-meta{font-size:var(--edulog-text-sm);color:var(--edulog-text-muted);line-height:var(--edulog-leading-tight);margin-top:2px}
+.row-actions{display:flex;align-items:center;gap:4px;justify-content:flex-end}
+.stats{display:grid;grid-template-columns:repeat(4,auto);gap:4px 14px}
+.stat{display:flex;align-items:center;gap:6px;font-size:var(--edulog-text-sm);white-space:nowrap}
+.stat-label{color:var(--edulog-text-muted)}
+.stat-val{font-weight:500}
+.stat-val.ok{color:var(--edulog-status-ok-text)}.stat-val.warn{color:var(--edulog-status-warn-text)}.stat-val.danger{color:var(--edulog-status-danger-text)}.stat-val.neutral{color:var(--edulog-status-neutral-text)}
+.stats-head{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:16px;padding:6px 16px 6px 19px;background:var(--edulog-surface-subtle);border-bottom:1px solid var(--edulog-border);font-size:var(--edulog-text-xs);color:var(--edulog-text-muted);font-weight:600}
+.group-head{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:8px;padding:8px 16px;background:var(--edulog-surface-subtle);border-top:1px solid var(--edulog-border);border-bottom:1px solid var(--edulog-border);font-size:var(--edulog-text-sm);font-weight:600;color:var(--edulog-text-secondary);cursor:pointer;width:100%;text-align:left;border-left:0;border-right:0}
+.group:first-child .group-head{border-top:0}
+.group-head .count{margin-left:auto;font-size:var(--edulog-text-xs);font-weight:500;color:var(--edulog-text-muted)}
+.group-head .chev{transition:transform var(--edulog-duration)}
+.group[data-open=false] .chev{transform:rotate(-90deg)}
+.group[data-open=false] .list{display:none}
+.group-head.danger{color:var(--edulog-status-danger-text);background:var(--edulog-status-danger-soft)}
+.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 16px;border-bottom:1px solid var(--edulog-border)}
+.more{position:relative}
+.menu{position:absolute;top:calc(100% + 4px);left:0;z-index:var(--edulog-z-overlay);min-width:180px;background:var(--edulog-surface);border:1px solid var(--edulog-border);border-radius:var(--edulog-radius);box-shadow:var(--edulog-shadow-popover);padding:4px}
+.menu button{display:flex;width:100%;align-items:center;gap:8px;justify-content:space-between;border:0;background:none;padding:8px 10px;border-radius:var(--edulog-radius-sm);cursor:pointer;text-align:left;min-height:36px}
+.menu button:hover{background:var(--edulog-surface-muted)}
+.empty{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:40px 16px;color:var(--edulog-text-muted)}
+.empty strong{color:var(--edulog-text-strong);font-size:var(--edulog-text-base)}
+.notice{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:var(--edulog-radius-sm);font-size:var(--edulog-text-sm)}
+.notice-info{background:var(--edulog-primary-soft);border:1px solid var(--edulog-primary-border);color:var(--edulog-status-info-text)}
+.notice-warn{background:var(--edulog-status-warn-soft);color:var(--edulog-status-warn-text)}
+.seg{display:inline-flex;border:1px solid var(--edulog-border-strong);border-radius:var(--edulog-radius-sm);overflow:hidden;background:var(--edulog-surface)}
+.seg button{border:0;background:none;padding:0 12px;min-height:34px;cursor:pointer;color:var(--edulog-text-secondary);font-weight:500;border-left:1px solid var(--edulog-border-strong);display:flex;flex-direction:column;justify-content:center;line-height:1.2}
+.seg button:first-child{border-left:0}
+.seg button small{font-size:11px;color:var(--edulog-text-subtle);font-weight:500}
+.seg button[aria-pressed=true]{background:var(--edulog-primary-soft-strong);color:var(--edulog-primary)}
+.seg button[aria-pressed=true] small{color:var(--edulog-primary)}
+.phone-btn{border:0;background:none;color:var(--edulog-primary);cursor:pointer;display:inline-flex;align-items:center;gap:4px;font-size:var(--edulog-text-sm);padding:2px 4px;border-radius:var(--edulog-radius-xs)}
+.phone-btn:hover{background:var(--edulog-primary-soft)}
+
+/* ---------- Popup ---------- */
+.popup-wrap{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start;justify-content:center}
+.popup{width:360px;max-width:100%;background:var(--edulog-surface);border:1px solid var(--edulog-border);border-radius:var(--edulog-radius-lg);box-shadow:var(--edulog-shadow-popover);overflow:hidden}
+.popup-head{display:flex;align-items:center;gap:8px;padding:10px 8px 10px 14px;border-bottom:1px solid var(--edulog-border-soft)}
+.logo{width:24px;height:24px;border-radius:6px;background:var(--edulog-primary);color:#fff;display:grid;place-items:center;font-weight:700;font-size:13px}
+.brand{font-weight:700;color:var(--edulog-text-strong)}
+.conn{display:inline-flex;align-items:center;gap:6px;font-size:var(--edulog-text-xs);font-weight:500;padding:3px 8px;border-radius:var(--edulog-radius-pill);background:var(--edulog-surface-muted);color:var(--edulog-text-secondary)}
+.conn.ok{background:var(--edulog-status-ok-soft);color:var(--edulog-status-ok-text)}
+.popup-head .spacer{flex:1}
+.popup-body{padding:16px 14px;display:grid;gap:12px}
+.ctx{display:flex;gap:10px;align-items:flex-start}
+.ctx-ic{width:36px;height:36px;border-radius:var(--edulog-radius);background:var(--edulog-primary-soft);color:var(--edulog-primary);display:grid;place-items:center;flex:none}
+.ctx-title{font-weight:600;color:var(--edulog-text-strong)}
+.ctx-sub{font-size:var(--edulog-text-sm);color:var(--edulog-text-muted)}
+.popup-foot{display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--edulog-border-soft);padding:4px 6px}
+.linkrow{display:flex;align-items:center;gap:8px;width:100%;border:0;background:none;padding:10px 8px;border-radius:var(--edulog-radius-sm);cursor:pointer;color:var(--edulog-text-secondary);font-weight:500;min-height:var(--edulog-touch-target)}
+.linkrow:hover{background:var(--edulog-surface-muted)}
+.linkrow .count{margin-left:auto;font-size:var(--edulog-text-xs);background:var(--edulog-status-warn-soft);color:var(--edulog-status-warn-text);border-radius:var(--edulog-radius-pill);padding:1px 8px}
+.field{display:grid;gap:4px;align-content:start}
+.field label,.field .lbl{font-size:var(--edulog-text-sm);font-weight:600;color:var(--edulog-text-secondary)}
+.field .hint{font-size:var(--edulog-text-xs);color:var(--edulog-text-muted)}
+.input,.select{min-height:var(--edulog-control-height);height:var(--edulog-control-height);border:1px solid var(--edulog-border-input);border-radius:var(--edulog-radius-sm);padding:0 10px;background:var(--edulog-surface);width:100%}
+textarea.input{padding:8px 10px;height:auto;min-height:84px;resize:vertical}
+.popup-caption{font-size:var(--edulog-text-xs);color:var(--edulog-text-muted);text-align:center;margin-top:8px}
+.popup-col{display:flex;flex-direction:column;align-items:center;width:360px;max-width:100%;min-width:0}
+.popup-col .url-bar{width:100%}
+
+/* ---------- Workspace ---------- */
+.ws{max-width:960px;margin:0 auto}
+.ws-head{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.ws-head h1{font-size:var(--edulog-text-xl);color:var(--edulog-text-strong)}
+.stepper{display:flex;align-items:center;gap:8px;list-style:none;margin:0 0 16px;padding:12px 16px;background:var(--edulog-surface);border:1px solid var(--edulog-border);border-radius:var(--edulog-radius)}
+.step{display:flex;align-items:center;gap:8px;color:var(--edulog-text-muted);font-weight:500}
+.step-n{width:24px;height:24px;border-radius:50%;border:1.5px solid var(--edulog-border-input);display:grid;place-items:center;font-size:var(--edulog-text-xs);font-weight:600;background:var(--edulog-surface)}
+.step[aria-current=step]{color:var(--edulog-text-strong);font-weight:700}
+.step[aria-current=step] .step-n{background:var(--edulog-primary-bright);border-color:var(--edulog-primary-bright);color:#fff}
+.step.done .step-n{background:var(--edulog-status-ok);border-color:var(--edulog-status-ok);color:#fff}
+.step-line{flex:1;height:1.5px;background:var(--edulog-border);min-width:16px}
+.step-line.done{background:var(--edulog-status-ok)}
+.stepper-compact{display:none}
+.ws-foot{display:flex;align-items:center;gap:8px;justify-content:space-between;padding:12px 16px;background:var(--edulog-surface);border-top:1px solid var(--edulog-border);border-radius:0 0 var(--edulog-radius) var(--edulog-radius)}
+.summary-line{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--edulog-border);color:var(--edulog-status-ok-text);font-weight:500}
+.summary-line .btn{margin-left:auto}
+.choice{display:inline-flex;flex-wrap:wrap;gap:4px}
+.choice button{border:1px solid var(--edulog-border-strong);background:var(--edulog-surface);border-radius:var(--edulog-radius-sm);min-height:30px;padding:0 10px;font-size:var(--edulog-text-sm);cursor:pointer;color:var(--edulog-text-secondary)}
+.choice button[aria-pressed=true]{background:var(--edulog-primary-soft-strong);border-color:var(--edulog-primary-border);color:var(--edulog-primary);font-weight:600}
+.issue-nav{display:flex;align-items:center;gap:8px;font-size:var(--edulog-text-sm);color:var(--edulog-text-muted)}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-bottom:1px solid var(--edulog-border)}
+.kpi{padding:16px;border-left:1px solid var(--edulog-border-soft)}
+.kpi:first-child{border-left:0}
+.kpi b{display:block;font-size:var(--edulog-text-xl);color:var(--edulog-text-strong)}
+.kpi span{font-size:var(--edulog-text-sm);color:var(--edulog-text-muted)}
+details.adv{border-top:1px solid var(--edulog-border)}
+details.adv summary{padding:12px 16px;color:var(--edulog-text-secondary);font-weight:500;cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px}
+details.adv[open] summary .chev{transform:rotate(180deg)}
+.adv-body{padding:0 16px 16px;display:grid;gap:10px}
+.check{display:flex;align-items:center;gap:8px;font-size:var(--edulog-text-md)}
+.radio-row{cursor:pointer}
+.radio-row input{width:18px;height:18px;accent-color:var(--edulog-primary-bright)}
+.radio-row[data-selected=true]{background:var(--edulog-primary-soft)}
+
+/* ---------- Source site mock (corp.orangeapple.co) ---------- */
+.site{background:#fff;border:1px solid var(--edulog-border);border-radius:var(--edulog-radius);overflow:hidden}
+.site-nav{display:flex;align-items:center;gap:12px;padding:10px 16px;background:#3c4b64;color:#fff;font-size:var(--edulog-text-sm)}
+.site-nav b{font-weight:700}
+.site-nav .muted{opacity:.75}
+.site-body{padding:16px;background:#ebedef}
+.edulog-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 16px;background:var(--edulog-surface);border-bottom:1px solid var(--edulog-border)}
+.edulog-bar .badge{display:inline-flex;align-items:center;gap:6px;font-size:var(--edulog-text-xs);font-weight:600;color:var(--edulog-primary)}
+.page-title{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px}
+.page-title h2{font-size:var(--edulog-text-lg);color:var(--edulog-text-strong)}
+.page-title span{font-size:var(--edulog-text-sm);color:var(--edulog-text-muted)}
+
+/* ---------- Report modal mock ---------- */
+.backdrop{background:#0f172a73;padding:24px 16px;border-radius:var(--edulog-radius);min-height:560px}
+.modal{max-width:1040px;margin:0 auto;background:#fff;border-radius:var(--edulog-radius-lg);box-shadow:var(--edulog-shadow-modal);overflow:hidden}
+.modal-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:12px 16px;border-bottom:1px solid var(--edulog-border)}
+.modal-head h3{font-size:var(--edulog-text-lg);color:var(--edulog-text-strong);margin-right:auto}
+.modal-grid{display:grid;grid-template-columns:minmax(0,1fr)}
+.modal-grid.with-panel{grid-template-columns:minmax(0,1fr) 340px}
+.modal-form{padding:16px;display:grid;gap:12px}
+.modal-form .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.modal-foot{display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--edulog-border)}
+.assist{border-left:1px solid var(--edulog-border);background:var(--edulog-surface-subtle);display:flex;flex-direction:column}
+.assist-head{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--edulog-border);font-weight:600;color:var(--edulog-text-strong)}
+.assist-head .btn-icon{margin-left:auto}
+.assist-body{padding:12px;display:grid;gap:12px;align-content:start}
+.sugg{background:var(--edulog-surface);border:1px solid var(--edulog-border);border-radius:var(--edulog-radius-sm);padding:10px 12px;display:grid;gap:6px}
+.sugg-head{display:flex;align-items:center;gap:8px;font-size:var(--edulog-text-sm);font-weight:600;color:var(--edulog-text-secondary)}
+.sugg-head .btn{margin-left:auto}
+.sugg p{font-size:var(--edulog-text-sm);color:var(--edulog-text)}
+.assist-line{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 16px;background:var(--edulog-primary-soft);border-bottom:1px solid var(--edulog-primary-border);font-size:var(--edulog-text-sm);color:var(--edulog-status-info-text)}
+.assist-line .btn{margin-left:auto}
+.assist-collapsed{display:flex;align-items:center;gap:8px}
+
+/* ---------- Responsive ---------- */
+@media (max-width:900px){
+  .modal-grid.with-panel{grid-template-columns:1fr}
+  .assist{border-left:0;border-bottom:1px solid var(--edulog-border);order:-1}
+}
+@media (max-width:1023px){
+  .row:has(> .stats){grid-template-columns:minmax(0,1fr) auto}
+  .row > .stats{grid-column:1 / -1;grid-row:2}
+  .row:has(> .stats) > .row-actions{grid-column:2;grid-row:1}
+  .stats-head{display:none}
+}
+@media (max-width:767px){
+  .proto-nav{margin-left:0;width:100%}
+  .row{padding:10px 12px 10px 15px}
+  .row .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .stats-head{display:none}
+  .gh-sub{display:none}
+  .btn,.chip,.choice button{min-height:var(--edulog-touch-target)}
+  .btn-sm{min-height:40px}
+  .btn-icon{width:var(--edulog-touch-target)}
+  .stepper .step-label,.stepper .step-line{display:none}
+  .stepper{display:none}
+  .stepper-compact{display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:10px 12px;background:var(--edulog-surface);border:1px solid var(--edulog-border);border-radius:var(--edulog-radius);font-weight:600}
+  .stepper-compact .bar{flex:1;height:4px;background:var(--edulog-border);border-radius:2px;overflow:hidden}
+  .stepper-compact .bar i{display:block;height:100%;background:var(--edulog-primary-bright)}
+  .kpis{grid-template-columns:repeat(2,1fr)}
+  .kpi:nth-child(3){border-left:0}
+  .kpi:nth-child(n+3){border-top:1px solid var(--edulog-border-soft)}
+  .modal-form .row2{grid-template-columns:1fr}
+  .site-body{padding:8px}
+  .backdrop{padding:12px 8px}
+  .ws-foot{flex-wrap:wrap}
+  .ws-foot .btn-primary{flex:1}
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-chev-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-chev-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-chev-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></symbol>
+    <symbol id="i-plug" viewBox="0 0 24 24"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></symbol>
+    <symbol id="i-dashboard" viewBox="0 0 24 24"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></symbol>
+    <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M21.17 6.81a1 1 0 0 0-3.99-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+    <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></symbol>
+    <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="M9.94 14.06A2 2 0 0 0 8.5 12.6L2.4 11a.5.5 0 0 1 0-.96L8.5 8.4A2 2 0 0 0 9.94 7L11.5.9a.5.5 0 0 1 .96 0L14.06 7A2 2 0 0 0 15.5 8.4l6.1 1.6a.5.5 0 0 1 0 .96L15.5 12.6a2 2 0 0 0-1.44 1.44L12.46 20.1a.5.5 0 0 1-.96 0z"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></symbol>
+    <symbol id="i-panel" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></symbol>
+  </defs>
+</svg>
+
+<header class="proto-top">
+  <div class="proto-top-inner">
+    <div class="proto-title"><span class="logo" aria-hidden="true">E</span>EduLog 介面原型 <small>P1 · 假資料</small></div>
+    <nav class="proto-nav" aria-label="畫面" id="nav"></nav>
+  </div>
+</header>
+<div class="proto-states" id="states"></div>
+<p class="proto-note" id="note"></p>
+<main class="stage" id="stage"></main>
+
+<script>
+const I = (id, cls = '') => `<svg class="ic ${cls}" aria-hidden="true"><use href="#i-${id}"/></svg>`
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))
+
+/* ---------- Fake data (fictional names and phones only) ---------- */
+const NAMES = ['林小樂','陳小禾','張小晴','黃小宇','吳小恩','周小澄','鄭小安','許小芸','蔡小翔','謝小米','楊小豆','劉小果']
+const COURSE = '初階程式 A 班'
+// status: ok | warn | none(原站未開放) | leave
+const S = { ok: ['已填','ok'], warn: ['未填','warn'], att: ['已點名','ok'], noatt: ['未點名','warn'], none: ['未開放','neutral'], leave: ['請假','neutral'], late: ['逾期','danger'], todo: ['未填','neutral'], notyet: ['未點名','neutral'] }
+const WEEKS = {
+  past:   { label:'上週', date:'10/11（六）', sub:'過去', lesson:7 },
+  today:  { label:'本週', date:'10/18（六）', sub:'今天 · 未開課', lesson:8 },
+  future: { label:'下週', date:'10/25（六）', sub:'未來', lesson:9 },
+}
+function classRows(week){
+  // [name, att, done, internal, perf, editable, tags]
+  const p = {
+    past: [
+      [0,'att','ok','ok','ok',true],[1,'att','ok','late','late',true],[2,'leave','ok','ok','ok',true,['請假']],
+      [3,'att','ok','ok','ok',true],[4,'noatt','late','late','late',true],[5,'att','ok','ok','warn',true],
+      [6,'att','ok','ok','ok',true],[7,'att','none','none','none',false],
+    ],
+    today: [
+      [0,'noatt','warn','warn','warn',true],[1,'noatt','warn','warn','warn',true],[2,'leave','warn','warn','warn',true,['請假']],
+      [3,'att','ok','warn','warn',true],[4,'noatt','warn','warn','warn',true],[5,'noatt','warn','warn','warn',true],
+      [6,'noatt','warn','warn','warn',true],[7,'noatt','none','none','none',false],
+    ],
+    future: [
+      [0,'noatt','warn','warn','warn',true],[1,'leave','warn','warn','warn',true,['請假']],[2,'noatt','warn','warn','warn',true],
+      [3,'noatt','warn','warn','warn',true],[4,'noatt','none','none','none',false,['不出席']],[5,'noatt','warn','warn','warn',true],
+      [6,'noatt','warn','warn','warn',true],[7,'noatt','none','none','none',false],
+    ],
+  }[week]
+  return p.map(([n, att, done, internal, perf, editable, tags = []]) => {
+    if (!editable) { done = internal = perf = 'none'; if (att === 'noatt') att = 'none'; tags = [...tags, '原站未開放'] }
+    // Future weeks: still shown and fillable, but not yet due, so neutral instead of warn
+    if (week === 'future') { const f = x => x === 'warn' ? 'todo' : x === 'noatt' ? 'notyet' : x; [att, done, internal, perf] = [att, done, internal, perf].map(f) }
+    return { name: NAMES[n], att, done, internal, perf, editable, tags }
+  })
+}
+function worst(r){
+  const v = [r.att, r.done, r.internal, r.perf]
+  if (v.includes('late')) return 'danger'
+  if (v.includes('warn') || v.includes('noatt')) return 'warn'
+  return ''
+}
+function stat(label, key){
+  const [t, c] = S[key]
+  return `<span class="stat" aria-label="${label}：${t}"><span class="dot dot-${c}"></span><span class="stat-label">${label}</span><span class="stat-val ${c}">${t}</span></span>`
+}
+function statsCells(r){
+  return `<div class="stats">${stat('出席', r.att)}${stat('完成狀況', r.done)}${stat('內部紀錄', r.internal)}${stat('學習表現', r.perf)}</div>`
+}
+
+/* ---------- State ---------- */
+const SCREENS = {
+  popup:   { label:'Popup', states:{ off:'未連線', class:'已連線 · 班級頁', report:'已連線 · 報告頁', other:'已連線 · 其他頁', jobs:'工作紀錄', settings:'設定（齒輪）' },
+             note:'依目前分頁顯示單一主操作；主題、語言、伺服器收進齒輪。' },
+  ws:      { label:'整合工作台', states:{ read:'1 讀取（在班級頁）', pick:'1 讀取（我的班級）', confirm:'2 確認', done:'3 完成' },
+             note:'v1 只同步單班。確認頁只列例外，已自動配對收成一行。' },
+  class:   { label:'班級頁', states:{ past:'過去週次', today:'今天 · 未開課', future:'未來週次' },
+             note:'/courses/dt/<id>：四項狀態在過去、今天（含未開課）、未來一律顯示；沒有編輯連結顯示「原站未開放」。' },
+  unfilled:{ label:'未填報告', states:{ list:'有未填', empty:'全部填完' },
+             note:'/admissions/unfilled_report：依班級時段分組，逾期置頂標紅，電話點擊才顯示。' },
+  monthly: { label:'月未填', states:{ list:'十月' }, note:'月未填頁沿用班級頁的同一個清單列元件。' },
+  modal:   { label:'報告 modal', states:{ off:'未連線', unsynced:'已連線 · 學生未同步', on:'已連線 · 已同步' },
+             note:'未連線不掛載助手面板，只在標題列放小按鈕。' },
+}
+const st = { screen:'popup', sub:'off', filter:'pending', moreOpen:false, phones:new Set(), groups:{}, assistOpen:true, pickClass:0, choices:{}, autoOpen:false }
+
+function readHash(){
+  const [s, sub] = location.hash.replace('#','').split('/')
+  if (SCREENS[s]) { st.screen = s; st.sub = SCREENS[s].states[sub] ? sub : Object.keys(SCREENS[s].states)[0] }
+  if (st.screen === 'class') st.filter = st.sub === 'future' ? 'all' : 'pending'
+}
+function go(screen, sub){
+  st.screen = screen; st.sub = sub ?? Object.keys(SCREENS[screen].states)[0]
+  st.moreOpen = false
+  if (screen === 'class') st.filter = st.sub === 'future' ? 'all' : 'pending'
+  history.replaceState(null, '', `#${st.screen}/${st.sub}`)
+  render()
+}
+
+/* ---------- Popup ---------- */
+function popupHead(connected){
+  return `<div class="popup-head"><span class="logo" aria-hidden="true">E</span><span class="brand">EduLog</span>
+    <span class="conn ${connected ? 'ok' : ''}"><span class="dot ${connected ? 'dot-ok' : 'dot-neutral'}"></span>${connected ? '已連線' : '未連線'}</span>
+    <span class="spacer"></span>
+    <button class="btn btn-icon" aria-label="設定" data-go="popup/settings">${I('settings','ic-lg')}</button></div>`
+}
+function popupFoot(n = 3){
+  return `<div class="popup-foot"><button class="linkrow" data-go="popup/jobs">${I('history')}工作紀錄<span class="count">${n}</span>${I('chev-right')}</button></div>`
+}
+function popupView(sub){
+  const url = { off:'corp.orangeapple.co/courses/dt/1024', class:'corp.orangeapple.co/courses/dt/1024', report:'corp.orangeapple.co/dt_admissions/301/reports/401/edit', other:'corp.orangeapple.co/admissions', jobs:'', settings:'' }[sub]
+  let body
+  if (sub === 'off') body = `${popupHead(false)}<div class="popup-body">
+      <div class="ctx"><span class="ctx-ic">${I('plug','ic-lg')}</span><div><div class="ctx-title">尚未連接 EduLog</div><div class="ctx-sub">連接後即可同步班級、預填報告。</div></div></div>
+      <button class="btn btn-primary btn-block">${I('plug')}連接 EduLog</button></div>`
+  else if (sub === 'class') body = `${popupHead(true)}<div class="popup-body">
+      <div class="ctx"><span class="ctx-ic">${I('users','ic-lg')}</span><div><div class="ctx-title">${COURSE}</div><div class="ctx-sub">週六 10:00 · 8 位學生 · 上次同步 10/11</div></div></div>
+      <button class="btn btn-primary btn-block">${I('refresh')}同步本班</button>
+      <button class="btn btn-ghost" data-go="ws/read">${I('dashboard')}開啟工作台</button></div>${popupFoot()}`
+  else if (sub === 'report') body = `${popupHead(true)}<div class="popup-body">
+      <div class="ctx"><span class="ctx-ic">${I('file','ic-lg')}</span><div><div class="ctx-title">林小樂 · 第 8 堂</div><div class="ctx-sub">${COURSE} · 10/18（六）</div></div></div>
+      <button class="btn btn-primary btn-block">${I('sparkles')}預填本報告</button></div>${popupFoot()}`
+  else if (sub === 'other') body = `${popupHead(true)}<div class="popup-body">
+      <div class="ctx"><span class="ctx-ic">${I('dashboard','ic-lg')}</span><div><div class="ctx-title">這一頁沒有可同步的班級</div><div class="ctx-sub">到工作台從「我的班級」挑一班同步。</div></div></div>
+      <button class="btn btn-primary btn-block" data-go="ws/pick">${I('dashboard')}開啟工作台</button></div>${popupFoot()}`
+  else if (sub === 'jobs') body = `<div class="popup-head"><button class="btn btn-icon" aria-label="返回" data-go="popup/class">${I('chev-left','ic-lg')}</button><span class="brand">工作紀錄</span></div>
+      <ul class="list">
+        <li class="row" data-bar="warn"><div class="row-main"><div class="row-title">${COURSE}</div><div class="row-meta">同步 · 3 項待確認 · 10 分鐘前</div></div><span class="tag tag-warn">待確認</span><div class="row-actions"><button class="btn btn-secondary btn-sm" data-go="ws/confirm">繼續</button></div></li>
+        <li class="row"><div class="row-main"><div class="row-title">機器人 B 班</div><div class="row-meta">同步 · 新增 12 · 昨天 18:20</div></div><span class="tag tag-ok">完成</span><div class="row-actions"></div></li>
+        <li class="row"><div class="row-main"><div class="row-title">林小樂 · 第 7 堂報告</div><div class="row-meta">預填 · 10/11 11:05</div></div><span class="tag tag-ok">完成</span><div class="row-actions"></div></li>
+      </ul>`
+  else body = `<div class="popup-head"><button class="btn btn-icon" aria-label="返回" data-go="popup/class">${I('chev-left','ic-lg')}</button><span class="brand">設定</span></div>
+      <div class="popup-body">
+        <div class="field"><span class="lbl">主題</span><div class="seg" role="group" aria-label="主題"><button aria-pressed="true">淺色</button><button disabled title="即將推出">深色（即將推出）</button></div></div>
+        <div class="field"><label for="lang">語言</label><select id="lang" class="select"><option>繁體中文</option><option>English</option></select></div>
+        <div class="field"><label for="srv">EduLog 伺服器</label><input id="srv" class="input" value="https://edulog.example.com"><span class="hint">變更後需重新連接。</span></div>
+        <div class="field"><span class="lbl">連線</span><div class="row" style="padding:8px 0;border:0"><div class="row-main"><div class="row-title" style="font-weight:500"><span class="dot dot-ok"></span>已連線：示範老師</div></div><div class="row-actions"><button class="btn btn-secondary btn-sm">中斷連線</button></div></div></div>
+      </div>`
+  return `<div class="popup-wrap"><div class="popup-col">${url ? `<div class="url-bar">${I('external')}${url}</div>` : ''}<div class="popup">${body}</div>
+    <p class="popup-caption">實際寬度 360px</p></div></div>`
+}
+
+/* ---------- Workspace ---------- */
+const STEPS = ['讀取','確認','完成']
+function stepper(i){
+  const parts = STEPS.map((s, k) => {
+    const cls = k < i ? 'done' : ''
+    const cur = k === i ? 'aria-current="step"' : ''
+    const n = k < i ? I('check') : k + 1
+    return `<li class="step ${cls}" ${cur}><span class="step-n">${n}</span><span class="step-label">${s}</span></li>${k < 2 ? `<li class="step-line ${k < i ? 'done' : ''}" aria-hidden="true"></li>` : ''}`
+  }).join('')
+  return `<ol class="stepper" aria-label="同步步驟">${parts}</ol>
+    <div class="stepper-compact"><span>步驟 ${i + 1} / 3 · ${STEPS[i]}</span><span class="bar"><i style="width:${(i + 1) / 3 * 100}%"></i></span></div>`
+}
+const MY_CLASSES = [
+  ['初階程式 A 班','週六 10:00','8 位學生','上次同步 10/11'],
+  ['機器人 B 班','週三 16:00','10 位學生','上次同步 昨天'],
+  ['進階程式 C 班','週日 14:00','6 位學生','尚未同步'],
+  ['積木創客 D 班','週五 18:30','9 位學生','上次同步 9/27'],
+]
+const ISSUES = [
+  { type:'班級不明', why:'這份報告同時出現在兩個班級頁，無法判斷歸屬。', items:[
+    { k:'a1', name:'陳小禾', meta:'第 6 堂 · 10/04 報告', opts:[COURSE,'機器人 B 班','略過'] } ] },
+  { type:'配對不到課堂', why:'原站日期在 EduLog 沒有對應的課堂。', items:[
+    { k:'b1', name:'張小晴', meta:'09/20 報告 · EduLog 該日無課', opts:['建立課堂','只記出席','略過'] },
+    { k:'b2', name:'黃小宇', meta:'09/20 報告 · EduLog 該日無課', opts:['建立課堂','只記出席','略過'] } ] },
+  { type:'兩邊都改過', why:'上次同步後，原站與 EduLog 都有修改。', items:[
+    { k:'c1', name:'吳小恩', meta:'第 7 堂 · 學習表現', opts:['用原站','用 EduLog'] } ] },
+  { type:'學生未對應', why:'原站學生在 EduLog 找不到對應的報名。', items:[
+    { k:'d1', name:'周小澄', meta:'原站報名 #A-2207', opts:['建立學生','對應到…','略過'] },
+    { k:'d2', name:'許小芸', meta:'原站報名 #A-2210', opts:['建立學生','對應到…','略過'] },
+    { k:'d3', name:'蔡小翔', meta:'原站報名 #A-2213', opts:['建立學生','對應到…','略過'] } ] },
+]
+function wsView(sub){
+  const total = ISSUES.reduce((a, g) => a + g.items.length, 0)
+  const resolved = Object.keys(st.choices).length
+  let step, content
+  if (sub === 'read' || sub === 'pick') {
+    step = 0
+    const picker = sub === 'pick'
+    content = `<section class="panel">
+      <div class="panel-head"><div><h2>${picker ? '選擇要同步的班級' : '讀取本班資料'}</h2>
+        <div class="sub">${picker ? '目前分頁不是班級頁，從我的班級挑一班。' : '從目前分頁讀取學生、報告與出席紀錄，不會修改原站。'}</div></div></div>
+      ${picker ? `<ul class="list" role="radiogroup" aria-label="我的班級">${MY_CLASSES.map((c, i) => `
+        <li class="row radio-row" data-pick="${i}" data-selected="${st.pickClass === i}"><label class="row-main check" style="cursor:pointer"><input type="radio" name="cls" ${st.pickClass === i ? 'checked' : ''}><span><span class="row-title">${c[0]}</span><span class="row-meta" style="display:block">${c[1]} · ${c[2]}</span></span></label>
+        <span class="tag ${c[3] === '尚未同步' ? 'tag-neutral' : 'tag-ok'}">${c[3]}</span><div class="row-actions"></div></li>`).join('')}</ul>`
+      : `<ul class="list"><li class="row"><div class="row-main"><div class="row-title">${I('users')}${COURSE}</div><div class="row-meta">週六 10:00 · 8 位學生 · 第 1–8 堂 · 上次同步 10/11</div></div><span class="tag tag-info">目前分頁</span><div class="row-actions"></div></li></ul>`}
+      <details class="adv"><summary>${I('chev-down','chev')}進階選項</summary><div class="adv-body">
+        <label class="check"><input type="checkbox" checked> 包含出席證據（沒有報告的上課紀錄）</label>
+        <label class="check"><input type="checkbox"> 重新讀取已同步的週次</label>
+        <div class="field" style="max-width:240px"><label for="range">讀取範圍</label><select id="range" class="select"><option>全部堂次</option><option>最近 4 週</option></select></div>
+      </div></details>
+      <div class="ws-foot"><button class="btn btn-secondary">取消</button><button class="btn btn-primary" data-go="ws/confirm">${I('refresh')}讀取${picker ? ' ' + MY_CLASSES[st.pickClass][0] : '本班資料'}</button></div>
+    </section>`
+  } else if (sub === 'confirm') {
+    step = 1
+    content = `<section class="panel">
+      <div class="panel-head"><div><h2>確認 ${total} 個例外</h2><div class="sub">${COURSE} · 其他資料已自動配對，只需處理下列項目。</div></div>
+        <div class="issue-nav" style="margin-left:auto"><span>已處理 ${resolved} / ${total}</span><button class="btn btn-secondary btn-sm">下一個待確認 ${I('chev-down')}</button></div></div>
+      <div class="summary-line">${I('check-circle')}已自動配對 42 筆（報告 30、出席 12）
+        <button class="btn btn-ghost btn-sm" data-auto>${st.autoOpen ? '收合' : '展開'} ${I('chev-down')}</button></div>
+      ${st.autoOpen ? `<ul class="list" style="border-bottom:1px solid var(--edulog-border)">${NAMES.slice(0,4).map((n, i) => `<li class="row"><div class="row-main"><div class="row-title" style="font-weight:500">${n}</div><div class="row-meta">第 ${i + 4} 堂 · 報告 #${401 + i} → 10/${String(4 + i).padStart(2,'0')} 課堂</div></div><span class="tag tag-ok">已配對</span><div class="row-actions"></div></li>`).join('')}<li class="row"><div class="row-main row-meta">… 還有 38 筆</div><span></span><span></span></li></ul>` : ''}
+      ${ISSUES.map((g, gi) => {
+        const open = st.groups['ws' + gi] !== false
+        return `<div class="group" data-open="${open}"><button class="group-head" data-group="ws${gi}" aria-expanded="${open}">${I('chev-down','chev')}<span class="dot dot-${g.type === '兩邊都改過' ? 'notice' : 'warn'}"></span>${g.type}<span class="gh-sub" style="font-weight:400;color:var(--edulog-text-muted)">· ${g.why}</span><span class="count">${g.items.length}</span></button>
+          <ul class="list">${g.items.map(it => `<li class="row" data-bar="${st.choices[it.k] ? '' : (g.type === '兩邊都改過' ? 'notice' : 'warn')}">
+            <div class="row-main"><div class="row-title">${it.name}${st.choices[it.k] ? `<span class="tag tag-ok">${I('check')}${st.choices[it.k]}</span>` : ''}</div><div class="row-meta">${it.meta}</div></div><span></span>
+            <div class="row-actions"><div class="choice" role="group" aria-label="${it.name} 的處理方式">${it.opts.map(o => `<button data-choice="${it.k}" data-val="${o}" aria-pressed="${st.choices[it.k] === o}">${o}</button>`).join('')}</div></div></li>`).join('')}</ul></div>`
+      }).join('')}
+      <div class="ws-foot"><button class="btn btn-secondary" data-go="ws/read">上一步</button><span class="row-meta" style="margin:0 auto 0 0;padding-left:8px">${total - resolved ? `還有 ${total - resolved} 項未處理（未處理的會略過）` : '全部處理完成'}</span><button class="btn btn-primary" data-go="ws/done">${I('check')}確認並同步</button></div>
+    </section>`
+  } else {
+    step = 2
+    content = `<section class="panel">
+      <div class="panel-head"><div><h2>${I('check-circle','ic-lg')} 同步完成</h2><div class="sub">${COURSE} · 10/18 11:42</div></div></div>
+      <div class="kpis"><div class="kpi"><b>12</b><span>新增報告</span></div><div class="kpi"><b>30</b><span>更新報告</span></div><div class="kpi"><b>12</b><span>出席證據</span></div><div class="kpi"><b>2</b><span>略過</span></div></div>
+      <div class="group" data-open="true"><div class="group-head" style="cursor:default">${I('alert')}略過的項目<span class="count">2</span></div>
+        <ul class="list"><li class="row"><div class="row-main"><div class="row-title">張小晴</div><div class="row-meta">09/20 報告 · 配對不到課堂</div></div><span></span><div class="row-actions"><button class="btn btn-ghost btn-sm">重新處理</button></div></li>
+        <li class="row"><div class="row-main"><div class="row-title">蔡小翔</div><div class="row-meta">原站報名 #A-2213 · 學生未對應</div></div><span></span><div class="row-actions"><button class="btn btn-ghost btn-sm">重新處理</button></div></li></ul></div>
+      <div class="ws-foot"><button class="btn btn-secondary" data-go="class/today">回到原站</button><button class="btn btn-primary">${I('external')}在 EduLog 檢視</button></div>
+    </section>`
+  }
+  return `<div class="ws"><div class="ws-head"><span class="logo" aria-hidden="true">E</span><h1>整合工作台</h1><span class="conn ok" style="margin-left:auto"><span class="dot dot-ok"></span>已連線</span></div>${stepper(step)}${content}</div>`
+}
+
+/* ---------- Source site wrapper ---------- */
+function site(path, inner){
+  return `<div class="url-bar">${I('external')}corp.orangeapple.co${path}</div><div class="site"><div class="site-nav"><b>原站</b><span class="muted">課程</span><span class="muted">報名</span><span class="muted">報告</span></div>${inner}</div>`
+}
+function edulogBar(extra = ''){
+  return `<div class="edulog-bar"><span class="badge"><span class="logo" style="width:18px;height:18px;font-size:11px">E</span>EduLog</span>${extra}</div>`
+}
+
+/* ---------- Class page ---------- */
+const FILTERS = [['pending','待處理'],['noatt','未點名'],['incomplete','資料未齊'],['all','全部']]
+const MORE = [['leave','請假 / 不出席'],['done','已完成'],['closed','原站未開放']]
+function filterRows(rows, f){
+  return rows.filter(r => {
+    const v = [r.done, r.internal, r.perf]
+    if (f === 'all') return true
+    if (f === 'pending') return worst(r) !== ''
+    if (f === 'noatt') return r.att === 'noatt' || r.att === 'notyet'
+    if (f === 'incomplete') return v.some(x => x === 'warn' || x === 'late' || x === 'todo')
+    if (f === 'leave') return r.att === 'leave' || r.tags.includes('不出席')
+    if (f === 'done') return r.editable && [r.done, r.internal, r.perf].every(x => x === 'ok')
+    if (f === 'closed') return !r.editable
+  })
+}
+function classView(sub){
+  const w = WEEKS[sub]
+  const rows = classRows(sub)
+  const counts = Object.fromEntries([...FILTERS, ...MORE].map(([k]) => [k, filterRows(rows, k).length]))
+  const shown = filterRows(rows, st.filter)
+  const moreSel = MORE.find(([k]) => k === st.filter)
+  const list = shown.length ? `<div class="stats-head"><span>學生</span><span>出席 · 完成狀況 · 內部紀錄 · 學習表現</span><span style="width:64px;text-align:right">操作</span></div>
+    <ul class="list">${shown.map(r => `<li class="row" data-bar="${worst(r)}">
+      <div class="row-main"><div class="row-title">${r.name}${r.tags.map(t => `<span class="tag tag-neutral">${t}</span>`).join('')}</div><div class="row-meta">${COURSE} · 第 ${w.lesson} 堂 · ${w.date}</div></div>
+      ${statsCells(r)}
+      <div class="row-actions">${r.editable ? ([r.done, r.internal, r.perf].some(x => x !== 'ok') ? `<button class="btn btn-primary btn-sm" data-go="modal/on">填寫</button>` : `<button class="btn btn-ghost btn-sm" data-go="modal/on">檢視</button>`) : `<span class="row-meta" style="width:64px;text-align:right">—</span>`}</div></li>`).join('')}</ul>`
+    : `<div class="empty">${I('check-circle','ic-xl')}<strong>沒有符合的學生</strong><span>這週這個篩選沒有需要處理的項目。</span><button class="btn btn-ghost" data-filter="all">顯示全部</button></div>`
+  const inner = `${edulogBar(`<span class="row-meta" style="margin:0">已同步 10/11</span><button class="btn btn-secondary btn-sm" style="margin-left:auto">${I('refresh')}同步本班</button>`)}
+    <div class="site-body"><section class="panel">
+      <div class="panel-head"><div class="page-title"><h2>${COURSE}</h2><span>週六 10:00–11:30 · 教室 3 · 8 位學生</span></div>
+        <div class="seg" role="group" aria-label="週次" style="margin-left:auto">${Object.entries(WEEKS).map(([k, x]) => `<button aria-pressed="${k === sub}" data-go="class/${k}">${x.label} ${x.date.slice(0,5)}<small>${x.sub}</small></button>`).join('')}</div></div>
+      ${sub === 'today' ? `<div style="padding:10px 16px 0"><div class="notice notice-info">${I('clock')}<span>本堂 10:00 開始。現在就可以先點名、填報告；送出前仍可修改。</span></div></div>` : ''}
+      <div class="toolbar"><div class="chips" role="group" aria-label="篩選">
+        ${FILTERS.map(([k, l]) => `<button class="chip" aria-pressed="${st.filter === k}" data-filter="${k}">${l}<span class="count">${counts[k]}</span></button>`).join('')}
+        <div class="more"><button class="chip" aria-pressed="${!!moreSel}" aria-expanded="${st.moreOpen}" data-more>${moreSel ? moreSel[1] : '更多'}${I('chev-down')}</button>
+          ${st.moreOpen ? `<div class="menu" role="menu">${MORE.map(([k, l]) => `<button role="menuitem" data-filter="${k}">${l}<span class="row-meta" style="margin:0">${counts[k]}</span></button>`).join('')}</div>` : ''}</div>
+      </div></div>
+      ${list}
+    </section></div>`
+  return site('/courses/dt/1024', inner)
+}
+
+/* ---------- Unfilled page ---------- */
+const UNFILLED = [
+  { key:'late', title:'逾期未填', danger:true, items:[
+    ['陳小禾','初階程式 A 班 · 第 7 堂','10/11（六）10:00','逾期 7 天',null],
+    ['吳小恩','初階程式 A 班 · 第 7 堂','10/11（六）10:00','逾期 7 天',null],
+    ['楊小豆','機器人 B 班 · 第 5 堂','10/08（三）16:00','逾期 10 天','節次不一致'] ] },
+  { key:'g1', title:'週三 16:00 · 機器人 B 班', sub:'10/15（三）', items:[
+    ['劉小果','機器人 B 班 · 第 6 堂','10/15（三）16:00','3 天前',null],
+    ['謝小米','機器人 B 班 · 第 6 堂','10/15（三）16:00','3 天前','節次不一致'] ] },
+  { key:'g2', title:'週六 10:00 · 初階程式 A 班', sub:'10/18（六）今天', items:[
+    ['林小樂','初階程式 A 班 · 第 8 堂','10/18（六）10:00','今天',null],
+    ['黃小宇','初階程式 A 班 · 第 8 堂','10/18（六）10:00','今天',null],
+    ['鄭小安','初階程式 A 班 · 第 8 堂','10/18（六）10:00','今天',null] ] },
+]
+function phoneCell(name, i){
+  const k = name
+  return st.phones.has(k) ? `<a class="phone-btn" href="tel:0900000${String(100 + i)}">${I('phone')}0900-000-${100 + i}</a>` : `<button class="phone-btn" data-phone="${k}" aria-label="顯示 ${name} 的聯絡電話">${I('phone')}顯示電話</button>`
+}
+function unfilledView(sub){
+  const total = UNFILLED.reduce((a, g) => a + g.items.length, 0)
+  let i = 0
+  const body = sub === 'empty'
+    ? `<div class="empty">${I('inbox','ic-xl')}<strong>報告都填完了</strong><span>目前沒有未填的課堂報告。</span><button class="btn btn-ghost">查看本月紀錄</button></div>`
+    : UNFILLED.map(g => {
+        const open = st.groups['u' + g.key] !== false
+        return `<div class="group" data-open="${open}"><button class="group-head ${g.danger ? 'danger' : ''}" data-group="u${g.key}" aria-expanded="${open}">${I('chev-down','chev')}${g.danger ? I('clock') : `<span class="dot dot-warn"></span>`}${g.title}${g.sub ? `<span style="font-weight:400;color:var(--edulog-text-muted)">· ${g.sub.slice(0,5)}</span>` : ''}<span class="count">${g.items.length} 份</span></button>
+          <ul class="list">${g.items.map(([n, c, d, age, tag]) => `<li class="row" data-bar="${g.danger ? 'danger' : 'warn'}">
+            <div class="row-main"><div class="row-title">${n}${tag ? `<span class="tag tag-notice" title="原站節次與 EduLog 課堂不一致">${I('alert')}${tag}</span>` : ''}</div><div class="row-meta">${c} · ${d}</div></div>
+            <div class="chips" style="gap:12px"><span class="tag ${g.danger ? 'tag-danger' : 'tag-warn'}">${age}</span>${phoneCell(n, i++)}</div>
+            <div class="row-actions"><button class="btn btn-primary btn-sm" data-go="modal/on">填寫</button></div></li>`).join('')}</ul></div>`
+      }).join('')
+  const inner = `${edulogBar(`<span class="row-meta" style="margin:0">${sub === 'empty' ? '沒有未填' : `${total} 份未填 · 3 份逾期`}</span>`)}
+    <div class="site-body"><section class="panel"><div class="panel-head"><div class="page-title"><h2>未填報告</h2><span>依班級時段分組，逾期置頂</span></div></div>${body}</section></div>`
+  return site('/admissions/unfilled_report', inner)
+}
+
+/* ---------- Monthly page ---------- */
+function monthlyView(){
+  const weeks = [['10/04（六）', 6, 'past'], ['10/11（六）', 7, 'past'], ['10/18（六）', 8, 'today']]
+  const body = weeks.map(([d, lesson, kind], wi) => {
+    const rows = classRows(kind).filter(r => worst(r)).slice(0, wi === 0 ? 1 : 3)
+    const open = st.groups['m' + wi] !== false
+    return `<div class="group" data-open="${open}"><button class="group-head" data-group="m${wi}" aria-expanded="${open}">${I('chev-down','chev')}${I('calendar')}${d} · 第 ${lesson} 堂<span class="count">${rows.length} 位未齊</span></button>
+      <ul class="list">${rows.map(r => `<li class="row" data-bar="${worst(r)}"><div class="row-main"><div class="row-title">${r.name}${r.tags.map(t => `<span class="tag tag-neutral">${t}</span>`).join('')}</div><div class="row-meta">${COURSE} · 第 ${lesson} 堂</div></div>${statsCells(r)}<div class="row-actions"><button class="btn btn-primary btn-sm" data-go="modal/on">填寫</button></div></li>`).join('')}</ul></div>`
+  }).join('')
+  const inner = `${edulogBar()}<div class="site-body"><section class="panel"><div class="panel-head"><div class="page-title"><h2>月未填</h2><span>${COURSE}</span></div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:4px"><button class="btn btn-icon" aria-label="上個月">${I('chev-left')}</button><b>2026 年 10 月</b><button class="btn btn-icon" aria-label="下個月">${I('chev-right')}</button></div></div>
+    <div class="stats-head"><span>學生</span><span>出席 · 完成狀況 · 內部紀錄 · 學習表現</span><span style="width:64px;text-align:right">操作</span></div>${body}</section></div>`
+  return site('/admissions/monthly_unfilled', inner)
+}
+
+/* ---------- Report modal ---------- */
+function modalView(sub){
+  const head = `<div class="modal-head"><h3>課堂紀錄 · 林小樂 · 第 8 堂</h3>
+    ${sub === 'off' ? `<button class="btn btn-secondary btn-sm" data-go="popup/off">${I('plug')}連接 EduLog 以啟用報告助手</button>` : ''}
+    ${sub === 'on' && !st.assistOpen ? `<button class="btn btn-secondary btn-sm" data-assist>${I('panel')}報告助手</button>` : ''}
+    <button class="btn btn-icon" aria-label="關閉">${I('x','ic-lg')}</button></div>`
+  const form = `<div class="modal-form">
+    <div class="row2"><div class="field"><label>出席</label><select class="select"><option>出席</option><option>請假</option><option>缺席</option></select></div>
+    <div class="field"><label>完成狀況</label><select class="select"><option>請選擇</option><option>完成</option><option>部分完成</option></select></div></div>
+    <div class="field"><label>內部紀錄</label><textarea class="input" placeholder="給老師與助教看的紀錄"></textarea></div>
+    <div class="field"><label>學習表現</label><textarea class="input" placeholder="會寄給家長"></textarea></div></div>`
+  const panel = `<aside class="assist" aria-label="EduLog 報告助手"><div class="assist-head">${I('sparkles')}報告助手<span class="tag tag-ok">已同步</span><button class="btn btn-icon" aria-label="收合報告助手" data-assist>${I('x')}</button></div>
+    <div class="assist-body">
+      <div class="row-meta">${COURSE} · 第 8 堂 · 10/18 · 教案「迴圈與條件」</div>
+      <div class="sugg"><div class="sugg-head">完成狀況<button class="btn btn-ghost btn-sm">填入</button></div><p>完成（EduLog 課堂紀錄：完成 3/3 關卡）</p></div>
+      <div class="sugg"><div class="sugg-head">學習表現<button class="btn btn-ghost btn-sm">填入</button></div><p>本堂練習用迴圈畫出圖形，能自己找出條件判斷的錯誤並修正，下次挑戰巢狀迴圈。</p></div>
+      <div class="sugg"><div class="sugg-head">上一堂（第 7 堂）</div><p class="row-meta">專注度佳，需要加強除錯步驟的說明。</p></div>
+      <button class="btn btn-secondary btn-block">${I('sparkles')}全部填入</button>
+    </div></aside>`
+  const body = sub === 'on' && st.assistOpen ? `<div class="modal-grid with-panel">${form}${panel}</div>` : `<div class="modal-grid">${form}</div>`
+  const line = sub === 'unsynced' ? `<div class="assist-line">${I('alert')}<span>EduLog 還沒有林小樂的資料，同步本班後即可預填。</span><button class="btn btn-secondary btn-sm">${I('refresh')}同步本班</button></div>` : ''
+  const inner = `<div class="backdrop"><div class="modal" role="dialog" aria-label="課堂紀錄">${head}${line}${body}<div class="modal-foot"><button class="btn btn-secondary">取消</button><button class="btn btn-primary">儲存</button></div></div></div>`
+  return site('/courses/dt/1024', `<div class="site-body" style="padding:0">${inner}</div>`)
+}
+
+/* ---------- Render + events ---------- */
+function render(){
+  const sc = SCREENS[st.screen]
+  document.getElementById('nav').innerHTML = Object.entries(SCREENS).map(([k, v]) => `<button data-go="${k}" ${k === st.screen ? 'aria-current="page"' : ''}>${v.label}</button>`).join('')
+  document.getElementById('states').innerHTML = `<span class="proto-states-label">狀態</span>` + Object.entries(sc.states).map(([k, v]) => `<button data-go="${st.screen}/${k}" aria-pressed="${k === st.sub}">${v}</button>`).join('')
+  document.getElementById('note').textContent = sc.note
+  const view = { popup:popupView, ws:wsView, class:classView, unfilled:unfilledView, monthly:monthlyView, modal:modalView }[st.screen]
+  document.getElementById('stage').innerHTML = view(st.sub)
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-go],[data-filter],[data-more],[data-group],[data-phone],[data-assist],[data-pick],[data-choice],[data-auto]')
+  if (!t) { if (st.moreOpen) { st.moreOpen = false; render() } return }
+  const d = t.dataset
+  if (d.go) { const [s, sub] = d.go.split('/'); return go(s, sub) }
+  if (d.filter) { st.filter = d.filter; st.moreOpen = false }
+  else if ('more' in d) st.moreOpen = !st.moreOpen
+  else if (d.group) st.groups[d.group] = st.groups[d.group] === false
+  else if (d.phone) st.phones.add(d.phone)
+  else if ('assist' in d) st.assistOpen = !st.assistOpen
+  else if (d.pick) st.pickClass = Number(d.pick)
+  else if (d.choice) st.choices[d.choice] === d.val ? delete st.choices[d.choice] : st.choices[d.choice] = d.val
+  else if ('auto' in d) st.autoOpen = !st.autoOpen
+  render()
+})
+addEventListener('hashchange', () => { readHash(); render() })
+readHash(); render()
+</script>
+</body>
+</html>
