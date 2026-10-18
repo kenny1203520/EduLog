@@ -41,3 +41,9 @@ test('history preview validation messages are localized with report details',asy
   assert.match(w.edulogUi.t('work.previewFailed'),/Difference check failed/)
   dom.window.close()
 })
+test('import stepper has three translated steps',async()=>{
+  const dom=new JSDOM('<body></body>',{runScripts:'outside-only'}),w=dom.window
+  w.eval(readFileSync(new URL('../shared/ui-core.js',import.meta.url),'utf8'));await new Promise(resolve=>setTimeout(resolve,0))
+  w.edulogUi.setLocale('zh-TW');assert.deepEqual(['work.import1','work.import2','work.import3'].map(key=>w.edulogUi.t(key)),['讀取','確認','完成']);assert.equal(w.edulogUi.t('work.import4'),'work.import4')
+  w.edulogUi.setLocale('en');assert.deepEqual(['work.import1','work.import2','work.import3'].map(key=>w.edulogUi.t(key)),['Read','Confirm','Done']);assert.equal(w.edulogUi.t('work.applyBatches'),'Confirm and sync');dom.window.close()
+})

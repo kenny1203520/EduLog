@@ -15,8 +15,11 @@ import { createReviewSaveCoordinator } from './history-review-save.js'
 import { prepareStaleReviewBatchRefresh } from './history-review-batches.js'
 import { renderReviewBlockers } from './history-review-issues.js'
 import { workspaceInterfaceFailure } from './workspace-operation-errors.js'
+import { entries as stepEntries, classEntries, exceptionModel, renderClassList, renderConfirmOverview, hydrateIcons } from './workspace-steps.js'
 const bridge = globalThis.edulogRuntime, $ = id => document.getElementById(id)
+globalThis.edulogUi?.register(stepEntries)
 initWorkspaceI18n()
+hydrateIcons(document.body)
 let fieldRules=[]
 let saveState='saved', lastSavedAt=null, lastSavedRevision=0, lastSavedWorkId='', saveFailure=null, saveFailureWorkId=''
 let activeOperationLabel=''
@@ -126,14 +129,17 @@ function stage(view, primary) {
   const step = view === 'import' ? ({ collect: 1, preview: 2, repreview: 3, apply: 3, pause: 4, resume: 4, 'cancel-work': 4 }[primary] || 1) : ({ 'read-form': 1, compare: 2, prefill: 3, 'return-source': 4 }[primary] || 1)
   activeStages[view]=step
   if(work?.type===view)work.interfaceState={...(work.interfaceState||{}),stage:step}
-  const state=currentWorkflow(view)
+  // Import keeps four internal stages (saved work stores them) and shows three:
+  // 讀取 = collect, 確認 = review + summary, 完成 = progress and result.
+  const state=view==='import'?importSteps(currentWorkflow(view)):currentWorkflow(view),shown=view==='import'?importStep(step):step
   document.querySelectorAll(`[data-wizard-step^="${view}-"]`).forEach(item=>{
     const index=Number(item.dataset.wizardStep.split('-').at(-1))-1
-    item.dataset.state=index===step-1?'current':state.attention[index]?'attention':state.complete[index]?'complete':'pending'
+    item.dataset.state=index===shown-1?'current':index<shown-1?'complete':state.attention[index]?'attention':state.complete[index]?'complete':'pending'
     const nav=item.querySelector('[data-stage-nav]');if(nav)nav.disabled=!state.available[index]
-    if(index===step-1)item.setAttribute('aria-current','step');else item.removeAttribute('aria-current')
+    if(index===shown-1)item.setAttribute('aria-current','step');else item.removeAttribute('aria-current')
   })
   if(view==='import')for(const [index,id] of ['import-scope','mapping','preview-section','import-progress'].entries())$(id).hidden=index+1!==step
+  if(view==='import'&&step===2)renderConfirm()
   if(view==='prefill')for(const [index,id] of ['prefill-target-step','report-picker','field-review','prefill-result'].entries())$(id).hidden=index+1!==step
   taskStatus()
 }
@@ -144,9 +150,46 @@ function restoreStage(view) {
   if(own&&['applying','failed','outcome_unknown','complete','partial_complete','paused','cancelled','awaiting-finalization'].includes(own.status))step=4
   stage(view,(view==='import'?['collect','preview','apply','resume']:['read-form','compare','prefill','return-source'])[step-1])
 }
+function importStep(step){return step>=4?3:step>=2?2:1}
+function importSteps(state){
+  return {available:[state.available[0],state.available[1],state.available[3]],complete:[state.complete[0],state.complete[1]&&state.complete[2],state.complete[3]],attention:[state.attention[0],state.attention[1]||state.attention[2],state.attention[3]]}
+}
+// 讀取: "my classes" are open class tabs plus classes synced in this browser.
+let classList=[],confirmAutoOpen=false
+const confirmPeak=new Map()
+function uiText(element,key,values){if(globalThis.edulogUi)globalThis.edulogUi.text(element,key,values);else element.textContent=stepEntries[key]?.[0]||key}
+function selectedClass(){const id=sourceContext?.classId?String(sourceContext.classId):'';return classList.find(item=>item.classId===id)||classList.find(item=>item.tabId===Number($('source-tab').value))||null}
+function renderClasses(){
+  const current=selectedClass(),here=Boolean(current?.current&&sourceContext?.classId)
+  renderClassList($('class-list'),classList,{selected:current?.classId,onPick:item=>void runLatest(()=>pickClass(item),{label:'正在讀取來源班級'})})
+  uiText($('read-title'),here?'work.readTitle':'work.pickTitle');uiText($('read-help'),here?'work.readHelp':'work.pickHelp')
+  const name=current?.title||''
+  if(name&&!here)uiText($('collect-label'),'work.readClass',{name});else uiText($('collect-label'),'work.readThis')
+}
+async function loadClassList(){
+  let works=[];try{works=await send({type:'workspace-store',action:'list'})||[]}catch{}
+  classList=classEntries({tabs,works,currentTabId:Number(params.get('source'))||null});renderClasses()
+}
+async function pickClass(item){
+  let tab=item.tabId?tabs.find(candidate=>candidate.id===item.tabId):null
+  if(!tab){tab=await send({type:'workspace-open-source',sourcePath:item.path});tabs.push(tab);item.tabId=tab.id}
+  if(![...$('source-tab').options].some(option=>option.value===String(tab.id)))$('source-tab').add(new Option(`${tab.title||'來源分頁'} · ${tab.path}`,tab.id))
+  $('source-tab').value=String(tab.id);await changeSource()
+}
+// 確認: only exceptions, grouped by kind; automatic matches collapse to one line.
+function renderConfirm(){
+  const host=$('confirm-overview');if(!host||work?.type!=='import'||!work.snapshot)return
+  let enrollments=[];try{enrollments=work.snapshot.records.filter(row=>row.kind==='enrollment'&&!row.sourceSkipped&&!mappingController.validateRow(row,true))}catch{}
+  const model=exceptionModel({items:historyPlan,enrollments}),peak=Math.max(confirmPeak.get(work.id)||0,model.total);confirmPeak.set(work.id,peak)
+  renderConfirmOverview(host,model,{className:work.sourceTitle||work.title||sourceContext?.title||'',handled:peak-model.total,autoOpen:confirmAutoOpen,onToggleAuto:open=>{confirmAutoOpen=open;renderConfirm()},onResolve:resolveException,autoLabel:item=>item.attendanceEvidence?'work.attendanceOnly':item.category==='history'?'work.historyOnly':'work.matched'})
+}
+function resolveException(item){
+  if(item.kind==='enrollment'){reviewPane('identity');$('identity-review').open=true;mappingController.revealAdmission(item.sourceId)}
+  else{reviewPane('reports');historyView.focusReport(item.key)}
+}
 document.querySelectorAll('[data-stage-nav]').forEach(button=>button.addEventListener('click',()=>{
   if(busy)return
-  const [view,raw]=button.dataset.stageNav.split(':'),step=Number(raw)
+  const [view,raw]=button.dataset.stageNav.split(':'),step=view==='import'?[1,2,4][Number(raw)-1]:Number(raw)
   if(!currentWorkflow(view).available[step-1])return
   stage(view,(view==='import'?['collect','preview','apply','resume']:['read-form','compare','prefill','return-source'])[step-1])
   if(work?.type===view)void save().catch(error=>notice(error.message,true))
@@ -165,7 +208,7 @@ function flow(value) {
   if(value!=='work')work=activeWorks[value]||null
   for(const item of ['import','prefill','work'])$(`${item}-view`).hidden=item!==value
   document.querySelectorAll('[data-flow]').forEach(button=>{if(button.dataset.flow===value)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current')})
-  $('source-picker').hidden=value==='work'
+  $('source-picker').hidden=value!=='prefill'
   if(value==='import'||value==='prefill')restoreStage(value)
   if(value==='work'&&binding)void runLatest(loadWork,{label:'正在更新工作紀錄'})
   taskStatus()
@@ -292,6 +335,7 @@ async function initialize() {
   $('connect').hidden = true; show('workspace')
   options($('source-tab'), tabs, t => `${t.title || '支援網站'} · ${t.path}`, '選擇支援網站分頁')
   if (tabs.some(t => t.id === Number(params.get('source')))) $('source-tab').value = params.get('source')
+  $('connection-pill').hidden = false; await loadClassList()
   loadedLessonCourses.clear(); lessonCatalogLoads.clear()
   context = { classrooms: [], courses: [], class_sessions: [], students: [], enrollments: [], occurrences: [], report_targets: [], lessons: [], source_links: [], permissions: {} }
   if ($('source-tab').value) await changeSource()
@@ -300,13 +344,22 @@ async function initialize() {
   if(!integrationCapabilities.sync_field_preferences){$('sync-preferences-status').textContent='目前連線不支援跨裝置同步偏好；本次工作仍可調整欄位。';$('save-sync-preferences').disabled=true} renderSyncFields()
   flow(params.get('flow') || ($('source-tab').value?'import':'work'))
 }
+// 完成: result header and a link to the class in EduLog.
+function renderDoneHeader() {
+  const done=['complete','partial_complete'].includes(work?.status),time=work?.updatedAt?new Intl.DateTimeFormat(globalThis.edulogUi?.locale||'zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(work.updatedAt)):''
+  $('done-icon').hidden=!done;uiText($('progress-heading'),work?.status==='complete'?'work.doneTitle':work?.status==='partial_complete'?'work.donePartial':'work.progressTitle')
+  $('done-sub').textContent=[work?.sourceTitle||work?.title,time].filter(Boolean).join(' · ')
+  let href=''
+  try{const session=work?.destination?.class_session_id;if(done&&frontendSettingsUrl&&/^[a-f0-9-]{36}$/i.test(session||''))href=new URL(`/dashboard/classrooms/session/${session}`,frontendSettingsUrl).href}catch{}
+  const link=$('view-in-edulog');link.hidden=!href;if(href)link.href=href;else link.removeAttribute('href')
+}
 async function changeSource() {
   const current = ++generation; $('source-picker').open=true;delete $('source-picker').dataset.workId; form = null; report = null; previewResults = []; work = null;activeWorks.import=null;activeWorks.prefill=null;activeStages.import=1;activeStages.prefill=1;continuation=null;$('continue-work').hidden=true
   const tab = tabs.find(t => t.id === Number($('source-tab').value)); selectedPath = tab?.path || ''
   sourceContext = null; classSourceReady = false; reportSourceReady = false
-  if (!tab) { $('source-label').textContent = '尚未選擇來源分頁'; $('collect').disabled = true; $('read-form').disabled = true; return }
+  if (!tab) { $('source-label').textContent = '尚未選擇來源分頁'; $('collect').disabled = true; $('read-form').disabled = true; renderClasses(); return }
   const c = await source('context'); if (current !== generation) return
-  sourceContext = c; classSourceReady = Boolean(c?.classId); reportSourceReady = Boolean(c?.reportOpen)
+  sourceContext = c; classSourceReady = Boolean(c?.classId); reportSourceReady = Boolean(c?.reportOpen); renderClasses()
   $('collect').disabled = !classSourceReady; $('read-form').disabled = !reportSourceReady
   if (!classSourceReady && !reportSourceReady) { $('source-label').textContent = `${tab.title || tab.path} · 來源班級或報告表單尚未辨識；請在來源分頁開啟班級頁或「記錄」表單後重試。`; notice('目前來源沒有可讀取的班級或報告表單；匯入與預填入口暫不可用。'); return }
   $('source-label').textContent = `${c.sourceOrigin} · ${c.title || c.sourcePath || selectedPath} · ${c.sourcePath || selectedPath}`
@@ -873,6 +926,7 @@ function allSubmissionRounds(row=work) {
 }
 function renderImportOutcome() {
   const host = $('import-outcome'); host.replaceChildren(); host.hidden = false
+  renderDoneHeader()
   const title = node('h3', work.status==='complete'?'同步工作已完成':work.status==='stale'?'同步受阻，請重新核對未提交資料':work.status==='outcome_unknown'?'結果待確認':work.status==='cancelled'?'已取消剩餘工作':work.status==='awaiting-finalization'?'批次已保存，等待確認完成':'本輪同步完成，仍有待處理項目')
   host.append(title)
   const totals = {}
@@ -1458,6 +1512,9 @@ $('work-class-filter').addEventListener('input',renderWorkRecords)
 
 document.querySelectorAll('[data-flow]').forEach(b => b.addEventListener('click', async () => {if(busy&&!activeReadId)return;if(activeReadId){await cancelRead(false);await readFinished}flow(b.dataset.flow)}))
 $('source-tab').addEventListener('change', () => void runLatest(changeSource, { label: '正在讀取來源班級' }))
+$('back-to-read').addEventListener('click',()=>{if(busy)return;stage('import','collect');if(work)void save().catch(error=>notice(error.message,true))})
+$('back-to-review').addEventListener('click',()=>{if(busy)return;stage('import','preview');if(work)void save().catch(error=>notice(error.message,true))})
+$('return-source-import').addEventListener('click',()=>void run(async()=>{await send({type:'workspace-return',tabId:work?.sourceTab||Number($('source-tab').value),sourcePath:work?.sourcePath||selectedPath});notice('已開啟來源分頁。')}))
 chrome.runtime.onMessage.addListener((message,_sender,respond)=>{
   if(message?.type!=='workspace-focus')return
   void(async()=>{
