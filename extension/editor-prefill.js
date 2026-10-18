@@ -6,6 +6,9 @@
   let host = null, root = null, form = null, target = null, report = null, generation = 0, observer
   let nativeForm, layout, anchor, modal, settingsUrl, capabilities = {}, saving = false, suspended = false, containers = []
   let fieldRules=[]
+  // The assistant mounts only for a verified EduLog connection; otherwise the native editor stays untouched.
+  const COLLAPSE_KEY='edulogAssistantCollapsed'
+  let gate=null, gateForm=null, pendingForm=null, accessSerial=0
   let stopLocale; let resizeHandler, paneScroll={native:0,assistant:0}
   const groups = new Map(), drafts = new Map()
   function formContext(){if(!modal)return;const header=modal.querySelector('.modal-header');if(!header)return;let context=header.querySelector('.edulog-prefill-context');if(!context){context=make('p',undefined,'edulog-prefill-context');context.dataset.edulogOwned='';context.setAttribute('aria-live','polite');header.append(context)}context.textContent=`原站目標：${target?.studentName||form?.title||'學生待確認'} · ${form?.date||'日期待確認'} · ${target?.courseName||'課程待確認'}${report?` ｜ EduLog ${report.occurrence_date}${report.occurrence_date!==form?.date||report.enrollment_id!==target?.enrollmentId?'（範本）':''}`:''}`}
@@ -40,7 +43,7 @@
     const compact=layout?.querySelector('.edulog-editor-compact-status');if(compact){compact.textContent=message;compact.dataset.error=String(error)}
     const local=root?.querySelector('.apply-feedback');if(local){local.textContent=message;local.dataset.error=String(error)}
   }
-  function setup() {
+  function setup({ collapsed = false } = {}) {
     if (host?.isConnected) return
     nativeForm=adapter.getForm(document)
     if (!nativeForm) return
@@ -64,8 +67,8 @@
       @media(max-width:480px){.comparison{grid-template-columns:1fr}}
       @media(max-width:560px){section{padding:11px}header{align-items:flex-start}.actions button{flex:1 1 100%}}
       @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
-    </style><section><header><div><h2>EduLog 報告預覽</h2><p class="target">正在查詢已記住的學生與日期…</p></div><button class="refresh" type="button">重新核對</button></header><p role="status" aria-live="polite" aria-atomic="true">正在驗證擴充套件連線…</p><div class="result"></div><div class="actions"><button class="connect" type="button" hidden>開啟 EduLog 連線設定</button></div></section>`
-    if(globalThis.edulogUi){const style=document.createElement('style');style.textContent=globalThis.edulogUi.styles;root.append(style);globalThis.edulogUi.text(root.querySelector('.refresh'),'assistant.refresh')}
+    </style><section><header><div><h2>EduLog 報告預覽</h2><p class="target">正在查詢已記住的學生與日期…</p></div><button class="refresh" type="button">重新核對</button></header><p role="status" aria-live="polite" aria-atomic="true">正在驗證擴充套件連線…</p><div class="result"></div><div class="actions"><button class="sync-class primary" type="button" hidden>同步本班</button><button class="connect" type="button" hidden>開啟 EduLog 連線設定</button></div></section>`
+    if(globalThis.edulogUi){const style=document.createElement('style');style.textContent=globalThis.edulogUi.styles;root.append(style);globalThis.edulogUi.text(root.querySelector('.refresh'),'assistant.refresh');globalThis.edulogUi.text(root.querySelector('.sync-class'),'assistant.syncClass')}
     stopLocale=globalThis.edulogUiLegacy?.watch(root)
     const section=root.querySelector('section'),header=root.querySelector('header')
     header.querySelector('h2').textContent='EduLog 報告助手';globalThis.edulogUi?.text(header.querySelector('h2'),'assistant.title')
@@ -83,9 +86,12 @@
     const nativePane=make('div',undefined,'edulog-editor-native');nativePane.append(nativeForm);layout.append(tabs,nativePane,host);anchor.after(layout);modal=nativeForm.closest('.modal');modal?.setAttribute('data-edulog-prefill','');setView('native')
     let paneWidth=innerWidth,paneHeight=innerHeight;paneScroll={native:0,assistant:0};nativePane.addEventListener('scroll',()=>{if(nativePane.offsetHeight&&innerWidth===paneWidth&&innerHeight===paneHeight)paneScroll.native=nativePane.scrollTop});host.addEventListener('scroll',()=>{if(host.offsetHeight&&innerWidth===paneWidth&&innerHeight===paneHeight)paneScroll.assistant=host.scrollTop})
     resizeHandler=()=>{if(!layout||layout.hidden)return;const position={...paneScroll};requestAnimationFrame(()=>{if(!host?.isConnected)return;if(host.offsetHeight)host.scrollTop=position.assistant;if(nativePane.offsetHeight)nativePane.scrollTop=position.native;paneScroll=position;paneWidth=innerWidth;paneHeight=innerHeight})};window.addEventListener('resize',resizeHandler)
-    collapse.addEventListener('click',()=>{const closed=layout.dataset.collapsed!=='true';const state=preserveView();layout.dataset.collapsed=String(closed);host.dataset.collapsed=String(closed);body.hidden=closed;layout.hidden=closed;modal?.toggleAttribute('data-edulog-prefill',!closed);for(const c of containers){if(closed){if(c.value===null)c.node.removeAttribute('data-edulog-prefill-container');else c.node.setAttribute('data-edulog-prefill-container',c.value)}else c.node.setAttribute('data-edulog-prefill-container','')}if(closed){anchor.after(host,nativeForm)}else{layout.querySelector('.edulog-editor-native').append(nativeForm);layout.append(host);anchor.after(layout)}collapse.textContent=closed?'展開 EduLog 助手':'收合助手';globalThis.edulogUi?.text(collapse,closed?'assistant.expand':'assistant.collapse');restoreView(state)})
+    const applyCollapsed=(closed,persist=true)=>{const state=preserveView();layout.dataset.collapsed=String(closed);host.dataset.collapsed=String(closed);body.hidden=closed;layout.hidden=closed;modal?.toggleAttribute('data-edulog-prefill',!closed);for(const c of containers){if(closed){if(c.value===null)c.node.removeAttribute('data-edulog-prefill-container');else c.node.setAttribute('data-edulog-prefill-container',c.value)}else c.node.setAttribute('data-edulog-prefill-container','')}if(closed){anchor.after(host,nativeForm)}else{layout.querySelector('.edulog-editor-native').append(nativeForm);layout.append(host);anchor.after(layout)}collapse.textContent=closed?'展開 EduLog 助手':'收合助手';globalThis.edulogUi?.text(collapse,closed?'assistant.expand':'assistant.collapse');restoreView(state);if(persist)saveCollapsed(closed)}
+    collapse.addEventListener('click',()=>applyCollapsed(layout.dataset.collapsed!=='true'))
     root.querySelector('.refresh').addEventListener('click',()=>void lookup())
+    root.querySelector('.sync-class').addEventListener('click',async event=>{const button=event.currentTarget;button.disabled=true;try{const result=await globalThis.edulogRuntime.send({type:'open-integration-workspace',flow:'import'});if(result?.opened===false)throw new Error(result?.error?.message||'無法開啟整合工作台。')}catch(error){status(error.message||'無法開啟整合工作台。',true)}finally{if(button.isConnected)button.disabled=false}})
     root.querySelector('.connect').addEventListener('click',async event=>{const button=event.currentTarget;button.disabled=true;try{await globalThis.edulogRuntime.send({type:'open-integration-workspace',flow:'prefill'})}catch(error){status(error.message||'無法開啟整合工作台。',true)}finally{if(button.isConnected)button.disabled=false}})
+    if(collapsed)applyCollapsed(true,false)
     void lookup()
   }
   function reportLabel(item){return `${item.student_name || '學生'} · ${item.occurrence_date || '日期待確認'} · ${item.course_name || '課程'} · ${item.completeness?.isMissing?'報告未齊備':'報告已齊備'}`}
@@ -94,7 +100,7 @@
   function verifiedLink(parent,label,url){try{const u=new URL(url);if(!['http:','https:'].includes(u.protocol)||u.username||u.password)return;const a=make('a',`${label} ↗`);a.href=u.href;a.target='_blank';a.rel='noopener noreferrer';parent.append(a)}catch{/* Missing URLs remain unavailable. */}}
   function frontend(path){try{const u=new URL(settingsUrl),suffix='/dashboard/settings';if(!u.pathname.endsWith(suffix)||!['http:','https:'].includes(u.protocol))return null;u.pathname=u.pathname.slice(0,-suffix.length)+path;u.search='';u.hash='';return u.href}catch{return null}}
   function questionUI(){
-    const box=root.querySelector('.question-body'),stage=root.querySelector('.questions');box.replaceChildren();stage.open=!form.date||!target
+    const box=root.querySelector('.question-body'),stage=root.querySelector('.questions');box.replaceChildren();stage.open=!form.date
     stage.querySelector('summary').textContent=form.date&&target?`1 · 目標已核對 · ${form.date}`:'1 · 補足目標資訊'
     const summary=make('div',undefined,'report');summary.append(make('strong',`原站報名 #${form.admissionId} · ${form.date||'日期待確認'}`),make('small',target?`${target.studentName||'學生'} · ${target.courseName||'課程'} · ${target.className||'班級'}`:'尚無有效 EduLog 報名對應，可先查看報告範本。'))
     if(form.dateInfo?.raw?.length){const raw=make('details');raw.append(make('summary','查看原站日期資料'),make('p',form.dateInfo.raw.join(' ／ ')));summary.append(raw)}
@@ -105,7 +111,7 @@
     let conflict
     if(form.dateInfo?.conflict){conflict=make('input');conflict.type='checkbox';const l=make('label',undefined,'check');l.append(conflict,make('span','我已核對矛盾的來源日期，確認使用此日期'));q.append(l)}
     const b=action('確認上課日期',()=>{if(!input.value){status('請選擇完整上課日期。',true);input.focus();return}void supplement({date:input.value,conflictAcknowledged:conflict?.checked===true},b)},'primary');q.append(b,action('稍後處理',()=>{stage.open=false;status('可繼續查看候選，套用前仍需確認完整日期。')}));if(form.date){const edit=make('details',undefined,'date-edit');edit.append(make('summary','修改已確認的上課日期'),q);box.append(edit)}else box.append(q)
-    const identities=make('details',undefined,'identity-question');identities.open=Boolean(form.date&&!target);identities.append(make('summary',target?'修改當次學生／報名':'需要您確認：當次學生／報名'))
+    const identities=make('details',undefined,'identity-question');identities.open=false;identities.append(make('summary',target?'修改當次學生／報名':'需要您確認：當次學生／報名'))
     const student=make('input');student.type='search';student.name='target-student-search';student.autocomplete='off';student.maxLength=80;const lab=make('label','搜尋既有 EduLog 學生');lab.append(student);identities.append(lab)
     const feedback=make('p','姓名不自動合併；選擇只用於本次報告。','muted');feedback.setAttribute('aria-live','polite');const results=make('div',undefined,'list');let serial=0,timer
     const search=async cursor=>{const id=++serial,scope=generation;feedback.textContent='正在查詢學生…';try{const data=await request('identity-search',{query:{resource:'students',search:student.value.trim(),cursor}});if(id!==serial||scope!==generation||!identities.isConnected)return;if(!cursor)results.replaceChildren();for(const item of data.items||[])results.append(action(`${item.name} · #${item.id.slice(0,8)}`,()=>void enrollments(item)));feedback.textContent=`本頁找到 ${data.items?.length||0} 位學生。`;if(data.next_cursor)results.append(action('載入更多學生',()=>void search(data.next_cursor)))}catch(e){if(id===serial)feedback.textContent=e.message}}
@@ -256,7 +262,10 @@
       await loadFieldRules(serial);if(serial!==generation||!host?.isConnected)return
       if(!result.connected){root.querySelector('.connect').hidden=false;status('請先連接 EduLog，配對完成後再重新核對。',true);renderList([]);return}
       root.querySelector('.connect').hidden=true
-      if(result.reason)status(result.reason,!target)
+      // An unsynced student is an ordinary state, not an error: offer the class sync instead of empty steps.
+      root.querySelector('.sync-class').hidden=Boolean(target);root.querySelector('.candidates').hidden=!target
+      if(!target)status('此學生尚未同步到 EduLog。同步本班後即可預填。')
+      else if(result.reason)status(result.reason)
       else status(result.reports.length===1?'找到一份相符報告。':`已查詢同一日期報告：${result.reports.length} 份。`)
       renderList(result.reports||[],result.next_cursor)
       if(report){const selected=await request('detail',{reportId:report.id});if(serial!==generation||!host?.isConnected)return;if(!selected)throw new Error('所選報告已無法讀取；目前預填草稿仍保留。');const changed=selected.version!==report.version;if(changed){const key=`${form.action||form.reportId}:${report.id}:`;const old=drafts.get(key+report.version);if(old)drafts.set(key+selected.version,old)}report=selected;formContext();renderFields(report);restoreView(view);if(changed)status('EduLog 報告已更新；已保留預填草稿，請重新核對後再套用。')}
@@ -265,15 +274,43 @@
     }catch(error){if(serial===generation){if(/連接並驗證|請先連接/.test(error.message))root.querySelector('.connect').hidden=false;status(error.message,true)}}
   }
   function teardown(){generation++;stopLocale?.();stopLocale=null;if(resizeHandler)window.removeEventListener('resize',resizeHandler);resizeHandler=null;if(layout&&nativeForm){anchor?.after(nativeForm);layout.remove();anchor?.remove()}for(const {node,value} of containers){if(value===null)node.removeAttribute('data-edulog-prefill-container');else node.setAttribute('data-edulog-prefill-container',value)}containers=[];modal?.querySelector('.edulog-prefill-context')?.remove();modal?.removeAttribute('data-edulog-prefill');host?.remove();host=root=nativeForm=layout=anchor=modal=form=target=report=null;groups.clear();saving=false}
-  function sync(){if(suspended)return;const current=adapter.getForm(document);if(host?.isConnected&&nativeForm===current)return;teardown();if(current)setup()}
+  async function readAccess(){try{const value=await globalThis.edulogRuntime.send({type:'get-edulog-integration-status'});return value?.status==='connected'&&value?.capabilities?.report_prefill===true}catch{return false}}
+  async function readCollapsed(){try{return (await chrome.storage.local.get(COLLAPSE_KEY))?.[COLLAPSE_KEY]===true}catch{return false}}
+  function saveCollapsed(value){try{void chrome.storage.local.set({[COLLAPSE_KEY]:value}).catch(()=>{})}catch{/* Storage is unavailable after the extension context is invalidated. */}}
+  function removeGate(){gate?.remove();gate=gateForm=null}
+  function showGate(current){
+    if(gate?.isConnected&&gateForm===current)return
+    removeGate()
+    gate=make('button','連接 EduLog 以啟用報告助手','edulog-prefill-gate');gate.type='button';gate.dataset.edulogOwned='';gateForm=current
+    globalThis.edulogUi?.text(gate,'assistant.connectToEnable')
+    gate.addEventListener('click',async()=>{gate.disabled=true;try{await globalThis.edulogRuntime.send({type:'open-integration-workspace',flow:'prefill'})}catch{/* The toolbar keeps the connection entry point available. */}finally{if(gate?.isConnected)gate.disabled=false}})
+    const header=current.closest('.modal,#remote_modal')?.querySelector('.modal-header')
+    if(header)header.append(gate);else current.before(gate)
+  }
+  async function sync(force=false){
+    if(suspended)return
+    const current=adapter.getForm(document)
+    if(!current){pendingForm=null;accessSerial++;teardown();removeGate();return}
+    if(!force&&(pendingForm===current||host?.isConnected&&nativeForm===current||gate?.isConnected&&gateForm===current))return
+    const serial=++accessSerial;pendingForm=current
+    const [ready,collapsed]=await Promise.all([readAccess(),readCollapsed()])
+    if(serial!==accessSerial)return
+    pendingForm=null
+    if(suspended||adapter.getForm(document)!==current)return
+    if(!ready){teardown();showGate(current);return}
+    removeGate()
+    if(host?.isConnected&&nativeForm===current)return
+    teardown();setup({collapsed})
+  }
+  try{chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&changes.edulogExtension)void sync(true)})}catch{/* The page keeps the native editor when extension storage is unavailable. */}
   observer=new MutationObserver(records=>{if(records.some(record=>{
     const node=record.target.nodeType===1?record.target:record.target.parentElement
     if(node?.closest('[data-edulog-owned],.edulog-editor-layout'))return false
     const changed=[...record.addedNodes,...record.removedNodes].filter(n=>n.nodeType===1&&!n.matches('[data-edulog-owned],.edulog-editor-layout'))
     return changed.length&&(node?.closest('.modal,#remote_modal')||changed.some(n=>n.matches('.modal,#remote_modal')||n.querySelector('.modal,#remote_modal')))
-  }))sync()})
+  }))void sync()})
   observer.observe(document.documentElement,{childList:true,subtree:true})
-  document.addEventListener('turbo:before-cache',()=>{suspended=true;teardown()})
-  for(const name of ['turbo:render','turbo:load'])document.addEventListener(name,()=>{suspended=false;sync()})
-  sync()
+  document.addEventListener('turbo:before-cache',()=>{suspended=true;accessSerial++;pendingForm=null;teardown();removeGate()})
+  for(const name of ['turbo:render','turbo:load'])document.addEventListener(name,()=>{suspended=false;void sync()})
+  void sync()
 })()

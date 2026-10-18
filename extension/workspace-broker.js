@@ -128,7 +128,7 @@ export function installWorkspaceBroker(getStatus) {
         const formResponse = await chrome.tabs.sendMessage(tab.id, { type: 'integration-form', expectedPath: new URL(tab.url).pathname })
         if (formResponse?.error || !formResponse?.data) fail(formResponse?.error?.message || '原站報告表單已關閉，請重新開啟。')
         let form = formResponse.data
-        if (!/^[0-9]+$/.test(form.admissionId || '') || !/^[0-9]+$/.test(form.reportId || '') || (message.formId && message.formId !== form.formId) || (message.fingerprint && message.fingerprint !== form.fingerprint)) fail('原站報告表單已變更，請重新讀取。')
+        if (!/^[0-9]+$/.test(form.admissionId || '') || !/^[0-9]+$/.test(form.reportId || '') || (message.formId && message.formId !== form.formId) || (message.operation !== 'lookup' && message.fingerprint && message.fingerprint !== form.fingerprint)) fail('原站報告表單已變更，請重新讀取。')
         const operation = message.operation
         const call=async details=>{const reply=await api({...details,binding:{instance:bound.instance,userId:bound.userId}});if(reply.error){const error=new Error(reply.error.message);Object.assign(error,reply.error);throw error}return reply.data}
         if(operation==='supplement'){

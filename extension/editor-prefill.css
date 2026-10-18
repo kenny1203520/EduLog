@@ -36,3 +36,7 @@
  .modal[data-edulog-prefill] .modal-content{height:100dvh!important;max-height:100dvh!important;border-radius:0}
  .edulog-editor-native,.edulog-editor-assistant{padding:16px 12px max(24px,env(safe-area-inset-bottom))}
 }
+.edulog-prefill-gate{font:14px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;min-height:36px;padding:6px 12px;margin-inline-start:auto;border:1px solid var(--edulog-border-strong);border-radius:8px;background:white;color:var(--edulog-primary);cursor:pointer;transition:background-color .15s ease}
+.edulog-prefill-gate:hover{background:var(--edulog-surface-subtle)}
+.edulog-prefill-gate:focus-visible{outline:3px solid var(--edulog-focus-ring);outline-offset:2px}
+.edulog-prefill-gate:disabled{opacity:.6;cursor:progress}

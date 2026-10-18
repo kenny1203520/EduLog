@@ -31,7 +31,7 @@ try{
      window.reports=[make(11,'2026-10-03'),make(12,'2026-10-05')]
      reports.forEach(r=>{r.course_name+=' · '+ 'LongCourseName'.repeat(8);r.class_name+=' · 長名稱測試班級'.repeat(4)})
      window.edulogRuntime={send:async m=>{
-      editorCalls.push(m);if(m.type==='open-integration-workspace')return{data:{opened:true}}
+      editorCalls.push(m);if(m.type==='get-edulog-integration-status')return{status:'connected',capabilities:{report_prefill:true}};if(m.type==='open-integration-workspace')return{data:{opened:true}}
       const form=await edulogSourceIntegration.readForm(document)
       if(m.operation==='lookup')return{data:{connected:true,form,target:{studentId:student,enrollmentId:enrollment,courseId:course,studentName:'學生甲',courseName:'同一課程',className:'週日班級'},reports:[],settingsUrl:'https://web.example:8443/edulog/dashboard/settings?tab=integrations',capabilities:{nearest_report_candidates:true}}}
       if(m.operation==='supplement')return{data:{form:await edulogSourceIntegration.supplementForm(document,{...m.input,formId:m.formId,fingerprint:m.fingerprint})}}

@@ -155,7 +155,7 @@ try {
           document.body.innerHTML='<div class="modal"><form id="source-report-form"><button type="submit">原站送出</button></form></div>'
           document.querySelector('form').addEventListener('submit',event=>{event.preventDefault();globalThis.sourceSubmitted++})
           globalThis.edulogSourceIntegration={getForm:doc=>doc.querySelector('#source-report-form'),readForm:async()=>structuredClone(form)}
-          globalThis.edulogRuntime={send:async message=>{
+          globalThis.edulogRuntime={send:async message=>{if(message.type==='get-edulog-integration-status')return{status:'connected',capabilities:{report_prefill:true}};
             editorCalls.push(message)
             if(message.type==='open-integration-workspace')return{data:true}
             if(message.operation==='lookup')return{data:{connected:true,form:structuredClone(form),target:{enrollmentId:'target-enrollment',studentId:'target-student',studentName:'目標學生',className:'目標班級',courseName:'測試課程'},reports:[{id:'target-report',version:4,student_id:'target-student',student_name:'目標學生',enrollment_id:'target-enrollment',course_name:'測試課程',occurrence_date:'2026-10-02',updated_at:'2026-10-03T00:00:00Z',attendance_status:'present',content:'EduLog 學習摘要',class_notes:'內部文字',is_completed:false,completeness:{isMissing:false}}]}}
