@@ -44,6 +44,8 @@ try{
      await aside.evaluate(el=>el.scrollIntoView({block:'center'}));await aside.evaluate(el=>el.scrollTop=el.scrollHeight)
      const beforeWheel=await page.evaluate(()=>({page:scrollY,editor:document.getElementById('history-editor').scrollTop,list:document.querySelector('#history-workbench aside').scrollTop}))
      const box=await aside.boundingBox();await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.wheel(0,-500)
+     // Wheel scrolling is applied asynchronously; give a busy runner time before reading positions.
+     await page.waitForFunction(before=>document.querySelector('#history-workbench aside').scrollTop<before,beforeWheel.list,{timeout:3000}).catch(()=>{})
      const afterWheel=await page.evaluate(()=>({page:scrollY,editor:document.getElementById('history-editor').scrollTop,list:document.querySelector('#history-workbench aside').scrollTop}))
      assert.ok(afterWheel.list<beforeWheel.list,`${name} ${width}: mouse wheel scrolls the left report pane ${JSON.stringify({beforeWheel,afterWheel,box})}`)
      assert.equal(afterWheel.page,beforeWheel.page);assert.equal(afterWheel.editor,beforeWheel.editor)
