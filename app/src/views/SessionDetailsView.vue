@@ -2770,6 +2770,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                 :initial-lesson-id="selectedEditorReport?.lessonId"
                                 :available-lessons="courseLessons"
                                 :initial-report-external-link="selectedEditorReport?.externalLink"
+                                :source-identity="selectedEditorReport"
                                 :initial-is-completed="selectedEditorReport?.isCompleted"
                                 :initial-progress-start="selectedEditorReport?.progressStart"
                                 :initial-progress-end="selectedEditorReport?.progressEnd"

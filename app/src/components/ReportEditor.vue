@@ -184,6 +184,9 @@
                 </section>
             </div>
 
+            <!-- Source report (imported) -->
+            <SourceReportLink :identity="sourceIdentity" class="mb-4" />
+
             <!-- Report External Link Input -->
             <div class="mb-4">
                 <label class="block text-xs font-medium text-gray-600 mb-1">
@@ -704,6 +707,8 @@ import {
 import { copyRichTextToClipboard } from '@/utils/clipboard'
 import { formatNumber } from '@/utils/numberFormatting'
 import { safeExternalHref } from '@/utils/safeExternalHref'
+import type { SourceReportIdentity } from '@/utils/sourceReportLink'
+import SourceReportLink from '@/components/reports/SourceReportLink.vue'
 import { normalizeAbsenceReasonCode } from '@/utils/absenceReason'
 import { mergeReportConflict } from '@/services/report/ReportConflictMerge'
 import { findCourseProgressGaps } from '@/utils/courseProgressGaps'
@@ -750,6 +755,7 @@ interface Props {
     collaborationEnabled?: boolean
     notificationsEnabled?: boolean
     initialEnrollmentExternalLink?: string // 課程外部連結
+    sourceIdentity?: SourceReportIdentity | null // 匯入報告的原站身分
     initialCreatedAt?: string // 建立時間
     compact?: boolean // 是否為緊湊模式 (for split view)
 }
@@ -791,6 +797,7 @@ const props = withDefaults(defineProps<Props>(), {
     collaborationEnabled: undefined,
     notificationsEnabled: undefined,
     initialEnrollmentExternalLink: '',
+    sourceIdentity: null,
     initialCreatedAt: '',
     compact: false,
 })

@@ -25,6 +25,13 @@ describe('student API resource boundaries', () => {
     ]))
   })
 
+  it('exposes the read-only source report identity on report projections', () => {
+    const sourceFields = ['source_origin', 'source_admission_id', 'source_report_id']
+    expect(resources.reports.fields).toEqual(expect.arrayContaining(sourceFields))
+    expect(resources.reports.listFields).toEqual(expect.arrayContaining(sourceFields))
+    for (const field of sourceFields) expect(resources.reports.writable).not.toContain(field)
+  })
+
   it('registers explicit student child resources with the student permission scope', () => {
     expect(resources['student-contacts'].table).toBe('student_contacts')
     expect(resources['student-schools'].table).toBe('student_schools')

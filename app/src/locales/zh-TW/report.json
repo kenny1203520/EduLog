@@ -107,6 +107,8 @@
         "view_external_report": "外部報告總覽連結",
         "report_link_label": "報告連結",
         "view_report_link": "開啟報告連結",
+        "open_source_report": "在原站開啟／編輯",
+        "open_source_report_hint": "在新分頁開啟原站的這份報告",
         "unrated": "未評分",
         "clear_rating": "清除評分",
         "rate_half_star": "評為 {value} / 5 分",

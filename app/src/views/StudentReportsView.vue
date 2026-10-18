@@ -273,6 +273,7 @@
                             class="inline-flex w-fit items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-700">
                             {{ $t('report.editor.view_report_link') }}
                         </a>
+                        <SourceReportLink :identity="displayReport.sourceIdentity" />
 
                         <!-- Notes Summary -->
                         <div v-if="displayReport.classNotes"
@@ -457,6 +458,7 @@
                         :initial-student-name="enrollmentInfo?.studentName"
                         :initial-student-id="enrollmentInfo?.studentId" :initial-lesson-id="selectedReport.lessonId"
                         :available-lessons="courseLessons" :initial-report-external-link="selectedReport.externalLink"
+                        :source-identity="selectedReport"
                         :initial-is-completed="selectedReport.isCompleted"
                         :initial-progress-start="selectedReport.progressStart"
                         :initial-progress-end="selectedReport.progressEnd"
@@ -554,6 +556,8 @@ import { DateUtils } from '@/utils/DateUtils'
 import { isAttendanceReportStatus } from '@/utils/reportListFilter'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { safeExternalHref } from '@/utils/safeExternalHref'
+import { sourceIdentityFromRow } from '@/utils/sourceReportLink'
+import SourceReportLink from '@/components/reports/SourceReportLink.vue'
 
 type ReportEditorExpose = {
     saveNow: (options?: { reason?: 'manual' | 'switch' }) => Promise<boolean>
@@ -792,6 +796,7 @@ const allReportDisplay = computed(() => {
                 classParticipation: r.class_participation,
                 classroomBehavior: r.classroom_behavior,
                 externalLink: r.external_link,
+                sourceIdentity: sourceIdentityFromRow(r),
                 isCompleted: r.is_completed,
                 contactNotes: r.contact_notes,
                 progressDisplay: r.progress_letter
@@ -818,6 +823,7 @@ const allReportDisplay = computed(() => {
                 classParticipation: null,
                 classroomBehavior: null,
                 externalLink: null,
+                sourceIdentity: null,
                 isCompleted: false,
                 contactNotes: '',
                 progressDisplay: '',
@@ -850,6 +856,7 @@ const allReportDisplay = computed(() => {
                 classParticipation: r.class_participation,
                 classroomBehavior: r.classroom_behavior,
                 externalLink: r.external_link,
+                sourceIdentity: sourceIdentityFromRow(r),
                 isCompleted: r.is_completed,
                 contactNotes: r.contact_notes,
                 progressDisplay: r.progress_letter
