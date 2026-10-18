@@ -263,18 +263,66 @@ test('empty monthly list does not imply reports were submitted', () => {
   assert.equal(dom.window.document.querySelector('[aria-current=page]').textContent, '上月份')
   dom.window.close()
 })
-test('current unfilled list is searchable without losing original action links', () => {
-  const dom = fixture('unfilled-current','/admissions/unfilled_report'), doc = dom.window.document
-  const originalLink = doc.querySelector('tbody a[href*="student_id=301"]')
+// An overdue row with a phone number, as the provider shows it on 補填 pages.
+const overdueUnfilledRow = '<tr><td><a href="/dt_admissions/303">學生丙</a><small>課程丙</small> 0912-345-678</td><td>週日第 1 時段 (10:00 ~ 12:00)</td><td>週日第 1 時段 (10:00 ~ 12:00)</td><td><a class="btn btn-danger" href="/courses/dt/101/lesson_reports?student_id=303">請儘速填寫</a></td></tr>'
+function unfilledFixture(path = '/admissions/unfilled_report', name = 'unfilled-current') {
+  const virtualConsole = new VirtualConsole()
+  virtualConsole.on('jsdomError', error => pendingJsdomErrors.push(error))
+  const html = read(`fixtures/${name}.html`).replace(/<tbody>/, `<tbody>${overdueUnfilledRow}`)
+  const dom = new JSDOM(html, { url: `https://corp.orangeapple.co${path}`, runScripts: 'outside-only', virtualConsole })
+  for (const file of ['sites/orange-apple/orange-apple-lexicon.js', 'sites/orange-apple/orange-apple-model.js', 'sites/orange-apple/orange-apple-workflows.js', 'sites/orange-apple/orange-apple.js']) dom.window.eval(read(`../${file}`))
+  return dom
+}
+const unfilledGroups = doc => [...doc.querySelectorAll('.edulog-unfilled-group')].map(group => `${group.dataset.tone}:${group.querySelector('.edulog-unfilled-head').textContent}:${[...group.querySelectorAll('.edulog-unfilled-row strong > span:first-child')].map(node => node.textContent).join(',')}`)
+test('current unfilled list groups by class session, overdue first, and keeps the native links', () => {
+  const dom = unfilledFixture(), doc = dom.window.document
+  const originalLink = doc.querySelector('tbody a[href*="student_id=301"]'), before = doc.body.outerHTML
   const enhanced = dom.window.edulogSiteAdapter.enhancePage(doc)
   assert.equal(doc.querySelector('[data-edulog-page="unfilled-current"]') !== null, true)
-  assert.equal(doc.querySelectorAll('tbody tr[data-edulog-unfilled-card]').length, 2)
-  assert.equal(doc.querySelector('tbody tr td[data-edulog-label="目前節次"]')?.textContent.trim(), '週日第 1 時段 (10:00 ~ 12:00)')
+  assert.equal(doc.querySelectorAll('tbody tr[data-edulog-unfilled-card]').length, 3)
+  assert.equal(doc.querySelector('[data-edulog-scroll]').getAttribute('data-edulog-cards'), 'on', 'the native table is hidden behind the list')
+  assert.deepEqual(unfilledGroups(doc), [
+    'danger:逾期未填1 份:學生丙',
+    'warn:週六第 2 時段 (13:00 ~ 15:00)課程甲1 份:學生甲',
+    'warn:週日第 1 時段 (10:00 ~ 12:00)課程乙1 份:學生乙',
+  ])
+  assert.equal(doc.querySelector('.edulog-unfilled-row').dataset.bar, 'danger')
+  assert.match(doc.querySelector('.edulog-unfilled-summary').textContent, /3 份未填 · 1 份請儘速填寫/)
+  // 學習紀錄節次 ≠ 目前節次 gets a tag; equal slots do not.
+  const rowOf = name => [...doc.querySelectorAll('.edulog-unfilled-row')].find(row => row.querySelector('strong > span').textContent === name)
+  assert.equal(rowOf('學生甲').querySelector('[data-tone="notice"]').textContent, '節次不一致')
+  assert.equal(rowOf('學生乙').querySelector('[data-tone="notice"]'), null)
+  // One 填寫 per row; it clicks the provider's own link.
+  for (const row of doc.querySelectorAll('.edulog-unfilled-row')) assert.equal(row.querySelectorAll('[data-edulog-unfilled-fill]').length, 1)
+  let clicked = null
+  originalLink.addEventListener('click', event => { event.preventDefault(); clicked = originalLink.href })
+  rowOf('學生甲').querySelector('[data-edulog-unfilled-fill]').click()
+  assert.match(clicked, /student_id=301/)
   assert.equal(doc.querySelector('tbody a[href*="student_id=301"]'), originalLink)
+  // The phone is shown only after a click.
+  assert.equal(doc.querySelector('.edulog-unfilled-list').textContent.includes('0912-345-678'), false)
+  const reveal = rowOf('學生丙').querySelector('button.edulog-phone')
+  assert.equal(reveal.getAttribute('aria-label'), '顯示 學生丙 的聯絡電話')
+  reveal.click()
+  assert.equal(rowOf('學生丙').querySelector('a.edulog-phone').getAttribute('href'), 'tel:0912345678')
+  // Search still filters (native rows and list rows together).
   const search = doc.querySelector('[data-edulog-search="unfilledQuery"]')
   search.value = '學生乙'; search.dispatchEvent(new dom.window.Event('input', { bubbles:true }))
   assert.equal(doc.querySelectorAll('tbody tr:not([data-edulog-filtered])').length, 1)
-  assert.match(doc.querySelector('[role=status]').textContent, /顯示 1 \/ 2 筆/)
+  assert.match(doc.querySelector('[role=status]').textContent, /顯示 1 \/ 3 筆/)
+  assert.deepEqual(unfilledGroups(doc), ['warn:週日第 1 時段 (10:00 ~ 12:00)課程乙1 份:學生乙'])
+  // Groups fold.
+  doc.querySelector('.edulog-unfilled-head').click()
+  assert.equal(doc.querySelector('.edulog-unfilled-head').getAttribute('aria-expanded'), 'false')
+  enhanced.restore()
+  assert.equal(doc.body.outerHTML, before)
+  dom.window.close()
+})
+test('monthly unfilled page reuses the same rows', () => {
+  const dom = unfilledFixture('/admissions/month_unfilled_report', 'unfilled'), doc = dom.window.document
+  const enhanced = dom.window.edulogSiteAdapter.enhancePage(doc)
+  assert.equal(doc.querySelectorAll('.edulog-unfilled-row').length, 1)
+  assert.equal(doc.querySelector('.edulog-unfilled-list').getAttribute('aria-label'), '整月未填課堂紀錄')
   enhanced.restore(); dom.window.close()
 })
 test('report grouping preserves form identity, values, handlers and native rating payload', () => {

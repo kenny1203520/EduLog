@@ -29,7 +29,7 @@ test('pairing includes named installation metadata and blocks duplicate submissi
     permissions: { request: async () => true }, tabs: { create: async value => opened.push(value) },
   }
   w.fetch = async (url, options) => { requests.push({ url, body: JSON.parse(options.body) }); return new Promise(resolve => { finish = resolve }) }
-  for (const file of ['shared/runtime-bridge.js','shared/connection-ui.js','shared/integration-ui.js','popup/popup.js']) w.eval(read(`../${file}`))
+  for (const file of ['shared/runtime-bridge.js','shared/connection-ui.js','popup/popup.js']) w.eval(read(`../${file}`))
   await wait()
   const get = id => w.document.getElementById(id)
   get('instance').value = 'http://localhost:5173'; get('device-name').value = 'Teaching laptop'
@@ -98,29 +98,103 @@ test('bridge preserves safe classifications for channel closure and oversized me
   }
 })
 
-for (const state of ['not-connected', 'pending', 'pairing-expired', 'connected', 'expired', 'revoked', 'unavailable', 'forbidden']) test(`popup renders ${state}, independent UI preferences`, async () => {
+const POPUP_SCRIPTS = ['shared/runtime-bridge.js', 'sites/orange-apple/orange-apple-lexicon.js', 'shared/connection-ui.js', 'popup/popup.js']
+function popup({ state, stored = { origin: 'http://localhost:5173', token: 'private-token' }, tab = null, capabilities = {}, work = 0 }) {
   const dom = trackedDom(read('../popup/popup.html'), { url: 'https://extension.example/popup/popup.html', runScripts: 'outside-only' })
-  const w = dom.window
+  const w = dom.window, opened = [], sent = []
+  w.chrome = {
+    storage: { local: { get: async () => ({ edulogExtension: stored }), set: async () => assert.fail('Unexpected storage write') } },
+    runtime: { sendMessage: async data => { sent.push(data); return data.type === 'get-edulog-installation' ? { installation_id: '11111111-1111-4111-8111-111111111111', device_name: 'Test browser', browser_name: 'Chrome', platform_name: 'Windows', extension_version: '0.1.0' } : data.type === 'get-ui-preferences' ? { enabled: false } : data.type === 'set-ui-preferences' ? { enabled: data.enabled } : data.type === 'get-integration-work-summary' ? { count: work } : data.type === 'open-integration-workspace' ? { opened: true } : { status: state, origin: stored.origin, capabilities, settingsUrl: 'http://localhost:5173/dashboard/settings?tab=integrations', lastVerifiedAt: '2026-10-01T00:00:00Z' } } },
+    tabs: { create: async value => opened.push(value), query: async () => tab ? [tab] : [] },
+  }
+  for (const file of POPUP_SCRIPTS) w.eval(read(`../${file}`))
+  return { dom, w, opened, sent, get: id => w.document.getElementById(id) }
+}
+const visiblePrimaries = doc => [...doc.querySelectorAll('.btn-primary')].filter(button => !button.closest('[hidden]'))
+
+for (const state of ['not-connected', 'pending', 'pairing-expired', 'connected', 'expired', 'revoked', 'unavailable', 'forbidden']) test(`popup renders ${state}, independent UI preferences`, async () => {
   const stored = { origin: 'http://localhost:5173', token: 'private-token', pending: state === 'pending' ? { expiresAt: new Date(Date.now() + 60000).toISOString(), authorizeUrl: 'http://localhost:5173/dashboard/settings?extension_pair=id' } : undefined }
-  const opened = []
-  w.chrome = { storage: { local: { get: async () => ({ edulogExtension: stored }), set: async () => assert.fail('Unexpected storage write') } }, runtime: { sendMessage: async data => data.type === 'get-edulog-installation' ? { installation_id: '11111111-1111-4111-8111-111111111111', device_name: 'Test browser', browser_name: 'Chrome', platform_name: 'Windows', extension_version: '0.1.0' } : data.type === 'get-ui-preferences' ? { enabled: false } : data.type === 'set-ui-preferences' ? { enabled: data.enabled } : { status: state, origin: stored.origin, settingsUrl: 'http://localhost:5173/dashboard/settings?tab=integrations', lastVerifiedAt: '2026-10-01T00:00:00Z' } }, tabs: { create: async value => opened.push(value) } }
-  for (const file of ['shared/runtime-bridge.js', 'shared/connection-ui.js', 'shared/integration-ui.js', 'popup/popup.js']) w.eval(read(`../${file}`))
+  const { dom, w, opened, get } = popup({ state, stored })
   await wait()
-  const get = id => w.document.getElementById(id)
   assert.equal(get('connection-card').dataset.state, state)
   assert.equal(get('ui-enabled').disabled, false)
   assert.equal(get('ui-enabled').checked, false)
   assert.equal(get('pending-card').hidden, state !== 'pending')
-  assert.equal(get('feature-list').hidden, false)
+  // Connected shows one action area; every other state shows the pairing path instead.
+  assert.equal(get('feature-list').hidden, state !== 'connected')
+  assert.equal(get('work-row').hidden, state !== 'connected')
   assert.equal(get('server-form').hidden, !['not-connected', 'expired', 'revoked', 'pairing-expired'].includes(state))
+  assert.equal(get('state-badge').dataset.tone, { connected: 'ok', pending: 'warn', 'pairing-expired': 'warn', expired: 'warn', revoked: 'warn', unavailable: 'danger', forbidden: 'danger', 'not-connected': 'neutral' }[state])
+  assert.equal(get('retry').hidden, !['unavailable', 'forbidden'].includes(state))
   assert.equal(w.document.body.textContent.includes('private-token'), false)
+  assert.ok(visiblePrimaries(w.document).length <= 1, 'at most one primary button is visible')
+  if (state === 'not-connected') assert.equal(get('pair-label').textContent, '連接 EduLog')
   if (state === 'connected') {
-    assert.match(get('feature-list').textContent, /此操作未就緒/)
+    assert.equal(get('feature-hint').hidden, true, 'the workspace needs no capability')
+    assert.equal(get('primary-label').textContent, '開啟工作台')
     get('change').click(); get('instance').value = 'http://localhost:9999'; get('cancel').click()
     assert.equal(get('server-form').hidden, true)
     assert.equal(get('instance').value, stored.origin)
     assert.equal(stored.token, 'private-token')
   }
   if (state === 'pending') { get('open-approval').click(); await wait(); assert.equal(opened[0].url, stored.pending.authorizeUrl) }
+  dom.window.close()
+})
+
+for (const [kind, url, label, flow, capability] of [
+  ['class', 'https://corp.orangeapple.co/courses/dt/1024', '同步本班', 'import', 'teaching_data_import'],
+  ['report', 'https://corp.orangeapple.co/dt_admissions/301/reports/401/edit', '預填本報告', 'prefill', 'report_prefill'],
+  ['other', 'https://corp.orangeapple.co/admissions', '開啟工作台', 'import', null],
+  ['other', undefined, '開啟工作台', 'import', null],
+]) test(`connected popup offers one action for a ${kind} tab (${url || 'no readable URL'})`, async () => {
+  const { dom, w, get, sent } = popup({ state: 'connected', tab: { url, title: '初階程式 A 班 | 橘子蘋果' }, capabilities: { teaching_data_import: true, report_prefill: true }, work: 3 })
+  await wait()
+  assert.equal(get('connection-card').dataset.context, kind)
+  assert.equal(get('primary-label').textContent, label)
+  assert.equal(get('primary-action').disabled, false)
+  assert.equal(get('open-workspace').hidden, kind !== 'class')
+  assert.equal(get('state-label').textContent, '已連線')
+  assert.equal(get('work-count').textContent, '3')
+  assert.equal(visiblePrimaries(w.document).length, 1)
+  if (kind === 'class') assert.equal(get('context-title').textContent, '初階程式 A 班')
+  get('primary-action').click(); await wait()
+  assert.deepEqual(sent.filter(message => message.type === 'open-integration-workspace').map(message => message.flow), [flow])
+  get('open-work').click(); await wait()
+  assert.equal(sent.filter(message => message.type === 'open-integration-workspace').at(-1).flow, 'work')
+  if (capability) {
+    const limited = popup({ state: 'connected', tab: { url }, capabilities: {} })
+    await wait()
+    assert.equal(limited.get('primary-action').disabled, true)
+    assert.equal(limited.get('feature-hint').hidden, false)
+    limited.dom.window.close()
+  }
+  dom.window.close()
+})
+
+test('theme, language and server details live behind the gear', async () => {
+  const { dom, get } = popup({ state: 'connected', tab: { url: 'https://corp.orangeapple.co/courses/dt/1024' } })
+  await wait()
+  assert.equal(get('settings-view').hidden, true)
+  get('open-settings-panel').click()
+  assert.equal(get('settings-view').hidden, false)
+  assert.equal(get('main-view').hidden, true)
+  assert.equal(get('server-value').textContent, 'http://localhost:5173')
+  get('change').click()
+  assert.equal(get('settings-view').hidden, true)
+  assert.equal(get('server-form').hidden, false)
+  assert.equal(get('feature-list').hidden, true)
+  dom.window.close()
+})
+
+test('page context reuses the site lexicon patterns', () => {
+  const dom = trackedDom('', { runScripts: 'outside-only' })
+  for (const file of ['sites/orange-apple/orange-apple-lexicon.js', 'shared/connection-ui.js']) dom.window.eval(read(`../${file}`))
+  const { pageContext, tabHeading } = dom.window.edulogConnectionUi
+  assert.deepEqual({ ...pageContext('https://corp.orangeapple.co/courses/dt/12/') }, { kind: 'class', supported: true, classId: '12' })
+  assert.deepEqual({ ...pageContext('https://corp.orangeapple.co/dt_admissions/3/reports/4/edit') }, { kind: 'report', supported: true, admissionId: '3', reportId: '4' })
+  assert.equal(pageContext('https://corp.orangeapple.co/courses/dt/12/lesson_reports').kind, 'other')
+  assert.equal(pageContext('https://evil.example/courses/dt/12').supported, false)
+  assert.equal(pageContext(undefined).kind, 'other')
+  assert.equal(tabHeading('初階程式 A 班 - 橘子蘋果'), '初階程式 A 班')
   dom.window.close()
 })

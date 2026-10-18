@@ -1,29 +1,29 @@
 .modal[data-edulog-prefill] .modal-dialog{width:calc(100% - 32px)!important;max-width:1440px!important;margin:16px auto!important}
-.modal[data-edulog-prefill] .modal-content{box-sizing:border-box;height:calc(100dvh - 32px)!important;max-height:calc(100dvh - 32px)!important;display:flex!important;flex-direction:column;overflow:hidden!important;min-height:0}
-.modal[data-edulog-prefill] .modal-header{flex:none;background:white;min-height:60px;position:relative;z-index:1;flex-wrap:wrap}
+.modal[data-edulog-prefill] .modal-content{box-sizing:border-box;border:0;border-radius:var(--edulog-radius-lg);box-shadow:var(--edulog-shadow-modal);height:calc(100dvh - 32px)!important;max-height:calc(100dvh - 32px)!important;display:flex!important;flex-direction:column;overflow:hidden!important;min-height:0}
+.modal[data-edulog-prefill] .modal-header{flex:none;background:var(--edulog-surface);border-bottom:1px solid var(--edulog-border);gap:8px 12px;min-height:60px;position:relative;z-index:1;flex-wrap:wrap}
 .modal[data-edulog-prefill] .modal-header button{min-width:44px;min-height:44px}
 .modal[data-edulog-prefill] .modal-body{min-height:0!important;height:0;padding:0!important;overflow:hidden!important;flex:1 1 0;display:flex!important;flex-direction:column}
 .modal[data-edulog-prefill] .modal-body [data-edulog-prefill-container],#lesson-report-modal[data-edulog-prefill] .modal-body [data-edulog-prefill-container]{display:flex!important;flex-direction:column;flex:1 1 auto;min-height:0;min-width:0;width:100%;max-width:none}
-.edulog-editor-layout{display:grid!important;grid-template-columns:minmax(0,56fr) minmax(0,44fr);grid-template-rows:minmax(0,1fr);height:100%;flex:1;min-height:0;width:100%;background:white}
+.edulog-editor-layout{display:grid!important;grid-template-columns:minmax(0,56fr) minmax(0,44fr);grid-template-rows:minmax(0,1fr);height:100%;flex:1;min-height:0;width:100%;background:var(--edulog-surface)}
 .edulog-editor-native,.edulog-editor-assistant{min-width:0;min-height:0;overflow:auto!important;overscroll-behavior:contain;scroll-padding-block:20px;scrollbar-gutter:stable;max-height:100%}
-.edulog-editor-native{padding:20px 24px;font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}.edulog-editor-native form{width:100%!important;min-width:0}
+.edulog-editor-native{padding:20px 24px;font:var(--edulog-text-base)/var(--edulog-leading) var(--edulog-font)}.edulog-editor-native form{width:100%!important;min-width:0}
 .edulog-editor-native select,.edulog-editor-native textarea{font-size:16px!important}
-.edulog-prefill-context{font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--edulog-text-secondary);flex-basis:100%;margin:6px 0 0;overflow-wrap:anywhere}
+.edulog-prefill-context{font:var(--edulog-text-sm)/var(--edulog-leading) var(--edulog-font);color:var(--edulog-text-muted);flex-basis:100%;margin:6px 0 0;overflow-wrap:anywhere}
 .edulog-editor-assistant{padding:20px;border-left:1px solid var(--edulog-border);background:var(--edulog-surface-subtle)}
 .edulog-editor-tabs{display:none!important}
 .edulog-editor-layout[hidden]{display:none!important}
 .edulog-editor-assistant[data-collapsed=true]{padding:8px 0;border:0;background:transparent;overflow:visible!important;max-height:none}
-.modal[data-edulog-prefill] .modal-title{float:none!important;min-width:0;flex:1;margin:0}
+.modal[data-edulog-prefill] .modal-title{float:none!important;min-width:0;flex:1;margin:0;font:600 var(--edulog-text-lg)/var(--edulog-leading-tight) var(--edulog-font);color:var(--edulog-text-strong)}
 .modal[data-edulog-prefill] .modal-header .close{float:none!important;position:static!important;flex:none;margin:0}
-.edulog-editor-tabs small{display:block;font-size:14px;line-height:1.4;flex-basis:100%;min-width:0;overflow-wrap:anywhere}
+.edulog-editor-tabs small{display:block;font-size:var(--edulog-text-sm);line-height:1.4;flex-basis:100%;min-width:0;overflow-wrap:anywhere}
 .edulog-editor-native form{padding-bottom:max(24px,env(safe-area-inset-bottom))}
 .edulog-editor-native :is(button,input,textarea,select,summary){scroll-margin-block:24px}
 .edulog-editor-assistant{scroll-padding-bottom:96px}
 @media(max-width:1199px){
  .modal[data-edulog-prefill] .modal-dialog{max-width:920px!important}
  .edulog-editor-tabs{display:flex!important;flex-wrap:wrap;grid-column:1/-1;gap:8px;padding:8px 16px;border-bottom:1px solid var(--edulog-border)}
- .edulog-editor-tabs button{font:inherit;min-height:44px;flex:1;border:1px solid var(--edulog-border-strong);border-radius:8px;background:white;color:var(--edulog-text)}
- .edulog-editor-tabs button[aria-pressed=true]{background:var(--edulog-primary);color:white;border-color:var(--edulog-primary)}
+ .edulog-editor-tabs button{font:inherit;font-weight:500;min-height:var(--edulog-touch-target);flex:1;border:1px solid var(--edulog-border-strong);border-radius:var(--edulog-radius-sm);background:var(--edulog-surface);color:var(--edulog-text-secondary);transition:background-color var(--edulog-duration)}
+ .edulog-editor-tabs button[aria-pressed=true]{background:var(--edulog-primary-soft-strong);color:var(--edulog-primary);border-color:var(--edulog-primary-border);font-weight:600}
  .edulog-editor-tabs button:focus-visible{outline:3px solid var(--edulog-focus-ring);outline-offset:2px}
  .edulog-editor-layout{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
  .edulog-editor-assistant{border-left:0}
@@ -36,7 +36,9 @@
  .modal[data-edulog-prefill] .modal-content{height:100dvh!important;max-height:100dvh!important;border-radius:0}
  .edulog-editor-native,.edulog-editor-assistant{padding:16px 12px max(24px,env(safe-area-inset-bottom))}
 }
-.edulog-prefill-gate{font:14px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;min-height:36px;padding:6px 12px;margin-inline-start:auto;border:1px solid var(--edulog-border-strong);border-radius:8px;background:white;color:var(--edulog-primary);cursor:pointer;transition:background-color .15s ease}
-.edulog-prefill-gate:hover{background:var(--edulog-surface-subtle)}
+/* Not connected: a small secondary button in the modal header, never a mounted panel (MASTER §6.9). */
+.edulog-prefill-gate{display:inline-flex;align-items:center;gap:6px;font:600 var(--edulog-text-sm)/1.2 var(--edulog-font);min-height:30px;padding:0 10px;margin-inline-start:auto;border:1px solid var(--edulog-border-strong);border-radius:var(--edulog-radius-sm);background:var(--edulog-surface);color:var(--edulog-text);cursor:pointer;white-space:nowrap;transition:background-color var(--edulog-duration)}
+.edulog-prefill-gate:hover{background:var(--edulog-surface-muted)}
 .edulog-prefill-gate:focus-visible{outline:3px solid var(--edulog-focus-ring);outline-offset:2px}
-.edulog-prefill-gate:disabled{opacity:.6;cursor:progress}
+.edulog-prefill-gate:disabled{background:var(--edulog-surface-disabled);color:var(--edulog-text-subtle);border-color:transparent;cursor:progress}
+@media(max-width:767px){.edulog-prefill-gate{min-height:var(--edulog-touch-target)}}
