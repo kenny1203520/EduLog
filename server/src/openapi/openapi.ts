@@ -27,6 +27,8 @@ const errorResponses = {
 
 function fieldSchema(field: string) {
   if (field === 'is_system') return { type: 'boolean', const: false, description: 'Compatibility input only; system roles cannot be created or modified' }
+  if (field === 'source_origin') return { type: ['string', 'null'], enum: ['https://corp.orangeapple.co', null], description: 'Read-only origin of an imported source report' }
+  if (field === 'source_admission_id' || field === 'source_report_id') return { type: ['string', 'null'], pattern: '^[0-9]+$', description: 'Read-only numeric identifier of the imported source report' }
   if (field.endsWith('_id') || field === 'id') return { type: 'string', format: 'uuid' }
   if (['course_ids', 'teacher_ids', 'classroom_ids', 'class_session_ids'].includes(field)) return { type: 'array', items: { type: 'string', format: 'uuid' } }
   if (['teacher_attendance', 'editor_settings', 'content_document', 'notes_document', 'bio_document', 'contact_notes_document', 'class_notes_document', 'description_document', 'template_document', 'snapshot'].includes(field)) return { type: 'object' }
