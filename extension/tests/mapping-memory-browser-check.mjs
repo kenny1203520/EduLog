@@ -88,7 +88,10 @@ try{
           c.class_sessions.push({...c.class_sessions[0],id:id(23),day_of_week:0,start_time:'14:00:00',end_time:'16:00:00'})
           c.enrollments.push({id:id(44),student_id:id(4),course_id:id(2),class_session_id:id(23),start_date:'2026-01-01',status:'regular',course_name:'課程 A',class_session:c.class_sessions[1]}, {id:id(45),student_id:id(14),course_id:id(2),class_session_id:id(3),start_date:'2026-01-01',status:'regular',class_session:c.class_sessions[0]})
         })
-        await page.locator('#classroom').selectOption(id(1));await page.locator('#class-session').selectOption(id(3))
+        // The session list reloads asynchronously after the classroom changes; wait for the patched catalog.
+        await page.locator('#classroom').selectOption(id(1));await page.locator(`#class-session option[value="${id(23)}"]`).waitFor({state:'attached'})
+        await page.locator('#class-session').selectOption(id(3))
+        await page.waitForFunction(()=>/週六 09:00–10:00/.test(document.querySelector('#class-session option:checked')?.textContent||''),null,{timeout:5000}).catch(()=>{})
         assert.match(await page.locator('#class-session option:checked').textContent(),/週六 09:00–10:00/)
         assert.match(await page.locator(`#class-session option[value="${id(23)}"]`).textContent(),/週日 14:00–16:00/)
         await choose('admissions',0);await page.locator('#student-101').selectOption(id(4));await page.locator('#enrollment-course-301').selectOption(id(2))
