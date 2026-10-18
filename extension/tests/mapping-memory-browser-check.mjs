@@ -70,7 +70,7 @@ try{
     const browser = await chromium.launch(launchOptions)
     try{for(const width of(process.argv.includes('--focused')?[390,1440]:[360,390,768,1024,1200,1440,1920,720])){
       const context=await browser.newContext({viewport:{width,height:900},deviceScaleFactor:width===720?2:1}),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.addInitScript(mock)
-      const collect=async()=>{await page.locator('#read-history').uncheck();await page.locator('#collect').click();await page.locator('#mapping').waitFor({state:'visible'})}
+      const collect=async()=>{await page.locator('#import-advanced summary').click();await page.locator('#read-history').uncheck();await page.locator('#collect').click();await page.locator('#mapping').waitFor({state:'visible'})}
       await page.goto(`${base}/workspace/workspace.html?source=10${process.argv.includes('--reconciliation')?'&reconciliation=1':''}`);await collect()
       assert.equal(await page.evaluate(()=>testCalls.some(m=>m.operation==='context')),false)
       await page.locator('#classroom').selectOption(id(1));await page.locator('#class-session').selectOption(id(3));await page.locator('#remember-destination').click();await page.waitForFunction(()=>document.querySelector('#notice').textContent.includes('已保存'))

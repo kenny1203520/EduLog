@@ -186,7 +186,7 @@ try {
       for (const width of ((editorOnly||inlineOnly)?[]:[360,390,768,1024,1200,1440,1920])) {
       const page = await browser.newPage({viewport:{width,height:900}}), errors=[]; page.on('pageerror',e=>errors.push(e.message)); await page.addInitScript(()=>{window.unhandledRejections=[];window.addEventListener('unhandledrejection',event=>window.unhandledRejections.push(String(event.reason)))}); await page.addInitScript(mock)
       await page.goto(`http://127.0.0.1:${port}/workspace/workspace.html?source=10`); await page.locator('#workspace').waitFor({state:'visible'})
-      await page.locator('#read-history').uncheck(); await page.locator('#collect').click(); await page.locator('#mapping').waitFor({state:'visible'})
+      await page.locator('#import-advanced summary').click(); await page.locator('#read-history').uncheck(); await page.locator('#collect').click(); await page.locator('#mapping').waitFor({state:'visible'})
       await page.locator('#classroom').selectOption('00000000-0000-4000-8000-000000000001'); await page.locator('#class-session').selectOption('00000000-0000-4000-8000-000000000003')
       await page.locator('[data-mapping-section=admissions]').click(); await page.locator('#mapping-items button:visible').first().click()
       await page.locator('#student-101').selectOption('new'); await page.locator('#enrollment-301').selectOption('new'); await page.locator('#enrollment-course-301').selectOption('00000000-0000-4000-8000-000000000002'); await page.locator('#start-301').fill('2026-01-01'); await page.locator('#status-301').selectOption('regular')
@@ -207,7 +207,7 @@ try {
       assert.equal(await page.locator('#preview-section').isVisible(),true,'return to the actual preview stage')
       assert.equal(await page.evaluate(()=>previewNode===document.querySelector('#diff-list')&&nativeDraftNode===document.querySelector('#status-301')),true,'flow switching keeps controls and preview nodes')
       await page.evaluate(()=>edulogUi.setLocale('en'));await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))))
-      assert.equal(await page.locator('#apply').textContent(),'Confirm and import batches')
+      assert.equal(await page.locator('#apply').textContent(),'Confirm and sync')
       await page.evaluate(()=>edulogUi.setLocale('zh-TW'));await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))))
       await page.screenshot({path:fileURLToPath(new URL(`${name}-${width}-import.png`,output))})
       await page.locator('#apply').click(); await page.waitForFunction(()=>document.querySelector('#notice').textContent.includes('已核對'))

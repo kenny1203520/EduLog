@@ -1,0 +1,121 @@
+/* Three-step import (讀取 → 確認 → 完成), from docs/design/MASTER.md and the prototype. */
+.icon{width:var(--edulog-icon-sm,16px);height:var(--edulog-icon-sm,16px);flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vertical-align:-3px}
+.icon.flip{transform:rotate(180deg)}
+.brand{display:flex;align-items:center;gap:8px}
+.brand .logo{margin:0;color:#fff;font-size:13px}
+.logo{width:24px;height:24px;border-radius:6px;background:var(--edulog-primary);color:#fff;display:inline-grid;place-items:center;font-weight:700;font-size:13px}
+.header-tools{display:flex;align-items:center;gap:12px}
+.conn{display:inline-flex;align-items:center;gap:6px;font-size:var(--edulog-text-xs);font-weight:500;padding:3px 8px;border-radius:var(--edulog-radius-pill);background:var(--edulog-status-ok-soft);color:var(--edulog-status-ok-text);white-space:nowrap}
+.dot{width:var(--edulog-status-dot,8px);height:var(--edulog-status-dot,8px);border-radius:50%;flex:none;background:var(--edulog-status-neutral)}
+.dot-ok{background:var(--edulog-status-ok)}.dot-warn{background:var(--edulog-status-warn)}.dot-notice{background:var(--edulog-status-notice)}
+
+body>header,body>nav,main{max-width:1200px;margin-left:auto;margin-right:auto}
+
+/* Stepper */
+.stepper{display:flex;align-items:center;gap:8px;list-style:none;margin:0 0 16px;padding:12px 16px;background:var(--edulog-surface);border:1px solid var(--edulog-border);border-radius:var(--edulog-radius)}
+.stepper li[data-wizard-step]{padding:0;border:0;background:none;flex:none;min-width:0}
+.stepper li[data-wizard-step] button{display:flex;align-items:center;gap:8px;min-height:36px;padding:0 4px;border:0;background:none;color:var(--edulog-text-muted);font-weight:500;width:auto}
+.stepper li[data-wizard-step] button:disabled{opacity:1;cursor:default}
+.stepper li[data-wizard-step] button:not(:disabled):hover{background:var(--edulog-surface-muted)}
+.step-n{width:24px;height:24px;border-radius:50%;border:1.5px solid var(--edulog-border-input);display:grid;place-items:center;font-size:var(--edulog-text-xs);font-weight:600;background:var(--edulog-surface);flex:none}
+.step-n .step-done{display:none}.step-n .icon{width:14px;height:14px;stroke-width:3}
+.stepper li[data-state=current] button{color:var(--edulog-text-strong);font-weight:700}
+.stepper li[data-state=current] .step-n{background:var(--edulog-primary-bright);border-color:var(--edulog-primary-bright);color:#fff}
+.stepper li[data-state=complete] .step-n{background:var(--edulog-status-ok);border-color:var(--edulog-status-ok);color:#fff}
+.stepper li[data-state=complete] .step-num{display:none}.stepper li[data-state=complete] .step-done{display:grid}
+.stepper li[data-state=attention] .step-n{border-color:var(--edulog-status-warn);color:var(--edulog-status-warn-text)}
+.stepper .step-line{flex:1;height:1.5px;background:var(--edulog-border);min-width:16px;padding:0;border:0;border-radius:0}
+.stepper li[data-state=complete]+.step-line{background:var(--edulog-status-ok)}
+.stepper-plain li[data-wizard-step]{flex:1}
+
+/* Panels and list rows */
+.panel{background:var(--edulog-surface);border:1px solid var(--edulog-border);border-radius:var(--edulog-radius);margin-bottom:16px;min-width:0}
+.panel-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:12px 16px;border-bottom:1px solid var(--edulog-border)}
+.panel-head h2{font-size:var(--edulog-text-lg);font-weight:600;color:var(--edulog-text-strong);line-height:var(--edulog-leading-tight);margin:0;display:flex;align-items:center;gap:8px}
+.panel-head .sub{font-size:var(--edulog-text-sm);color:var(--edulog-text-muted);margin:2px 0 0}
+.panel-body{padding:12px 16px}
+.panel .list{list-style:none;margin:0;padding:0}
+.panel .row{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:8px 16px;min-height:var(--edulog-row-min-height,52px);padding:8px 16px 8px 19px;border-top:1px solid var(--edulog-border-soft);margin:0}
+.panel .row:first-child{border-top:0}
+.panel .row:hover{background:var(--edulog-surface-subtle)}
+.panel .row::before{content:"";position:absolute;left:0;top:0;bottom:0;width:var(--edulog-status-bar-width,3px);background:transparent}
+.panel .row[data-bar=warn]::before{background:var(--edulog-status-warn)}
+.panel .row[data-bar=notice]::before{background:var(--edulog-status-notice)}
+.panel .row[data-current=true]{background:var(--edulog-primary-soft)}
+.row-main{min-width:0}
+.row-title{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-weight:600;color:var(--edulog-text-strong);line-height:var(--edulog-leading-tight)}
+.row-meta{display:block;font-size:var(--edulog-text-sm);color:var(--edulog-text-muted);line-height:var(--edulog-leading-tight);margin-top:2px;overflow-wrap:anywhere}
+.row-actions{display:flex;align-items:center;gap:4px;justify-content:flex-end}
+.panel .tag{display:inline-flex;align-items:center;gap:4px;font-size:var(--edulog-text-xs);font-weight:500;line-height:1;padding:4px 6px;border-radius:var(--edulog-radius-xs,4px);white-space:nowrap}
+.tag-ok{background:var(--edulog-status-ok-soft);color:var(--edulog-status-ok-text)}
+.tag-info{background:var(--edulog-status-info-soft);color:var(--edulog-status-info-text)}
+.tag-neutral{background:var(--edulog-status-neutral-soft);color:var(--edulog-status-neutral-text)}
+
+/* Buttons used by the new layout */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:var(--edulog-control-height,36px);padding:0 14px;border-radius:var(--edulog-radius-sm);border:1px solid var(--edulog-border-strong);background:var(--edulog-surface);font-weight:600;font-size:var(--edulog-text-md);cursor:pointer;white-space:nowrap;text-decoration:none;color:var(--edulog-text)}
+.btn-primary,a.btn-primary{background:var(--edulog-primary-bright);border-color:var(--edulog-primary-bright);color:var(--edulog-text-on-primary,#fff)}
+.btn-primary:hover{background:var(--edulog-primary)}
+.btn-secondary:hover{background:var(--edulog-surface-muted)}
+.btn-ghost{background:none;border-color:transparent;color:var(--edulog-primary);padding:0 8px}
+.btn-ghost:hover{background:var(--edulog-primary-soft)}
+.btn-sm{min-height:30px;padding:0 10px;font-size:var(--edulog-text-sm)}
+.ws-foot{display:flex;flex-wrap:wrap;align-items:center;gap:8px;justify-content:flex-end;padding:12px 16px;margin:0;background:var(--edulog-surface);border-top:1px solid var(--edulog-border);border-radius:0 0 var(--edulog-radius) var(--edulog-radius)}
+.ws-foot button,.ws-foot .btn{min-height:var(--edulog-control-height,36px);padding:0 14px;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.ws-foot button.primary{background:var(--edulog-primary-bright);border-color:var(--edulog-primary-bright)}
+.ws-foot .spacer{flex:1}
+.ws-foot>p{margin:0 auto 0 0;font-size:var(--edulog-text-sm);color:var(--edulog-text-muted)}
+.ws-foot>#back-to-read,.ws-foot>#back-to-review{margin-right:auto}
+.ws-foot>#back-to-read+p{margin-left:0}
+
+/* 讀取 */
+.radio-row{cursor:pointer}
+.radio-row label{display:flex;align-items:center;gap:12px;margin:0;font-weight:400;cursor:pointer;min-height:36px}
+.radio-row input{width:18px;height:18px;flex:none;accent-color:var(--edulog-primary-bright)}
+.panel .radio-row[data-selected=true]{background:var(--edulog-primary-soft)}
+.panel .class-empty{grid-template-columns:1fr;color:var(--edulog-text-muted);font-size:var(--edulog-text-sm)}
+details.adv{border:0;border-top:1px solid var(--edulog-border);border-radius:0;margin:0;padding:0}
+details.adv summary{padding:12px 16px;min-height:0;color:var(--edulog-text-secondary);font-weight:500;cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px}
+details.adv summary::-webkit-details-marker{display:none}
+details.adv[open] summary .icon{transform:rotate(180deg)}
+.adv-body{padding:0 16px 16px;display:grid;gap:4px}
+.adv-body .grid{max-width:520px;gap:12px}
+.adv-body label{margin:4px 0}.adv-body .check{min-height:36px}.adv-body .hint{margin:4px 0 0}
+
+/* 確認 */
+#mapping.panel{padding:0}
+.confirm-overview .panel-head h2{font-size:var(--edulog-text-lg)}
+.issue-nav{display:flex;align-items:center;gap:8px;margin-left:auto;font-size:var(--edulog-text-sm);color:var(--edulog-text-muted)}
+.summary-line{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--edulog-border);color:var(--edulog-status-ok-text);font-weight:500}
+.summary-line .btn{margin-left:auto}
+.auto-list{border-bottom:1px solid var(--edulog-border)}
+.auto-list .row-title{font-weight:500}
+.confirm-overview .group-head{display:flex;align-items:center;gap:8px;padding:8px 16px;background:var(--edulog-surface-subtle);border-bottom:1px solid var(--edulog-border);font-size:var(--edulog-text-sm);font-weight:600;color:var(--edulog-text-secondary)}
+.confirm-overview .group-head .gh-sub{font-weight:400;color:var(--edulog-text-muted)}
+.confirm-overview .group-head .gh-sub::before{content:"· "}
+.confirm-overview .group-head .count{margin-left:auto;font-size:var(--edulog-text-xs);font-weight:500;color:var(--edulog-text-muted)}
+.confirm-overview .group .list{border-bottom:1px solid var(--edulog-border)}
+.review-detail{padding:16px}
+.review-detail .detail-heading{margin:0 0 8px;font-size:var(--edulog-text-md);color:var(--edulog-text-secondary)}
+#mapping>.task-actions,#import-progress>.task-actions,#import-scope>.ws-foot{position:static}
+
+/* 完成 */
+.done-title .icon{width:20px;height:20px;color:var(--edulog-status-ok)}
+#import-progress .outcome-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:0;margin:0 -16px;border-top:1px solid var(--edulog-border);border-bottom:1px solid var(--edulog-border)}
+#import-progress .outcome-metrics>div{padding:16px;border:0;border-radius:0;background:none;border-left:1px solid var(--edulog-border-soft);display:flex;flex-direction:column-reverse;justify-content:flex-end;margin:0}
+#import-progress .outcome-metrics>div:first-child{border-left:0}
+#import-progress .outcome-metrics dd{margin:0;font-size:var(--edulog-text-xl);font-weight:700;color:var(--edulog-text-strong)}
+#import-progress .outcome-metrics dt{font-size:var(--edulog-text-sm);color:var(--edulog-text-muted)}
+#import-progress progress{margin:4px 0}
+
+@media(max-width:767px){
+  .stepper{padding:10px 12px}
+  .stepper li[data-wizard-step]:not([data-state=current]) .step-label{display:none}
+  .panel .row{grid-template-columns:minmax(0,1fr) auto;padding:10px 12px 10px 15px}
+  .panel .row .tag{grid-column:2}
+  .confirm-overview .group-head .gh-sub{display:none}
+  .issue-nav{margin-left:0;width:100%;justify-content:space-between}
+  .ws-foot button.primary,.ws-foot .btn-primary{flex:1}
+  .btn,.ws-foot button,.btn-sm{min-height:var(--edulog-touch-target,44px)}
+  #import-progress .outcome-metrics{grid-template-columns:repeat(2,1fr)}
+  #import-progress .outcome-metrics>div:nth-child(odd){border-left:0}
+}
