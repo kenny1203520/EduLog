@@ -171,6 +171,20 @@
     }
     return svg
   }
+  // A <details> menu that opens in the top layer, anchored to its summary, so list containers
+  // with overflow clipping cannot hide it. Without popover support the menu stays in place.
+  let anchorSerial = 0
+  function floatMenu(scope, doc, details, summary, menu, align = 'end') {
+    if (typeof menu.showPopover !== 'function') return
+    const name = `--edulog-menu-${++anchorSerial}`
+    summary.style.setProperty('anchor-name', name); menu.style.setProperty('position-anchor', name)
+    menu.setAttribute('popover', 'manual'); menu.classList.add('edulog-popover-menu'); menu.dataset.align = align
+    const sync = () => { try { if (details.open && !menu.matches(':popover-open')) menu.showPopover(); else if (!details.open && menu.matches(':popover-open')) menu.hidePopover() } catch { /* A detached menu keeps its inline position. */ } }
+    scope.listen(details, 'toggle', sync)
+    scope.listen(doc, 'click', event => { if (details.open && !details.contains(event.target)) details.open = false })
+    scope.listen(doc, 'keydown', event => { if (event.key === 'Escape' && details.open) { details.open = false; summary.focus() } })
+    scope.listen(menu, 'click', event => { if (event.target.closest('a,button')) details.open = false })
+  }
   // Four persistent chips, the rest in a 更多 disclosure. A chosen 更多 chip shows its
   // name on the disclosure so the active filter is always visible.
   function createChips({ doc, scope, onSelect }) {
@@ -189,7 +203,7 @@
     const summary = element('summary'); const summaryText = element('span', '更多'); summary.append(summaryText, icon(doc, 'chevron-down'))
     const menu = element('div'); menu.className = 'edulog-chip-menu'; menu.setAttribute('role', 'group'); menu.setAttribute('aria-label', '更多篩選')
     for (const [chip, label] of MORE_CHIPS) menu.append(chipButton(chip, label))
-    more.append(summary, menu); group.append(more)
+    more.append(summary, menu); group.append(more); floatMenu(scope, doc, more, summary, menu, 'start')
     listen(doc, 'click', event => { if (more.open && !more.contains(event.target)) more.open = false })
     return {
       element: group,
@@ -348,7 +362,7 @@
       if (student.project) { const link = element('a', '專案檢查'); link.href = student.project.getAttribute('href'); link.target = '_blank'; link.rel = 'noopener noreferrer'; menu.append(link) }
       if (student.stats) menu.append(dataText('p', `出席 ${student.stats.attended} · 缺 ${student.stats.absent} · 未記 ${student.stats.unrecorded}`, 'edulog-card-stats'))
       more.append(summary, menu)
-      if (menu.childNodes.length) actions.append(more)
+      if (menu.childNodes.length) { actions.append(more); floatMenu(scope, doc, more, summary, menu) }
       face.replaceChildren(...[main, strip, actions].filter(Boolean))
     }
     return {

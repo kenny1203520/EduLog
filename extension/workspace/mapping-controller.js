@@ -418,10 +418,14 @@ export function createMappingController(hooks) {
       const queryStatus=el('p',capable()?'查詢範圍：此學生所有可存取報名，包含其他班級與課程。':'目前僅查詢所選班級與課程；跨班報名尚未核對。','enrollment-query-status');queryStatus.id=`enrollment-status-${r.source_id}`;queryStatus.dataset.enrollmentStatus='';queryStatus.setAttribute('role','status');queryStatus.setAttribute('aria-live','polite');right.append(queryStatus)
       const results=el('div',undefined,'enrollment-results');results.id=`enrollment-results-${r.source_id}`;right.append(results)
       const reviewLabel=el('label',undefined,'mapping-review'),review=el('input');review.type='checkbox';review.id=`review-${r.source_id}`;review.name=review.id;reviewLabel.htmlFor=review.id;reviewLabel.append(review,el('span','已核對來源與 EduLog 差異；若新建，確認需要獨立報名。'));right.append(reviewLabel)
-      input(right,'報名開始日期',`start-${r.source_id}`,'date',existing?.start_date||r.data.start_date||'')
-      const status=select(right,'報名狀態',`status-${r.source_id}`,Object.entries(enrollmentStatuses).map(([id,name])=>({id,name})),r=>r.name,'請確認狀態');status.value=existing?.status||r.data.status||''
+      input(right,'報名開始日期',`start-${r.source_id}`,'date',existing?.start_date||r.data.start_date||firstLessonDate(r))
+      const status=select(right,'報名狀態',`status-${r.source_id}`,Object.entries(enrollmentStatuses).map(([id,name])=>({id,name})),r=>r.name,'請確認狀態');status.value=existing?.status||r.data.status||'regular'
       const error=el('p',undefined,'mapping-error');error.id=`mapping-error-${r.source_id}`;error.setAttribute('role','status');right.append(error)
-      button(right,'確認並記住此報名',async()=>{error.textContent='';try{await confirmRow(r)}catch(e){error.textContent=e.message;throw e}})
+      // New students, classes and courses are remembered by the import itself, so confirming them first is not offered.
+      const confirmButton=button(right,'確認並記住此報名',async()=>{error.textContent='';await confirmRow(r)})
+      const createNote=el('p','新建的學生、班級或課程會在同步時一併保存，不需先記住。','mapping-create-note');right.append(createNote)
+      const syncCreate=()=>{const creating=s.value==='new'||$('class-session').value==='new'||courseRows().some(t=>t.target_id===cs.value);confirmButton.hidden=creating;createNote.hidden=!creating}
+      syncCreate();for(const control of [s,cs])control.addEventListener('change',syncCreate)
       button(right,'修改對應',async()=>{confirmed.delete(r.source_id);c.open=true;s.focus();summary()})
       button(right,'保留 EduLog 並略過此筆',async()=>{work().skippedAdmissions=[...new Set([...(work().skippedAdmissions||[]),r.source_id])];confirmed.delete(r.source_id);summary();dirty();notice('已略過此筆及相關報告；既有資料與選擇保留。')})
       button(right,'恢復此筆對應',async()=>{work().skippedAdmissions=(work().skippedAdmissions||[]).filter(id=>id!==r.source_id);summary();dirty();notice('此筆已恢復，請核對後確認。')})
@@ -497,11 +501,14 @@ export function createMappingController(hooks) {
     if(!room||!session||session==='new')throw new Error('新班級的對應會隨建立保存；既有班級請先選擇教室與班級。')
     await confirm([{kind:'classroom',key:work().snapshot.classId,target_id:room,expected_revision:revision('classroom',work().snapshot.classId)},{kind:'class_session',key:work().snapshot.classId,target_id:session,expected_revision:revision('class_session',work().snapshot.classId)}]);dirty()
   }
+  // The first dated lesson stands in when the source lists no enrollment date.
+  function firstLessonDate(r){return work().snapshot.records.filter(x=>x.kind==='report'&&x.enrollment_source_id===r.source_id&&/^\d{4}-\d{2}-\d{2}$/.test(x.date||'')).map(x=>x.date).sort()[0]||''}
   function validateRow(r,quiet=false) {
     if(skipped(r))return false
     const s=studentSelect(r)?.value,c=$(`enrollment-course-${r.source_id}`)?.value
     if(!s||!c)return false
     try{assertReconciled(r)}catch(error){$(`mapping-error-${r.source_id}`).textContent=error.message;return false}
+    if(!$(`start-${r.source_id}`)?.value||!$(`status-${r.source_id}`)?.value||!$(`enrollment-${r.source_id}`)?.value){const e=$(`mapping-error-${r.source_id}`);if(e)e.textContent='請補上報名對應、開始日期與報名狀態。';return false}
     if(s!=='new'&&$('class-session').value!=='new'&&!courseRowsSafe().some(t=>t.id===c)&&confirmed.get(r.source_id)!==signature(r)) {
       const e=$(`mapping-error-${r.source_id}`);e.textContent='請先確認並記住此報名的學生與課程。';if(quiet)return false;view.revealRow(r);studentSelect(r).focus({preventScroll:true});throw new Error(`${r.sourceStudentName||'報名 '+r.source_id} 的對應尚未確認。`)
     }

@@ -144,6 +144,20 @@ for (const [browserName, launchOptions] of executables) {
         }
       }
       if (name === 'real-class') {
+        // Names, actions and captions share one type scale in 課堂記錄 and 班級名單.
+        const sizes = await page.evaluate(() => { const size = selector => { const node = document.querySelector(selector); return node ? getComputedStyle(node).fontSize : null }
+          return { session: [size('.edulog-session-cards .edulog-card-main strong'), size('.edulog-session-cards .edulog-todo-meta')], roster: [size('.edulog-roster-cards .edulog-card-main strong'), size('.edulog-roster-cards .edulog-todo-meta')] } })
+        if (sizes.session[0] && sizes.roster[0]) assert.deepEqual(sizes.session, sizes.roster, `${browserName} ${name} ${width}: roster and session rows use the same type sizes`)
+        // The last row's 更多 menu opens in the top layer and is fully visible.
+        const lastMore = page.locator('.edulog-session-cards .edulog-card-more > summary:visible').last()
+        if (await lastMore.count()) {
+          await lastMore.scrollIntoViewIfNeeded(); await lastMore.click()
+          // <details> toggle events are queued, so the popover opens just after the click.
+          await page.waitForFunction(() => [...document.querySelectorAll('.edulog-session-cards .edulog-card-more[open] .edulog-card-menu')].at(-1)?.matches(':popover-open'), null, { timeout: 2000 }).catch(() => {})
+          const menu = await page.evaluate(() => { const el = [...document.querySelectorAll('.edulog-session-cards .edulog-card-more[open] .edulog-card-menu')].at(-1); if (!el) return null; const r = el.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + Math.min(r.height / 2, 12)); return { open: el.matches(':popover-open'), visible: r.height > 0 && r.top >= 0 && r.bottom <= innerHeight + 1 && Boolean(hit && el.contains(hit)), detail: JSON.stringify({ top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right), inner: [innerWidth, innerHeight], hit: hit ? hit.tagName + '.' + hit.className : null, position: getComputedStyle(el).position }) } })
+          assert.ok(menu?.open && menu.visible, `${browserName} ${name} ${width}: last row 更多 menu is not clipped ${menu?.detail}`)
+          await page.keyboard.press('Escape')
+        }
         // 班級名單 tab: roster cards replace the native table and fit every width.
         await page.evaluate(() => { for (const pane of document.querySelectorAll('.tab-pane')) pane.classList.toggle('active', pane.id === 'overview'), pane.classList.toggle('show', pane.id === 'overview') })
         assert.equal(await page.locator('#students-table').isVisible(), false, `${browserName} ${name} ${width}: native roster hidden behind cards`)

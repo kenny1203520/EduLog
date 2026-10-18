@@ -3,7 +3,7 @@
   "name": "EduLog Teaching Tools",
   "description": "Improve teaching system workflows with EduLog.",
   "version": "0.1.0",
-  "minimum_chrome_version": "116",
+  "minimum_chrome_version": "125",
   "action": {
     "default_title": "EduLog",
     "default_popup": "popup/popup.html"

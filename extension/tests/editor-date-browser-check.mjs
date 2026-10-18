@@ -84,7 +84,8 @@ try{
     // Scroll is restored after the refreshed fields render; wait for it before comparing.
     await page.waitForFunction(top=>document.querySelector('aside[data-edulog-owned]')?.scrollTop===top,recheck.scroll,{timeout:3000}).catch(()=>{})
     const restored=await helper.evaluate(n=>({scroll:n.scrollTop,start:n.shadowRoot.activeElement.selectionStart,end:n.shadowRoot.activeElement.selectionEnd}))
-    assert.deepEqual(restored,recheck)
+    const scrollState=await helper.evaluate(n=>JSON.stringify({max:n.scrollHeight-n.clientHeight,open:[...n.shadowRoot.querySelectorAll("details[open]")].map(d=>d.className||d.querySelector("summary")?.textContent?.slice(0,12)),active:n.shadowRoot.activeElement?.dataset.key}))
+    assert.deepEqual(restored,recheck,`${channel} ${width}: recheck keeps scroll and caret ${scrollState}`)
     await page.evaluate(()=>edulogUi.setLocale('en'))
     await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))))
     assert.equal(await shadow('.refresh').textContent(),'Recheck')

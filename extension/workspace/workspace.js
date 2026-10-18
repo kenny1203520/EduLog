@@ -433,7 +433,7 @@ function historyTargets() {
   for(const r of work.snapshot.records.filter(r=>r.kind==='enrollment')) {
     const choice=$(`enrollment-${r.source_id}`)?.value,courseId=$(`enrollment-course-${r.source_id}`)?.value||mappingController.courseFor(r)
     if(!courseId)continue
-    targets.set(r.source_id,{id:choice&&choice!=='new'?choice:choice==='new'?idFor('enrollment',r.source_id):null,isNew:choice==='new',eligible:mappingController.validateRow(r,true),courseId,name:r.sourceStudentName,courseName:context.courses.find(c=>c.id===courseId)?.display_name||r.sourceCourseLabel})
+    targets.set(r.source_id,{id:choice&&choice!=='new'?choice:choice==='new'?idFor('enrollment',r.source_id):null,isNew:choice==='new'&&!(work.createdAdmissions||[]).includes(r.source_id),eligible:mappingController.validateRow(r,true),courseId,name:r.sourceStudentName,courseName:context.courses.find(c=>c.id===courseId)?.display_name||r.sourceCourseLabel})
   }
   return targets
 }
@@ -530,6 +530,11 @@ function renderHistoryIssues(){
 function prepareRows() {
   work.includeInternalNotes = $('include-internal-notes').checked
   const eligible = new Set(work.snapshot.records.filter(r=>r.kind==='enrollment'&&mappingController.validateRow(r,true)).map(r=>r.source_id))
+  const unresolved = work.snapshot.records.filter(r=>r.kind==='enrollment'&&!eligible.has(r.source_id)&&!(work.skippedAdmissions||[]).includes(r.source_id))
+  if (unresolved.length) {
+    mappingController.revealAdmission(unresolved[0].source_id)
+    throw new Error(`尚有 ${unresolved.length} 筆報名未完成對應或缺少資料：${unresolved.slice(0,3).map(r=>r.sourceStudentName||`報名 ${r.source_id}`).join('、')}${unresolved.length>3?' 等':''}。請補齊，或選擇「保留 EduLog 並略過此筆」。`)
+  }
   if (!eligible.size) throw new Error('目前沒有可匯入的報名。請查看各筆核對提示，完成既有報名查詢與對應後再產生差異。')
   const courseIds = [...new Set(work.snapshot.records.filter(r=>eligible.has(r.source_id)&&r.kind==='enrollment').map(r=>$(`enrollment-course-${r.source_id}`).value))], courseId = courseIds[0]
   const sessionId = $('class-session').value === 'new' ? idFor('class_session', work.snapshot.classId) : $('class-session').value
@@ -1035,7 +1040,24 @@ async function recordAttendanceEvidence() {
   try{for(let i=0;i<items.length;i+=50)await api('attendance-evidence',{source_origin:'https://corp.orangeapple.co',items:items.slice(i,i+50)});work.attendanceEvidenceRecorded=true}
   catch(error){work.needs.push(`出席證據未保存：${error.message}；匯入的報告不受影響。`)}
 }
+// Reports of enrollments created by this sync can only be routed once the enrollment exists,
+// so they are planned again here and bound in the same finishing step.
+async function bindCreatedEnrollments() {
+  if(!integrationCapabilities.enrollment_history_reports)return
+  const created=[...historyTargets()].filter(([,target])=>target.isNew&&target.id).map(([admission])=>admission)
+  if(!created.length)return
+  work.createdAdmissions=[...new Set([...(work.createdAdmissions||[]),...created])]
+  await refreshHistoryPlan({admissions:created})
+  work.historyBindings||=[]
+  for(const item of historyPlan) {
+    if(item.category!=='bind'||!created.includes(item.record?.enrollment_source_id)||!item.occurrence?.id||!item.existing?.id)continue
+    if(work.historyBindings.some(binding=>binding.itemKey===item.key))continue
+    work.historyBindings.push({historyId:item.existing.id,itemKey:item.key,expectedFields:Object.fromEntries(teachingFields.filter(f=>Object.hasOwn(item.data||{},f)).map(f=>[f,item.data[f]])),occurrence:item.occurrence,body:{key:crypto.randomUUID(),class_occurrence_id:item.occurrence.id,overwrite:[],include_internal:work.includeInternalNotes,include_fields:item.includedFields||[]},status:'pending',atomic:false})
+  }
+  await save()
+}
 async function finalizeImport() {
+  await bindCreatedEnrollments()
   await applyHistoryBindings()
   const issueCounts=currentImportIssueCounts()
   refreshConfirmedHistorySummary()
