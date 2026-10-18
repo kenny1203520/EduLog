@@ -50,6 +50,7 @@ export function installWorkspaceBroker(getStatus) {
       job: ['POST', '/imports'], preview: ['POST', `/imports/${message.jobId}/preview`], apply: ['POST', `/imports/${message.jobId}/apply`],
       'job-status': ['PATCH', `/imports/${message.jobId}`], push: ['POST', '/report-pushes'],
       'work-records':['GET','/work-records'], 'work-record-save':['PATCH',`/work-records/${message.workId}`],
+      'attendance-evidence':['POST','/attendance-evidence'],
       'report-decisions-resolve':['POST','/report-decisions/resolve'], 'report-decisions-confirm':['POST','/report-decisions/confirm'],
     }
     if (message.operation === 'reconcile' && !/^[a-f0-9-]{36}$/i.test(message.enrollmentId || '')) fail('報名識別碼不正確。')

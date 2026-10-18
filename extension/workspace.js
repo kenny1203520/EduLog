@@ -330,7 +330,10 @@ function markMappingChanged(){
 const mappingController = createMappingController({ capabilities: () => integrationCapabilities, settingsUrl: () => frontendSettingsUrl, rereadSource: () => source('collect'),state:()=>({work,context}),generation:()=>generation,readGeneration:()=>activeReadGeneration,api,catalog,run:(action,options)=>options?.readOnly?runLatest(action,options):run(action,options),notice,idFor,loadClassrooms,loadMappingCourses,mappingChanged:markMappingChanged})
 let historyPlan = [], historyCheckSequence = 0, historyLocalSequence = 0, historyArchives = new Map(), historyRoutes = new Map()
 const loadedLessonCourses=new Set(),lessonCatalogLoads=new Map()
-function historyOptions(){return {dateFrom:work?.dateFrom,dateTo:work?.dateTo,includeInternal:$('include-internal-notes').checked,lessons:context?.lessons||[],syncFields:effectiveSyncFields()}}
+// The synced source class maps to the selected EduLog class session; reports
+// of other source classes become class exceptions in the planner.
+function sourceClassSessions(){const classId=work?.snapshot?.classId,session=$('class-session')?.value;if(!classId||!session)return new Map();return new Map([[String(classId),session==='new'?idFor('class_session',classId):session]])}
+function historyOptions(){return {dateFrom:work?.dateFrom,dateTo:work?.dateTo,includeInternal:$('include-internal-notes').checked,lessons:context?.lessons||[],syncFields:effectiveSyncFields(),sourceClassSessions:sourceClassSessions()}}
 function effectiveSyncFields(record){const base={lesson_id:true,is_completed:true,progress_letter:true,attendance_status:true,absence_reason:true,class_participation:true,classroom_behavior:true,content:true,contact_notes:true,class_notes:false,external_link:true};Object.assign(base,syncPreferences.fields||{},syncDraftOverrides,work?.syncFieldPreferences||{},work?.syncFieldOverrides||{});if(record)Object.assign(base,record.syncFieldOverrides||{});return base}
 function renderSyncFields(){const host=$('sync-field-options');if(!host)return;const current=effectiveSyncFields();for(const [key,label] of syncFields){let wrap=host.querySelector(`[data-sync-choice="${key}"]`),input=wrap?.querySelector('input');if(!wrap){wrap=node('label',undefined,'sync-field-choice');wrap.dataset.syncChoice=key;input=node('input');input.type='checkbox';input.dataset.syncField=key;wrap.append(input,node('span',label));host.append(wrap);input.addEventListener('change',()=>{syncDraftOverrides[key]=input.checked;if(key==='class_notes')$('include-internal-notes').checked=input.checked;if(work){if(key==='class_notes')work.includeInternalNotes=input.checked;work.syncFieldOverrides||={};work.syncFieldOverrides[key]=input.checked;work.syncPreferencesSnapshot={...effectiveSyncFields(),[key]:input.checked};historyWorkChanged();historyView.refreshEditor(historyPlan)}$('sync-preferences-status').textContent=`${work?'本次工作':'目前選擇'}：${label}${input.checked?'會同步':'不同步'}。尚未提交的差異已失效。`})}if(input!==document.activeElement)input.checked=current[key]!==false&&(key!=='class_notes'||$('include-internal-notes').checked)}}
 async function loadSyncPreferences(){if(!integrationCapabilities.sync_field_preferences)return;const data=await api('sync-preferences-get',undefined,{query:{source_origin:'https://corp.orangeapple.co',adapter_version:'orange-apple-v1'}});syncPreferences={fields:data.fields||{},revision:data.revision||null};renderSyncFields()}
@@ -457,7 +460,7 @@ function renderHistoryIssues(){
     if(item.sourceEvidence){const details=node('details');details.append(node('summary','查看已擷取的教學原文'));for(const evidence of item.sourceEvidence)for(const f of evidence.fields||[])details.append(node('p',`${f.label}：${f.text||'未取得'}`));card.append(details)}
     const original=node('a','查看原站學生完整紀錄 ↗');original.href=`https://corp.orangeapple.co${item.admissionPath||'/dt_admissions/'+item.enrollment_source_id}`;original.target='_blank';original.rel='noopener noreferrer';card.append(original)
     let url,date
-    if(!item.listFailed){url=labelledInput(card,'原站報告編輯連結','url',`history-link-${item.evidenceKey}`,item.data?.external_link||'');date=labelledInput(card,'完整上課日期（缺少年份時請確認）','date',`history-date-${item.evidenceKey}`,item.date||'');url.autocomplete=date.autocomplete='off'}
+    if(!item.listFailed){url=labelledInput(card,'原站報告編輯連結','url',`history-link-${item.evidenceKey||item.source_id}`,item.data?.external_link||'');date=labelledInput(card,'完整上課日期（缺少年份時請確認）','date',`history-date-${item.evidenceKey||item.source_id}`,item.date||'');url.autocomplete=date.autocomplete='off'}
     const status=node('p',item.skipped?'已略過；不會建立此報告。':'尚未完成擷取','hint');status.setAttribute('aria-live','polite');card.append(status)
     const retry=node('button',item.listFailed?'重試此生歷史紀錄':'補足並重新讀取'),skip=node('button',item.skipped?'取消略過':'略過此筆');retry.type=skip.type='button';card.append(retry,skip)
     skip.addEventListener('click',()=>void run(async()=>{item.skipped=!item.skipped;const record=work.snapshot.records.find(r=>r.kind==='report'&&r.source_id&&r.source_id===item.source_id);if(record)record.sourceSkipped=item.skipped;updateHistoryPlanLocal();await save();skip.textContent=item.skipped?'取消略過':'略過此筆';status.textContent=item.skipped?'已略過；其他資料可繼續匯入。':'待處理，請補足或重試。';if(['stale','partial_complete','complete'].includes(work.status))renderImportOutcome()},{label:'正在保存略過選擇'}))
@@ -537,10 +540,11 @@ function prepareRows() {
     const targetId=item.existing?.id||idFor('history_report',item.key)
     const historyRow=add('history_report',item.key,targetId,item.data)
     if(!historyRow)continue
-    historyRow.overwrite=[...(item.record.historyOverwrite||[])]
+    // An EduLog report untouched since the last sync takes the source values.
+    historyRow.overwrite=[...new Set([...(item.record.historyOverwrite||[]),...(item.autoOverwrite||[])])]
     if(item.record.historyDuplicateConfirmed)historyRow.reviewed_duplicate=true
     if(item.category==='bind'){
-      const binding={historyId:targetId,itemKey:item.key,expectedFields:Object.fromEntries(teachingFields.filter(f=>Object.hasOwn(item.data,f)).map(f=>[f,item.data[f]])),occurrence:item.occurrence,body:{key:crypto.randomUUID(),class_occurrence_id:item.occurrence.id,overwrite:item.record.historyOverwrite||[],include_internal:work.includeInternalNotes,include_fields:item.includedFields||[]},status:'pending',atomic:true}
+      const binding={historyId:targetId,itemKey:item.key,expectedFields:Object.fromEntries(teachingFields.filter(f=>Object.hasOwn(item.data,f)).map(f=>[f,item.data[f]])),occurrence:item.occurrence,body:{key:crypto.randomUUID(),class_occurrence_id:item.occurrence.id,overwrite:historyRow.overwrite,include_internal:work.includeInternalNotes,include_fields:item.includedFields||[]},status:'pending',atomic:true}
       historyRow.history_reconciliation={key:binding.body.key,class_occurrence_id:item.occurrence.id,overwrite:binding.body.overwrite,include_internal:work.includeInternalNotes,include_fields:item.includedFields||[]}
       historyBindings.push(binding)
     }
@@ -963,6 +967,20 @@ function taipeiToday() {
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date())
   return `${parts.find(p=>p.type==='year').value}-${parts.find(p=>p.type==='month').value}-${parts.find(p=>p.type==='day').value}`
 }
+// Source rows without a reportId are saved only as attendance evidence for
+// enrollments that now exist. Failures never undo the applied import.
+async function recordAttendanceEvidence() {
+  if(!integrationCapabilities.attendance_evidence||work.attendanceEvidenceRecorded)return
+  const targets=historyTargets(),items=[]
+  for(const record of work.snapshot?.records||[]){
+    if(record.kind!=='attendance'||!record.date||record.date<work.dateFrom||record.date>work.dateTo)continue
+    const target=targets.get(record.enrollment_source_id)
+    if(!target?.id||!(record.attendance_count>0))continue
+    items.push({enrollment_id:target.id,source_admission_id:record.enrollment_source_id,...(record.sourceClassId?{source_class_id:String(record.sourceClassId)}:{}),evidence_date:record.date,attendance_count:Math.min(20,record.attendance_count),present_count:Math.min(20,record.present_count||0),absent_count:Math.min(20,record.absent_count||0)})
+  }
+  try{for(let i=0;i<items.length;i+=50)await api('attendance-evidence',{source_origin:'https://corp.orangeapple.co',items:items.slice(i,i+50)});work.attendanceEvidenceRecorded=true}
+  catch(error){work.needs.push(`出席證據未保存：${error.message}；匯入的報告不受影響。`)}
+}
 async function finalizeImport() {
   await applyHistoryBindings()
   const issueCounts=currentImportIssueCounts()
@@ -1061,7 +1079,7 @@ async function apply() {
     }
     const finished = work.done === work.batches.length
     work.status = finished ? 'applying' : cancelRequested ? 'cancelled' : 'paused'
-    if (finished) await finalizeImport()
+    if (finished) { if (typeof recordAttendanceEvidence === 'function') await recordAttendanceEvidence(); await finalizeImport() }
     else { await api('job-status', { status: work.status }, { jobId: work.jobId }); await save(); progress() }
     if (finished || cancelRequested) { previewResults = []; $('mapping').hidden = true; $('preview-section').hidden = true; $('pause').hidden = true; $('cancel-work').hidden = true; stage('import', 'cancel-work') }
     notice(finished ? `已核對 ${work.batchCount} 個匯入批次；${currentImportIssueCounts().pending} 項仍需處理，請查看名單核對結果。` : cancelRequested ? '已取消剩餘工作，成功寫入的資料保留。' : '工作已暫停，成功批次保留。')

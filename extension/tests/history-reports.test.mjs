@@ -57,12 +57,13 @@ test('history uses date headers rather than positional administrative columns',a
  const [r]=await api.readHistory('/dt_admissions/301');assert.equal(r.date,'2026-10-01');assert.equal(r.sourceReadStatus,'complete');dom.window.close()
 })
 
-test('full list teaching values survive without report IDs; exact evidence dedupes',async()=>{
+test('rows without report IDs keep their list values but only become attendance evidence; no content or row identity',async()=>{
  const {api,pages,dom}=fixture()
  const record='<tr><td>1</td><td>2026/10/04</td><td><label>評語：</label><p></p><label>聯絡欄：</label><p>保留\n段落</p><label>課程進度：</label><span>未完成</span><label>課程參與：</label><span>0</span><label>課堂表現：</label><span>4.5</span><label>最新課程階段：</label><span>Lesson 13</span></td><td>FORBIDDEN_ADMIN</td></tr>'
  pages.set('/dt_admissions/301',table(record+record))
- const records=await api.readHistory('/dt_admissions/301')
- assert.equal(records.length,1);assert.equal(records[0].source_id,null);assert.match(records[0].historyKey,/^evidence:[a-f0-9]{64}$/)
+ const all=await api.readHistory('/dt_admissions/301'),records=all.filter(r=>r.kind==='report'),[attendance]=all.filter(r=>r.kind==='attendance')
+ assert.equal(records.length,2,'identical rows are not merged by content');assert.equal(records[0].source_id,null);assert.equal(records[0].historyKey,undefined);assert.equal(records[0].evidenceKey,undefined)
+ assert.deepEqual([attendance.enrollment_source_id,attendance.date,attendance.attendance_count],['301','2026-10-04',2])
  assert.equal(records[0].data.content,'');assert.equal(records[0].data.class_participation,0);assert.equal(records[0].data.classroom_behavior,4.5);assert.equal(records[0].data.is_completed,false)
  assert.equal(records[0].sourceLessonLabel,'Lesson 13');assert.equal(JSON.stringify(records).includes('FORBIDDEN_ADMIN'),false)
  dom.window.close()
@@ -117,7 +118,26 @@ test('explicit holidays without teaching content are system exclusions, while sa
  const {api,pages,dom}=fixture()
  const html=`<div id="page-body"><div class="content"><table><thead><tr><th>堂次</th><th>日期</th><th>啟用進度</th><th>課程進度</th><th>出席狀況</th><th>學習評估</th></tr></thead><tbody><tr><td>--</td><td>2026-09-26</td><td></td><td></td><td>休假日</td><td></td></tr><tr><td>10</td><td>2026-10-10</td><td></td><td></td><td>不出席</td><td></td></tr></tbody></table></div></div>`
  pages.set('/dt_admissions/301',html)
- const records=await api.readHistory('/dt_admissions/301',{listOnly:true})
+ const all=await api.readHistory('/dt_admissions/301',{listOnly:true}),records=all.filter(r=>r.kind==='report')
  assert.equal(records.length,2);assert.equal(records[0].sourceRowType,'system-excluded');assert.equal(records[1].sourceRowType,'report');assert.equal(records[1].data.attendance_status,'absent')
+ assert.deepEqual(Array.from(all).filter(r=>r.kind==='attendance').map(r=>[r.date,r.attendance_count,r.absent_count]),[['2026-10-10',1,1]],'holidays are not attendance evidence')
+ dom.window.close()
+})
+
+test('class comes from the listing class page first, then the report page lesson session, never the admission current class',async()=>{
+ const {api,pages,dom}=fixture()
+ const classPage='<div id="page-body"><div class="content"><h2>週日班</h2><table id="reports"><tbody><tr><td><a href="/dt_admissions/301">報名</a><a href="/students/101">學生甲</a></td><td>課程</td><td><a href="/dt_admissions/301/reports/401/edit" data-date="2026-10-04">編輯</a></td></tr></tbody></table></div></div>'
+ const admission='<div id="page-body"><div class="content"><div id="admission-data"><ul><li>學生：<a href="/students/101">學生甲</a></li><li>梯次/節次：<a href="/courses/dt/55">目前節次</a></li></ul></div><table><tbody><tr><th>編號</th><th>上課日期</th><th>教學紀錄</th></tr>'+row('401','2026/10/04')+row('402','2026/10/11')+row('403','2026/10/18')+'</tbody></table></div></div>'
+ const withSession=(id,date,classId)=>editor(id,date).replace('<form',`<div class="report-meta"><span>學習紀錄節次：</span><a href="/courses/dt/${classId}">週六班</a></div><form`)
+ pages.set('/courses/dt/11/lesson_reports',classPage);pages.set('/dt_admissions/301',admission)
+ pages.set('/dt_admissions/301/reports/401/edit',withSession('401','2026-10-04','77'));pages.set('/dt_admissions/301/reports/402/edit',withSession('402','2026-10-11','77'));pages.set('/dt_admissions/301/reports/403/edit',editor('403','2026-10-18'))
+ dom.window.document.body.innerHTML='<div id="page-body"><div class="content"><h2>週日班</h2></div></div>'
+ const snapshot=await api.collect(dom.window.document,{history:false})
+ const listed=snapshot.records.find(r=>r.kind==='report'&&r.source_id==='401');assert.equal(listed.sourceClassId,'11');assert.equal(listed.sourceClassBasis,'class-page')
+ const history=await api.readHistory('/dt_admissions/301'),byId=Object.fromEntries(history.filter(r=>r.kind==='report').map(r=>[r.source_id,r]))
+ assert.equal(byId['402'].sourceClassId,'77');assert.equal(byId['402'].sourceClassBasis,'report-page')
+ assert.equal(byId['403'].sourceClassId,null,'the admission current class (梯次/節次) is never used');assert.equal(byId['403'].sourceClassBasis,null)
+ const reread=await api.readReport({...listed,sourceFields:[],data:{external_link:'https://corp.orangeapple.co/dt_admissions/301/reports/401/edit'}})
+ assert.equal(reread.sourceClassId,'11','the listing class page outranks the report page');assert.equal(reread.sourceReportClassId,'77')
  dom.window.close()
 })

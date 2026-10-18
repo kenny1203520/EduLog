@@ -2,22 +2,52 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { planHistory, bindingStillMatches } from '../history-sync.js'
 import { mergeClearToken, mergeSignature } from '../history-merge.js'
-const record=(extra={})=>({kind:'report',enrollment_source_id:'301',source_id:'401',historyKey:'report:401',date:'2026-10-04',sourceFields:[{key:'content',label:'評語',type:'text',value:''}],data:{is_completed:false,class_participation:0,classroom_behavior:4.5,content:''},...extra})
+const record=(extra={})=>({kind:'report',enrollment_source_id:'301',source_id:'401',historyKey:'report:401',sourceClassId:'11',date:'2026-10-04',sourceFields:[{key:'content',label:'評語',type:'text',value:''}],data:{is_completed:false,class_participation:0,classroom_behavior:4.5,content:''},...extra})
 const target=new Map([['301',{id:'enrollment',courseId:'course',name:'測試學生'}]])
 const occurrence={id:'sunday-occurrence',class_session_id:'sunday-session',class_name:'週日班',occurrence_date:'2026-10-04',can_write:true}
-const options={dateFrom:'1900-01-01',dateTo:'9999-12-31'}
+const options={dateFrom:'1900-01-01',dateTo:'9999-12-31',sourceClassSessions:new Map([['11','sunday-session']])}
 const plan=(records,archive=[],routes=[occurrence],settings=options)=>planHistory(records,target,new Map([['enrollment',archive]]),new Map([['enrollment',routes]]),settings)
 test('transfer date routes to the effective Sunday occurrence without enrollment or occurrence writes',()=>{
  const [item]=plan([record()]);assert.equal(item.category,'bind');assert.equal(item.occurrence.class_session_id,'sunday-session');assert.equal(item.data.is_completed,false);assert.equal(item.data.class_participation,0);assert.equal(item.data.classroom_behavior,4.5);assert.equal(item.data.class_session_id,undefined)
  assert.equal(bindingStillMatches(item,{report_version:null}),true);assert.equal(bindingStillMatches(item,{report_version:2}),false)
  assert.equal(plan([record({date:'2026-10-03'})])[0].category,'history')
 })
-test('missing report identity is honest evidence-only history; same-day changes require confirmation',()=>{
+test('rows without a report ID are attendance evidence only, never report payloads',()=>{
  const r=record({source_id:null,historyKey:'evidence:hash',identityUnverified:true})
- const [item]=plan([r]);assert.equal(item.data.identity_status,'evidence_only');assert.equal(item.data.source_report_id,undefined);assert.equal(item.data.external_link,undefined)
- const existing={source_admission_id:'301',source_key:'evidence:older',report_date:r.date}
- assert.equal(plan([r],[existing])[0].category,'needs')
- assert.notEqual(plan([{...r,historyDuplicateConfirmed:true}],[existing])[0].category,'needs')
+ const [item]=plan([r]);assert.equal(item.category,'system-excluded');assert.equal(item.attendanceEvidence,true);assert.equal(item.data,undefined);assert.equal(item.issues,undefined)
+ const [verified]=plan([record()]);assert.equal(verified.data.identity_status,'verified');assert.equal(verified.data.source_report_id,'401');assert.equal(verified.data.source_key,'report:301:401')
+ const [noLink]=plan([record()],[],[occurrence],{...options,syncFields:{external_link:false}});assert.equal(noLink.data.source_report_id,'401','identity does not depend on syncing the edit link to the lesson');assert.equal(noLink.includedFields.includes('external_link'),false)
+})
+test('same-day reports map to that day occurrences by reportId and lesson time; count mismatches are exceptions',()=>{
+ const early={...occurrence,id:'early',start_time:'10:00:00'},late={...occurrence,id:'late',start_time:'14:00:00'}
+ const items=plan([record({source_id:'410'}),record({source_id:'409'})],[],[late,early])
+ assert.deepEqual(items.map(item=>[item.record.source_id,item.category,item.occurrence?.id]),[['410','bind','late'],['409','bind','early']])
+ const mismatch=plan([record({source_id:'410'}),record({source_id:'409'})],[],[early])
+ assert.ok(mismatch.every(item=>item.category==='needs'&&item.issues[0].code==='occurrence-mismatch'))
+ const taken=plan([record({source_id:'410'})],[],[{...early,report:{id:'other',version:1,source_report_id:'999'}}])
+ assert.equal(taken[0].category,'needs');assert.equal(taken[0].issues[0].code,'occurrence-mismatch');assert.match(taken[0].reason,/其他原站報告/)
+})
+test('class comes from the class page or report page, never from guesses; cross-class reports are exceptions',()=>{
+ const [missing]=plan([record({sourceClassId:null})]);assert.equal(missing.category,'needs');assert.equal(missing.issues[0].code,'class')
+ const [other]=plan([record({sourceClassId:'99',sourceClassBasis:'report-page'})]);assert.equal(other.category,'needs');assert.equal(other.issues[0].code,'class-other');assert.match(other.reason,/99/)
+ assert.equal(plan([record({sourceClassId:'99',historyOnly:true})])[0].category,'history')
+ assert.equal(plan([record({sourceClassId:null})],[],[])[0].category,'history','no EduLog lesson on that date needs no class decision')
+ const [chosen]=plan([record({sourceClassId:null,historyOccurrenceId:occurrence.id})]);assert.equal(chosen.category,'bind')
+ const [bound]=plan([record({sourceClassId:null})],[],[{...occurrence,report:{id:'report',version:2,source_report_id:'401',source_synced_version:2,source_synced_fields:{}}}]);assert.equal(bound.category,'bind','an existing reportId binding identifies the lesson by itself')
+})
+test('re-sync overwrites an untouched EduLog report and asks only when both sides changed',()=>{
+ const synced={id:'report',version:3,source_report_id:'401',source_synced_version:3,source_synced_fields:{content:'old'},content:'old',is_completed:false,class_participation:0,classroom_behavior:4.5}
+ const [untouched]=plan([record({data:{...record().data,content:'new'}})],[],[{...occurrence,report:synced}])
+ assert.equal(untouched.category,'bind');assert.deepEqual(untouched.conflicts,[]);assert.ok(untouched.autoOverwrite.includes('content'))
+ const edited={...synced,version:4,content:'EduLog edit'}
+ const [both]=plan([record({data:{...record().data,content:'new'}})],[],[{...occurrence,report:edited}])
+ assert.equal(both.category,'needs');assert.equal(both.issues[0].code,'both-changed');assert.deepEqual(both.conflicts,['content'])
+ const confirmed=record({data:{...record().data,content:'new'},historyConflictConfirmed:true,historyConflictSignature:both.conflictSignature,historyOverwrite:['content']})
+ assert.equal(plan([confirmed],[],[{...occurrence,report:edited}])[0].category,'bind')
+ const [kept]=plan([record({data:{...record().data,content:'old'}})],[],[{...occurrence,report:edited}])
+ assert.equal(kept.category,'linked');assert.match(kept.reason,/EduLog/)
+ const [unknownBaseline]=plan([record({data:{...record().data,content:'new'}})],[],[{...occurrence,report:{...synced,source_synced_version:null,content:'EduLog edit'}}])
+ assert.equal(unknownBaseline.category,'needs','a migrated link without a sync baseline never overwrites silently')
 })
 test('multiple legal occurrences and nonempty content conflicts require explicit choices',()=>{
  const two=[occurrence,{...occurrence,id:'other'}]
@@ -97,9 +127,7 @@ test('list/editor disagreements wait for explicit confirmation before course-rep
  const [confirmed]=plan([record({sourceFieldConflicts:[conflict],sourceConflictAcknowledged:true})])
  assert.equal(confirmed.category,'bind');assert.equal(confirmed.data.content,'')
 })
-test('same-day ambiguous identities and two sources for one occurrence require review',()=>{
- const unknown=record({source_id:null,historyKey:'evidence:first',identityUnverified:true})
- assert.ok(plan([unknown,{...unknown,historyKey:'evidence:second'}]).every(i=>i.category==='needs'))
+test('two sources for one occurrence require review unless one is saved as history only',()=>{
  assert.ok(plan([record(),record({source_id:'402',historyKey:'report:402'})]).every(i=>i.category==='needs'))
  const one=plan([record(),record({source_id:'402',historyKey:'report:402',historyOnly:true})]);assert.equal(one[0].category,'bind');assert.equal(one[1].category,'history')
 })
