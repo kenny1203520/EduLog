@@ -8,7 +8,7 @@
 - `sites/orange-apple/orange-apple-lexicon.js`：路由、結構選擇器、狀態用語、頁面探針集中一處。
 - `sites/orange-apple/orange-apple-model.js`：`matchPage`、`sessionText`、`classifySession`、`readWeekColumns`、`pickWeek`、`checkPage`。報告頁的週欄位與課次狀態判斷（adapter 與 workflows）改由此讀取。
 - 健康檢查：增強前檢查探針。權限頁維持原狀；結構不符時該頁保留原站畫面，工具列顯示「此頁暫用原站畫面：原站版面可能已更新…」。
-- 每頁原版：工具列「本頁看原版／本頁套用 EduLog」，按頁面種類記住。偏好存為 `edulogUiPreferences[adapterId].pages[kind] = 'original'`；空時不寫入，舊格式不變。啟動時原版頁直接釋放，不閃爍主題。
+- 每頁原版：EduLog 面板的「本頁套用 EduLog」開關（P9 起；原為工具列「本頁看原版／本頁套用 EduLog」按鈕），按頁面種類記住。偏好存為 `edulogUiPreferences[adapterId].pages[kind] = 'original'`；空時不寫入，舊格式不變。啟動時原版頁直接釋放，不閃爍主題。
 
 尚未搬入詞彙表：`orange-apple-integration.js` 的資料解析用語與 workflows 其他頁面的欄位標題比對（歷史、時數、未填寫、行事曆），隨 M2/M3 使用到時再搬。
 

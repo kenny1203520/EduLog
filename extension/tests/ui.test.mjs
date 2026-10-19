@@ -30,10 +30,16 @@ function fixture(name, path) {
   dom.window.eval(adapterCode)
   return dom
 }
-function start(dom, enabled = true, pages = undefined) {
+function start(dom, enabled = true, pages = undefined, status = undefined) {
   const messages = [], listeners = []
   dom.window.chrome = { runtime: {
-    sendMessage: async data => { messages.push(data); return data.type === 'get-ui-preferences' ? { enabled, pages } : { enabled: data.enabled } },
+    sendMessage: async data => {
+      messages.push(data)
+      if (data.type === 'get-ui-preferences') return { enabled, pages }
+      if (status && data.type === 'get-edulog-integration-status') return status
+      if (data.type === 'open-integration-workspace') return { opened: true }
+      return { enabled: data.enabled }
+    },
     onMessage: { addListener: fn => listeners.push(fn) },
   } }
   dom.window.eval(read('../shared/runtime-bridge.js'))
@@ -125,7 +131,8 @@ test('standalone UI works without pairing and homepage shortcuts use source clas
   await wait()
   assert.equal(dom.window.document.documentElement.dataset.edulogUi, 'on')
   assert.equal(dom.window.document.querySelectorAll('.edulog-class-shortcuts a').length, 2)
-  assert.deepEqual(messages.map(m => m.type), ['get-ui-preferences'])
+  // Only reads: the theme preference and the connection status behind the toolbar's dot.
+  assert.deepEqual(messages.map(m => m.type), ['get-ui-preferences', 'get-edulog-integration-status'])
   dom.window.close()
 })
 test('preference changes restore the original and re-enable without duplicates', async () => {
@@ -185,7 +192,11 @@ test('a page kind saved as original stays native and can be switched back from t
   assert.equal(doc.querySelector('#edulog-extension-root').dataset.enabled, 'false')
   const pageMode = toolbarPart(doc, '.page-mode')
   assert.equal(pageMode.hidden, false)
-  assert.equal(pageMode.textContent, '本頁套用 EduLog')
+  assert.equal(pageMode.getAttribute('role'), 'switch')
+  assert.equal(pageMode.getAttribute('aria-checked'), 'false')
+  assert.equal(pageMode.querySelector('.switch-label').textContent, '本頁套用 EduLog')
+  assert.equal(toolbarPart(doc, '.integration').classList.contains('fab'), true, 'original pages show one floating EduLog button')
+  assert.equal(toolbarPart(doc, '.bar'), null)
   pageMode.click(); await wait()
   assert.equal(doc.documentElement.dataset.edulogUi, 'on')
   assert.equal(doc.querySelectorAll('.edulog-table-tools').length, 2)
@@ -217,5 +228,74 @@ test('unrecognised provider structure keeps the native page and explains it in t
   assert.equal(doc.querySelector('#edulog-extension-root').dataset.enabled, 'false')
   assert.match(toolbarPart(doc, '.notice').textContent, /原站版面可能已更新/)
   assert.equal(toolbarPart(doc, '.page-mode').hidden, true)
+  dom.window.close()
+})
+
+const connected = { status: 'connected', origin: 'https://edulog.example.com', capabilities: { teaching_data_import: true, report_prefill: true }, settingsUrl: 'https://edulog.example.com/settings', lastVerifiedAt: '2026-10-19T06:02:00Z' }
+test('theme off shows one floating button whose panel holds the page switch, main action, connection and settings', async () => {
+  const dom = fixture('class', '/courses/dt/101'), doc = dom.window.document
+  const { messages } = start(dom, false, undefined, connected)
+  await wait()
+  const host = doc.querySelector('#edulog-extension-root')
+  assert.equal(host.dataset.enabled, 'false')
+  assert.equal(host.shadowRoot.querySelectorAll('button.integration').length, 1)
+  assert.equal(toolbarPart(doc, '.fab-dot').dataset.tone, 'ok')
+  assert.equal(toolbarPart(doc, '.integration').getAttribute('aria-label'), 'EduLog（已連線）')
+  const panel = toolbarPart(doc, '.panel'), trigger = toolbarPart(doc, '.integration')
+  assert.equal(panel.hidden, true)
+  trigger.click(); await wait()
+  assert.equal(panel.hidden, false)
+  assert.equal(trigger.getAttribute('aria-expanded'), 'true')
+  // With the theme off the theme switch takes the page switch's place; the per-page choice stays hidden.
+  assert.equal(toolbarPart(doc, '.switch-slot .toggle').getAttribute('aria-checked'), 'false')
+  assert.equal(toolbarPart(doc, '.page-mode').hidden, true)
+  const primary = toolbarPart(doc, '.panel-primary')
+  assert.equal(primary.hidden, false)
+  assert.equal(primary.textContent, '同步本班')
+  assert.equal(toolbarPart(doc, '.panel .status').textContent, 'edulog.example.com')
+  assert.equal(toolbarPart(doc, '.settings').hidden, false)
+  primary.click(); await wait()
+  assert.deepEqual(messages.filter(m => m.type === 'open-integration-workspace').map(m => m.flow), ['import'])
+  panel.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true }))
+  assert.equal(panel.hidden, true)
+  assert.equal(host.shadowRoot.activeElement, trigger, 'Esc returns focus to the button')
+  trigger.click(); await wait()
+  doc.body.dispatchEvent(new dom.window.Event('pointerdown', { bubbles: true, composed: true }))
+  assert.equal(panel.hidden, true, 'a click outside closes the panel')
+  dom.window.close()
+})
+test('the report editor offers prefill; a disconnected page explains how to connect instead', async () => {
+  const report = fixture('report-editor', '/dt_admissions/301/reports/401/edit')
+  const sent = start(report, false, undefined, connected).messages
+  await wait()
+  toolbarPart(report.window.document, '.integration').click(); await wait()
+  const primary = toolbarPart(report.window.document, '.panel-primary')
+  assert.equal(primary.textContent, '預填本報告')
+  primary.click(); await wait()
+  assert.deepEqual(sent.filter(m => m.type === 'open-integration-workspace').map(m => m.flow), ['prefill'])
+  report.window.close()
+  const offline = fixture('class', '/courses/dt/101'), doc = offline.window.document
+  start(offline, false, undefined, { status: 'not-connected' }); await wait()
+  assert.equal(toolbarPart(doc, '.fab-dot').dataset.tone, 'neutral')
+  toolbarPart(doc, '.integration').click(); await wait()
+  assert.equal(toolbarPart(doc, '.panel-primary').hidden, true)
+  assert.match(toolbarPart(doc, '.panel .status-meta').textContent, /EduLog 圖示/)
+  offline.window.close()
+})
+test('theme on shows the toolbar with one primary action and the panel behind "more"', async () => {
+  const dom = fixture('class', '/courses/dt/101'), doc = dom.window.document
+  start(dom, true, undefined, connected); await wait()
+  assert.equal(toolbarPart(doc, '.fab'), null)
+  const primary = toolbarPart(doc, '.bar .primary')
+  assert.equal(primary.hidden, false)
+  assert.equal(primary.textContent, '同步本班')
+  assert.equal(toolbarPart(doc, '.bar .conn').dataset.tone, 'ok')
+  toolbarPart(doc, '.integration').click(); await wait()
+  assert.equal(toolbarPart(doc, '.panel-primary').hidden, true, 'the toolbar already carries the primary action')
+  assert.equal(toolbarPart(doc, '.page-mode').getAttribute('aria-checked'), 'true')
+  assert.equal(toolbarPart(doc, '.toggle-slot .toggle').getAttribute('aria-checked'), 'true')
+  toolbarPart(doc, '.page-mode').click(); await wait()
+  assert.equal(doc.documentElement.hasAttribute('data-edulog-ui'), false)
+  assert.equal(toolbarPart(doc, '.integration').classList.contains('fab'), true)
   dom.window.close()
 })

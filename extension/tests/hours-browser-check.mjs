@@ -46,11 +46,12 @@ for (const [name, launchOptions] of browserTargets()) {
       }, { early, late, content: read('../content/content.js'), failed })
       await page.goto('https://corp.orangeapple.co/my/hour')
       await page.locator('#edulog-extension-root').waitFor()
-      const toggle = page.getByRole('button', { name: '套用清晰主題', exact: true })
+      const toggle = page.getByRole('switch', { name: '套用 EduLog 清晰主題', exact: true })
+      // Theme on: the switch sits in the panel's settings; theme off: at the top of the floating panel.
       const openPreferences = async () => {
-        await page.getByRole('button', { name: 'EduLog 功能', exact: true }).click()
+        await page.getByRole('button', { name: /^EduLog（|^EduLog 更多$/ }).click()
         const summary = page.locator('.preferences summary')
-        if (!await summary.evaluate(el => el.parentElement.open)) await summary.click()
+        if (await page.locator('html[data-edulog-ui=on]').count() && !await summary.evaluate(el => el.parentElement.open)) await summary.click()
       }
       if (failed) {
         assert.equal(await page.locator('html[data-edulog-ui]').count(), 0)
@@ -84,7 +85,8 @@ for (const [name, launchOptions] of browserTargets()) {
       }), `${name} ${width}: ${selector} usable`)
       await page.screenshot({ path: join(output, `${name}-${width}-${failed ? 'recovered' : 'hours'}.png`), fullPage: true })
       await openPreferences()
-      await page.getByRole('button', { name: '使用原站主題', exact: true }).click()
+      await toggle.click()
+      assert.equal(await page.locator('html[data-edulog-ui]').count(), 0)
       assert.equal(await page.evaluate(() => nativeForm.outerHTML === nativeMarkup), true)
       assert.equal(await page.locator('[name=year]').inputValue(), '2025')
       await openPreferences()

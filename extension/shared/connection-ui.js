@@ -27,13 +27,28 @@
   }
   // Source tab titles end with the provider's site name; keep the part the teacher recognises.
   const tabHeading = title => String(title || '').split(/\s[|｜–—-]\s/)[0].trim()
+  // English for the same states, keyed as conn.<state>.<chip|label|detail> for extension-owned UI.
+  const english = {
+    checking: ['Checking', 'Checking connection', 'Please wait…'],
+    'not-connected': ['Not connected', 'Not connected to EduLog', 'Connect to sync classes and prefill reports.'],
+    pending: ['Awaiting approval', 'Waiting for EduLog approval', 'Approve the connection in EduLog, then finish pairing here.'],
+    'pairing-expired': ['Not connected', 'Pairing expired', 'Start a new pairing request.'],
+    connected: ['Connected', 'EduLog connected', 'Connection verified.'],
+    expired: ['Expired', 'Connection expired', 'Reconnect EduLog. The light theme still works.'],
+    revoked: ['Access revoked', 'Access revoked', 'Reconnect EduLog. The light theme still works.'],
+    forbidden: ['Connection error', 'Server blocks this extension', 'Check the server\'s extension origin setting, then verify again.'],
+    unavailable: ['Connection error', 'Can\'t verify right now', 'Your connection is kept. Check the server is reachable, then retry.'],
+    'context-invalidated': ['Reopen needed', 'Extension updated', 'Save your work, then reload the tab.'],
+  }
   globalThis.edulogUi?.register({
     'popup.settings': ['設定', 'Settings'],
+    ...Object.fromEntries(Object.entries(states).flatMap(([state, zh]) => ['chip', 'label', 'detail'].map((part, index) => [`conn.${state}.${part}`, [zh[index], english[state][index]]]))),
   })
   globalThis.edulogConnectionUi = Object.freeze({
     describe(state) {
-      const [chip, label, detail, tone] = states[state] || states.unavailable
-      return { chip, label, detail, tone }
+      const key = states[state] ? state : 'unavailable'
+      const [chip, label, detail, tone] = states[key]
+      return { chip, label, detail, tone, key: `conn.${key}` }
     },
     pageContext,
     tabHeading,

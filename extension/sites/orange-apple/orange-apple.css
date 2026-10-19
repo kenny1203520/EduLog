@@ -2,8 +2,7 @@
 html[data-edulog-pending] #page-body { visibility:hidden !important; }
 html[data-edulog-pending]::before { content:'正在準備介面…'; position:fixed; inset:0; display:grid; place-items:center; background:var(--edulog-canvas); color:var(--edulog-text-muted); font:var(--edulog-text-base)/1.6 system-ui,sans-serif; z-index:1039; pointer-events:none; }
 #edulog-loading-status { position:fixed; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
-html[data-edulog-ui="on"] { --edulog-toolbar-height:64px; }
-@media(max-width:480px) { html[data-edulog-ui="on"] { --edulog-toolbar-height:113px; } }
+html[data-edulog-ui="on"] { --edulog-toolbar-height:48px; }
 html[data-edulog-ui="on"] { background:var(--edulog-canvas); scroll-padding-top:80px; }
 html[data-edulog-ui="on"] body { background:var(--edulog-canvas); color:var(--edulog-text); font:var(--edulog-text-base)/1.6 system-ui,-apple-system,"Segoe UI",sans-serif; }
 html[data-edulog-ui="on"] #page-body { margin:0; min-width:0; }
