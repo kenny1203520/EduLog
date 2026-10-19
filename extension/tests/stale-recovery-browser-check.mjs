@@ -75,7 +75,8 @@ try{
    assert.equal(await page.locator('#cancel-read').isVisible(),false)
    assert.equal(await page.locator('#workspace').getAttribute('aria-busy'),null)
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true)
-   const hit=await page.locator('#retry-work-recovery').boundingBox();assert.ok(hit.width>=44&&hit.height>=44)
+   // MASTER §4: 44px touch targets below 768px, dense 36px controls on desktop.
+   const hit=await page.locator('#retry-work-recovery').boundingBox(),target=width<768?44:36;assert.ok(hit.width>=target&&hit.height>=target,JSON.stringify(hit))
    await page.screenshot({path:fileURLToPath(new URL(`${name}-${width}-${height}-error.png`,out))})
    await page.evaluate(()=>edulogUi.setLocale('en'))
    assert.match(await page.locator('#operation-title').innerText(),/Workspace interface error/)
