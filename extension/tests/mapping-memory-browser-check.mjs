@@ -70,11 +70,15 @@ try{
     const browser = await chromium.launch(launchOptions)
     try{for(const width of(process.argv.includes('--focused')?[390,1440]:[360,390,768,1024,1200,1440,1920,720])){
       const context=await browser.newContext({viewport:{width,height:900},deviceScaleFactor:width===720?2:1}),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.addInitScript(mock)
+      // The full mapping workbench lives in the 進階：全部對應 drawer (prototype v2).
+      const adv=async tab=>{if(!await page.locator('#advanced-drawer').isVisible())await page.locator('#open-advanced').click();await page.locator(`[data-adv-tab="${tab}"]`).click();await page.locator(`[data-adv-pane="${tab}"]`).waitFor({state:'visible'})}
+      const closeAdv=async()=>{if(await page.locator('#advanced-drawer').isVisible()){await page.locator('#advanced-apply').click();await page.locator('#advanced-drawer').waitFor({state:'hidden'})}}
       const collect=async()=>{await page.locator('#import-advanced summary').click();await page.locator('#read-history').uncheck();await page.locator('#collect').click();await page.locator('#mapping').waitFor({state:'visible'})}
       await page.goto(`${base}/workspace/workspace.html?source=10${process.argv.includes('--reconciliation')?'&reconciliation=1':''}`);await collect()
       assert.equal(await page.evaluate(()=>testCalls.some(m=>m.operation==='context')),false)
-      await page.locator('#classroom').selectOption(id(1));await page.locator('#class-session').selectOption(id(3));await page.locator('#remember-destination').click();await page.waitForFunction(()=>document.querySelector('#notice').textContent.includes('已保存'))
+      await adv('classes');await page.locator('#classroom').selectOption(id(1));await page.locator(`#class-session option[value="${id(3)}"]`).waitFor({state:'attached'});await page.locator('#class-session').selectOption(id(3));await page.waitForFunction(()=>!document.querySelector('#workspace').hasAttribute('aria-busy'));await page.locator('#remember-destination').click();await page.waitForFunction(()=>document.querySelector('#notice').textContent.includes('已保存'))
       const choose=async(section,index)=>{
+        await adv('students')
         if(width<=768&&await page.locator('#mapping-back').isVisible())await page.locator('#mapping-back').click()
         await page.locator(`[data-mapping-section="${section}"]`).click()
         await page.locator('#mapping-filter').selectOption('all')
@@ -89,7 +93,7 @@ try{
           c.enrollments.push({id:id(44),student_id:id(4),course_id:id(2),class_session_id:id(23),start_date:'2026-01-01',status:'regular',course_name:'課程 A',class_session:c.class_sessions[1]}, {id:id(45),student_id:id(14),course_id:id(2),class_session_id:id(3),start_date:'2026-01-01',status:'regular',class_session:c.class_sessions[0]})
         })
         // The session list reloads asynchronously after the classroom changes; wait for the patched catalog.
-        await page.locator('#classroom').selectOption(id(1));await page.locator(`#class-session option[value="${id(23)}"]`).waitFor({state:'attached'})
+        await adv('classes');await page.locator('#classroom').selectOption(id(1));await page.locator(`#class-session option[value="${id(23)}"]`).waitFor({state:'attached'})
         await page.locator('#class-session').selectOption(id(3))
         await page.waitForFunction(()=>/週六 09:00–10:00/.test(document.querySelector('#class-session option:checked')?.textContent||''),null,{timeout:5000}).catch(()=>{})
         assert.match(await page.locator('#class-session option:checked').textContent(),/週六 09:00–10:00/)
@@ -115,7 +119,7 @@ try{
         await choose('admissions',1);await page.locator('#student-102').selectOption(id(14));await page.locator('#enrollment-course-302').selectOption(id(2));await page.locator('#more-enrollments-302').click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'))
         await page.locator('.mapping-row:visible').getByRole('button',{name:'使用符合的既有報名',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));await page.locator('.mapping-row:visible .mapping-actions>.primary').click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'))
         await page.evaluate(()=>testSnapshot.records.find(r=>r.kind==='enrollment'&&r.source_id==='301').student_source_id=null)
-        await page.locator('#reread-source').click();await page.waitForFunction(()=>!document.querySelector('#workspace').hasAttribute('aria-busy'))
+        await adv('maint');await page.locator('#reread-source').click();await page.waitForFunction(()=>!document.querySelector('#workspace').hasAttribute('aria-busy'))
         await choose('admissions',0);assert.match(await page.locator('.mapping-row:visible').textContent(),/來源學生：同名學生 · ID 101/,'an incomplete reread does not erase a reliable source identity')
         await choose('admissions',1);assert.equal(await page.locator('#student-102').inputValue(),id(14),'source reread preserves unaffected choices')
         // Reports now use the history workbench, replacing the legacy per-occurrence picker.
@@ -154,7 +158,7 @@ try{
         await row.locator('.source-evidence>summary').click();assert.match(await row.locator('.source-evidence').textContent(),/同名學生/);await row.locator('.source-evidence>summary').click()
         const button=row.locator('.mapping-actions>.primary')
         if(index===0){const baseline=await page.evaluate(()=>testCalls.length);await page.evaluate(()=>window.confirmFailure='VERSION_CONFLICT');await button.click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));assert.match(await row.locator('.mapping-feedback').textContent(),/已重新核對最新狀態|目前選擇尚未保存/);assert.equal(await page.locator(`#start-${admission}`).inputValue(),'2026-01-01');const recovery=await page.evaluate(n=>testCalls.slice(n),baseline),attempts=recovery.filter(m=>m.operation==='confirm');assert.equal(attempts.length,1,'a conflict is rechecked once and never auto-resubmitted');const refresh=recovery.filter(m=>m.operation==='resolve');assert.ok(refresh.some(call=>call.body.source_refs.some(ref=>ref.source_kind==='student'&&ref.source_id==='101')),'focused conflict recovery resolves the source student ID')}
-        if(index===1){await page.evaluate(()=>window.confirmFailure='API_TIMEOUT');await button.click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));assert.match(await row.locator('.mapping-feedback').textContent(),/保存結果尚未確認/);assert.equal(await button.getAttribute('aria-disabled'),'true');await page.locator('#reload-memories').click();await page.waitForFunction(()=>!document.querySelector('#workspace').hasAttribute('aria-busy'));assert.equal(await button.getAttribute('aria-disabled'),'false')}
+        if(index===1){await page.evaluate(()=>window.confirmFailure='API_TIMEOUT');await button.click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));assert.match(await row.locator('.mapping-feedback').textContent(),/保存結果尚未確認/);assert.equal(await button.getAttribute('aria-disabled'),'true');await adv('classes');await page.locator('#reload-memories').click();await page.waitForFunction(()=>!document.querySelector('#workspace').hasAttribute('aria-busy'));await adv('students');assert.equal(await button.getAttribute('aria-disabled'),'false')}
         await button.click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));assert.match(await row.locator('.mapping-feedback').textContent(),/已記住此報名/);assert.equal(await row.isVisible(),true)
       }
       assert.equal(await page.locator('.mapping-row:visible').count(),1,'only the active editor remains visible')
@@ -171,7 +175,7 @@ try{
       await page.locator('#mapping-workbench').scrollIntoViewIfNeeded();await page.locator('#mapping-editor-pane').evaluate(n=>n.scrollTop=0);await page.screenshot({path:fileURLToPath(new URL(`${name}-${width}-mapping.png`,output))})
       // Remount twice and alternate tabs: no stale buttons or cross-tab editor.
       for(let repeat=0;repeat<2;repeat++){
-        await page.locator('#reread-source').click();await page.waitForFunction(()=>!document.querySelector('#workspace').hasAttribute('aria-busy'))
+        await adv('maint');await page.locator('#reread-source').click();await page.waitForFunction(()=>!document.querySelector('#workspace').hasAttribute('aria-busy'))
         assert.equal(await page.locator('#mapping-items button').count(),6)
         assert.equal(await page.evaluate(()=>new Set([...document.querySelectorAll('#mapping-items button')].map(b=>b.dataset.entryKey)).size),6)
         for(const [section,count]of[['courses',2],['admissions',4]]){
@@ -191,12 +195,14 @@ try{
         await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'))
       }
       if(width===390){
-        await page.evaluate(()=>window.previewFailure=true);await page.locator('#preview').click();await page.waitForFunction(()=>!document.querySelector('#workspace').hasAttribute('aria-busy'))
+        await closeAdv();await page.evaluate(()=>window.previewFailure=true);await page.locator('#sync').click();await page.waitForFunction(()=>!document.querySelector('#workspace').hasAttribute('aria-busy'))
         assert.match(await page.locator('#operation-title').textContent(),/差異核對失敗/)
         assert.match(await page.locator('#operation-detail').textContent(),/請重新產生差異/);assert.match(await page.locator('#diagnostic').textContent(),/重複來源 ID|Duplicate source IDs/);assert.match(await page.locator('#diagnostic').textContent(),/edulog-synthetic-duplicate/)
         assert.equal(await page.locator('#start-301').inputValue(),'2026-01-01');assert.equal(await page.locator('#apply').isDisabled(),true)
       }
-      await page.locator('#preview').click();await page.waitForFunction(()=>!document.querySelector('#workspace').hasAttribute('aria-busy'));assert.equal(await page.locator('#preview-section').isVisible(),true,await page.locator('#operation-detail').textContent())
+      // One click previews first; the class's extra course needs an explicit decision, so it stops on the difference screen.
+      await closeAdv();await page.locator('#sync').click();await page.waitForFunction(()=>!document.querySelector('#workspace').hasAttribute('aria-busy'));assert.equal(await page.locator('#preview-section').isVisible(),true,await page.locator('#operation-detail').textContent())
+      assert.equal(await page.evaluate(()=>testCalls.some(m=>m.operation==='apply')),false,'a class change needing confirmation never writes automatically')
       const job=await page.evaluate(()=>testCalls.find(m=>m.operation==='job').body);assert.deepEqual(job.course_ids.sort(),[id(2),id(12)].sort());assert.equal('course_id'in job,false)
       const batch=await page.evaluate(()=>testCalls.find(m=>m.operation==='preview').body.rows.filter(r=>r.record.kind==='enrollment'));assert.equal(batch.length,4);assert.equal(batch.find(r=>r.source_id==='301').record.data.student_id,id(4));assert.equal(batch.find(r=>r.source_id==='302').record.data.student_id,id(14));assert.equal(batch.find(r=>r.source_id==='303').record.data.course_id,id(12))
       const change=page.getByText('我確認追加選定課程到班級可上課程（保留原有課程與排程）',{exact:true});await change.locator('..').locator('input').check();await page.locator('#repreview').click();await page.waitForFunction(()=>!document.querySelector('#workspace').hasAttribute('aria-busy'))
@@ -205,7 +211,7 @@ try{
       await page.reload();await collect();assert.equal(await page.locator('#mapping').isVisible(),true,'an unfinished review reopens in its saved review stage')
       assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);assert.deepEqual(errors,[])
       if(width===1440&&process.argv.includes('--short-viewport')){
-        await page.locator('[data-review-pane="identity"]').click();await choose('admissions',0);await page.setViewportSize({width,height:480})
+        await choose('admissions',0);await page.setViewportSize({width,height:480})
         const pane=page.locator('#mapping-editor-pane');await pane.evaluate(n=>n.scrollTop=n.scrollHeight)
         const geometry=await pane.evaluate(n=>({client:n.clientHeight,scroll:n.scrollHeight,height:n.getBoundingClientRect().height}))
         assert.ok(geometry.client>100&&geometry.height<481&&geometry.scroll>geometry.client,`short workspace scrolls ${JSON.stringify(geometry)}`)

@@ -16,7 +16,7 @@ const staleScript = script.slice(script.indexOf('function refreshStaleReviewBatc
 const staleReasonScript = script.slice(script.indexOf('function staleReasonLabel('), script.indexOf('function renderImportOutcome('))
 const outcomeStateScript = script.slice(script.indexOf('function currentImportIssueCounts('), script.indexOf('function renderImportOutcome('))
 const applyScript = script.slice(script.indexOf('async function apply()'), script.indexOf('async function resumeImport()'))
-const resumeScript = script.slice(script.indexOf('async function refreshImportCheckpoint()'), script.indexOf('async function readForm()'))
+const resumeScript = script.slice(script.indexOf('async function refreshImportCheckpoint()'), script.indexOf('async function saveWorkMetadata('))
 const progressScript=script.slice(script.indexOf('function progress()'),script.indexOf('function taipeiToday()'))
 const applyGateScript=script.slice(script.indexOf('function canApplyCurrentPreview()'),script.indexOf('function stage('))
 const staleNavigationScript=script.slice(script.indexOf('function captureStaleSummaryState()'),script.indexOf('function renderDifferences()'))
@@ -91,13 +91,13 @@ test('stale preview details are shown only when they came from an actual version
  assert.match(trusted,/目標資料版本改變/)
 })
 
-test('review persistence disables both preview and sync before any request or batch mutation',async()=>{
+test('review persistence disables one-click sync and refresh before any request or batch mutation',async()=>{
  const current=work(),before=structuredClone(current),f=previewFixture(current,[])
  f.context.reviewSaveCoordinator={isSaving:()=>true}
  f.context.busy=false
- f.controls.preview={disabled:false};f.controls.repreview={disabled:false}
+ f.controls.sync={disabled:false};f.controls.repreview={disabled:false}
  f.context.updateApplyAvailability()
- assert.equal(f.controls.apply.disabled,true);assert.equal(f.controls.preview.disabled,true);assert.equal(f.controls.repreview.disabled,true)
+ assert.equal(f.controls.apply.disabled,true);assert.equal(f.controls.sync.disabled,true);assert.equal(f.controls.repreview.disabled,true)
  await assert.rejects(f.preview(true),error=>error.code==='REVIEW_SAVE_IN_PROGRESS')
  assert.deepEqual(current,before);assert.equal(f.calls.length,0);assert.equal(f.saved.length,0)
 })
@@ -114,13 +114,13 @@ test('local report blockers retain every batch and give actionable data before H
  assert.equal(f.controls['preview-section'].hidden,false)
 })
 
-test('stale report navigation switches to the review pane before focusing and retains summary state',()=>{
+test('stale report navigation opens the reports drawer before focusing and retains summary state',()=>{
  const dom=new JSDOM('<div id="diff-list"><article data-stale-review-key="history_report:301"><details open data-stale-review-detail="history_report:301:values"><summary>欄位</summary></details><button data-stale-review-open>前往核對</button></article></div><div id="history-sync"></div>'),calls=[],work={id:'work'}
  dom.window.scrollTo=({top})=>{dom.window.__scrollTop=top};dom.window.document.getElementById('history-sync').scrollIntoView=()=>calls.push('scroll')
- const context=vm.createContext({work,window:dom.window,document:dom.window.document,$:id=>dom.window.document.getElementById(id),stage:(...args)=>calls.push(['stage',...args]),reviewPane:p=>calls.push(['pane',p]),historyView:{focusReport:(key,field)=>{calls.push(['focus',key,field]);return true}},notice:()=>{}})
+ const context=vm.createContext({work,window:dom.window,document:dom.window.document,$:id=>dom.window.document.getElementById(id),stage:(...args)=>calls.push(['stage',...args]),openAdvanced:p=>calls.push(['advanced',p]),historyView:{focusReport:(key,field)=>{calls.push(['focus',key,field]);return true}},notice:()=>{}})
  vm.runInContext(staleNavigationScript,context)
  dom.window.document.querySelector('[data-stale-review-open]').focus()
- assert.equal(context.openStaleReport({key:'301'},'content'),true);assert.deepEqual(calls,[['stage','import','preview'],['pane','reports'],['focus','301','content'],'scroll']);assert.deepEqual(Array.from(work.staleReviewSummaryUI.open),['history_report:301:values']);assert.equal(work.staleReviewSummaryUI.focusKey,'history_report:301')
+ assert.equal(context.openStaleReport({key:'301'},'content'),true);assert.deepEqual(calls,[['stage','import','preview'],['advanced','reports'],['focus','301','content']]);assert.deepEqual(Array.from(work.staleReviewSummaryUI.open),['history_report:301:values']);assert.equal(work.staleReviewSummaryUI.focusKey,'history_report:301')
  dom.window.document.querySelector('details').open=false;context.restoreStaleSummaryState();assert.equal(dom.window.document.querySelector('details').open,true);dom.window.close()
 })
 
@@ -225,7 +225,7 @@ test('PREVIEW_STALE pauses before further writes and preserves the failed key an
 })
 test('stale progress remains visibly marked as an error',()=>{
   const elements=new Map(['progress','progress-label','resume','pause','cancel-work','operation-status','operation-title','operation-detail','operation-progress'].map(id=>[id,{dataset:{},hidden:false}]))
-  const context=vm.createContext({work:{status:'stale',done:0,batchCount:3,needs:[{}],staleDiagnostics:{'batches.key.preview':['TARGET_VERSION_CHANGED']}},historyPlan:[],show(){},stage(){},staleReasonLabel:()=> 'EduLog 目標資料已更新',renderImportOutcome(){},$:id=>elements.get(id)})
+  const context=vm.createContext({work:{status:'stale',done:0,batchCount:3,needs:[{}],staleDiagnostics:{'batches.key.preview':['TARGET_VERSION_CHANGED']}},historyPlan:[],show(){},stage(){},staleReasonLabel:()=> 'EduLog 目標資料已更新',renderImportOutcome(){},renderDone(){},$:id=>elements.get(id)})
   vm.runInContext(`${outcomeStateScript}\n${progressScript}\nprogress()`,context)
   assert.equal(elements.get('operation-status').hidden,false)
   assert.equal(elements.get('operation-status').dataset.state,'error')

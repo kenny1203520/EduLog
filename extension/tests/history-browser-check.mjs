@@ -15,8 +15,10 @@ try{
     const page=await browser.newPage({viewport:{width,height}}),errors=[];page.on('pageerror',e=>errors.push(e.message))
     await page.goto(`http://127.0.0.1:${server.address().port}/workspace/workspace.html`)
     await page.evaluate(async()=>{
-     const {createHistoryWorkbench}=await import('/workspace/history-workbench.js')
-     document.getElementById('workspace').hidden=false;document.getElementById('import-view').hidden=false;document.getElementById('mapping').hidden=false;document.getElementById('import-scope').hidden=true;document.getElementById('identity-review').open=false;for(let node=document.getElementById('history-sync');node&&node.id!=='mapping';node=node.parentElement)node.hidden=false
+     const {createHistoryWorkbench}=await import('/workspace/history-workbench.js'),{renderShell}=await import('/workspace/views/shell.js')
+     // workspace.html is a shell; the report workbench lives in the 課堂紀錄 tab of the advanced drawer.
+     renderShell(document.body)
+     document.getElementById('workspace').hidden=false;document.getElementById('import-view').hidden=false;document.getElementById('mapping').hidden=false;document.getElementById('import-scope').hidden=true;document.getElementById('advanced-scrim').hidden=false;for(let node=document.getElementById('history-sync');node&&node!==document.body;node=node.parentElement)node.hidden=false
      const work={id:'synthetic'},items=Array.from({length:70},(_,i)=>({key:String(301+i),category:'needs',reason:'需要確認來源課程；報名關係不變。',target:{id:'enrollment',name:`測試學生 ${i+1}`,courseName:'長課程名稱 · 程式設計與教學紀錄核對'},record:{enrollment_source_id:String(301+i),date:'2026-10-04',...(i===1?{skipDecision:{status:'review'}}:{}),sourceEvidence:[{sourcePath:'/dt_admissions/301',table:'歷史紀錄',row:1,fields:[{label:'評語',text:'允許的來源教學原文。'.repeat(30)}]}]}}))
      let view
      view=createHistoryWorkbench({work:()=>work,labels:{},changed:()=>{},staleFields:item=>(work.staleReviewPending||[]).filter(row=>row.source_id===item.key).map(row=>row.field),hasStaleReview:item=>(work.staleReviewPending||[]).some(row=>row.source_id===item.key),recheck:()=>{items[0].category='history';view.render(items);view.refreshEditor()},fields:(host,item)=>{const label=document.createElement('label');label.textContent='人工核對草稿';const input=document.createElement('textarea');input.name='review-draft';input.value=item.record.draft||'';input.style.minHeight='110px';input.oninput=()=>{item.record.draft=input.value};label.append(input);const stale=document.createElement('button');stale.type='button';stale.dataset.staleFieldControl='';stale.textContent='待確認欄位';label.append(stale);host.append(label)}})
@@ -53,9 +55,13 @@ try{
     }else{
      const aside=page.locator('#history-workbench aside');await aside.evaluate(el=>el.scrollIntoView({block:'start'}));await aside.evaluate(el=>{el.focus({preventScroll:true});el.addEventListener('keydown',event=>{window.mobileKeyWasPrevented=event.defaultPrevented})})
      await page.keyboard.press('PageDown');assert.equal(await page.evaluate(()=>window.mobileKeyWasPrevented),false,`${name} ${width}: mobile PageDown remains available to page scrolling`)
-     const pageBefore=await page.evaluate(()=>scrollY),box=await aside.boundingBox(),height=page.viewportSize().height;await page.mouse.move(box.x+box.width/2,box.y+Math.min(box.height/2,height-8));await page.mouse.wheel(0,400);const pageAfter=await page.evaluate(()=>scrollY)
-     assert.ok(pageAfter>pageBefore,`${name} ${width}: mouse wheel scrolls the mobile page`)
-     await page.evaluate(()=>scrollTo(0,0))
+     // On narrow screens the drawer body is the page-level scroller; the list must not trap the wheel.
+     const scroller=()=>document.querySelector('#advanced-drawer .drawer-body').scrollTop
+     const pageBefore=await page.evaluate(scroller),box=await aside.boundingBox(),height=page.viewportSize().height;await page.mouse.move(box.x+box.width/2,box.y+Math.min(box.height/2,height-8));await page.mouse.wheel(0,400)
+     await page.waitForFunction(before=>document.querySelector('#advanced-drawer .drawer-body').scrollTop>before,pageBefore,{timeout:3000}).catch(()=>{})
+     const pageAfter=await page.evaluate(scroller)
+     assert.ok(pageAfter>pageBefore,`${name} ${width}: mouse wheel scrolls the mobile drawer`)
+     await page.evaluate(()=>{document.querySelector('#advanced-drawer .drawer-body').scrollTop=0})
     }
     await page.locator('#history-items .mapping-list-item').first().click()
     await page.locator('#history-detail textarea').waitFor()
@@ -63,7 +69,8 @@ try{
     await page.locator('#history-detail summary').evaluate(el=>el.click())
     const last=page.getByRole('button',{name:'略過此份紀錄',exact:true});await last.focus();await last.scrollIntoViewIfNeeded()
     assert.equal(await last.evaluate(el=>{const r=el.getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight}),true,`${name} ${width}x${height}: last control reachable`)
-    assert.equal(await last.evaluate(el=>el.getBoundingClientRect().height>=44),true)
+    // MASTER §4: 44px targets below 768px, dense 36px controls on desktop.
+    assert.equal(await last.evaluate((el,min)=>el.getBoundingClientRect().height>=min,width<768?44:36),true)
     await page.locator('#history-detail').getByRole('button',{name:'重新核對此份紀錄',exact:true}).focus()
     if(width>=768)await page.locator('#history-workbench aside').evaluate(el=>el.scrollTop=180)
     const before=await page.evaluate(()=>({page:scrollY,pane:document.getElementById('history-editor').scrollTop,list:document.querySelector('#history-workbench aside').scrollTop}))

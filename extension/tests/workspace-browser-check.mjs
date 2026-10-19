@@ -41,7 +41,7 @@ const mock = () => {
       if(m.operation==='resolve')return{data:{source_links:[],targets:[]}}
       if(m.operation==='context')return{data:catalog}
       if(m.operation==='job')return{data:{id:id(9)}}
-      if(m.operation==='preview')return{data:{rows:m.body.rows.map(r=>({kind:r.record.kind,source_id:r.source_id,status:'added',before:{},after:r.record.data})),counts:{added:m.body.rows.length}}}
+      if(m.operation==='preview')return{data:{rows:m.body.rows.map(r=>({kind:r.record.kind,source_id:r.source_id,status:window.previewConflict&&r.record.kind==='enrollment'?'conflict':'added',before:window.previewConflict&&r.record.kind==='enrollment'?{...r.record.data,status:'trial'}:{},after:r.record.data})),counts:{added:m.body.rows.length}}}
       if(m.operation==='apply'){window.appliedRows.push(...m.body.rows);return{data:{applied:m.body.rows.length}}}
       if(m.operation==='complete')return{data:{status:'complete',verified:true}}
       if(m.operation==='import-info')return{data:{job:{status:'complete'},roster_date:'2026-10-03',batches:[],roster:{enrollments:window.appliedRows.filter(r=>r.record.kind==='enrollment').map(r=>({id:r.target_id,class_session_id:r.record.data.class_session_id,status:r.record.data.status,start_date:r.record.data.start_date}))}}}
@@ -57,7 +57,7 @@ try {
     const browser = await chromium.launch(launchOptions)
     try {
       if(!inlineOnly){
-      for(const flow of ['import','prefill','work']){
+      for(const flow of ['import','work']){
         const emptyPage=await browser.newPage(),startupErrors=[]
         emptyPage.on('pageerror',error=>startupErrors.push(error.message))
         await emptyPage.addInitScript(()=>{window.unhandledRejections=[];window.addEventListener('unhandledrejection',event=>window.unhandledRejections.push(String(event.reason)))})
@@ -65,7 +65,7 @@ try {
         await emptyPage.locator(`#${flow}-view`).waitFor({state:'visible'})
         await emptyPage.waitForFunction(()=>document.querySelector('#workspace')?.getAttribute('aria-busy')!=='true')
         assert.equal(await emptyPage.locator('#collect').isDisabled(),true,`${name} ${flow}: import remains unavailable without a source`)
-        assert.equal(await emptyPage.locator('#read-form').isDisabled(),true,`${name} ${flow}: prefill remains unavailable without a source`)
+        assert.equal(await emptyPage.locator('#prefill-view').count(),0,`${name} ${flow}: the prefill flow is gone from the workspace`)
         assert.equal(await emptyPage.evaluate(()=>testCalls.some(m=>m.type==='workspace-api'&&['context','catalog','reports'].includes(m.operation))),false,`${name} ${flow}: no source scoped requests`)
         assert.deepEqual(startupErrors,[],`${name} ${flow}: no uncaught startup errors`)
         assert.deepEqual(await emptyPage.evaluate(()=>unhandledRejections),[],`${name} ${flow}: no unhandled startup rejections`)
@@ -185,44 +185,88 @@ try {
       }
       for (const width of ((editorOnly||inlineOnly)?[]:[360,390,768,1024,1200,1440,1920])) {
       const page = await browser.newPage({viewport:{width,height:900}}), errors=[]; page.on('pageerror',e=>errors.push(e.message)); await page.addInitScript(()=>{window.unhandledRejections=[];window.addEventListener('unhandledrejection',event=>window.unhandledRejections.push(String(event.reason)))}); await page.addInitScript(mock)
+      if(width===1440)await page.addInitScript(()=>{window.previewConflict=true})
       await page.goto(`http://127.0.0.1:${port}/workspace/workspace.html?source=10`); await page.locator('#workspace').waitFor({state:'visible'})
-      await page.locator('#import-advanced summary').click(); await page.locator('#read-history').uncheck(); await page.locator('#collect').click(); await page.locator('#mapping').waitFor({state:'visible'})
-      await page.locator('#classroom').selectOption('00000000-0000-4000-8000-000000000001'); await page.locator('#class-session').selectOption('00000000-0000-4000-8000-000000000003')
-      await page.locator('[data-mapping-section=admissions]').click(); await page.locator('#mapping-items button:visible').first().click()
-      await page.locator('#student-101').selectOption('new'); await page.locator('#enrollment-301').selectOption('new'); await page.locator('#enrollment-course-301').selectOption('00000000-0000-4000-8000-000000000002'); assert.equal(await page.locator('#status-301').inputValue(),'regular',`${name} ${width}: new enrollments default to the regular status`); assert.equal(await page.evaluate(()=>[...document.querySelectorAll('#mapping button')].find(b=>b.textContent==='確認並記住此報名'&&b.closest('[id^="mapping"]')&&b.offsetParent!==null)?.hidden??true),true,`${name} ${width}: new students are not confirmed separately`); await page.locator('#start-301').fill('2026-01-01'); await page.locator('#status-301').selectOption('regular')
-      await page.locator('#review-301').check()
-      if (width === 390) {
-        await page.waitForFunction(async () => { const id=testCalls.findLast(m=>m.type==='workspace-store-authorize'&&m.action==='put')?.workId;if(!id)return false;const {workStore}=await import('/shared/work-store.js');const owner={instance:'http://localhost:3000',userId:'00000000-0000-4000-8000-000000000008'};const saved=await workStore.get(id,owner);return saved?.uiState?.find(s=>s.id==='status-301'&&s.value==='regular')})
-        await page.locator('[data-flow=work]').click(); await page.waitForFunction(()=>document.querySelector('#workspace').getAttribute('aria-busy')!=='true'); await page.getByRole('button',{name:'\u7e7c\u7e8c\u6838\u5c0d',exact:true}).click(); await page.waitForFunction(()=>document.querySelector('#workspace').getAttribute('aria-busy')!=='true'); await page.waitForFunction(()=>document.querySelector('#mapping')&&!document.querySelector('#mapping').hidden,{timeout:10000}).catch(async()=>{const state=await page.evaluate(()=>({notice:document.querySelector('#notice')?.textContent,operation:document.querySelector('#operation-detail')?.textContent,calls:testCalls.slice(-8)}));throw new Error('Work resume did not show mapping: '+JSON.stringify(state))})
-        for (const [id, value] of [['classroom','00000000-0000-4000-8000-000000000001'],['class-session','00000000-0000-4000-8000-000000000003'],['student-101','new'],['enrollment-301','new'],['enrollment-course-301','00000000-0000-4000-8000-000000000002'],['start-301','2026-01-01'],['status-301','regular']]) assert.equal(await page.locator(`#${id}`).inputValue(), value, `${name}: restores ${id}`)
-      }
-      if (width === 390) assert.equal(await page.evaluate(()=>appliedRows.length),0,'continue review restores mapping but performs no teaching-data writes')
+      const zh=await page.evaluate(()=>edulogUi.locale==='zh-TW')
+      const idle=()=>page.waitForFunction(()=>document.querySelector('#workspace').getAttribute('aria-busy')!=='true')
+      const overflow=async label=>{const wide=await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth?[]:[...document.querySelectorAll("body *")].filter(n=>n.getBoundingClientRect().right>innerWidth+1&&n.children.length===0).slice(0,8).map(n=>`${n.tagName.toLowerCase()}${n.id?"#"+n.id:""}.${n.className}: ${(n.textContent||n.value||"").trim().slice(0,60)}`));assert.deepEqual(wide,[],`${name} ${width}: ${label} overflow`)}
+      // 1 讀取: the current tab's class is preselected; advanced settings stay collapsed.
+      await page.locator('#class-list input[type=radio]').first().waitFor()
+      assert.equal(await page.locator('#class-list input[type=radio]:checked').count(),1,`${name} ${width}: current class preselected`)
+      assert.equal(await page.locator('#import-advanced').evaluate(n=>n.open),false,`${name} ${width}: advanced settings collapsed`)
+      await overflow('read step'); await page.screenshot({path:fileURLToPath(new URL(`${name}-${width}-read.png`,output))})
+      await page.locator('#import-advanced summary').click(); await page.locator('#read-history').uncheck(); await page.locator('#collect').click(); await page.locator('#mapping').waitFor({state:'visible'}); await idle()
+      // 2 確認: only exceptions, decided inline; the mapping workbench stays inside the closed advanced drawer.
+      assert.equal(await page.locator('#advanced-drawer').isVisible(),false,`${name} ${width}: full mapping list is not exposed`)
+      await page.locator('[data-exception-key="class-target"]').waitFor()
+      const row=page.locator('[data-exception-key="enrollment:301"]')
+      await row.waitFor()
+      assert.equal(await row.getAttribute('data-tone'),'danger',`${name} ${width}: missing start date marked`)
+      assert.equal(await row.locator('.err').count()>0,true,`${name} ${width}: missing data shown in red`)
+      assert.equal(await page.locator('#sync').isDisabled(),true,`${name} ${width}: unresolved exceptions block syncing instead of being skipped`)
+      await overflow('confirm step')
+      await page.locator('[data-exception-key="class-target"] [data-ctl=classroom]').selectOption('00000000-0000-4000-8000-000000000001'); await idle()
+      await page.waitForFunction(()=>document.querySelector('[data-exception-key="class-target"] [data-ctl=session] option[value="00000000-0000-4000-8000-000000000003"]'))
+      await page.locator('[data-exception-key="class-target"] [data-ctl=session]').selectOption('00000000-0000-4000-8000-000000000003'); await idle()
+      await page.waitForFunction(()=>{const b=document.querySelector('[data-exception-key="enrollment:301"] [data-ctl=seg-new]');return b&&!b.disabled})
+      await page.locator('[data-exception-key="enrollment:301"] [data-ctl=seg-new]').click()
+      await page.waitForFunction(()=>document.querySelector('#student-101')?.value==='new'&&document.querySelector('#enrollment-301')?.value==='new')
+      assert.equal(await page.locator('#status-301').inputValue(),'regular',`${name} ${width}: new enrollments default to the regular status`)
+      assert.equal(await page.locator('[data-exception-key="enrollment:301"] [data-ctl=confirm]').count(),0,`${name} ${width}: new students are not confirmed separately`)
+      assert.equal(await page.evaluate(()=>[...document.querySelectorAll('#mapping button')].filter(b=>b.dataset.originalLabel==='確認並記住此報名'&&!b.hidden).length),0,`${name} ${width}: no confirm-and-remember for new items`)
+      assert.equal(await page.locator('#review-301').isChecked(),true,`${name} ${width}: choosing 新建 confirms the independent enrollment`)
+      await page.locator('[data-exception-key="enrollment:301"] [data-ctl=start]').fill('2026-01-01'); await page.locator('[data-exception-key="enrollment:301"] [data-ctl=start]').dispatchEvent('change')
+      await page.waitForFunction(()=>document.querySelector('#start-301')?.value==='2026-01-01')
+      if(await page.locator('[data-exception-key="enrollment:301"] [data-ctl=course]').count())await page.locator('[data-exception-key="enrollment:301"] [data-ctl=course]').selectOption('00000000-0000-4000-8000-000000000002')
+      await page.waitForFunction(()=>document.querySelector('#enrollment-course-301')?.value)
+      await page.waitForFunction(()=>!document.querySelector('#sync').disabled).catch(async()=>{throw new Error('sync stays disabled: '+JSON.stringify(await page.evaluate(()=>({summary:document.querySelector('#review-action-summary').textContent,error:document.querySelector('#mapping-error-301')?.textContent,review:document.querySelector('#review-301')?.checked}))))})
       assert.equal(await page.locator('#review-301').isChecked(), true, `${name} ${width}: new enrollment confirmation retained`)
-      await page.locator('#preview').click();
-      try { await page.locator('#preview-section').waitFor({state:'visible',timeout:5000}) }
-      catch { throw new Error(`${name} ${width}: preview did not render; review=${await page.locator('#review-301').isChecked()} notice=${await page.locator('#notice').textContent()} diagnostics=${await page.locator('#diagnostic').textContent()} operation=${await page.locator('#operation-detail').textContent()} calls=${JSON.stringify(await page.evaluate(()=>testCalls.slice(-8)))}`) }
-      {const wide=await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth?[]:[...document.querySelectorAll("body *")].filter(n=>n.getBoundingClientRect().right>innerWidth+1&&n.children.length===0).slice(0,8).map(n=>`${n.tagName.toLowerCase()}${n.id?"#"+n.id:""}.${n.className}: ${(n.textContent||n.value||"").trim().slice(0,60)}`));assert.deepEqual(wide,[],`${name} ${width}: preview overflow`)}
-      await page.evaluate(()=>{window.previewNode=document.querySelector('#diff-list');window.nativeDraftNode=document.querySelector('#status-301')})
-      await page.locator('[data-flow=prefill]').click();await page.locator('[data-flow=import]').click()
-      assert.equal(await page.locator('#preview-section').isVisible(),true,'return to the actual preview stage')
-      assert.equal(await page.evaluate(()=>previewNode===document.querySelector('#diff-list')&&nativeDraftNode===document.querySelector('#status-301')),true,'flow switching keeps controls and preview nodes')
+      await page.waitForFunction(()=>document.querySelector('[data-exception-key="enrollment:301"]')?.dataset.tone==='ok').catch(()=>{throw new Error(`${name} ${width}: fixed row stays listed as resolved`)})
+      // Detail drawer and the advanced drawer.
+      await page.locator('[data-exception-key="enrollment:301"] [data-ctl=detail]').click(); await page.locator('#detail-drawer').waitFor({state:'visible'})
+      assert.match(await page.locator('#detail-title').textContent(),/測試學生 A/)
+      await overflow('detail drawer'); await page.screenshot({path:fileURLToPath(new URL(`${name}-${width}-detail.png`,output))})
+      await page.keyboard.press('Escape'); await page.locator('#detail-drawer').waitFor({state:'hidden'})
+      await page.locator('#open-advanced').click(); await page.locator('#advanced-drawer').waitFor({state:'visible'})
+      assert.equal(await page.locator('#mapping-workbench').isVisible(),true,`${name} ${width}: full student/enrollment list lives in the advanced drawer`)
+      await overflow('advanced drawer'); await page.screenshot({path:fileURLToPath(new URL(`${name}-${width}-advanced.png`,output))})
+      await page.locator('#advanced-apply').click(); await page.locator('#advanced-drawer').waitFor({state:'hidden'})
+      if (width === 390) {
+        await page.waitForFunction(async () => { const id=testCalls.findLast(m=>m.type==='workspace-store-authorize'&&m.action==='put')?.workId;if(!id)return false;const {workStore}=await import('/shared/work-store.js');const owner={instance:'http://localhost:3000',userId:'00000000-0000-4000-8000-000000000008'};const saved=await workStore.get(id,owner);return saved?.uiState?.find(s=>s.id==='status-301'&&s.value==='regular')&&saved?.uiState?.find(s=>s.id==='start-301'&&s.value==='2026-01-01')})
+        await page.locator('[data-flow=work]').click(); await idle(); await page.locator('[data-work-primary]').first().click(); await idle(); await page.waitForFunction(()=>document.querySelector('#mapping')&&!document.querySelector('#mapping').hidden,{timeout:10000}).catch(async()=>{const state=await page.evaluate(()=>({notice:document.querySelector('#notice')?.textContent,operation:document.querySelector('#operation-detail')?.textContent,calls:testCalls.slice(-8)}));throw new Error('Work resume did not show mapping: '+JSON.stringify(state))})
+        for (const [id, value] of [['classroom','00000000-0000-4000-8000-000000000001'],['class-session','00000000-0000-4000-8000-000000000003'],['student-101','new'],['enrollment-301','new'],['enrollment-course-301','00000000-0000-4000-8000-000000000002'],['start-301','2026-01-01'],['status-301','regular']]) assert.equal(await page.locator(`#${id}`).inputValue(), value, `${name}: restores ${id}`)
+        assert.equal(await page.evaluate(()=>appliedRows.length),0,'continue review restores mapping but performs no teaching-data writes')
+        await page.waitForFunction(()=>!document.querySelector('#sync').disabled)
+      }
+      await page.evaluate(()=>{window.statusNode=document.querySelector('#status-301')})
+      await page.locator('[data-flow=work]').click(); await idle(); await page.locator('[data-flow=import]').click()
+      assert.equal(await page.locator('#mapping').isVisible(),true,'return to the confirm step')
+      assert.equal(await page.evaluate(()=>statusNode===document.querySelector('#status-301')),true,'flow switching keeps the mapping controls')
       await page.evaluate(()=>edulogUi.setLocale('en'));await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))))
-      assert.equal(await page.locator('#apply').textContent(),'Confirm and sync')
-      await page.evaluate(()=>edulogUi.setLocale('zh-TW'));await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))))
-      await page.screenshot({path:fileURLToPath(new URL(`${name}-${width}-import.png`,output))})
-      await page.locator('#apply').click(); await page.waitForFunction(()=>document.querySelector('#notice').textContent.includes('已核對'))
+      assert.equal(await page.locator('#sync-label').textContent(),'Confirm & sync')
+      await overflow('confirm step in English')
+      await page.evaluate(locale=>edulogUi.setLocale(locale),zh?'zh-TW':'en');await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))))
+      await page.screenshot({path:fileURLToPath(new URL(`${name}-${width}-confirm.png`,output)),fullPage:true})
+      // One click: preview and write unless something needs a decision.
+      await page.locator('#sync').click(); await idle()
+      if(width===1440){
+        await page.locator('#preview-section').waitFor({state:'visible'})
+        assert.equal(await page.evaluate(()=>testCalls.filter(m=>m.operation==='apply').length),0,'a conflict stops before any write')
+        assert.equal(await page.locator('#diff-list details').count()>0,true)
+        await overflow('interrupt'); await page.screenshot({path:fileURLToPath(new URL(`${name}-${width}-interrupt.png`,output))})
+        await page.locator('#apply').click(); await idle()
+      }
+      await page.locator('#import-progress').waitFor({state:'visible'})
       assert.equal(await page.evaluate(()=>testCalls.filter(m=>m.operation==='apply').length),1)
-      await page.locator('[data-flow=prefill]').click(); await page.locator('#read-form').click(); await page.locator('#target-summary').waitFor({state:'visible'})
-      await page.locator('#target-confirm').check(); await page.locator('input[name=report]').check(); await page.locator('#compare').click(); await page.locator('#field-review').waitFor({state:'visible'})
-      assert.equal(await page.locator('[data-key=content] [data-include]').isChecked(),false)
-      assert.equal(await page.locator('[data-key=class_notes] [data-include]').isChecked(),false)
-      assert.equal(await page.locator('#report-completeness').textContent().then(s=>s.includes('未齊備')&&s.includes('課程已完成')),true)
-      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`${name} ${width}: prefill overflow`)
-      await page.screenshot({path:fileURLToPath(new URL(`${name}-${width}-prefill.png`,output))})
-      await page.locator('#prefill').click(); await page.locator('#prefill-result').waitFor({state:'visible'})
-      const fields = await page.evaluate(()=>testCalls.find(m=>m.type==='workspace-source'&&m.action==='apply').input.fields); assert.deepEqual(fields.map(f=>f.key),['attendance_status'])
+      assert.equal(await page.evaluate(()=>testCalls.filter(m=>m.operation==='preview').length),1,'one preview before the write')
+      assert.deepEqual(await page.evaluate(()=>appliedRows.filter(r=>r.record.kind==='enrollment').map(r=>[r.record.data.status,r.record.data.start_date])),[['regular','2026-01-01']])
+      assert.equal(await page.locator('#done-tiles .tile').count(),5); assert.equal(await page.locator('#done-tiles .tile b').first().textContent(),'1')
+      await overflow('done step'); await page.screenshot({path:fileURLToPath(new URL(`${name}-${width}-done.png`,output))})
       await page.locator('[data-flow=work]').click(); await page.locator('#work-view').waitFor({state:'visible'}); await page.waitForFunction(()=>document.querySelector('#work-count').textContent.trim().length>0)
-      assert.deepEqual(errors,[]); assert.deepEqual(await page.evaluate(()=>unhandledRejections),[]); console.log(`PASS ${name} ${width}: import, manual mapping, preview/apply, prefill preservation, pending record, history, overflow`); await page.close()
+      assert.equal(await page.locator('#work-list .group-head').count()>=1,true)
+      await page.locator('[data-work-view]').first().click(); await page.locator('#work-detail').waitFor({state:'visible'}); await overflow('work detail')
+      await page.screenshot({path:fileURLToPath(new URL(`${name}-${width}-log.png`,output))})
+      assert.deepEqual(errors,[]); assert.deepEqual(await page.evaluate(()=>unhandledRejections),[]); console.log(`PASS ${name} ${width}: read, inline exceptions, drawers, one-click sync${width===1440?' with conflict stop':''}, work log, overflow`); await page.close()
     } } finally { await browser.close() }
   }
 } finally { await new Promise(resolve=>server.close(resolve)) }
