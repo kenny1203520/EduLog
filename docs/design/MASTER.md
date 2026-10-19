@@ -2,7 +2,7 @@
 
 適用：擴充功能 popup、整合工作台、原站（corp.orangeapple.co）改造頁、報告 modal 助手。
 實作來源：`extension/styles/edulog-tokens.css`（`--edulog-*`）與 `extension/styles/ui-tokens.css`（`--ui-*` 別名）。
-互動原型：`docs/design/prototype/index.html`。
+互動原型：`docs/design/prototype/index.html`（v2，P7：工作台兩分頁、例外確認、浮動按鈕）。
 
 > 本檔是唯一事實來源。頁面若需偏離，寫在 `docs/design/pages/<page>.md`，並註明理由。
 
@@ -76,25 +76,30 @@
 - 數字（日期、堂次、計數、電話）：`font-variant-numeric: tabular-nums`。
 - 行高：內文 1.5；列內單行 1.35。
 
-| Token | 大小 / 字重 | 用途 |
-|---|---|---|
-| `--edulog-text-xs` | 12px / 500 | tag、chip 計數、時間戳（**最小**，不可再小） |
-| `--edulog-text-sm` | 13px / 400 | 列 meta（課程·堂次）、表頭 |
-| `--edulog-text-md` | 14px / 400–600 | popup 與原站改造頁內文、列主文字、按鈕 |
-| `--edulog-text-base` | 16px / 400 | 工作台內文、行動版輸入框（避免 iOS 縮放） |
-| `--edulog-text-lg` | 18px / 600 | 分區標題、modal 標題 |
-| `--edulog-text-xl` | 22px / 700 | 工作台頁標題、完成頁數字 |
+字級以「角色」決定，不以畫面決定：同一角色在 popup、工作台、原站班級名單、課堂紀錄、浮動面板都一樣大。程式一律寫 token（實作檔 `extension/styles/edulog-tokens.css` 的 `--edulog-font-*` 角色別名指向下表尺寸 token），**禁止寫 raw px**。
 
-字重只用 400 / 500 / 600 / 700。
+| 角色 token | 尺寸 token | 大小 / 字重 | 用途 |
+|---|---|---|---|
+| `--edulog-font-name` | `--edulog-text-base` | **16px** / 600 | 學生姓名、例外列主文字、工作紀錄標題 |
+| `--edulog-font-body` | `--edulog-text-md` | **14px** / 400 | 一般內文、表單、說明段落 |
+| `--edulog-font-button` | `--edulog-text-md` | **14px** / 600 | 所有按鈕、分頁、chip 文字 |
+| `--edulog-font-caption` | `--edulog-text-sm` | **13px** / 400–500 | 列 meta（課程·堂次·日期）、狀態文字、提示、表頭 |
+| `--edulog-font-heading` | `--edulog-text-lg` | **18px** / 600 | 分區標題、抽屜標題、popup 標題、modal 標題 |
+| `--edulog-font-title` | `--edulog-text-xl` | **22px** / 700 | 工作台頁標題、完成頁統計數字 |
+| `--edulog-font-tag` | `--edulog-text-xs` | 12px / 500 | tag、計數徽章、時間戳（**最小**，不可再小；不可用於可讀內文） |
+
+- **只允許 12 / 13 / 14 / 16 / 18 / 22px。** 禁止 15、17、20、23、24、26、28px 及任何其他零散尺寸；P6 前遺留的這些值一律換成上表 token。
+- 行動版輸入框用 16px（避免 iOS 自動縮放），屬於 `--edulog-font-name` 尺寸，不另開 token。
+- 字重只用 400 / 500 / 600 / 700。
 
 ## 4. 間距、尺寸、形狀
 
 - 4px 基準：`--edulog-space-1..8` = 4 / 8 / 12 / 16 / 20 / 24 / 32 / 40。
 - 列內左右 padding 12–16px；列高最小 `--edulog-row-min-height` 52px（姓名 + meta 兩行）。
-- 控制項：`--edulog-control-height` 36px（桌面密集）；`--edulog-touch-target` 44px（行動版與 popup 主按鈕）。行動寬度下所有可點擊物 ≥ 44px。
+- 控制項：**桌面密集介面一律 36px**（`--edulog-control-height`：按鈕、輸入、select、分頁、icon 按鈕）；小按鈕（列內）30px 只用在 ≥ 768px。`--edulog-touch-target` 44px 用於 popup 主按鈕與 < 768px 的所有可點擊物。`styles/ui-tokens.css` 不可再把全域控制項設成 44px。
 - 圓角：`--edulog-radius-xs` 4px（tag）、`-sm` 6px（按鈕、輸入）、`--edulog-radius` 8px（面板）、`-lg` 12px（modal、popup 外框）、`--edulog-radius-pill`（chip）。
 - 陰影：只有浮層（popover、modal、sticky bar）有陰影；清單與面板只用 1px 框線。
-- z-index：10 raised / 20 sticky / 30 overlay / 1040 toolbar（沿用）。
+- z-index：10 raised / 20 sticky / 30 overlay（抽屜、遮罩）/ 1040 原站工具列與浮動按鈕（沿用）。Popover 進 top layer，不設 z-index。
 - 動畫：`--edulog-duration` 160ms，只做 color / background / opacity / transform(旋轉箭頭)。`prefers-reduced-motion` 時為 0。
 
 ## 5. Icon
@@ -111,7 +116,7 @@
 ### 6.1 清單列（List row）——取代卡片
 
 ```
-┃ 姓名（14/600）                         [狀態指示 × 4]   [主操作]
+┃ 姓名（16/600）                         [狀態指示 × 4]   [主操作]
 ┃ 課程 · 第 N 堂 · 日期（13 muted）       請假/備註 tag
 ```
 - 結構：`左色條 3px | 主欄（姓名 + meta） | 狀態欄 | 動作欄`。
@@ -168,7 +173,46 @@
 
 - `● 已連線 EduLog` (ok)／`● 未連線` (neutral)／`● 連線異常` (danger)。
 
-### 6.9 報告助手（modal）
+### 6.9 彈出選單（Popover）
+
+- 所有「更多 ▾」、篩選更多、列上的溢出選單、浮動按鈕面板**一律用原生 Popover API**：觸發鈕 `popovertarget`，選單 `popover="auto"`（點外面與 Esc 自動關閉）。
+- 定位用 **CSS anchor positioning**：觸發鈕 `anchor-name: --x`，選單 `position-anchor: --x; position-area: block-end span-inline-start; position-try-fallbacks: flip-block, flip-inline`。
+- 因進 top layer，**永遠不會被 `overflow:hidden/clip` 的祖先裁切**；禁止再用 `<details>` + 絕對定位做選單。
+- 最低版本：`manifest.json` `minimum_chrome_version: "125"`（anchor positioning 首版）。
+- 外觀：白底、`--edulog-border` 框、`--edulog-radius`、`--edulog-shadow-popover`、內距 4px；選項高 36px、14px、左 icon 16px；寬 200–280px。危險選項放最後，用分隔線隔開。
+
+### 6.10 右側詳情抽屜（Drawer）
+
+- 從右側滑入，寬 `min(440px, 100vw)`；「進階：全部對應」抽屜寬 `min(720px, 100vw)`。
+- 結構：標題列（18px 標題＋關閉 icon 鈕）→ 可捲動內容 → 底部動作列（主操作靠右）。
+- ≥ 1024px：抽屜覆蓋在清單右側，不遮罩（清單仍可捲動並換選取列）；< 1024px：半透明遮罩＋全高。< 640px：抽屜全寬，標題列左邊顯示「返回」（清單／詳情切換）。
+- 用 `<dialog>`（非 modal 時 `show()`，窄螢幕 `showModal()`），Esc 關閉，焦點回到觸發列。
+
+### 6.11 例外列（Exception row）
+
+```
+┃ 王小明（16/600）   原站：A 班 · 報名 2026-09-01（13 muted）
+┃ ( ) 對應既有 [選擇學生 ▾]   (•) 新建   狀態 正常 · 開始 2026-09-01   [詳情]
+```
+- 每列只做一個決定：「對應既有學生／報名」或「新建」二選一（segmented），右側 `詳情` 開抽屜。
+- 新建時直接顯示預填值：報名狀態「正常」、開始日期＝原站報名日期（無則第一堂課日期），可就地修改。新建項目**不顯示**「確認並記住」（同步時自動記住）。
+- **缺少資料**的列：左色條 danger、欄位紅字「缺少開始日期」＋「補上」按鈕；未補齊時主按鈕停用並說明原因。**絕不默默略過**。
+- 分組標題提供批次動作（例：「全部新建」「全部套用建議」），組內逐列仍可改。
+- 自動配對成功者收成一行：「已自動配對 42 筆 · 展開」，展開後為唯讀清單。
+
+### 6.12 EduLog 浮動按鈕與功能面板（原站）
+
+- **主題開啟**：原站頂部 sticky 工具列（高 48px，白底、底線 `--edulog-border`）：左 EduLog 標誌＋本頁名稱；右側本頁主要動作（主按鈕，一顆）＋連線狀態標籤＋「更多」icon 鈕（popover：開啟工作台、工作紀錄、設定、關閉本頁主題）。
+- **主題關閉**：右下角**單一** 40px 圓形 EduLog 圖示按鈕（白底、`--edulog-border`、`--edulog-shadow-popover`，距邊 16px），右上角 10px 連線狀態點（ok 綠 / neutral 灰 / danger 紅，含 2px 白描邊），`aria-label="EduLog（已連線）"`。
+- 點擊開啟面板（popover，錨定按鈕上方，寬 300px）：
+  1. 標題列：EduLog＋連線狀態標籤
+  2. 開關「本頁套用 EduLog」（切換主題）
+  3. 本頁主要動作（主按鈕全寬）：班級頁「同步本班」、報告頁「預填本報告」；其他頁「開啟工作台」
+  4. 連線狀態一行（伺服器名稱、最近同步時間）；未連線時改為「連接 EduLog」次按鈕
+  5. 底部：「設定」連結列
+- 不可同時出現多顆浮動按鈕；不可自動展開面板。
+
+### 6.13 報告助手（modal）
 
 - 未連線：**不掛載面板**，標題列只有小型次按鈕「連接 EduLog 以啟用報告助手」。
 - 已連線但學生未同步：一行說明 +「同步本班」次按鈕。
@@ -177,14 +221,21 @@
 ## 7. 版面
 
 - Popup：寬 360px，最高 560px；結構＝標題列（logo、連線標籤、齒輪）→ 情境說明一行 → 單一主按鈕（全寬 44px）→ 工作紀錄（N）入口。
-- 工作台：最大寬 960px 置中；頂部 stepper；內容區清單；底部 sticky 動作列（左：次要、右：主要）。
+- 工作台：**最大寬 1200px** 置中。頂部標題列＋**兩個分頁：「匯入」「工作紀錄」**（不再有「報告預填」）。
+  - 匯入：stepper（讀取 → 確認 → 完成）→ 內容區清單 → 底部 sticky 動作列（左：次要、右：唯一主操作）。
+  - 版面＝**清單＋右側詳情抽屜**（§6.10）。≥ 1024px 清單與抽屜並存；< 640px 清單與詳情互相切換。
+  - 讀取：班級清單（自動選目前班級）＋收合的「進階設定」。
+  - 確認：只列例外，依類型分組；自動配對收成一行；「進階：全部對應」抽屜放完整對應、教室／班級／課程對應與記憶、同步欄位、補讀來源資料／重新核對歷史。
+  - 主操作「確認並同步」一鍵完成（背景先預覽，無衝突直接寫入）；**只有衝突或資料過期時**才停下顯示中斷畫面。
+  - 完成：統計數字（22px）＋略過清單（每列「重新處理」）＋「在 EduLog 檢視」。
+  - 工作紀錄：「未完成／已完成」分組清單，主動作「繼續」／「查看」，詳情抽屜，篩選只有搜尋＋班級。
 - 原站改造頁：沿用原站容器寬度，工具列 sticky；清單列滿版。
 - 斷點：375（行動）、768（平板）、1024、1440。不可有水平捲動。
 
 ## 8. 文案
 
 - 繁體中文；動詞開頭；數字直接寫出（「3 位學生未對應」）。
-- 例外分類固定用詞：**班級不明、配對不到課堂、兩邊都改過、學生未對應**。
+- 例外分類固定用詞（依此順序）：**班級不明、配對不到課堂、兩邊都改過、學生未對應、缺少資料**。
 - 已自動配對收成一行：「已自動配對 42 筆 · 展開」。
 
 ## 9. 反模式（禁止）
@@ -199,11 +250,17 @@
 8. 把所有選項攤在第一層（主題、語言、伺服器收進齒輪；進階選項收合）。
 9. 列出已成功的項目逐筆要人確認（只列例外）。
 10. 預設顯示學生電話（點擊才顯示）。
-11. 低於 12px 的文字、`#94a3b8` 以下對比的內文。
+11. 低於 12px 的文字、`#94a3b8` 以下對比的內文；15／17／20／23／24／26／28px 等不在字級表的尺寸；raw px 字級。
 12. 「下拉選單選來源」當主要入口（改為「我的班級」清單）。
+13. 用 `<details>` 或絕對定位做彈出選單（會被祖先 overflow 裁切）——改用 Popover。
+14. 新建項目因缺資料被默默略過；新建項目顯示「確認並記住」。
+15. 在確認步驟外露完整對應工作台（收進「進階：全部對應」抽屜）。
+16. 原站同時出現多顆 EduLog 浮動按鈕。
 
 ## 10. 交付前檢查
 
+- [ ] 字級只出現 12／13／14／16／18／22px，且皆經由 token
+- [ ] 選單皆為 Popover，在 `overflow:clip` 容器內最後一列仍完整顯示
 - [ ] 無 emoji icon，icon 皆 Lucide 同尺寸
 - [ ] 每畫面只有一顆主按鈕
 - [ ] 狀態都有文字/aria-label
