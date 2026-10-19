@@ -1,5 +1,5 @@
-/* Popup: one context, one primary action. Spec: docs/design/MASTER.md §6.8, §7. */
-:root { color-scheme:light; width:360px; min-width:320px; max-width:360px; background:var(--edulog-surface); color:var(--edulog-text); font:var(--edulog-text-md)/var(--edulog-leading) var(--edulog-font); font-variant-numeric:tabular-nums; -webkit-font-smoothing:antialiased; }
+/* Popup: one context, one primary action. Spec: docs/design/MASTER.md §3, §6.8, §7. Type sizes use role tokens only. */
+:root { color-scheme:light; width:360px; min-width:320px; max-width:360px; background:var(--edulog-surface); color:var(--edulog-text); font:var(--edulog-font-body)/var(--edulog-leading) var(--edulog-font); font-variant-numeric:tabular-nums; -webkit-font-smoothing:antialiased; }
 * { box-sizing:border-box; }
 [hidden] { display:none !important; }
 html { width:360px; min-width:320px; max-width:360px; }
@@ -12,62 +12,70 @@ button, input, select { font:inherit; color:inherit; }
 .ic-lg { width:var(--edulog-icon); height:var(--edulog-icon); }
 
 .popup-head { display:flex; align-items:center; gap:8px; min-height:52px; padding:8px 8px 8px 14px; border-bottom:1px solid var(--edulog-border-soft); }
-.logo { display:grid; place-items:center; width:24px; height:24px; border-radius:var(--edulog-radius-sm); background:var(--edulog-primary); color:var(--edulog-text-on-primary); font-weight:700; font-size:var(--edulog-text-sm); }
-.brand { font-size:var(--edulog-text-md); font-weight:700; color:var(--edulog-text-strong); }
+.logo { display:grid; place-items:center; flex:none; width:24px; height:24px; border-radius:var(--edulog-radius-sm); background:var(--edulog-primary-bright); color:var(--edulog-text-on-primary); font-weight:700; font-size:var(--edulog-font-caption); }
+.brand { font-size:var(--edulog-font-heading); font-weight:600; color:var(--edulog-text-strong); line-height:var(--edulog-leading-tight); }
 .spacer { flex:1; }
-.conn { display:inline-flex; align-items:center; gap:6px; padding:3px 8px; border-radius:var(--edulog-radius-pill); background:var(--edulog-surface-muted); color:var(--edulog-text-secondary); font-size:var(--edulog-text-xs); font-weight:500; white-space:nowrap; }
-.conn .dot { width:var(--edulog-status-dot); height:var(--edulog-status-dot); border-radius:50%; border:1.5px solid var(--edulog-status-neutral); }
-.conn[data-tone="ok"] { background:var(--edulog-status-ok-soft); color:var(--edulog-status-ok-text); }
-.conn[data-tone="ok"] .dot { background:var(--edulog-status-ok); border-color:var(--edulog-status-ok); }
-.conn[data-tone="warn"] { background:var(--edulog-status-warn-soft); color:var(--edulog-status-warn-text); }
-.conn[data-tone="warn"] .dot { background:var(--edulog-status-warn); border-color:var(--edulog-status-warn); }
-.conn[data-tone="danger"] { background:var(--edulog-status-danger-soft); color:var(--edulog-status-danger-text); }
-.conn[data-tone="danger"] .dot { background:var(--edulog-status-danger); border-color:var(--edulog-status-danger); }
+.conn { display:inline-flex; align-items:center; gap:6px; color:var(--edulog-status-neutral-text); font-size:var(--edulog-font-caption); font-weight:500; white-space:nowrap; }
+.conn .dot { width:var(--edulog-status-dot); height:var(--edulog-status-dot); flex:none; border-radius:50%; background:var(--edulog-status-neutral); }
+.conn[data-tone="ok"] { color:var(--edulog-status-ok-text); }
+.conn[data-tone="ok"] .dot { background:var(--edulog-status-ok); }
+.conn[data-tone="warn"] { color:var(--edulog-status-warn-text); }
+.conn[data-tone="warn"] .dot { background:var(--edulog-status-warn); }
+.conn[data-tone="danger"] { color:var(--edulog-status-danger-text); }
+.conn[data-tone="danger"] .dot { background:var(--edulog-status-danger); }
 
 .popup-body { display:grid; gap:12px; padding:16px 14px; }
 .stack { display:grid; gap:8px; }
-.ctx { display:flex; gap:10px; align-items:flex-start; }
+.ctx { display:flex; gap:12px; align-items:flex-start; }
 .ctx-ic { display:grid; place-items:center; flex:none; width:36px; height:36px; border-radius:var(--edulog-radius); background:var(--edulog-primary-soft); color:var(--edulog-primary); }
+.ctx-ic[data-tone="neutral"] { background:var(--edulog-surface-muted); color:var(--edulog-text-muted); }
+.ctx-ic[data-tone="danger"] { background:var(--edulog-status-danger-soft); color:var(--edulog-status-danger-text); }
+.ctx-ic[data-tone="warn"] { background:var(--edulog-status-warn-soft); color:var(--edulog-status-warn-text); }
 .ctx-text { min-width:0; }
-.ctx-title { font-weight:600; color:var(--edulog-text-strong); line-height:var(--edulog-leading-tight); overflow-wrap:anywhere; }
-.ctx-sub { margin-top:2px; font-size:var(--edulog-text-sm); color:var(--edulog-text-muted); overflow-wrap:anywhere; }
-.form-title { font-weight:600; color:var(--edulog-text-strong); }
+.ctx-title { font-size:var(--edulog-font-name); font-weight:600; color:var(--edulog-text-strong); line-height:var(--edulog-leading-tight); overflow-wrap:anywhere; }
+.ctx-sub { margin-top:2px; font-size:var(--edulog-font-caption); color:var(--edulog-text-muted); overflow-wrap:anywhere; }
+.form-title { font-size:var(--edulog-font-name); font-weight:600; color:var(--edulog-text-strong); }
 
-.btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:var(--edulog-control-height); padding:0 14px; border:1px solid transparent; border-radius:var(--edulog-radius-sm); background:none; font-weight:600; font-size:var(--edulog-text-md); cursor:pointer; white-space:nowrap; transition:background var(--edulog-duration), border-color var(--edulog-duration), color var(--edulog-duration); }
+.btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:var(--edulog-control-height); padding:0 14px; border:1px solid transparent; border-radius:var(--edulog-radius-sm); background:none; font-size:var(--edulog-font-button); font-weight:600; cursor:pointer; white-space:nowrap; transition:background var(--edulog-duration), border-color var(--edulog-duration), color var(--edulog-duration); }
 .btn-primary { background:var(--edulog-primary-bright); color:var(--edulog-text-on-primary); }
 .btn-primary:hover { background:var(--edulog-primary); }
 .btn-secondary { background:var(--edulog-surface); border-color:var(--edulog-border-strong); color:var(--edulog-text); }
 .btn-secondary:hover { background:var(--edulog-surface-muted); }
 .btn-ghost { color:var(--edulog-primary); padding:0 8px; }
 .btn-ghost:hover { background:var(--edulog-primary-soft); }
-.btn-sm { min-height:30px; padding:0 10px; font-size:var(--edulog-text-sm); }
+.btn-sm { min-height:var(--edulog-control-height-sm); padding:0 10px; }
 .btn-block { width:100%; min-height:var(--edulog-touch-target); }
 .btn-icon { width:var(--edulog-control-height); padding:0; color:var(--edulog-text-muted); }
 .btn-icon:hover { background:var(--edulog-surface-muted); color:var(--edulog-text-strong); }
-.btn:disabled { background:var(--edulog-surface-disabled); border-color:transparent; color:var(--edulog-text-subtle); cursor:default; }
+.btn:disabled { background:var(--edulog-surface-disabled); border-color:transparent; color:var(--edulog-text-subtle); cursor:not-allowed; }
 
 .field { display:grid; gap:4px; align-content:start; }
-.field label:not(.switch), .lbl { font-size:var(--edulog-text-sm); font-weight:600; color:var(--edulog-text-secondary); }
-.hint { font-size:var(--edulog-text-xs); color:var(--edulog-text-muted); overflow-wrap:anywhere; }
-.input, select { width:100%; min-height:var(--edulog-control-height); padding:0 10px; border:1px solid var(--edulog-border-input); border-radius:var(--edulog-radius-sm); background:var(--edulog-surface); }
-details.device > summary, #diagnostics > summary { display:flex; align-items:center; min-height:32px; cursor:pointer; font-size:var(--edulog-text-sm); color:var(--edulog-text-muted); }
+.field > label:not(.switch), .lbl { font-size:var(--edulog-font-caption); font-weight:600; color:var(--edulog-text-secondary); }
+.hint { font-size:var(--edulog-font-caption); color:var(--edulog-text-muted); overflow-wrap:anywhere; }
+.input, select { width:100%; min-height:var(--edulog-control-height); padding:0 10px; border:1px solid var(--edulog-border-input); border-radius:var(--edulog-radius-sm); background:var(--edulog-surface); font-size:var(--edulog-font-body); }
+details.device > summary, #diagnostics > summary { display:flex; align-items:center; min-height:var(--edulog-control-height-sm); cursor:pointer; font-size:var(--edulog-font-caption); color:var(--edulog-text-muted); }
 details.device[open] > summary { margin-bottom:4px; }
 .switch { display:flex; gap:12px; align-items:center; justify-content:space-between; min-height:var(--edulog-touch-target); font-weight:500; cursor:pointer; }
-.switch small { display:block; font-size:var(--edulog-text-xs); font-weight:400; color:var(--edulog-text-muted); }
-.switch input { width:20px; height:20px; flex:none; accent-color:var(--edulog-primary-bright); }
+.switch small { display:block; font-size:var(--edulog-font-caption); font-weight:400; color:var(--edulog-text-muted); }
+.switch input { appearance:none; position:relative; flex:none; width:36px; height:20px; margin:0; border-radius:var(--edulog-radius-pill); background:var(--edulog-border-strong); cursor:pointer; transition:background var(--edulog-duration); }
+.switch input::after { content:""; position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:var(--edulog-surface); transition:transform var(--edulog-duration); }
+.switch input:checked { background:var(--edulog-primary-bright); }
+.switch input:checked::after { transform:translateX(16px); }
+.switch input:disabled { opacity:.6; cursor:wait; }
 dl { display:grid; gap:6px; }
-dt { font-size:var(--edulog-text-xs); color:var(--edulog-text-muted); }
-dd { font-size:var(--edulog-text-sm); overflow-wrap:anywhere; }
+dl > div { display:flex; justify-content:space-between; gap:12px; font-size:var(--edulog-font-caption); }
+dt { color:var(--edulog-text-muted); }
+dd { color:var(--edulog-text-strong); text-align:right; overflow-wrap:anywhere; min-width:0; }
+#server-row dd { text-align:left; }
 .actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:4px; }
-#status { font-size:var(--edulog-text-sm); overflow-wrap:anywhere; }
+#status { font-size:var(--edulog-font-caption); overflow-wrap:anywhere; }
 #status:empty { display:none; }
 #status[data-error="true"] { color:var(--edulog-status-danger-text); }
-#diagnostic-text { white-space:pre-wrap; overflow-wrap:anywhere; font-size:var(--edulog-text-xs); color:var(--edulog-text-muted); }
+#diagnostic-text { white-space:pre-wrap; overflow-wrap:anywhere; font-size:var(--edulog-font-tag); color:var(--edulog-text-muted); }
 
-.popup-foot { display:flex; align-items:center; padding:4px 6px; border-top:1px solid var(--edulog-border-soft); }
-.linkrow { display:flex; align-items:center; gap:8px; width:100%; min-height:var(--edulog-touch-target); padding:10px 8px; border:0; border-radius:var(--edulog-radius-sm); background:none; color:var(--edulog-text-secondary); font-weight:500; cursor:pointer; text-align:left; }
+.popup-foot { display:flex; align-items:center; padding:4px; border-top:1px solid var(--edulog-border-soft); }
+.linkrow { display:flex; align-items:center; gap:10px; width:100%; min-height:var(--edulog-touch-target); padding:0 10px; border:0; border-radius:var(--edulog-radius-sm); background:none; color:var(--edulog-text); font-size:var(--edulog-font-button); font-weight:500; cursor:pointer; text-align:left; }
 .linkrow:hover { background:var(--edulog-surface-muted); }
-.linkrow .count { margin-left:auto; padding:1px 8px; border-radius:var(--edulog-radius-pill); background:var(--edulog-status-warn-soft); color:var(--edulog-status-warn-text); font-size:var(--edulog-text-xs); }
-.linkrow .chev { margin-left:auto; color:var(--edulog-text-subtle); }
-.linkrow .count + .chev { margin-left:0; }
+.linkrow .count { display:inline-flex; align-items:center; justify-content:center; min-width:20px; height:20px; padding:0 6px; border-radius:var(--edulog-radius-pill); background:var(--edulog-status-warn-soft); color:var(--edulog-status-warn-text); font-size:var(--edulog-font-tag); font-weight:600; }
+.linkrow .chev { margin-left:auto; color:var(--edulog-text-muted); }
 @media (prefers-reduced-motion:reduce) { * { transition:none !important; } }

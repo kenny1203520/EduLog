@@ -58,14 +58,15 @@ function showError(error) {
 const useIcon = (node, name) => node.setAttribute('href', `#i-${name}`)
 const connectForm = state => ['not-connected', 'expired', 'revoked', 'pairing-expired'].includes(state)
 function renderContext(state, display) {
-  let icon = 'plug', title = display.label, detail = display.detail
+  let icon = 'plug', tone = 'neutral', title = display.label, detail = display.detail
   if (editing) { title = '變更伺服器'; detail = '連接新的伺服器後需重新配對。' }
-  else if (state === 'connected' && context.kind === 'class') { icon = 'users'; title = tabTitle || '本班'; detail = '同步學生、報告與出席紀錄到 EduLog；不會修改原站。' }
-  else if (state === 'connected' && context.kind === 'report') { icon = 'file'; title = tabTitle || '本報告'; detail = '以 EduLog 的課堂紀錄預填欄位，送出前由你檢查。' }
+  else if (state === 'connected' && context.kind === 'class') { icon = 'users'; tone = 'brand'; title = tabTitle || '本班'; detail = '同步學生、報告與出席紀錄到 EduLog；不會修改原站。' }
+  else if (state === 'connected' && context.kind === 'report') { icon = 'file'; tone = 'brand'; title = tabTitle || '本報告'; detail = '以 EduLog 的課堂紀錄預填欄位，送出前由你檢查。' }
   else if (state === 'connected') { icon = 'dashboard'; title = '這一頁沒有可同步的班級'; detail = '到工作台從「我的班級」挑一班同步。' }
-  else if (['unavailable', 'forbidden'].includes(state)) icon = 'alert'
-  else if (state === 'pending') icon = 'clock'
+  else if (['unavailable', 'forbidden'].includes(state)) { icon = 'alert'; tone = 'danger' }
+  else if (state === 'pending') { icon = 'clock'; tone = 'warn' }
   useIcon(ui('context-use'), icon)
+  ui('context-icon').dataset.tone = tone
   ui('context-title').textContent = title
   ui('state-detail').textContent = detail
 }

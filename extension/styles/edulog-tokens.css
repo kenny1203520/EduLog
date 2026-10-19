@@ -62,6 +62,14 @@
   --edulog-text-base:16px;
   --edulog-text-lg:18px;
   --edulog-text-xl:22px;
+  /* Type roles (MASTER §3): code uses these, never raw px */
+  --edulog-font-tag:var(--edulog-text-xs);
+  --edulog-font-caption:var(--edulog-text-sm);
+  --edulog-font-body:var(--edulog-text-md);
+  --edulog-font-button:var(--edulog-text-md);
+  --edulog-font-name:var(--edulog-text-base);
+  --edulog-font-heading:var(--edulog-text-lg);
+  --edulog-font-title:var(--edulog-text-xl);
   --edulog-leading:1.5;
   --edulog-leading-tight:1.35;
   /* Shape */
@@ -80,6 +88,7 @@
   --edulog-space-7:32px;
   --edulog-space-8:40px;
   --edulog-control-height:36px;
+  --edulog-control-height-sm:30px;
   --edulog-touch-target:44px;
   --edulog-row-min-height:52px;
   --edulog-icon-sm:16px;
