@@ -87,8 +87,14 @@
     restoreToolbarHeight()
     document.documentElement.removeAttribute('data-edulog-nav-open')
   }
+  // Last connection answer, so a rebuilt toolbar shows the known state before checking again.
+  let lastStatus = null, lastStatusAt = 0
+  // Theme on: sticky toolbar with one primary action and a "more" button. Theme off or this page
+  // kind set to original: one floating EduLog button. Both open the same panel (MASTER §6.12).
   function toolbar(page) {
     const ownerDocument = document
+    const shell = globalThis.edulogIntegrationUi, presentation = globalThis.edulogConnectionUi
+    const { icon, label } = shell
     const toolbarHost = document.createElement('div')
     host = toolbarHost
     toolbarHost.id = 'edulog-extension-root'
@@ -98,43 +104,67 @@
     const instance = { host: toolbarHost, root, ownerDocument, disposed: false, observer: null, resizeObserver: null, dismissOutside: null, stopLocale: null }
     toolbarLifecycle = instance
     const isCurrent = () => !instance.disposed && toolbarLifecycle === instance && toolbarHost.isConnected && toolbarHost.shadowRoot === root
-    root.innerHTML = `<style>
-      :host{all:initial;position:fixed;inset:0 0 auto;z-index:1040;color:var(--edulog-text);font:var(--edulog-text-base)/1.6 var(--edulog-font,system-ui,-apple-system,"Segoe UI",sans-serif)}
-      *{box-sizing:border-box}button{font:inherit;cursor:pointer;min-height:44px;padding:8px 12px;border:1px solid var(--edulog-border-strong);border-radius:8px;background:white;color:var(--edulog-text-secondary)}
-      button:hover{background:var(--edulog-primary-soft)}button:focus-visible{outline:3px solid var(--edulog-focus-ring);outline-offset:2px}
-      .bar{display:flex;gap:12px;align-items:center;min-height:64px;padding:8px 20px;background:white;border-bottom:1px solid var(--edulog-border);box-shadow:var(--edulog-shadow-bar)}
-      strong{color:var(--edulog-primary)}.title{flex:1}.toggle{color:var(--edulog-primary);font-weight:600}.menu{display:none}
-      .panel{position:fixed;right:16px;top:72px;margin:0;padding:16px;width:min(400px,calc(100vw - 32px));max-width:400px;max-height:calc(100dvh - 88px);overflow:auto;overscroll-behavior:contain;background:white;border:1px solid var(--edulog-border);border-radius:12px;box-shadow:var(--edulog-shadow-popover)}
-      .panel-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.panel-heading strong{min-width:0;overflow-wrap:anywhere}.panel-close{flex:none!important;width:44px!important;min-width:44px;padding:8px!important;margin:0!important;font-size:var(--edulog-text-lg);line-height:1}
-      .panel[hidden]{display:none}p{margin:8px 0;color:var(--edulog-text-muted)}.panel p{font-size:var(--edulog-text-md)}.panel button{margin-top:8px}.panel .panel-close{margin-top:0}.note{font-size:var(--edulog-text-md)}
-      :host([data-enabled="false"]){inset:auto 16px 20px auto;max-width:calc(100vw - 32px)}.bar{border-radius:0}
-      :host([data-enabled="false"]) .bar{padding:6px;border:1px solid var(--edulog-border);border-radius:12px}
-      :host([data-enabled="false"]) .bar>:not(.integration):not(.page-mode){display:none}.page-mode[hidden]{display:none!important}
-      :host([data-enabled="false"]) .panel{top:auto;right:16px;bottom:86px;width:min(400px,calc(100vw - 32px));max-width:400px;max-height:calc(100dvh - 112px)}
-      .preferences{border-top:1px solid var(--edulog-border);margin-top:12px}.preferences summary{min-height:44px;display:flex;align-items:center;cursor:pointer}.preferences select{font:inherit;min-height:44px;max-width:100%;margin-top:8px}
-      @media(max-width:991px){.menu{display:block}.bar{padding:8px 12px;gap:8px}.title{font-size:var(--edulog-text-md)}}
-      @media(max-width:480px){.brand{display:none}.bar{flex-wrap:wrap}.title{flex-basis:calc(100% - 70px)}.panel{right:8px;width:min(400px,calc(100vw - 16px));max-width:400px;max-height:calc(100dvh - 152px)}}
-    </style><div class="bar"><button class="menu" type="button" aria-label="切換網站導覽" aria-expanded="false">導覽</button><strong class="brand">EduLog</strong><span class="title"></span><button class="page-mode" type="button" hidden></button><button class="integration" type="button" aria-expanded="false">EduLog 功能</button></div>
-    <section class="panel" aria-label="EduLog 整合功能" hidden><div class="panel-heading"><strong>EduLog 連線與整合</strong><button class="panel-close" type="button" aria-label="關閉 EduLog 整合面板">×</button></div><p class="status" role="status" aria-live="polite"></p><p class="note">清晰主題不需要配對。下方可查看教學整合的規劃流程；原站的報告操作可照常使用。</p><button class="settings" type="button">開啟整合設定</button></section>`
-    // On class pages the title carries the short class name from the navigation bar.
-    const currentClass = globalThis.edulogSiteNavigation?.currentClass(document)
-    root.querySelector('.title').textContent = currentClass ? `${page.title} · ${currentClass.primary}` : page.title
-    const preferences=document.createElement('details');preferences.className='preferences'
-    const preferenceTitle=document.createElement('summary');preferenceTitle.textContent='設定';preferences.append(preferenceTitle)
-    const themeToggle=document.createElement('button');themeToggle.type='button';themeToggle.className='toggle';preferences.append(themeToggle);root.querySelector('.panel').append(preferences)
-    if(globalThis.edulogUi){const style=document.createElement('style');style.textContent=globalThis.edulogUi.styles;root.append(style);preferences.append(globalThis.edulogUi.languageSelect());globalThis.edulogUi.text(preferenceTitle,'ui.settings');globalThis.edulogUi.text(root.querySelector('.integration'),'ui.integration');globalThis.edulogUi.text(root.querySelector('.menu'),'ui.navigation')}
-    instance.stopLocale=globalThis.edulogUiLegacy?.watch(root)
-    const banner = document.createElement('div')
-    banner.className = 'notice'
-    banner.style.cssText = 'padding:10px 16px;background:var(--edulog-status-notice-soft);color:var(--edulog-status-notice-text);max-width:100vw'
-    banner.setAttribute('role', 'status')
+    const context = presentation?.pageContext(location.href) || { kind: 'other' }
+    const opener = 'aria-haspopup="dialog" aria-expanded="false" aria-controls="edulog-panel" data-focus="integration"'
+    const conn = extra => `<span class="conn" data-tone="neutral"><span class="dot" aria-hidden="true"></span><span class="conn-text${extra}"></span></span>`
+    const trigger = shown
+      ? `<div class="bar"><button class="menu btn btn-icon" type="button" aria-expanded="false" data-focus="menu">${icon('menu', 'lg')}</button><span class="logo" aria-hidden="true">E</span>
+        <div class="tb-title"><b class="title"></b><span class="tb-sub"></span></div>
+        <div class="tb-actions">${conn(' conn-label')}<button class="primary btn btn-primary btn-sm" type="button" data-focus="primary" hidden><span class="primary-icon"></span><span class="primary-text"></span></button>
+        <button class="integration btn btn-icon" type="button" ${opener}>${icon('more', 'lg')}</button></div></div><div class="notice" role="status" hidden></div>`
+      : `<div class="dock"><div class="notice" role="status" hidden></div><button class="integration fab" type="button" ${opener}><span class="logo" aria-hidden="true">E</span><span class="fab-dot" data-tone="neutral" aria-hidden="true"></span></button></div>`
+    root.innerHTML = `<style>${shell.styles}</style>${trigger}
+    <section class="panel" id="edulog-panel" role="dialog" aria-labelledby="edulog-panel-title" tabindex="-1" data-place="${shown ? 'top' : 'bottom'}" hidden>
+      <div class="fp-head"><span class="logo" aria-hidden="true">E</span><b class="panel-title" id="edulog-panel-title">EduLog</b><span class="spacer"></span>${conn('')}<button class="panel-close btn btn-icon" type="button">${icon('x', 'lg')}</button></div>
+      <div class="fp-body"><div class="switch-slot"></div>
+        <button class="panel-primary btn btn-primary btn-block" type="button" data-focus="panel-primary" hidden><span class="primary-icon"></span><span class="primary-text"></span></button>
+        <div class="links"${shown ? '' : ' hidden'}><button class="linkrow open-workspace" type="button">${icon('dashboard')}<span class="open-workspace-text"></span></button><button class="linkrow open-work" type="button">${icon('history')}<span class="open-work-text"></span></button></div>
+        <div class="fp-conn" data-tone="neutral"><span class="fp-icon"></span><div><p class="status" role="status" aria-live="polite"><span class="status-text"></span></p><p class="status-meta"></p></div></div>
+        <div class="fp-actions"><button class="retry btn btn-secondary btn-sm" type="button" hidden></button></div>
+        <details class="diagnostics" hidden><summary></summary><p class="diagnostic-text"></p></details></div>
+      <details class="preferences fp-foot"><summary class="linkrow">${icon('settings')}<span class="preferences-label"></span><span class="chev">${icon('chevron')}</span></summary>
+        <div class="prefs-body"><div class="toggle-slot"></div><div class="language-slot"></div><button class="settings btn btn-secondary btn-sm" type="button" hidden>${icon('external')}<span class="settings-text"></span></button></div></details>
+    </section>`
+    const part = selector => root.querySelector(selector)
+    // Replace a text holder so a keyed binding never overwrites a raw message later.
+    const put = (selector, key, params) => { const old = part(selector), fresh = old.cloneNode(false); delete fresh.dataset.i18n; old.replaceWith(fresh); if (key) label(fresh, key, params); return fresh }
+    const putText = (selector, value) => { const element = put(selector); element.textContent = value; return element }
+    for (const [selector, key] of [['.open-workspace-text', 'shell.openWorkspace'], ['.open-work-text', 'shell.workLog'], ['.preferences-label', 'ui.settings'], ['.settings-text', 'shell.integrationSettings'], ['.retry', 'shell.retry'], ['.diagnostics summary', 'shell.diagnostics']]) label(part(selector), key)
+    label(part('.panel-close'), 'shell.close', {}, 'aria-label')
+    if (shown) {
+      label(part('.integration'), 'shell.more', {}, 'aria-label')
+      label(part('.menu'), 'ui.navigation', {}, 'aria-label')
+      // On class pages the title carries the short class name from the navigation bar.
+      const currentClass = globalThis.edulogSiteNavigation?.currentClass(document)
+      part('.title').textContent = currentClass ? currentClass.primary : page.title
+      part('.tb-sub').textContent = currentClass ? page.title : ''
+    } else label(part('.integration'), 'shell.fab', { state: '…' }, 'aria-label')
+    const switchControl = (name, key, helpKey, checked) => {
+      const control = document.createElement('button')
+      control.type = 'button'; control.className = `switch ${name}`; control.dataset.focus = name
+      control.setAttribute('role', 'switch'); control.setAttribute('aria-checked', String(checked))
+      const text = document.createElement('span'), title = document.createElement('span'), help = document.createElement('small'), track = document.createElement('span')
+      title.className = 'switch-label'; title.id = `${name}-label`; help.id = `${name}-help`; track.className = 'track'; track.setAttribute('aria-hidden', 'true')
+      label(title, key); label(help, helpKey); text.append(title, help); control.append(text, track)
+      control.setAttribute('aria-labelledby', title.id); control.setAttribute('aria-describedby', help.id)
+      return control
+    }
+    // The page switch is offered while the theme is on; with the theme off the theme switch takes its place.
+    const pageMode = switchControl('page-mode', 'shell.applyPage', 'shell.applyPageHelp', shown)
+    pageMode.hidden = !enabled || (!shown && !pageOriginal(page))
+    const themeToggle = switchControl('toggle', 'shell.theme', 'shell.themeHelp', enabled)
+    part('.switch-slot').append(pageMode)
+    part(enabled ? '.toggle-slot' : '.switch-slot').append(themeToggle)
+    if (globalThis.edulogUi) {
+      const language = document.createElement('label'), name = document.createElement('span')
+      name.className = 'lbl'; label(name, 'ui.language'); language.className = 'field'; language.append(name, globalThis.edulogUi.languageSelect())
+      part('.language-slot').append(language)
+    }
+    instance.stopLocale = globalThis.edulogUiLegacy?.watch(root)
+    const banner = part('.notice')
     banner.textContent = notice
     banner.hidden = !notice
-    root.querySelector('.bar').after(banner)
-    root.querySelector('.toggle').textContent = enabled ? globalThis.edulogIntegrationUi.theme.original : globalThis.edulogIntegrationUi.theme.apply
-    if(globalThis.edulogUi)globalThis.edulogUi.text(root.querySelector('.toggle'),enabled?'ui.themeOff':'ui.themeOn')
-    root.querySelector('.toggle').title = enabled ? '目前使用 EduLog 清晰主題' : '套用 EduLog 清晰主題'
-    root.querySelector('.toggle').addEventListener('click', async () => {
+    themeToggle.addEventListener('click', async () => {
       enabled = !enabled
       revision++
       failedPath = null
@@ -148,12 +178,6 @@
         boot?.store({ enabled, pages: pageModes })
       } catch (error) { showNotice(`${error.message} 主題切換僅作用於當頁，偏好未儲存。`) }
     })
-    const pageMode = root.querySelector('.page-mode')
-    // Offered only while the theme is on and the page itself is healthy.
-    pageMode.hidden = !enabled || (!shown && !pageOriginal(page))
-    pageMode.textContent = shown ? '本頁看原版' : '本頁套用 EduLog'
-    pageMode.setAttribute('aria-pressed', String(!shown))
-    pageMode.title = shown ? '只有這類頁面改回原站畫面，其他頁面維持 EduLog 主題' : '這類頁面改回 EduLog 主題'
     pageMode.addEventListener('click', async () => {
       const mode = pageOriginal(page) ? 'enhanced' : 'original'
       const { [page.kind]: _previous, ...others } = pageModes
@@ -166,60 +190,92 @@
         boot?.store({ enabled, pages: pageModes })
       } catch (error) { showNotice(`${error.message} 本頁切換僅作用於當頁，偏好未儲存。`) }
     })
-    root.querySelector('.menu').addEventListener('click', event => {
+    part('.menu')?.addEventListener('click', event => {
       const open = document.documentElement.toggleAttribute('data-edulog-nav-open')
       event.currentTarget.setAttribute('aria-expanded', String(open))
       if (open) document.querySelector('#edulog-nav a, #edulog-nav button:not(.edulog-nav-close)')?.focus()
     })
-    const panel = root.querySelector('.panel'), integration = root.querySelector('.integration')
-    panel.style.overflowWrap = 'anywhere'
-    const diagnostics = document.createElement('details')
-    diagnostics.hidden = true
-    const summary = document.createElement('summary')
-    summary.textContent = '診斷資訊'
-    const detail = document.createElement('p')
-    diagnostics.append(summary, detail)
-    panel.append(diagnostics)
-    root.querySelector('.note').textContent = '清晰主題無須配對；教學整合將連接你設定的 EduLog。'
-    const features = document.createElement('section')
-    features.setAttribute('aria-label', '教學整合規劃')
-    panel.append(features)
-    const featureUi = globalThis.edulogIntegrationUi.mount(features)
-    featureUi.update('not-connected')
-    const retry = document.createElement('button')
-    retry.type = 'button'; retry.textContent = '重新檢查'; retry.hidden = true
-    panel.append(retry)
+    const panel = part('.panel'), integration = part('.integration'), closeButton = part('.panel-close'), retry = part('.retry')
+    const actionKey = { class: 'shell.syncClass', report: 'shell.prefill' }[context.kind] || 'shell.openWorkspace'
+    function applyStatus(result) {
+      const state = presentation?.describe(result?.status) || { tone: 'neutral', key: 'conn.unavailable', chip: '' }
+      const chip = () => globalThis.edulogUi?.t(`${state.key}.chip`) ?? state.chip
+      for (const element of root.querySelectorAll('.conn')) element.dataset.tone = state.tone
+      for (const element of root.querySelectorAll('.conn-text')) label(element, `${state.key}.chip`)
+      const dot = part('.fab-dot')
+      if (dot) { dot.dataset.tone = state.tone; label(integration, 'shell.fab', () => ({ state: chip() }), 'aria-label') }
+      const connected = result?.status === 'connected'
+      const action = presentation?.primaryAction(context, result?.capabilities) || { flow: 'import', icon: 'dashboard', ready: true }
+      for (const button of root.querySelectorAll('.primary, .panel-primary')) {
+        button.dataset.flow = action.flow
+        button.querySelector('.primary-icon').innerHTML = icon(action.icon)
+        label(button.querySelector('.primary-text'), actionKey)
+        button.disabled = !action.ready
+      }
+      const toolbarPrimary = part('.primary')
+      if (toolbarPrimary) toolbarPrimary.hidden = !connected || !action.ready
+      part('.panel-primary').hidden = shown || !connected
+      part('.open-workspace').hidden = shown && connected && context.kind === 'other'
+      part('.fp-conn').dataset.tone = state.tone
+      part('.fp-icon').innerHTML = icon(connected ? 'check' : state.tone === 'danger' ? 'alert' : 'plug')
+      if (connected) {
+        let origin = result.origin || ''
+        try { origin = new URL(origin).host } catch { /* Keep the raw value. */ }
+        putText('.status-text', origin || chip())
+        if (!action.ready) put('.status-meta', 'shell.notReady')
+        else if (result.lastVerifiedAt) put('.status-meta', 'shell.verified', { time: new Date(result.lastVerifiedAt).toLocaleString() })
+        else put('.status-meta')
+      } else {
+        put('.status-text', `${state.key}.label`)
+        put('.status-meta', ['not-connected', 'expired', 'revoked', 'pairing-expired'].includes(result?.status) ? 'shell.connectHint' : `${state.key}.detail`)
+      }
+      part('.diagnostics').hidden = !result?.diagnostic
+      part('.diagnostic-text').textContent = result?.diagnostic ? [result.diagnostic.code, result.diagnostic.message, result.diagnostic.requestId ? `請求編號：${result.diagnostic.requestId}` : ''].filter(Boolean).join(' — ') : ''
+      retry.hidden = !['unavailable', 'forbidden'].includes(result?.status)
+      part('.settings').hidden = !connected
+      part('.settings').disabled = !result?.settingsUrl
+    }
     const checkConnection = async () => {
-      const status = root.querySelector('.status')
-      status.textContent = '正在檢查連線…'
+      put('.status-text', 'shell.checking'); put('.status-meta')
       retry.disabled = true
       try {
         const result = await message({ type: 'get-edulog-integration-status' })
-        if (!isCurrent()) return
-        const state = globalThis.edulogConnectionUi.describe(result?.status)
-        featureUi.update(result)
-        status.textContent = `${state.label}：${state.detail}${result?.origin ? ` ${result.origin}` : ''}${result?.lastVerifiedAt ? ` 最近驗證：${new Date(result.lastVerifiedAt).toLocaleString()}` : ''}`
-        diagnostics.hidden = !result?.diagnostic
-        detail.textContent = result?.diagnostic ? [result.diagnostic.code, result.diagnostic.message, result.diagnostic.requestId ? `請求編號：${result.diagnostic.requestId}` : ''].filter(Boolean).join(' — ') : ''
-        retry.hidden = !['unavailable', 'connected', 'forbidden'].includes(result?.status)
-        root.querySelector('.settings').hidden = result?.status !== 'connected'
-        root.querySelector('.settings').disabled = !result?.settingsUrl
+        lastStatus = result; lastStatusAt = Date.now()
+        if (isCurrent()) applyStatus(result)
       } catch (error) {
         if (!isCurrent()) return
-        status.textContent = bridge.invalidated ? '通訊已停止；清晰主題與原站操作仍可使用。' : error.message
+        putText('.status-text', bridge.invalidated ? '通訊已停止；清晰主題與原站操作仍可使用。' : error.message)
         retry.hidden = bridge.invalidated
       } finally { if (isCurrent()) retry.disabled = false }
     }
     retry.addEventListener('click', () => { void checkConnection() })
+    const runFlow = async (flow, button) => {
+      button.disabled = true
+      try {
+        const result = await message({ type: 'open-integration-workspace', flow })
+        if (!result?.opened) throw new Error(result?.error?.message || globalThis.edulogUi?.t('shell.openFailed') || '無法開啟整合工作台。')
+      } catch (error) { if (isCurrent()) putText('.status-meta', error.message) }
+      finally { if (isCurrent()) button.disabled = false }
+    }
+    for (const button of root.querySelectorAll('.primary, .panel-primary')) button.addEventListener('click', () => { void runFlow(button.dataset.flow, button) })
+    part('.open-workspace').addEventListener('click', event => { void runFlow('import', event.currentTarget) })
+    part('.open-work').addEventListener('click', event => { void runFlow('work', event.currentTarget) })
+    // A manual popover keeps the panel in the top layer; click-outside and Esc stay ours.
+    const popover = typeof panel.showPopover === 'function'
+    if (popover) panel.setAttribute('popover', 'manual')
+    const openPanel = () => {
+      panel.hidden = false
+      if (popover && !panel.matches(':popover-open')) panel.showPopover()
+      integration.setAttribute('aria-expanded', 'true')
+      // The dialog itself takes focus; Tab then reaches its first control.
+      panel.focus({ preventScroll: true })
+      void checkConnection()
+    }
     const closePanel = (restoreFocus = false) => {
+      if (popover && panel.matches(':popover-open')) panel.hidePopover()
       panel.hidden = true
       integration.setAttribute('aria-expanded', 'false')
       if (restoreFocus && integration.isConnected) integration.focus()
-    }
-    const closeButton = root.querySelector('.panel-close')
-    if (globalThis.edulogUi) {
-      globalThis.edulogUi.text(root.querySelector('.panel-heading strong'), 'ui.integrationPanel')
-      globalThis.edulogUi.text(closeButton, 'ui.closePanel', {}, 'aria-label')
     }
     closeButton.addEventListener('click', () => closePanel(true))
     const dismissOutside = event => {
@@ -228,21 +284,17 @@
     }
     instance.dismissOutside = dismissOutside
     ownerDocument.addEventListener('pointerdown', dismissOutside, true)
-    integration.addEventListener('click', async () => {
-      panel.hidden = !panel.hidden
-      integration.setAttribute('aria-expanded', String(!panel.hidden))
-      if (panel.hidden) return
-      closeButton.focus()
-      await checkConnection()
-    })
-    root.querySelector('.settings').addEventListener('click', async () => {
+    integration.addEventListener('click', () => { if (panel.hidden) openPanel(); else closePanel() })
+    part('.settings').addEventListener('click', async () => {
       const result = await message({ type: 'open-edulog-settings' }).catch(error => { if (isCurrent()) showNotice(error.message); return null })
-      if (isCurrent() && !result?.opened) root.querySelector('.status').textContent = '請點選瀏覽器工具列的 EduLog 圖示，設定伺服器並完成配對。'
+      if (isCurrent() && !result?.opened) putText('.status-meta', '請點選瀏覽器工具列的 EduLog 圖示，設定伺服器並完成配對。')
     })
     root.addEventListener('keydown', event => {
       if (event.key === 'Escape' && !panel.hidden) closePanel(true)
     })
+    if (lastStatus) applyStatus(lastStatus)
     document.body.append(toolbarHost)
+    if (!lastStatus || Date.now() - lastStatusAt > 30000) void checkConnection()
     instance.observer = new MutationObserver(() => {
       if (instance.host.isConnected) return
       disposeToolbar(instance)
@@ -251,11 +303,11 @@
     if (shown) {
       const html = document.documentElement
       heightState = { value: html.style.getPropertyValue('--edulog-toolbar-height'), priority: html.style.getPropertyPriority('--edulog-toolbar-height'), hadStyle: html.hasAttribute('style') }
-      const updateHeight = () => { if (isCurrent()) html.style.setProperty('--edulog-toolbar-height', `${Math.max(64, root.querySelector('.bar').getBoundingClientRect().height + banner.getBoundingClientRect().height)}px`) }
+      const updateHeight = () => { if (isCurrent()) html.style.setProperty('--edulog-toolbar-height', `${Math.max(48, part('.bar').getBoundingClientRect().height + banner.getBoundingClientRect().height)}px`) }
       updateHeight()
       if (typeof ResizeObserver !== 'undefined') {
         instance.resizeObserver = resizeObserver = new ResizeObserver(updateHeight)
-        instance.resizeObserver.observe(root.querySelector('.bar'))
+        instance.resizeObserver.observe(part('.bar'))
         instance.resizeObserver.observe(banner)
       }
     }
@@ -273,7 +325,7 @@
     if (!force && enabled && lastPath === location.pathname && enhancement?.isCurrent()) { enhancement.refresh(); syncDialog(); return }
     const search = active?.dataset.edulogSearch
     const cursor = search && typeof active.selectionStart === 'number' ? [active.selectionStart, active.selectionEnd] : null
-    const toolbarFocus = host?.shadowRoot.activeElement?.className
+    const toolbarFocus = host?.shadowRoot.activeElement?.dataset.focus
     const scrolls = scrollState()
     const wanted = enabled && !pageOriginal(adapter.matchPage(location.pathname))
     const keepToolbar = lastPath === location.pathname && host?.isConnected && host.dataset.enabled === String(wanted)
@@ -303,8 +355,11 @@
       const input = document.querySelector(`[data-edulog-search="${search}"]`)
       input?.focus({ preventScroll: true })
       if (input && cursor) input.setSelectionRange(...cursor)
-    } else if (['toggle', 'menu', 'integration', 'page-mode'].includes(toolbarFocus)) {
-      host.shadowRoot.querySelector(`.${toolbarFocus}`)?.focus({ preventScroll: true })
+    } else if (toolbarFocus) {
+      // A control inside the closed panel cannot take focus; its opener can.
+      const target = host.shadowRoot.querySelector(`[data-focus="${toolbarFocus}"]`)
+      target?.focus({ preventScroll: true })
+      if (host.shadowRoot.activeElement !== target) host.shadowRoot.querySelector('.integration')?.focus({ preventScroll: true })
     } else if (active?.isConnected && active !== document.body) {
       active.focus({ preventScroll: true })
       if (nativeCursor) active.setSelectionRange(...nativeCursor)

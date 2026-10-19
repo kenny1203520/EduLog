@@ -2,7 +2,7 @@
 
 ## 本次範圍
 
-教師總覽 `/` 最上方新增擴充自繪的「本週待辦」，原站總覽內容（課表基準日期、我的班級、原站課程表）保留在下方。可用工具列「本頁看原版」整頁回原站。
+教師總覽 `/` 最上方新增擴充自繪的「本週待辦」，原站總覽內容（課表基準日期、我的班級、原站課程表）保留在下方。可在 EduLog 面板關閉「本頁套用 EduLog」整頁回原站。
 
 - 資料：同源唯讀讀取 `/admissions/month_unfilled_report`、`/admissions/unfilled_report`、`/calendar`、`/my/hour` 與側欄班級的 `/courses/dt/:id/lesson_reports`（最多 8 班、同時 2 個請求）。路徑白名單、`credentials: same-origin`、`redirect: error`，不送出任何表單。分頁內記憶 5 分鐘，「重新整理」強制重讀，標示「更新於 hh:mm」。
 - 區塊（各自載入、各自失敗與重試，不互相阻塞）：

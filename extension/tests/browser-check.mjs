@@ -18,6 +18,28 @@ if (process.argv[4]) {
   nativeCss = [application, 'flatpickr.min.css', 'style.min.css', 'all.css', 'jquery.dataTables.min.css', 'bootstrap-table.min.css', 'selectize.bootstrap5.min.css']
     .filter(n => n && existsSync(join(dir, n))).map(n => readFileSync(join(dir, n), 'utf8')).join('\n')
 }
+// en-US copy is longer: the toolbar, floating button and both panels must still fit 360px.
+async function englishShell(page, browserName, name, width) {
+  const root = page.locator('#edulog-extension-root')
+  await root.evaluate(el => new Promise(resolve => { const wait = () => el.shadowRoot.querySelector('.bar .conn')?.dataset.tone === 'ok' ? resolve() : setTimeout(wait, 10); wait() }))
+  const facts = () => root.evaluate(el => { const r = node => { const box = el.shadowRoot.querySelector(node)?.getBoundingClientRect(); return box && { left: box.left, right: box.right, top: box.top, bottom: box.bottom, height: box.height } }; const bar = el.shadowRoot.querySelector('.bar'); return { bar: r('.bar'), barOverflow: bar ? bar.scrollWidth > bar.clientWidth + 1 : false, primary: el.shadowRoot.querySelector('.bar .primary')?.textContent, panel: r('.panel'), panelOverflow: [...el.shadowRoot.querySelectorAll('.panel *')].some(n => n.getClientRects().length && n.scrollWidth > n.clientWidth + 1 && getComputedStyle(n).overflowX === 'visible' && n.clientWidth > 0) } })
+  let state = await facts()
+  assert.equal(state.primary, name === 'class' ? 'Sync class' : 'Prefill report', `${browserName} en ${name}: English primary action`)
+  assert.ok(state.bar.height === 48 && !state.barOverflow, `${browserName} en ${name} ${width}: toolbar fits ${JSON.stringify(state)}`)
+  await page.getByRole('button', { name: 'More EduLog options', exact: true }).click()
+  state = await facts()
+  assert.ok(state.panel.left >= 0 && state.panel.right <= width + 1 && !state.panelOverflow, `${browserName} en ${name} ${width}: toolbar panel fits ${JSON.stringify(state.panel)}`)
+  await page.screenshot({ path: join(output, `${browserName}-en-${name}-toolbar-panel-${width}.png`) })
+  await page.locator('.preferences summary').click()
+  await page.getByRole('switch', { name: 'EduLog light theme' }).click()
+  await page.locator('html[data-edulog-ui]').waitFor({ state: 'detached' })
+  await page.getByRole('button', { name: 'EduLog (Connected)', exact: true }).click()
+  state = await facts()
+  assert.ok(state.panel.left >= 0 && state.panel.right <= width + 1 && state.panel.top >= 0 && !state.panelOverflow, `${browserName} en ${name} ${width}: floating panel fits ${JSON.stringify(state.panel)}`)
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${browserName} en ${name} ${width}: page overflow`)
+  await page.screenshot({ path: join(output, `${browserName}-en-${name}-fab-panel-${width}.png`) })
+  console.log(`${browserName} en ${name} ${width}: passed`)
+}
 const executables = browserTargets()
 for (const [browserName, launchOptions] of executables) {
   const browser = await chromium.launch(launchOptions)
@@ -54,8 +76,11 @@ for (const [browserName, launchOptions] of executables) {
       await page.close()
     }
     // 720 CSS px at DPR 2 is a layout surrogate; native browser 200% zoom remains pending.
-    for (const width of [360, 390, 768, 1024, 1200, 1440, 1920, 720]) for (const [name, path] of [['hours','/my/hour'],['profile','/my'],['profile-edit','/my/101/edit'],['overview', '/'], ['class', '/courses/dt/101'], ['real-class', '/courses/dt/101'], ['real-sidebar', '/courses/dt/101'], ['reports', '/courses/dt/101/lesson_reports'], ['classes','/courses/dt'], ['history','/dt_admissions/301'], ['calendar','/calendar'], ['unfilled','/admissions/month_unfilled_report'], ['unfilled-current','/admissions/unfilled_report'], ['report-editor','/dt_admissions/301/reports/401/edit']]) {
-      const page = await browser.newPage({ locale:'zh-TW', viewport: { width, height: width === 720 ? 500 : 1000 }, deviceScaleFactor: width === 720 ? 2 : 1 })
+    const sourceRoutes = [['hours','/my/hour'],['profile','/my'],['profile-edit','/my/101/edit'],['overview', '/'], ['class', '/courses/dt/101'], ['real-class', '/courses/dt/101'], ['real-sidebar', '/courses/dt/101'], ['reports', '/courses/dt/101/lesson_reports'], ['classes','/courses/dt'], ['history','/dt_admissions/301'], ['calendar','/calendar'], ['unfilled','/admissions/month_unfilled_report'], ['unfilled-current','/admissions/unfilled_report'], ['report-editor','/dt_admissions/301/reports/401/edit']]
+    // English runs only check the extension shell (toolbar, floating button, panel) at the narrowest width.
+    const sourceCases = [...[360, 390, 768, 1024, 1200, 1440, 1920, 720].flatMap(width => sourceRoutes.map(([name, path]) => [width, name, path])), [360, 'class', '/courses/dt/101', 'en-US'], [360, 'report-editor', '/dt_admissions/301/reports/401/edit', 'en-US']]
+    for (const [width, name, path, locale = 'zh-TW'] of sourceCases) {
+      const page = await browser.newPage({ locale, viewport: { width, height: width === 720 ? 500 : 1000 }, deviceScaleFactor: width === 720 ? 2 : 1 })
       let fixture = read(`fixtures/${name}.html`)
       if (name === 'calendar') fixture = fixture.replace('<form method="get">','<div class="row"><div class="col-sm-2"><a class="btn" href="/calendar?date=2026-09-21">前一週</a></div><div class="col-sm-8"><form method="get"><div class="row"><div class="col-sm-7">').replace('<input type="submit"','</div><div class="col-sm-3"><input type="submit"').replace('</form>','</div></div></form></div><div class="col-sm-2"><a class="btn" href="/calendar?date=2026-10-05">下一週</a></div></div>')
       fixture = fixture.replace('</head>', `<style>${nativeCss}</style><style>${css}</style></head>`)
@@ -68,7 +93,8 @@ for (const [browserName, launchOptions] of executables) {
       })
       await page.goto(`https://corp.orangeapple.co${path}`)
       await page.evaluate(() => {
-        window.chrome = { runtime: { sendMessage: async data => ({ enabled: data.enabled ?? true }), onMessage: { addListener(fn) { window.edulogTestListener = fn } } } }
+        const status = { status: 'connected', origin: 'https://edulog.example.com', capabilities: { teaching_data_import: true, report_prefill: true }, settingsUrl: 'https://edulog.example.com/settings', lastVerifiedAt: '2026-10-19T06:02:00Z' }
+        window.chrome = { runtime: { sendMessage: async data => data.type === 'get-edulog-integration-status' ? status : ({ enabled: data.enabled ?? true }), onMessage: { addListener(fn) { window.edulogTestListener = fn } } } }
       })
       for (const file of ['lexicon', 'model']) await page.addScriptTag({ content: read(`../sites/orange-apple/orange-apple-${file}.js`) })
       await page.addScriptTag({ content: read('../sites/orange-apple/orange-apple-todo.js') })
@@ -87,9 +113,16 @@ for (const [browserName, launchOptions] of executables) {
       await page.addScriptTag({ content: read('../shared/integration-ui.js') })
       await page.addScriptTag({ content: read('../content/content.js') })
       await page.locator('html[data-edulog-ui=on]').waitFor()
+      if (locale !== 'zh-TW') { await englishShell(page, browserName, name, width); await page.close(); continue }
       assert.equal(await page.locator('#edulog-extension-root').count(), 1)
       await page.waitForTimeout(80)
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), `${browserName} ${name} ${width}: page overflow`)
+      await page.locator('#edulog-extension-root').evaluate(el => new Promise(resolve => { const wait = () => el.shadowRoot.querySelector('.bar .conn')?.dataset.tone === 'ok' ? resolve() : setTimeout(wait, 10); wait() }))
+      const toolbarFacts = await page.locator('#edulog-extension-root').evaluate(el => { const bar = el.shadowRoot.querySelector('.bar'), r = bar.getBoundingClientRect(); return { height: r.height, primaries: [...bar.querySelectorAll('.btn-primary')].filter(b => b.getClientRects().length).map(b => b.textContent), overflow: bar.scrollWidth > bar.clientWidth + 1, sizes: [...new Set([...el.shadowRoot.querySelectorAll('*')].filter(n => n.getClientRects().length && [...n.childNodes].some(c => c.nodeType === 3 && c.data.trim())).map(n => getComputedStyle(n).fontSize))] } })
+      assert.equal(toolbarFacts.height, 48, `${browserName} ${name} ${width}: toolbar height`)
+      assert.equal(toolbarFacts.overflow, false, `${browserName} ${name} ${width}: toolbar overflow`)
+      assert.deepEqual(toolbarFacts.primaries, [{ class: '同步本班', 'real-class': '同步本班', 'real-sidebar': '同步本班', 'report-editor': '預填本報告' }[name] || '開啟工作台'], `${browserName} ${name} ${width}: one toolbar primary action`)
+      assert.ok(toolbarFacts.sizes.every(size => ['12px', '13px', '14px', '16px', '18px', '22px'].includes(size)), `${browserName} ${name} ${width}: toolbar type scale ${toolbarFacts.sizes}`)
       const toolbarRoot = await page.locator('#edulog-extension-root').evaluateHandle(el => el.shadowRoot)
       const toolbar = await page.locator('#edulog-extension-root').evaluateHandle(el => el.shadowRoot.querySelector('.integration'))
       await toolbar.asElement().click()
@@ -97,6 +130,8 @@ for (const [browserName, launchOptions] of executables) {
       const panelBounds = await panel.evaluate(el => { const r = el.getBoundingClientRect(); return { width:r.width, right:r.right, bottom:r.bottom } })
       assert.ok(panelBounds.width <= Math.min(400, width - 16) + 1, `${browserName} ${name} ${width}: integration panel width`)
       assert.ok(panelBounds.right <= width + 1 && panelBounds.bottom <= 1000 + 1, `${browserName} ${name} ${width}: integration panel bounds`)
+      assert.equal(await panel.evaluate(el => el.matches(':popover-open')), true, `${browserName} ${name} ${width}: panel is a top-layer popover`)
+      if (name === 'class' && [360, 1440].includes(width)) await page.screenshot({ path: join(output, `${browserName}-toolbar-panel-${width}.png`) })
       await panel.evaluate(el => el.querySelector('.panel-close').click())
       assert.equal(await panel.evaluate(el => el.hidden), true, `${browserName} ${name} ${width}: close control`)
       await toolbarRoot.dispose(); await toolbar.dispose(); await panel.dispose()
@@ -251,20 +286,31 @@ for (const [browserName, launchOptions] of executables) {
       await page.screenshot({ path: join(output, `${browserName}-${name}-${width}.png`), fullPage: true })
       // Verify keyboard focus and unchanged native form state on toggle.
       if (name === 'class') await page.locator('textarea[name="content"]').fill('未送出的內容')
-      await page.getByRole('button',{name:'EduLog 功能',exact:true}).click()
+      await page.getByRole('button',{name:'EduLog 更多',exact:true}).click()
       await page.locator('.preferences summary').click()
-      const toggle = page.getByRole('button', { name: '使用原站主題' })
+      const toggle = page.getByRole('switch', { name: '套用 EduLog 清晰主題' })
       await toggle.focus(); await page.keyboard.press('Enter')
       assert.equal(await page.locator('html[data-edulog-ui]').count(), 0)
       if (name === 'class') assert.equal(await page.locator('textarea[name="content"]').inputValue(), '未送出的內容')
       if (name === 'profile-edit') assert.equal(await page.locator('#employee_skill').inputValue(),'保留的個人資料草稿')
-      await page.getByRole('button',{name:'EduLog 功能',exact:true}).click()
-      await page.locator('.preferences summary').click()
-      await page.getByRole('button', { name: '套用清晰主題' }).press('Enter')
+      // Theme off: exactly one floating EduLog button; its panel opens above it and fits the viewport.
+      const fab = page.getByRole('button', { name: /^EduLog（/ })
+      assert.equal(await fab.count(), 1, `${browserName} ${name} ${width}: one floating button`)
+      const fabBox = await fab.boundingBox()
+      assert.ok(fabBox.width === 40 && fabBox.x + fabBox.width <= width - 15 && fabBox.y + fabBox.height <= 1000 - 15, `${browserName} ${name} ${width}: floating button size and inset`)
+      if (name === 'class' && [360, 1440].includes(width)) await page.screenshot({ path: join(output, `${browserName}-fab-closed-${width}.png`) })
+      await fab.click()
+      const fabPanel = await page.locator('#edulog-extension-root').evaluate(el => { const panel = el.shadowRoot.querySelector('.panel'), r = panel.getBoundingClientRect(); return { open: panel.matches(':popover-open'), left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width } })
+      assert.ok(fabPanel.open && fabPanel.left >= 0 && fabPanel.right <= width + 1 && fabPanel.top >= 0 && fabPanel.bottom <= fabBox.y + 1 && fabPanel.width <= 300, `${browserName} ${name} ${width}: floating panel bounds ${JSON.stringify(fabPanel)}`)
+      if (name === 'class' && [360, 1440].includes(width)) await page.screenshot({ path: join(output, `${browserName}-fab-panel-${width}.png`) })
+      await page.keyboard.press('Escape')
+      assert.equal(await page.locator('#edulog-extension-root').evaluate(el => el.shadowRoot.querySelector('.panel').hidden && el.shadowRoot.activeElement?.classList.contains('fab')), true, `${browserName} ${name} ${width}: Esc closes and returns focus`)
+      await fab.click()
+      await page.getByRole('switch', { name: '套用 EduLog 清晰主題' }).press('Enter')
       await page.locator('html[data-edulog-ui=on]').waitFor()
       if (name === 'class') {
         await page.evaluate(() => { chrome.runtime.sendMessage = () => { throw new Error('Extension context invalidated.') } })
-        await page.getByRole('button', { name: 'EduLog 功能' }).click()
+        await page.getByRole('button', { name: 'EduLog 更多' }).click()
         await page.getByText('擴充套件已更新，請先儲存正在編輯的內容，再重新整理分頁。', { exact: true }).waitFor()
         assert.equal(await page.locator('textarea[name="content"]').inputValue(), '未送出的內容')
       }

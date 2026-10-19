@@ -33,7 +33,8 @@ for (const enabled of [true, false]) test(`bootstrap resolves preference ${enabl
   s.mount(); await tick()
   assert.equal(s.doc.documentElement.dataset.edulogUi, enabled ? 'on' : undefined)
   assert.equal(s.doc.documentElement.hasAttribute('data-edulog-pending'), false)
-  assert.equal(s.messages(), 1)
+  // The preference, then one connection-status read for the toolbar's status dot.
+  assert.equal(s.messages(), 2)
   assert.equal(s.doc.querySelectorAll('#edulog-extension-root').length, 1)
   s.dom.window.close()
 })

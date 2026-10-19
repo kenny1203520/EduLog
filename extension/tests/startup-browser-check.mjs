@@ -77,7 +77,7 @@ for (const [browserName, launchOptions] of browserTargets()) {
           const root = document.querySelector('#edulog-extension-root').shadowRoot
           return root.querySelector('.bar').getBoundingClientRect().height
         })
-        assert.equal(height, width <= 480 ? 113 : 64, 'early toolbar reservation must match the bar')
+        assert.equal(height, 48, 'early toolbar reservation must match the bar')
         // Refresh recording exercises a new bootstrap before parsing again.
         await page.reload(); await page.waitForTimeout(350)
         check = await capture()
