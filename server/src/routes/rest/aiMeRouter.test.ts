@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { errorHandler } from '../../http/errors.js'
 import { PendingPkceStore } from '../../ai/credentials/openRouterOAuth.js'
 import type { ApiConfig } from '../../config/config.js'
-import { createAiMeRouter } from './aiMeRouter.js'
+import { createAiMeRouter, openRouterReturnOrigin } from './aiMeRouter.js'
 
 type Row = Record<string, unknown>
 
@@ -194,5 +194,21 @@ describe('personal models and catalog', () => {
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+})
+
+describe('openRouterReturnOrigin', () => {
+  const config = { EDULOG_WEB_BASE_URL: 'https://edulog.example', API_ALLOWED_ORIGINS: 'https://edulog.example,https://staging.edulog.example', NODE_ENV: 'development' as const }
+
+  it('returns to the page that started the sign-in when its origin is trusted', () => {
+    expect(openRouterReturnOrigin(config, 'https://staging.edulog.example')).toBe('https://staging.edulog.example')
+    expect(openRouterReturnOrigin(config, 'http://localhost:5174')).toBe('http://localhost:5174')
+  })
+
+  it('falls back to the web base URL for unknown or missing origins', () => {
+    expect(openRouterReturnOrigin(config, 'https://evil.example')).toBe('https://edulog.example')
+    expect(openRouterReturnOrigin(config, undefined)).toBe('https://edulog.example')
+    expect(openRouterReturnOrigin(config, 'not a url')).toBe('https://edulog.example')
+    expect(openRouterReturnOrigin({ ...config, NODE_ENV: 'production' }, 'http://localhost:5174')).toBe('https://edulog.example')
   })
 })

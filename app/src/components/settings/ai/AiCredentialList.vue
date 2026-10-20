@@ -254,6 +254,7 @@ const statusClass: Record<AiCredentialDTO['status'], string> = {
                                 <span v-if="site && defaultModelId === model.id" class="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800">{{ t('ai.settings.default_badge') }}</span>
                                 <span v-if="isUnpriced(model)" class="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-900">{{ t('ai.settings.unpriced') }}</span>
                                 <span v-else-if="isFree(model)" class="ml-2 rounded-full bg-sky-100 px-2 py-0.5 text-xs font-bold text-sky-900">{{ t('ai.settings.free') }}</span>
+                                <span v-if="model.supports_structured_output === false" class="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-bold text-gray-700" :title="t('ai.settings.compat_mode_hint')">{{ t('ai.settings.compat_mode') }}</span>
                                 <span v-if="site" class="ml-2 text-xs text-gray-600">{{ t('ai.settings.model_meta', { weight: model.quota_weight, input: model.price_input_per_mtok ?? '—', output: model.price_output_per_mtok ?? '—' }) }}</span>
                             </span>
                             <span class="flex flex-wrap gap-1">

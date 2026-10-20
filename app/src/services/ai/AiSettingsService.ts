@@ -13,6 +13,7 @@ export interface CatalogModel {
     textCapable: boolean
     priceInputPerMtok?: number
     priceOutputPerMtok?: number
+    supportsStructuredOutput?: boolean
 }
 
 export type ModelCatalog = { supported: true, models: CatalogModel[], fetchedAt: string } | { supported: false, reason: string }
@@ -26,6 +27,8 @@ export interface AiModelDTO {
     quota_weight: number | string
     price_input_per_mtok: number | string | null
     price_output_per_mtok: number | string | null
+    /** false: the model rejects JSON schema output and is called in compatibility mode. */
+    supports_structured_output?: boolean | null
 }
 
 export interface AiCredentialDTO {
@@ -101,8 +104,12 @@ export interface GenerationLogRow {
     provider: string
     model_id: string
     prompt_versions: Record<string, string>
-    status: 'succeeded' | 'failed' | 'cancelled'
+    status: 'running' | 'succeeded' | 'failed' | 'cancelled'
     error_code: string | null
+    error_detail: { status: number | null, message: string | null } | null
+    system_prompt: string | null
+    sanitized_input: { prompt?: string } | null
+    options: Record<string, unknown> | null
     tokens_in: number | null
     tokens_out: number | null
     est_cost: number | string | null

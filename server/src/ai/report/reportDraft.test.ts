@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { MockLanguageModelV4, convertArrayToReadableStream } from 'ai/test'
 import { PlaceholderMap } from '../deidentify/placeholders.js'
-import { normalizeDraft, streamReportDraft, type DeepPartialDraft } from './reportDraft.js'
+import { InvalidDraftOutputError, normalizeDraft, parseJsonTextDraft, streamReportDraft, type DeepPartialDraft } from './reportDraft.js'
 import { buildReportPrompt } from './reportPrompt.js'
 
 const usage = {
@@ -74,6 +74,39 @@ describe('streamReportDraft', () => {
     }
     await expect(streamReportDraft({ model: streamingModel(JSON.stringify(output)), prompt, map: new PlaceholderMap() }))
       .rejects.toThrow()
+  })
+
+  it('in json_text mode sends no response format, asks for JSON in the prompt and parses fenced text', async () => {
+    const map = new PlaceholderMap()
+    map.assign('student', 'known:s1', '王小明')
+    let callOptions: { responseFormat?: unknown, prompt?: unknown } = {}
+    const text = '好的，以下是報告：\n```json\n{"sections":[{"key":"today","body":"[學生A]完成迴圈。"}],"teachingSuggestions":["多練習"]}\n```'
+    const model = streamingModel(text)
+    const doStream = model.doStream.bind(model)
+    model.doStream = async (options) => { callOptions = options; return doStream(options) }
+    const partials: DeepPartialDraft[] = []
+
+    const result = await streamReportDraft({ model, prompt, map, mode: 'json_text', onPartial: (draft) => partials.push(draft) })
+
+    expect((callOptions.responseFormat as { type?: string } | undefined)?.type ?? 'text').toBe('text')
+    expect(JSON.stringify(callOptions.prompt)).toContain('只輸出一個 JSON 物件')
+    expect(result.restored.sections).toEqual([{ key: 'today', title: '今日學習', body: '王小明完成迴圈。' }])
+    expect(result.restored.teachingSuggestions).toEqual(['多練習'])
+    expect(partials.some((partial) => partial.sections?.[0]?.body?.startsWith('王小明'))).toBe(true)
+  })
+})
+
+describe('parseJsonTextDraft', () => {
+  it('drops unknown section keys, fills missing titles and defaults suggestions', () => {
+    expect(parseJsonTextDraft('{"sections":[{"key":"home","body":"在家練習"},{"key":"secret","body":"x"}]}')).toEqual({
+      sections: [{ key: 'home', title: '居家建議', body: '在家練習' }],
+      teachingSuggestions: [],
+    })
+  })
+
+  it('rejects text that is not a JSON draft', () => {
+    expect(() => parseJsonTextDraft('我無法完成這個要求')).toThrow(InvalidDraftOutputError)
+    expect(() => parseJsonTextDraft('{"sections": "today"}')).toThrow(InvalidDraftOutputError)
   })
 })
 

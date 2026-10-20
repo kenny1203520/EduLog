@@ -95,8 +95,8 @@ describe('AiReportPanel', () => {
     it('lists earlier generations and opens one in the result area', async () => {
         service.bootstrap.mockResolvedValue(bootstrap())
         service.history.mockResolvedValue([
-            { generation_id: 'g2', status: 'failed', created_at: '2026-10-20T09:00:00Z', completed_at: '2026-10-20T09:00:05Z', provider: 'ollama', model_id: 'qwen', error_code: 'TIMEOUT', quota_charged: 0, draft: null, unresolved_placeholders: [], suggestion_states: {}, adoption_count: 0 },
-            { generation_id: 'g1', status: 'succeeded', created_at: '2026-10-20T08:00:00Z', completed_at: '2026-10-20T08:00:20Z', provider: 'ollama', model_id: 'qwen', error_code: null, quota_charged: 1, draft: { sections: [{ key: 'today', title: '今日學習', body: '先前的版本' }], teachingSuggestions: [] }, unresolved_placeholders: [], suggestion_states: {}, adoption_count: 1 },
+            { generation_id: 'g2', status: 'failed', created_at: '2026-10-20T09:00:00Z', completed_at: '2026-10-20T09:00:05Z', provider: 'ollama', model_id: 'qwen', error_code: 'TIMEOUT', quota_charged: 0, draft: null, unresolved_placeholders: [], suggestion_states: {}, adoption_count: 0, input: { system_prompt: null, prompt_version: 'report.v1', prompt: null }, error_detail: { status: 504, message: null } },
+            { generation_id: 'g1', status: 'succeeded', created_at: '2026-10-20T08:00:00Z', completed_at: '2026-10-20T08:00:20Z', provider: 'ollama', model_id: 'qwen', error_code: null, quota_charged: 1, draft: { sections: [{ key: 'today', title: '今日學習', body: '先前的版本' }], teachingSuggestions: [] }, unresolved_placeholders: [], suggestion_states: {}, adoption_count: 1, input: { system_prompt: '系統規則', prompt_version: 'report.v2', prompt: '學生：[學生A]' }, error_detail: null },
         ])
         const wrapper = mountPanel()
         await flushPromises()
@@ -108,6 +108,8 @@ describe('AiReportPanel', () => {
         expect(entries[0].text()).toContain('失敗')
         expect(entries[0].text()).toContain('AI 回應逾時')
         expect(entries[1].text()).toContain('已採用 1 次')
+        expect(entries[1].find('[data-testid="ai-history-input"]').text()).toContain('學生：[學生A]')
+        expect(entries[0].find('[data-testid="ai-history-input"]').exists()).toBe(false)
 
         await entries[1].findAll('button').find((button) => button.text().startsWith('開啟此版本'))!.trigger('click')
         expect(wrapper.find('#ai-tab-generate').attributes('aria-selected')).toBe('true')

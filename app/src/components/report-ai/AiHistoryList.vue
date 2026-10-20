@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { endedErrorCode } from '@/composables/useReportAssist'
+import { endedErrorCode, providerReason } from '@/composables/useReportAssist'
 import type { GenerationHistoryEntry } from '@/services/ai/ReportAssistService'
 
 /**
@@ -65,7 +65,10 @@ function reason(entry: GenerationHistoryEntry) {
 
             <div class="space-y-3 border-t border-gray-100 px-4 py-3">
                 <p v-if="entry.status === 'running'" class="text-sm text-sky-800" role="status">{{ $t('ai.history.running_hint') }}</p>
-                <p v-else-if="entry.status !== 'succeeded'" class="text-sm text-gray-700">{{ reason(entry) }}</p>
+                <template v-else-if="entry.status !== 'succeeded'">
+                    <p class="text-sm text-gray-700">{{ reason(entry) }}</p>
+                    <p v-if="providerReason(entry.error_detail)" class="break-words text-xs text-gray-600">{{ $t('ai.panel.provider_reason', { reason: providerReason(entry.error_detail) }) }}</p>
+                </template>
 
                 <template v-if="entry.draft">
                     <p v-if="entry.unresolved_placeholders.length" class="rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
@@ -90,6 +93,15 @@ function reason(entry: GenerationHistoryEntry) {
                         class="min-h-[44px] w-full cursor-pointer rounded-lg border border-emerald-600 bg-white px-4 text-sm font-semibold text-emerald-700 transition-colors duration-200 hover:bg-emerald-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600"
                         @click="emit('open', entry)">{{ $t('ai.history.open') }}</button>
                 </template>
+
+                <details v-if="entry.input?.prompt || entry.input?.system_prompt" class="rounded-lg border border-gray-200 bg-gray-50 p-2" data-testid="ai-history-input">
+                    <summary class="min-h-[44px] cursor-pointer content-center text-xs font-semibold text-gray-700">{{ $t('ai.history.input_title') }}</summary>
+                    <h4 class="mt-2 text-xs font-semibold text-gray-600">{{ $t('ai.history.system_prompt') }}</h4>
+                    <pre v-if="entry.input.system_prompt" class="mt-1 max-h-48 overflow-auto whitespace-pre-wrap rounded bg-white p-2 text-xs text-gray-800">{{ entry.input.system_prompt }}</pre>
+                    <p v-else class="mt-1 text-xs text-gray-600">{{ $t('ai.history.system_prompt_version_only', { version: entry.input.prompt_version ?? '—' }) }}</p>
+                    <h4 class="mt-2 text-xs font-semibold text-gray-600">{{ $t('ai.history.prompt') }}</h4>
+                    <pre class="mt-1 max-h-64 overflow-auto whitespace-pre-wrap rounded bg-white p-2 text-xs text-gray-800">{{ entry.input.prompt }}</pre>
+                </details>
             </div>
         </details>
     </div>

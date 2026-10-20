@@ -39,6 +39,8 @@ export interface ReportAssistBootstrap {
     kept_suggestions: Array<{ generationId: string, date: string | null, suggestions: string[] }>
     /** The newest succeeded or still running generation, so the panel reopens where it was. */
     latest: GenerationHistoryEntry | null
+    /** 學習報告 already has text: the AI keeps its voice and structure. */
+    has_draft?: boolean
     preferences: ReportAssistPreferences
 }
 
@@ -59,6 +61,10 @@ export interface GenerationHistoryEntry {
     unresolved_placeholders: string[]
     suggestion_states: Record<number, 'kept' | 'dismissed'>
     adoption_count: number
+    /** What was sent, already de-identified; system_prompt is null on generations from before it was recorded. */
+    input: { system_prompt: string | null, prompt_version: string | null, prompt: string | null }
+    /** Provider HTTP status and short message, for failures. */
+    error_detail: { status: number | null, message: string | null } | null
 }
 
 export interface ReportAssistOptions {
@@ -194,7 +200,7 @@ export const ReportAssistService = {
                 else if (event.event === 'partial') hooks.onPartial?.(data as PartialReportDraft)
                 else if (event.event === 'done') return data as GenerationResult
                 else if (event.event === 'error') {
-                    throw new ApiV1Error(502, { error: { code: data.code, message: data.message, request_id: data.request_id ?? requestId, trace_id: '' } })
+                    throw new ApiV1Error(502, { error: { code: data.code, message: data.message, request_id: data.request_id ?? requestId, trace_id: '', details: data.reason ? { reason: data.reason } : undefined } })
                 }
             }
         }

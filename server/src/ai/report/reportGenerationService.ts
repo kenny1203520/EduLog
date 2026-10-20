@@ -6,9 +6,10 @@ import type { KnownEntity } from '../deidentify/knownEntities.js'
 import { PlaceholderMap, type PlaceholderKind } from '../deidentify/placeholders.js'
 import { DeidentificationUnavailableError } from '../deidentify/presidioClient.js'
 import type { GenerationRegistry } from './generationRegistry.js'
+import { classifyProviderFailure, describeProviderError, providerErrorDetail } from '../providers/providerErrors.js'
 import { createLanguageModel, type ModelTarget } from '../providers/providerRegistry.js'
 import { computeQuotaBalance, pickEffectivePolicy, type QuotaBalance } from '../quota/quotaBalance.js'
-import { normalizeDraft, REPORT_SECTION_KEYS, restoreDraft, streamReportDraft, type DeepPartialDraft, type ReportDraft, type ReportDraftResult } from './reportDraft.js'
+import { InvalidDraftOutputError, normalizeDraft, REPORT_SECTION_KEYS, restoreDraft, streamReportDraft, type DeepPartialDraft, type OutputMode, type ReportDraft, type ReportDraftResult } from './reportDraft.js'
 import {
   assessReportContext,
   buildReportPrompt,
@@ -82,6 +83,9 @@ export interface GenerationHistoryEntry {
   unresolved: string[]
   suggestionStates: Record<number, 'kept' | 'dismissed'>
   adoptionCount: number
+  /** What was sent, already de-identified (the system prompt is missing on rows from before 1000154). */
+  input: { systemPrompt: string | null, promptVersion: string | null, prompt: string | null }
+  errorDetail: { status: number | null, message: string | null } | null
 }
 
 export const HISTORY_LIMIT = 30
@@ -259,6 +263,13 @@ export class ReportGenerationService {
   ): Promise<GenerationOutcome> {
     const { request, context, resolved } = prepared
     const startedAt = this.now().getTime()
+    const options = {
+      tone: request.options.tone,
+      length: request.options.length,
+      template_id: request.options.templateId ?? null,
+      extra_instructions: context.sanitizedFields.extraInstructions || null,
+      focus: context.sanitizedFields.focus || null,
+    }
     const generationId = await this.deps.repository.startGeneration({
       occurrence_report_id: request.reportId,
       user_id: request.userId,
@@ -267,13 +278,8 @@ export class ReportGenerationService {
       provider: resolved.provider,
       model_id: resolved.modelId,
       prompt_versions: { report: context.prompt.version },
-      options: {
-        tone: request.options.tone,
-        length: request.options.length,
-        template_id: request.options.templateId ?? null,
-        extra_instructions: context.sanitizedFields.extraInstructions || null,
-        focus: context.sanitizedFields.focus || null,
-      },
+      system_prompt: context.prompt.system,
+      options,
       sanitized_input: {
         fields: context.sanitizedFields,
         prompt: context.prompt.prompt,
@@ -299,33 +305,58 @@ export class ReportGenerationService {
     try {
       hooks.onStarted?.(generationId)
       let result: ReportDraftResult
+      let mode: OutputMode = resolved.supportsStructuredOutput === false ? 'json_text' : 'structured'
+      let streamed = false
+      const call = () => streamReportDraft({
+        model: prepared.model,
+        prompt: context.prompt,
+        map: context.map,
+        sectionMap: parentSectionMap(context),
+        signal,
+        mode,
+        onPartial: (draft) => { streamed = true; hooks.onPartial?.(draft) },
+      })
       try {
-        result = await streamReportDraft({
-          model: prepared.model,
-          prompt: context.prompt,
-          map: context.map,
-          sectionMap: parentSectionMap(context),
-          signal,
-          onPartial: hooks.onPartial,
-        })
+        try {
+          result = await call()
+        } catch (error) {
+          // The model rejected JSON schema output before writing anything: ask for JSON in the prompt instead.
+          if (mode === 'structured' && !streamed && !signal.aborted && classifyProviderFailure(providerErrorDetail(error)) === 'MODEL_UNSUPPORTED') {
+            mode = 'json_text'
+            await this.deps.repository.markStructuredOutputUnsupported(resolved.modelRowId).catch(() => {})
+            result = await call()
+          } else {
+            throw error
+          }
+        }
       } catch (error) {
         const cancelled = cancelSignal.aborted
+        const detail = cancelled || signal.aborted ? null : providerErrorDetail(error)
+        const invalid = error instanceof InvalidDraftOutputError
+        const failure = detail && !invalid ? classifyProviderFailure(detail) : null
         // A ChatGPT plan answers 429 once the plan allowance or this app's weekly cap is used up.
-        const planLimit = !cancelled && resolved.provider === 'openai' && resolved.authType === 'oauth' && providerStatus(error) === 429
+        const planLimit = failure === 'RATE_LIMITED' && resolved.provider === 'openai' && resolved.authType === 'oauth'
         await this.deps.repository.finishGeneration(generationId, {
           status: cancelled ? 'cancelled' : 'failed',
-          error_code: cancelled ? 'CANCELLED' : signal.aborted ? 'TIMEOUT' : planLimit ? 'PLAN_LIMIT' : errorCode(error),
+          error_code: cancelled ? 'CANCELLED' : signal.aborted ? 'TIMEOUT' : planLimit ? 'PLAN_LIMIT' : invalid ? 'INVALID_OUTPUT' : failure ?? errorCode(error),
+          error_detail: detail,
+          options: { ...options, output_mode: mode },
           latency_ms: latency(),
         })
         if (cancelled) throw new ApiError(499, 'AI_GENERATION_CANCELLED', 'Generation was cancelled')
         if (signal.aborted) throw new ApiError(504, 'AI_GENERATION_TIMEOUT', 'The model took too long to respond')
-        if (planLimit) throw new ApiError(429, 'AI_PLAN_LIMIT_REACHED', 'Your ChatGPT plan allowance for this app is used up')
-        throw new ApiError(502, 'AI_PROVIDER_ERROR', 'The AI provider returned an error')
+        const reason = detail ? { reason: describeProviderError(detail) } : undefined
+        if (planLimit) throw new ApiError(429, 'AI_PLAN_LIMIT_REACHED', 'Your ChatGPT plan allowance for this app is used up', undefined, undefined, undefined, reason)
+        if (invalid) throw new ApiError(502, 'AI_INVALID_OUTPUT', 'The model did not return a usable draft', undefined, undefined, undefined, { reason: (error as Error).message })
+        if (failure === 'RATE_LIMITED') throw new ApiError(429, 'AI_RATE_LIMITED', 'The AI provider is rate limiting this model', undefined, undefined, undefined, reason)
+        if (failure === 'MODEL_UNSUPPORTED') throw new ApiError(502, 'AI_MODEL_UNSUPPORTED', 'The model does not support this kind of request', undefined, undefined, undefined, reason)
+        throw new ApiError(502, 'AI_PROVIDER_ERROR', 'The AI provider returned an error', undefined, undefined, undefined, reason)
       }
 
       const tokensIn = result.usage.inputTokens ?? null
       const tokensOut = result.usage.outputTokens ?? null
       const usage = {
+        options: { ...options, output_mode: mode },
         sanitized_output: result.sanitized,
         tokens_in: tokensIn,
         tokens_out: tokensOut,
@@ -394,6 +425,12 @@ export class ReportGenerationService {
         unresolved,
         suggestionStates: row.suggestionStates,
         adoptionCount: row.adoptionCount,
+        input: {
+          systemPrompt: row.systemPrompt ?? null,
+          promptVersion: row.promptVersion ?? null,
+          prompt: typeof row.sanitizedInput.prompt === 'string' ? row.sanitizedInput.prompt : null,
+        },
+        errorDetail: row.errorDetail ?? null,
       }
     })
   }
@@ -481,13 +518,4 @@ function errorCode(error: unknown): string {
   return name.replace(/[^A-Za-z0-9_]/g, '').slice(0, 120) || 'PROVIDER_ERROR'
 }
 
-/** HTTP status of a provider error, looking through wrapped causes (AI SDK APICallError). */
-export function providerStatus(error: unknown): number | null {
-  let current: unknown = error
-  for (let depth = 0; depth < 5 && current && typeof current === 'object'; depth++) {
-    const status = (current as { statusCode?: unknown }).statusCode
-    if (typeof status === 'number') return status
-    current = (current as { cause?: unknown }).cause
-  }
-  return null
-}
+export { providerStatus } from '../providers/providerErrors.js'
