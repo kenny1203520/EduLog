@@ -724,6 +724,9 @@ services:
   presidio-analyzer:
     build:
       context: ./docker/presidio
+      args:
+        # Installed languages (zh, en, ja, ko); rebuild after changing.
+        PRESIDIO_LANGUAGES: ${EDULOG_PRESIDIO_LANGUAGES:-zh,en}
     container_name: edulog-presidio-analyzer
     restart: unless-stopped
     # Point the API at it with EDULOG_PRESIDIO_ANALYZER_URL=http://presidio-analyzer:3000.

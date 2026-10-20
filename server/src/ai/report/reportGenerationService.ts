@@ -121,10 +121,11 @@ export class ReportGenerationService {
     if (!this.deps.deidentifier) throw new ApiError(503, 'AI_DEIDENTIFICATION_UNAVAILABLE', 'De-identification is not configured')
     const facts = await this.deps.repository.loadReportFacts(reportId)
     if (!facts) throw new ApiError(404, 'NOT_FOUND', 'Report was not found')
-    const [entities, template, promptOverride] = await Promise.all([
+    const [entities, template, promptOverride, deidConfig] = await Promise.all([
       this.deps.repository.loadKnownEntities(facts, userId),
       options.templateId ? this.deps.repository.loadTemplate(options.templateId, userId) : Promise.resolve(null),
       this.deps.repository.getActivePromptOverride(REPORT_SYSTEM_PROMPT_KEY),
+      this.deps.repository.loadDeidentificationConfig(),
     ])
 
     const fields: Record<string, string> = {
@@ -141,7 +142,7 @@ export class ReportGenerationService {
 
     let result
     try {
-      result = await this.deps.deidentifier.deidentify(fields, entities)
+      result = await this.deps.deidentifier.deidentify(fields, entities, deidConfig)
     } catch (error) {
       if (error instanceof DeidentificationUnavailableError) {
         throw new ApiError(503, 'AI_DEIDENTIFICATION_UNAVAILABLE', 'De-identification service is unavailable')

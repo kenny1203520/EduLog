@@ -16,6 +16,7 @@ export const PLACEHOLDER_LABELS = {
   nationalId: '身分證',
   location: '地點',
   organization: '機構',
+  sensitive: '敏感',
 } as const
 
 export type PlaceholderKind = keyof typeof PLACEHOLDER_LABELS

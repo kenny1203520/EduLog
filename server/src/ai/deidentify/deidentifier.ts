@@ -4,6 +4,7 @@ import {
   parseKnownEntityType,
   type KnownEntity,
 } from './knownEntities.js'
+import { buildRuleRecognizers, exceptionWords, parseRuleEntityType, type DeidRule } from './customRules.js'
 import { PlaceholderMap, type PlaceholderKind } from './placeholders.js'
 import type { PresidioSpan, TextAnalyzer } from './presidioClient.js'
 
@@ -26,8 +27,28 @@ export class DeidentificationResidualError extends Error {
 }
 
 export interface DeidentifyOptions {
-  language?: string
+  /** Presidio languages to analyze with, each in its own pass. Defaults to `['zh']`. */
+  languages?: string[]
+  /** Administrator rules; see customRules. */
+  rules?: DeidRule[]
   scoreThreshold?: number
+}
+
+/** Where a replacement came from, for the admin test bench. */
+export type SpanSource = 'known' | 'rule' | 'ner'
+
+export interface AppliedSpan {
+  start: number
+  end: number
+  kind: PlaceholderKind
+  token: string
+  source: SpanSource
+  /** Presidio entity type, e.g. PERSON or EDULOG_RULE_0. */
+  entityType: string
+  /** Index into `options.rules` for rule matches. */
+  ruleIndex?: number
+  /** Language pass that found it. */
+  language: string
 }
 
 export interface DeidentifyResult<K extends string> {
@@ -37,21 +58,22 @@ export interface DeidentifyResult<K extends string> {
   map: PlaceholderMap
   /** Count of replacements per placeholder kind, safe to log. */
   counts: Partial<Record<PlaceholderKind, number>>
+  /** Replacements per field, in text order. In-memory only. */
+  spans: Record<K, AppliedSpan[]>
+  /** Exception words dropped because they contain a known name. */
+  ignoredExceptions: string[]
 }
 
-interface Replacement {
-  start: number
-  end: number
-  token: string
-  kind: PlaceholderKind
-}
+const PRIORITY: Record<SpanSource, number> = { known: 2, rule: 1, ner: 0 }
 
 /**
  * De-identify a set of text fields before they leave the server.
  *
- * Known entities win over NER detections, then longer spans over shorter.
- * Fails closed: if any known alias is still present afterwards, it throws
- * instead of returning text that would leak a name.
+ * Every enabled language is analyzed separately and the spans merged. Known
+ * entities win over rule matches, rule matches over NER detections, then
+ * longer spans over shorter. Fails closed: if any known alias is still
+ * present afterwards, it throws instead of returning text that would leak a
+ * name. Exception words never reach known names (see exceptionWords).
  */
 export class Deidentifier {
   constructor(private readonly analyzer: TextAnalyzer) {}
@@ -61,68 +83,90 @@ export class Deidentifier {
     entities: KnownEntity[],
     options: DeidentifyOptions = {},
   ): Promise<DeidentifyResult<K>> {
-    const language = options.language ?? 'zh'
-    const recognizers = buildKnownEntityRecognizers(entities, language)
+    const languages = options.languages?.length ? [...new Set(options.languages)] : ['zh']
+    const rules = options.rules ?? []
+    const passes = languages.map((language) => {
+      const exceptions = exceptionWords(rules, entities, language)
+      return {
+        language,
+        recognizers: [...buildKnownEntityRecognizers(entities, language), ...buildRuleRecognizers(rules, language)],
+        allowList: exceptions.words,
+        ignored: exceptions.ignored,
+      }
+    })
     const map = new PlaceholderMap()
     // Assign known entities first so the report's student is always [學生A].
-    entities.forEach((entity) => map.assign(knownKind(entity), `known:${entity.id}`, entity.display ?? entity.name))
+    entities.forEach((entity) => map.assign(entity.kind, `known:${entity.id}`, entity.display ?? entity.name))
 
     const counts: Partial<Record<PlaceholderKind, number>> = {}
     const out = {} as Record<K, string>
+    const spansByField = {} as Record<K, AppliedSpan[]>
     for (const key of Object.keys(fields) as K[]) {
       const text = fields[key] ?? ''
-      const spans = await this.analyzer.analyze({
+      const found = await Promise.all(passes.map(async (pass) => (await this.analyzer.analyze({
         text,
-        language,
-        adHocRecognizers: recognizers,
+        language: pass.language,
+        adHocRecognizers: pass.recognizers,
         scoreThreshold: options.scoreThreshold ?? 0.3,
-      })
-      const replacements = selectReplacements(text, spans, entities, map)
+        allowList: pass.allowList,
+      })).map((span) => ({ ...span, language: pass.language }))))
+      const replacements = selectReplacements(text, found.flat(), entities, rules, map)
       for (const replacement of replacements) counts[replacement.kind] = (counts[replacement.kind] ?? 0) + 1
       out[key] = applyReplacements(text, replacements)
+      spansByField[key] = replacements
     }
 
     const leaking = findResidualFields(out, entities)
     if (leaking.length > 0) throw new DeidentificationResidualError(leaking)
-    return { fields: out, map, counts }
+    return { fields: out, map, counts, spans: spansByField, ignoredExceptions: [...new Set(passes.flatMap((pass) => pass.ignored))] }
   }
 }
 
-function knownKind(entity: KnownEntity): PlaceholderKind {
-  return entity.kind
-}
+type Candidate = Omit<AppliedSpan, 'token'> & { key: string, display: string }
 
 function selectReplacements(
   text: string,
-  spans: PresidioSpan[],
+  spans: Array<PresidioSpan & { language: string }>,
   entities: KnownEntity[],
+  rules: DeidRule[],
   map: PlaceholderMap,
-): Replacement[] {
-  const candidates = spans.flatMap((span): Array<Replacement & { priority: number }> => {
+): AppliedSpan[] {
+  const candidates = spans.flatMap((span): Candidate[] => {
+    if (span.end <= span.start) return []
+    const base = { start: span.start, end: span.end, entityType: span.entity_type, language: span.language }
     const knownIndex = parseKnownEntityType(span.entity_type)
     if (knownIndex !== null) {
       const entity = entities[knownIndex]
       if (!entity) return []
-      const token = map.assign(knownKind(entity), `known:${entity.id}`, entity.display ?? entity.name)
-      return [{ start: span.start, end: span.end, token, kind: knownKind(entity), priority: 1 }]
+      return [{ ...base, kind: entity.kind, source: 'known', key: `known:${entity.id}`, display: entity.display ?? entity.name }]
+    }
+    const original = text.slice(span.start, span.end)
+    const ruleIndex = parseRuleEntityType(span.entity_type)
+    if (ruleIndex !== null) {
+      const kind = rules[ruleIndex]?.placeholderKind
+      if (!kind) return []
+      return [{ ...base, kind, source: 'rule', ruleIndex, key: original, display: original }]
     }
     const kind = DETECTED_KIND[span.entity_type]
     if (!kind) return []
-    const original = text.slice(span.start, span.end)
-    return [{ start: span.start, end: span.end, token: map.assign(kind, original, original), kind, priority: 0 }]
+    return [{ ...base, kind, source: 'ner', key: original, display: original }]
   })
 
   candidates.sort((a, b) =>
-    b.priority - a.priority || (b.end - b.start) - (a.end - a.start) || a.start - b.start)
-  const chosen: Replacement[] = []
+    PRIORITY[b.source] - PRIORITY[a.source] || (b.end - b.start) - (a.end - a.start) || a.start - b.start)
+  const chosen: Candidate[] = []
   for (const candidate of candidates) {
     if (chosen.some((other) => candidate.start < other.end && other.start < candidate.end)) continue
     chosen.push(candidate)
   }
-  return chosen.sort((a, b) => a.start - b.start)
+  // Tokens are assigned only to kept spans, in text order, so letters have no gaps.
+  return chosen.sort((a, b) => a.start - b.start).map(({ key, display, ...span }) => ({
+    ...span,
+    token: map.assign(span.kind, key, display),
+  }))
 }
 
-function applyReplacements(text: string, replacements: Replacement[]): string {
+function applyReplacements(text: string, replacements: AppliedSpan[]): string {
   let result = ''
   let cursor = 0
   for (const replacement of replacements) {

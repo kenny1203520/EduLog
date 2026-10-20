@@ -3,7 +3,7 @@ import { MockLanguageModelV4, convertArrayToReadableStream } from 'ai/test'
 import { SecretCipher } from '../credentials/secretCipher.js'
 import { Deidentifier } from '../deidentify/deidentifier.js'
 import type { AnalyzeRequest, PresidioSpan, TextAnalyzer } from '../deidentify/presidioClient.js'
-import type { GenerationLogRow, ReportAssistRepository, ReportFacts, ResolvedModel, StoredGeneration } from './reportAssistRepository.js'
+import type { DeidentificationConfig, GenerationLogRow, ReportAssistRepository, ReportFacts, ResolvedModel, StoredGeneration } from './reportAssistRepository.js'
 import { adoptionSnapshot, credentialAssociatedData, parentSectionMap, providerStatus, ReportGenerationService } from './reportGenerationService.js'
 
 class PatternAnalyzer implements TextAnalyzer {
@@ -45,8 +45,10 @@ class FakeRepository implements ReportAssistRepository {
   charges: Array<{ userId: string, generationId: string, amount: number }> = []
   stored: StoredGeneration[] = []
   kept = new Map<string, number[]>()
+  deidConfig: DeidentificationConfig = { languages: ['zh'], rules: [] }
 
   async getSettings() { return { enabled: this.enabled, noticeVersion: 1, defaultModelId: null } }
+  async loadDeidentificationConfig() { return this.deidConfig }
   async hasAcknowledgedNotice() { return this.acknowledged }
   async acknowledgeNotice() {}
   async listModelSources() { return [] }
@@ -119,6 +121,20 @@ function service(repository: FakeRepository, model = jsonModel(output), analyzer
 const request = { reportId: 'r-now', userId: 'u1', modelRowId: 'm1', options: { tone: 'warm' as const, length: 'short' as const, extraInstructions: '多鼓勵小明' }, sessionSeq: 1 }
 
 describe('ReportGenerationService', () => {
+  it('applies the administrator’s languages and rules on every request', async () => {
+    const repository = new FakeRepository()
+    repository.deidConfig = {
+      languages: ['zh', 'en'],
+      rules: [{ name: 'Topic', kind: 'deny_list', entries: ['迴圈'], pattern: null, placeholderKind: 'sensitive', languages: ['zh'], score: 0.85 }],
+    }
+    const { svc, analyzer } = service(repository)
+
+    const context = await svc.prepareContext('r-now', 'u1', { tone: 'warm', length: 'short' })
+
+    expect(new Set(analyzer.calls.map((call) => call.language))).toEqual(new Set(['zh', 'en']))
+    expect(context.sanitizedFields.lessonTitle).toBe('[敏感A]')
+  })
+
   it('sends only de-identified text, logs it, restores the draft and charges site quota', async () => {
     const repository = new FakeRepository()
     const capture: { prompt?: string } = {}
