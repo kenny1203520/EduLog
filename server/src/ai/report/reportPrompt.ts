@@ -94,6 +94,8 @@ export const DEFAULT_REPORT_SYSTEM_RULES = [
     '- 負面狀況要委婉、具建設性，並搭配具體的改進方向。',
     '- 若有「老師草稿」，那是老師已寫好的內容：保留其中所有事實與用語，在此基礎上潤飾、擴寫並補齊缺少的段落。',
     '- 若有「報告樣板」，只參考它的格式與段落安排，不要照抄其中的範例內容。',
+    '- sections 是給這位學生的家長看的：不要提到其他同學的名字（需要時寫「同學」），不要寫電話、Email、身分證或地址等聯絡資料。',
+    '- 除了上述佔位符，不要使用方括號，也不要寫「[家長您好]」這類待填欄位。',
 ].join('\n')
 
 /** Build the system and user prompt for one generation. */
@@ -103,7 +105,10 @@ export function buildReportPrompt(context: ReportPromptContext, options: ReportP
 
   const lines: string[] = []
   lines.push(`學生：${context.studentToken}`)
-  lines.push(`課程：${[context.courseName, context.subject, context.stage].filter(Boolean).join(' / ')}`)
+  // A display name like "Scratch 程式設計 階段 2" already carries subject and stage.
+  const extras = [context.subject, context.stage].filter((part): part is string => Boolean(part))
+  const redundant = extras.length > 0 && extras.every((part) => context.courseName.includes(part))
+  lines.push(`課程：${[context.courseName, ...(redundant ? [] : extras)].filter(Boolean).join(' / ')}`)
   if (context.lessonTitle) lines.push(`本次課次：${context.lessonTitle}`)
   if (context.progressStart || context.progressEnd) {
     lines.push(`進度：${context.progressStart ?? '?'} → ${context.progressEnd ?? '?'}${context.isCompleted ? '（本課已完成）' : ''}`)

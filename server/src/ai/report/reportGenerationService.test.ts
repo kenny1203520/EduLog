@@ -4,7 +4,7 @@ import { SecretCipher } from '../credentials/secretCipher.js'
 import { Deidentifier } from '../deidentify/deidentifier.js'
 import type { AnalyzeRequest, PresidioSpan, TextAnalyzer } from '../deidentify/presidioClient.js'
 import type { GenerationLogRow, ReportAssistRepository, ReportFacts, ResolvedModel, StoredGeneration } from './reportAssistRepository.js'
-import { adoptionSnapshot, credentialAssociatedData, ReportGenerationService } from './reportGenerationService.js'
+import { adoptionSnapshot, credentialAssociatedData, parentSectionMap, ReportGenerationService } from './reportGenerationService.js'
 
 class PatternAnalyzer implements TextAnalyzer {
   calls: AnalyzeRequest[] = []
@@ -212,5 +212,19 @@ describe('adoptionSnapshot', () => {
     expect(adoptionSnapshot(stored, 'today')).toBe('[學生A]好')
     expect(adoptionSnapshot(stored, 'all')).toBe('今日\n[學生A]好\n\n居家\n練習')
     expect(adoptionSnapshot(stored, 'teachingSuggestions')).toBeNull()
+  })
+})
+
+describe('parentSectionMap', () => {
+  it('shows classmates as 同學 and keeps contact details as tokens in parent-facing text', async () => {
+    const { PlaceholderMap } = await import('../deidentify/placeholders.js')
+    const map = new PlaceholderMap()
+    map.assign('student', 'known:s1', '王小明')
+    map.assign('student', 'known:s2', '陳大文')
+    map.assign('teacher', 'known:t1', '林雅婷')
+    map.assign('phone', '0912-345-678', '0912-345-678')
+    const parent = parentSectionMap({ map, facts: { ...facts, studentId: 's1' } })
+    expect(parent.restore('[學生A]和[學生B]聊天，[老師A]提醒；電話 [電話A]').text).toBe('王小明和同學聊天，林雅婷提醒；電話 [電話A]')
+    expect(map.restore('[學生B] [電話A]').text).toBe('陳大文 0912-345-678')
   })
 })

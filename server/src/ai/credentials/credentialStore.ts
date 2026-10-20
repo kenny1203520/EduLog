@@ -118,8 +118,10 @@ export async function testCredential(db: Db, cipher: SecretCipher | null, creden
   let ok = false
   let errorName: string | null = null
   try {
-    const result = await generateText({ model, prompt: 'Reply with the single word OK.', maxOutputTokens: 16, abortSignal: AbortSignal.timeout(30_000) })
-    ok = result.text.trim().length > 0
+    // Any successful response proves the endpoint, key and model id; reasoning
+    // models may spend the small budget thinking and return no text.
+    await generateText({ model, prompt: 'Reply with the single word OK.', maxOutputTokens: 16, abortSignal: AbortSignal.timeout(30_000) })
+    ok = true
   } catch (error) {
     errorName = error instanceof Error ? error.name : 'Error'
   }

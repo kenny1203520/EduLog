@@ -255,7 +255,14 @@ export class ReportGenerationService {
 
     let result: ReportDraftResult
     try {
-      result = await streamReportDraft({ model: prepared.model, prompt: context.prompt, map: context.map, signal, onPartial: hooks.onPartial })
+      result = await streamReportDraft({
+        model: prepared.model,
+        prompt: context.prompt,
+        map: context.map,
+        sectionMap: parentSectionMap(context),
+        signal,
+        onPartial: hooks.onPartial,
+      })
     } catch (error) {
       const cancelled = hooks.signal?.aborted === true
       await this.deps.repository.insertGeneration({
@@ -322,6 +329,23 @@ export class ReportGenerationService {
       }]
     }).slice(0, limit)
   }
+}
+
+/** Tokens never restored into parent-facing text: contact details and ID numbers. */
+const CONTACT_TOKEN = /^\[(電話|信箱|身分證)[A-Z]+\]$/
+
+/**
+ * Parents read the report sections, so other students appear as 同學 and
+ * contact details stay as tokens for the teacher to edit; the internal
+ * teaching suggestions keep the full restore map.
+ */
+export function parentSectionMap(context: Pick<PreparedContext, 'map' | 'facts'>): PlaceholderMap {
+  const overrides: Record<string, string | null> = {}
+  for (const [token, id] of Object.entries(context.map.knownRefs())) {
+    if (token.startsWith('[學生') && id !== context.facts.studentId) overrides[token] = '同學'
+  }
+  for (const token of context.map.tokens()) if (CONTACT_TOKEN.test(token)) overrides[token] = null
+  return context.map.withOverrides(overrides)
 }
 
 /** Rebuild a restore map for a stored generation from its known entity refs. */

@@ -50,3 +50,10 @@ describe('assessReportContext', () => {
     })).toEqual([])
   })
 })
+
+describe('course line', () => {
+  it('does not repeat subject and stage already in the display name', () => {
+    const built = buildReportPrompt({ ...base, courseName: 'Scratch 程式設計 階段 2', subject: 'Scratch 程式設計', stage: '階段 2' }, { tone: 'warm', length: 'short' })
+    expect(built.prompt).toContain('課程：Scratch 程式設計 階段 2\n')
+  })
+})

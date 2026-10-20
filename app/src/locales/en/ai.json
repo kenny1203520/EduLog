@@ -40,7 +40,7 @@
     "result_title": "Result",
     "previous_version": "Previous version",
     "next_version": "Next version",
-    "unresolved": "Some codes could not be restored: {tokens}. Please edit them by hand.",
+    "unresolved": "Some codes were not restored: {tokens}. They are contact details (kept out of parent reports) or names that could not be matched; please edit them by hand.",
     "insert": "Insert",
     "copy": "Copy",
     "copied": "Copied",

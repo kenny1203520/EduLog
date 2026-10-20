@@ -31,6 +31,12 @@ export interface StreamReportDraftOptions {
   model: LanguageModel
   prompt: BuiltPrompt
   map: PlaceholderMap
+  /**
+   * Restore map for the parent-facing sections, when they must differ from
+   * the internal suggestions (classmates as 同學, contact details unrestored).
+   * Defaults to `map`.
+   */
+  sectionMap?: PlaceholderMap
   signal?: AbortSignal
   /** Called with restored partial drafts while the model streams. */
   onPartial?: (draft: DeepPartialDraft) => void
@@ -44,6 +50,7 @@ export interface DeepPartialDraft {
 /** Stream a structured report draft from the model and restore placeholders. */
 export async function streamReportDraft(options: StreamReportDraftOptions): Promise<ReportDraftResult> {
   const { model, prompt, map, signal, onPartial } = options
+  const sectionMap = options.sectionMap ?? map
   const result = streamText({
     model,
     system: prompt.system,
@@ -55,19 +62,19 @@ export async function streamReportDraft(options: StreamReportDraftOptions): Prom
   })
 
   for await (const partial of result.partialOutputStream) {
-    onPartial?.(restorePartial(partial as DeepPartialDraft, map))
+    onPartial?.(restorePartial(partial as DeepPartialDraft, sectionMap, map))
   }
 
   const sanitized = normalizeDraft(await result.output)
   const unresolved = new Set<string>()
-  const restoreText = (text: string) => {
-    const restored = map.restore(text)
+  const restoreWith = (restoreMap: PlaceholderMap) => (text: string) => {
+    const restored = restoreMap.restore(text)
     restored.unresolved.forEach((fragment) => unresolved.add(fragment))
     return restored.text
   }
   const restored: ReportDraft = {
-    sections: sanitized.sections.map((section) => ({ ...section, title: restoreText(section.title), body: restoreText(section.body) })),
-    teachingSuggestions: sanitized.teachingSuggestions.map(restoreText),
+    sections: sanitized.sections.map((section) => ({ ...section, title: restoreWith(sectionMap)(section.title), body: restoreWith(sectionMap)(section.body) })),
+    teachingSuggestions: sanitized.teachingSuggestions.map(restoreWith(map)),
   }
   return { sanitized, restored, unresolved: [...unresolved], usage: await result.usage }
 }
@@ -84,12 +91,12 @@ export function normalizeDraft(draft: ReportDraft): ReportDraft {
   }
 }
 
-function restorePartial(partial: DeepPartialDraft, map: PlaceholderMap): DeepPartialDraft {
+function restorePartial(partial: DeepPartialDraft, sectionMap: PlaceholderMap, map: PlaceholderMap): DeepPartialDraft {
   return {
     sections: partial.sections?.map((section) => section && {
       key: section.key,
-      title: section.title === undefined ? undefined : map.restoreStreaming(section.title),
-      body: section.body === undefined ? undefined : map.restoreStreaming(section.body),
+      title: section.title === undefined ? undefined : sectionMap.restoreStreaming(section.title),
+      body: section.body === undefined ? undefined : sectionMap.restoreStreaming(section.body),
     }),
     teachingSuggestions: partial.teachingSuggestions?.map((text) => text === undefined ? undefined : map.restoreStreaming(text)),
   }

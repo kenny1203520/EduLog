@@ -40,7 +40,7 @@
     "result_title": "生成結果",
     "previous_version": "上一個版本",
     "next_version": "下一個版本",
-    "unresolved": "內容中有無法還原的代號：{tokens}，請手動修改。",
+    "unresolved": "內容中有未還原的代號：{tokens}。可能是聯絡資料（不會放進家長報告）或無法對應的名稱，請手動修改。",
     "insert": "插入",
     "copy": "複製",
     "copied": "已複製",

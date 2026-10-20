@@ -83,6 +83,20 @@ export class PlaceholderMap {
     return refs
   }
 
+  /**
+   * A restore-only copy with some tokens shown differently: a string replaces
+   * the display text, `null` leaves the token unrestored (e.g. contact details
+   * that must not reach a parent-facing report).
+   */
+  withOverrides(overrides: Record<string, string | null>): PlaceholderMap {
+    const map = PlaceholderMap.fromDisplays(Object.fromEntries(this.displayByToken))
+    for (const [token, display] of Object.entries(overrides)) {
+      if (display === null) map.displayByToken.delete(token)
+      else map.displayByToken.set(token, display)
+    }
+    return map
+  }
+
   get size(): number {
     return this.displayByToken.size
   }

@@ -382,7 +382,7 @@
                 @change="handleTextEditorChange('contactNotes', $event)"
                 @activity="handleCollaborationActivity('contactNotes', $event)" />
             <!-- Fallback standard editor if ydoc not ready -->
-            <TextEditor v-else :key="'plain-contact-notes'" v-model="contactNotesEditorValue" preset="notes" :disabled="props.disabled"
+            <TextEditor v-else :key="'plain-contact-notes'" ref="contactNotesEditorRef" v-model="contactNotesEditorValue" preset="notes" :disabled="props.disabled"
                 :formatting-enabled="preferences.editorSettings.formattingEnabled"
                 :toolbar-visible="preferences.editorSettings.toolbarVisible"
                 :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
@@ -421,7 +421,7 @@
                 :placeholder="$t('report.editor.class_notes_placeholder')"
                 @change="handleTextEditorChange('classNotes', $event)"
                 @activity="handleCollaborationActivity('classNotes', $event)" />
-            <TextEditor v-else :key="'plain-class-notes'" v-model="classNotesEditorValue" preset="notes" :disabled="props.disabled"
+            <TextEditor v-else :key="'plain-class-notes'" ref="classNotesEditorRef" v-model="classNotesEditorValue" preset="notes" :disabled="props.disabled"
                 :formatting-enabled="preferences.editorSettings.formattingEnabled"
                 :toolbar-visible="preferences.editorSettings.toolbarVisible"
                 :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
@@ -482,7 +482,7 @@
                 :placeholder="props.placeholder || $t('report.editor.learning_report_placeholder')"
                 @change="handleTextEditorChange('content', $event)"
                 @activity="handleCollaborationActivity('content', $event)" />
-            <TextEditor v-else :key="'plain-content'" v-model="contentEditorValue" preset="report"
+            <TextEditor v-else :key="'plain-content'" ref="contentEditorRef" v-model="contentEditorValue" preset="report"
                 :placeholder="props.placeholder || $t('report.editor.learning_report_placeholder')"
                 :disabled="props.disabled"
                 :formatting-enabled="preferences.editorSettings.formattingEnabled"
