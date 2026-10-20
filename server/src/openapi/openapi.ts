@@ -31,7 +31,7 @@ function fieldSchema(field: string) {
   if (field === 'source_admission_id' || field === 'source_report_id') return { type: ['string', 'null'], pattern: '^[0-9]+$', description: 'Read-only numeric identifier of the imported source report' }
   if (field.endsWith('_id') || field === 'id') return { type: 'string', format: 'uuid' }
   if (['course_ids', 'teacher_ids', 'classroom_ids', 'class_session_ids'].includes(field)) return { type: 'array', items: { type: 'string', format: 'uuid' } }
-  if (['teacher_attendance', 'editor_settings', 'content_document', 'notes_document', 'bio_document', 'contact_notes_document', 'class_notes_document', 'description_document', 'template_document', 'snapshot'].includes(field)) return { type: 'object' }
+  if (['teacher_attendance', 'editor_settings', 'ai_settings', 'content_document', 'notes_document', 'bio_document', 'contact_notes_document', 'class_notes_document', 'description_document', 'template_document', 'snapshot'].includes(field)) return { type: 'object' }
   if (field.endsWith('_date') || field.endsWith('_at') || field === 'birthday') return { type: 'string', format: field.endsWith('_at') ? 'date-time' : 'date' }
   if (['is_completed', 'active', 'enabled', 'is_hidden', 'is_conducted'].includes(field)) return { type: 'boolean' }
   if (['sequence', 'lesson_number', 'capacity', 'sort_order', 'version', 'day_of_week', 'day_of_month'].includes(field)) return { type: 'integer' }

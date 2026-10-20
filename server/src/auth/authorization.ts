@@ -5,6 +5,19 @@ import { setAuditContext } from '../http/context.js'
 
 type ScopeKind = NonNullable<ResourceDefinition['scope']>
 
+/**
+ * Permission keys of the AI report assistant (seeded by
+ * 1000149_ai_report_assist.sql). `generate` is a teaching permission held by
+ * teachers by default; `manage` and `logsViewAll` are system permissions.
+ */
+export const AI_PERMISSIONS = {
+  generate: 'teaching.ai.generate',
+  manage: 'system.ai.manage',
+  logsViewAll: 'system.ai.logs.view_all',
+} as const
+
+export type AiPermission = typeof AI_PERMISSIONS[keyof typeof AI_PERMISSIONS]
+
 function permissionFor(def: ResourceDefinition, action: string) {
   return def.permissions?.[action as keyof NonNullable<ResourceDefinition['permissions']>]
     ?? `${def.permission.slice(0, def.permission.lastIndexOf('.') + 1)}${action}`
