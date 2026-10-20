@@ -442,11 +442,26 @@
                     <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.learning_report_subtitle')
                         }}</span>
                 </span>
-                <span v-if="wordCount > 0" class="text-xs text-gray-500">
-                    {{ wordCount }} {{ $t('report.editor.word_count') }} · {{ characterCount }} {{
-                        $t('report.editor.character_count') }}
+                <span class="flex items-center gap-3">
+                    <span v-if="wordCount > 0" class="text-xs text-gray-500">
+                        {{ wordCount }} {{ $t('report.editor.word_count') }} · {{ characterCount }} {{
+                            $t('report.editor.character_count') }}
+                    </span>
+                    <button v-if="!props.disabled" type="button" data-testid="ai-panel-open"
+                        :disabled="!props.reportId"
+                        :title="props.reportId ? $t('ai.open_button_hint') : $t('ai.open_button_disabled')"
+                        class="inline-flex min-h-[36px] cursor-pointer items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-700 transition-colors duration-200 hover:bg-emerald-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
+                        @click.prevent="showAiPanel = true">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                        </svg>
+                        {{ $t('ai.open_button') }}
+                    </button>
                 </span>
             </label>
+            <div class="rounded-lg transition-shadow duration-700 motion-reduce:transition-none"
+                :class="aiInsertFlash ? 'ring-2 ring-emerald-400 ring-offset-2' : ''">
             <CollaborativeTextEditor
                 :key="'collab-content'"
                 ref="contentEditorRef"
@@ -475,6 +490,7 @@
                 :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
                 :font-scale="preferences.editorFontScale" :min-height="300" mono
                 @change="handleTextEditorChange('content', $event)" />
+            </div>
         </div>
 
         <!-- Error Display -->
@@ -496,6 +512,11 @@
             :focused-lesson-title="focusedProgressReport?.lesson.title" :focused-course-name="props.courseDisplayName || props.courseName"
             :focused-student-name="props.initialStudentName"
             @copy="handleCopyContent" />
+
+        <AiReportPanel :show="showAiPanel" :report-id="props.reportId"
+            :templates="savedTemplates.map(t => ({ id: t.id, name: t.name }))"
+            :has-content="Boolean(localContent?.trim())" :before-generate="flushBeforeAi"
+            @close="showAiPanel = false" @insert="handleAiInsert" @replace="handleAiReplace" />
 
         <ConfirmModal :is-open="confirmState.isOpen" :title="confirmState.title" :message="confirmState.message"
             :confirm-text="confirmState.confirmText" :is-dangerous="confirmState.isDangerous"
@@ -685,6 +706,7 @@ import { createEditorNotifier, type EditorNotification } from '@/components/comm
 import { DEFAULT_EDITOR_USER_SETTINGS, normalizeEditorUserSettings, type EditorUserSettings } from '@/components/common/text-editor/settings'
 import CopyTemplateEditorModal from '@/components/common/CopyTemplateEditorModal.vue'
 import ReportReferencePanel from '@/components/ReportReferencePanel.vue'
+import AiReportPanel from '@/components/report-ai/AiReportPanel.vue'
 import ReportVersionHistoryModal from '@/components/ReportVersionHistoryModal.vue'
 import { ReportTemplateService } from '@/services/report/ReportTemplateService'
 import { CopyTemplateService, type CopyTemplateLoadOption } from '@/services/copy_template/CopyTemplateService'
@@ -924,6 +946,45 @@ const handleCopyContent = (text: string) => {
         localContent.value = current + (current ? '\n\n' : '') + text
         handleInput()
     }
+}
+
+const showAiPanel = ref(false)
+const aiInsertFlash = ref(false)
+let aiFlashTimer: ReturnType<typeof setTimeout> | undefined
+
+/** Brief visual cue that AI text landed in the report; nothing is stored in the document. */
+function flashAiInsert() {
+    aiInsertFlash.value = true
+    clearTimeout(aiFlashTimer)
+    aiFlashTimer = setTimeout(() => { aiInsertFlash.value = false }, 1000)
+}
+
+/** Insert AI text at the cursor (or append when the rich editor is not ready). */
+function handleAiInsert(text: string) {
+    if (!text) return
+    if (isTextEditorHandle(contentEditorRef.value)) {
+        const editor = contentEditorRef.value
+        editor.insertText((editor.getText() ? '\n\n' : '') + text)
+    } else {
+        handleCopyContent(text)
+    }
+    flashAiInsert()
+}
+
+function handleAiReplace(text: string) {
+    if (isTextEditorHandle(contentEditorRef.value)) {
+        contentEditorRef.value.replaceText(text, { emitChange: true })
+    } else {
+        localContent.value = text
+        handleInput()
+    }
+    flashAiInsert()
+}
+
+/** The server reads notes from the database, so unsaved edits are saved first. */
+async function flushBeforeAi(): Promise<boolean> {
+    if (!hasUnsavedChanges.value) return true
+    return saveNow({ reason: 'manual' })
 }
 
 async function loadTemplates() {

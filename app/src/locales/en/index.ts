@@ -16,6 +16,7 @@ import settings from './settings.json'
 import editor from './editor.json'
 import errors from './errors.json'
 import rbac from './rbac.json'
+import ai from './ai.json'
 
 export default {
   nav,
@@ -35,5 +36,6 @@ export default {
   settings,
   editor,
   errors,
-  rbac
+  rbac,
+  ai
 }
