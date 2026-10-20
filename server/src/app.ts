@@ -27,6 +27,7 @@ import { createTeacherAssignmentRouter } from './routes/rest/teacherAssignmentRo
 import { createTeacherAccountLinkRouter } from './routes/rest/teacherAccountLinkRouter.js'
 import { createDomainRouter } from './routes/rest/domainRouter.js'
 import { createExtensionIntegrationRouter } from './routes/extension/extensionIntegrationRouter.js'
+import { createAiReportAssistRouter, defaultAiReportAssistDeps } from './routes/rest/aiReportAssistRouter.js'
 
 const LOCAL_DEVELOPMENT_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://[::1]:5173']
 
@@ -79,6 +80,7 @@ export function createApp(env: NodeJS.ProcessEnv = process.env) {
   protectedApi.use(createRbacRouter())
   protectedApi.use(createEnrollmentRouter())
   protectedApi.use(createReportRouter())
+  protectedApi.use(createAiReportAssistRouter(defaultAiReportAssistDeps(config)))
   protectedApi.use(createOccurrenceRouter())
   protectedApi.use(createTransferRouter())
   protectedApi.use(createSyncRouter())

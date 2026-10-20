@@ -50,6 +50,8 @@ export async function streamReportDraft(options: StreamReportDraftOptions): Prom
     prompt: prompt.prompt,
     output: Output.object({ schema: ReportDraftSchema }),
     abortSignal: signal,
+    // Errors surface through the awaited promises; skip the SDK's console logging.
+    onError: () => {},
   })
 
   for await (const partial of result.partialOutputStream) {

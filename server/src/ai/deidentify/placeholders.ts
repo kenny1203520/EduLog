@@ -43,7 +43,15 @@ export interface RestoreResult {
 export class PlaceholderMap {
   private readonly tokenByKey = new Map<string, string>()
   private readonly displayByToken = new Map<string, string>()
+  private readonly keyByToken = new Map<string, string>()
   private readonly counters = new Map<PlaceholderKind, number>()
+
+  /** Rebuild a restore-only map, e.g. from {@link knownRefs} and current names when showing a stored log. */
+  static fromDisplays(displays: Record<string, string>): PlaceholderMap {
+    const map = new PlaceholderMap()
+    for (const [token, display] of Object.entries(displays)) map.displayByToken.set(token, display)
+    return map
+  }
 
   /**
    * Return the token for an entity, creating it on first use.
@@ -60,7 +68,19 @@ export class PlaceholderMap {
     const token = `[${PLACEHOLDER_LABELS[kind]}${placeholderSuffix(index)}]`
     this.tokenByKey.set(mapKey, token)
     this.displayByToken.set(token, display)
+    this.keyByToken.set(token, key)
     return token
+  }
+
+  /**
+   * Token → key for entries whose key starts with `prefix` (known entities use
+   * `known:<id>`). Ids are not personal data, so this may be logged and used
+   * later to restore stored output by looking the names up again.
+   */
+  knownRefs(prefix = 'known:'): Record<string, string> {
+    const refs: Record<string, string> = {}
+    for (const [token, key] of this.keyByToken) if (key.startsWith(prefix)) refs[token] = key.slice(prefix.length)
+    return refs
   }
 
   get size(): number {
