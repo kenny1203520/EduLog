@@ -69,7 +69,8 @@ onMounted(() => { void loadUsage(); void loadLog() })
                     <dd class="text-xs text-gray-600">{{ t('ai.settings.usage_tokens_split', { input: n(report.totals.tokensIn, 'decimal'), output: n(report.totals.tokensOut, 'decimal') }) }}</dd></div>
                 <div class="rounded-2xl bg-gray-50 p-4"><dt class="text-xs font-bold text-gray-600">{{ t('ai.settings.usage_cost') }}</dt>
                     <dd class="mt-1 text-2xl font-black tabular-nums text-gray-900">{{ money(report.totals.estCost) }}</dd>
-                    <dd class="text-xs text-gray-600">{{ t('ai.settings.usage_quota_charged', { n: report.totals.quotaCharged }) }}</dd></div>
+                    <dd class="text-xs text-gray-600">{{ t('ai.settings.usage_quota_charged', { n: report.totals.quotaCharged }) }}</dd>
+                    <dd v-if="report.totals.unpricedGenerations" class="mt-1 text-xs font-bold text-amber-800">{{ t('ai.settings.usage_unpriced', { n: report.totals.unpricedGenerations }) }}</dd></div>
                 <div class="rounded-2xl bg-gray-50 p-4"><dt class="text-xs font-bold text-gray-600">{{ t('ai.settings.usage_adoption') }}</dt>
                     <dd class="mt-1 text-2xl font-black tabular-nums text-gray-900">{{ percent(report.totals.adoptionRate) }}</dd>
                     <dd class="text-xs text-gray-600">{{ t('ai.settings.usage_similarity', { value: percent(report.totals.avgFinalSimilarity) }) }}</dd></div>

@@ -247,6 +247,23 @@
     "chatgpt_description": "用你自己 ChatGPT 方案的額度產生報告，不扣站台額度。可在 ChatGPT 設定裡為本站設定每週上限。內容一樣會先去識別化後才送出。",
     "chatgpt_connect": "連接 ChatGPT",
     "chatgpt_connected": "已連接 ChatGPT，請在下方加入要使用的模型。",
-    "gemini_note": "Google 不提供用 Gemini 訂閱額度登入第三方網站的方式；要用 Gemini，請貼上 Gemini API 金鑰或透過 OpenRouter。"
+    "gemini_note": "Google 不提供用 Gemini 訂閱額度登入第三方網站的方式；要用 Gemini，請貼上 Gemini API 金鑰或透過 OpenRouter。",
+    "edit_model": "編輯模型「{name}」",
+    "model_id_fixed": "模型 ID：{id}（不可修改；要換模型請新增）",
+    "default_badge": "預設",
+    "unpriced": "未設價格",
+    "free": "免費",
+    "set_free": "設為免費",
+    "set_default": "設為預設",
+    "price_hint": "價格是美元／每百萬 token。留空代表未知（不計入成本統計），本機模型請設為免費（0）。",
+    "picker_placeholder": "從供應商清單選擇模型",
+    "picker_other": "其他（手動輸入模型 ID）",
+    "picker_price": "輸入 ${input}／輸出 ${output}（每百萬 token）",
+    "picker_no_results": "清單中找不到，請選「其他」手動輸入",
+    "picker_refresh": "重新取得模型清單",
+    "picker_show_all": "顯示全部（含 {n} 個非文字模型）",
+    "picker_manual_chatgpt": "ChatGPT 方案沒有提供模型清單，請手動輸入模型 ID。",
+    "picker_manual_unavailable": "暫時取不到這個來源的模型清單，請手動輸入模型 ID。",
+    "usage_unpriced": "另有 {n} 次使用未設價格的模型，未計入成本"
   }
 }

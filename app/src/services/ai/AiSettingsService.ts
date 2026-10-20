@@ -6,6 +6,17 @@ export type AiProvider = 'anthropic' | 'openai' | 'google' | 'openrouter' | 'oll
 export const PERSONAL_PROVIDERS: AiProvider[] = ['anthropic', 'openai', 'google', 'openrouter']
 export const SITE_PROVIDERS: AiProvider[] = ['anthropic', 'openai', 'google', 'openrouter', 'ollama']
 
+/** A model offered by the provider's own list (see server/src/ai/providers/modelCatalog.ts). */
+export interface CatalogModel {
+    id: string
+    name: string
+    textCapable: boolean
+    priceInputPerMtok?: number
+    priceOutputPerMtok?: number
+}
+
+export type ModelCatalog = { supported: true, models: CatalogModel[], fetchedAt: string } | { supported: false, reason: string }
+
 export interface AiModelDTO {
     id: string
     credential_id: string
@@ -67,6 +78,8 @@ export interface UsageBucket {
     tokensIn: number
     tokensOut: number
     estCost: number
+    /** Succeeded generations on unpriced models, left out of estCost. */
+    unpricedGenerations: number
     quotaCharged: number
     adopted: number
     adoptionRate: number | null
@@ -124,6 +137,12 @@ export const AiSettingsService = {
         return (await apiV1Client.post<AiModelDTO>(`/ai/me/credentials/${credentialId}/models`, input)).data
     },
     async deleteMyModel(id: string) { await apiV1Client.delete(`/ai/me/models/${id}`) },
+    async updateMyModel(id: string, patch: { display_name?: string, enabled?: boolean }) { return (await apiV1Client.patch<AiModelDTO>(`/ai/me/models/${id}`, patch)).data },
+    /** Provider model list for a credential; `scope` picks the personal or site route. */
+    async catalog(scope: 'personal' | 'site', credentialId: string, refresh = false) {
+        const base = scope === 'site' ? '/ai/admin/credentials' : '/ai/me/credentials'
+        return (await apiV1Client.get<ModelCatalog>(`${base}/${credentialId}/catalog${refresh ? '?refresh=1' : ''}`)).data
+    },
     async testMyCredential(id: string, modelId: string) {
         return (await apiV1Client.post<{ ok: boolean, error: string | null }>(`/ai/me/credentials/${id}/test`, { model_id: modelId })).data
     },

@@ -101,23 +101,39 @@ export async function updateCredential(db: Db, cipher: SecretCipher | null, id: 
   return result.data
 }
 
+/** Bearer token for credentials that store no plain API key (see ReportGenerationDeps.resolveToken). */
+export type TokenResolver = (credential: { provider: string, authType: string, credentialId: string }) => Promise<string | undefined>
+
+export interface UsableCredential {
+  id: string
+  provider: AiProvider
+  authType: 'api_key' | 'oauth' | 'none'
+  baseUrl: string | null
+  apiKey: string | undefined
+}
+
+/** Load a credential and turn its stored secret into something a provider call can use. */
+export async function loadUsableCredential(db: Db, cipher: SecretCipher | null, credentialId: string, resolveToken?: TokenResolver): Promise<UsableCredential> {
+  const row = await db.from('ai_credentials').select('id,provider,auth_type,secret_ciphertext,base_url').eq('id', credentialId).maybeSingle()
+  if (row.error) throw mapDatabaseError(row.error)
+  if (!row.data) throw new ApiError(404, 'NOT_FOUND', 'Credential was not found')
+  const token = await resolveToken?.({ provider: row.data.provider, authType: row.data.auth_type, credentialId })
+  const apiKey = token ?? (row.data.auth_type === 'none' || !row.data.secret_ciphertext
+    ? undefined
+    : requireCipher(cipher).decrypt(row.data.secret_ciphertext, credentialAssociatedData(credentialId)))
+  return { id: credentialId, provider: row.data.provider, authType: row.data.auth_type, baseUrl: row.data.base_url ?? null, apiKey }
+}
+
 /**
  * Send a tiny fixed prompt (no student data) to check that a credential and
  * model work, and record the outcome on the credential.
  */
 export async function testCredential(db: Db, cipher: SecretCipher | null, credentialId: string, modelId: string, options: {
   createModel?: (target: ModelTarget) => LanguageModel
-  /** Bearer token for credentials that store no plain API key (see ReportGenerationDeps.resolveToken). */
-  resolveToken?: (credential: { provider: string, authType: string, credentialId: string }) => Promise<string | undefined>
+  resolveToken?: TokenResolver
 } = {}) {
-  const row = await db.from('ai_credentials').select('id,provider,auth_type,secret_ciphertext,base_url').eq('id', credentialId).maybeSingle()
-  if (row.error) throw mapDatabaseError(row.error)
-  if (!row.data) throw new ApiError(404, 'NOT_FOUND', 'Credential was not found')
-  const token = await options.resolveToken?.({ provider: row.data.provider, authType: row.data.auth_type, credentialId })
-  const apiKey = token ?? (row.data.auth_type === 'none' || !row.data.secret_ciphertext
-    ? undefined
-    : requireCipher(cipher).decrypt(row.data.secret_ciphertext, credentialAssociatedData(credentialId)))
-  const model = (options.createModel ?? createLanguageModel)({ provider: row.data.provider, modelId, apiKey, baseUrl: row.data.base_url ?? undefined })
+  const credential = await loadUsableCredential(db, cipher, credentialId, options.resolveToken)
+  const model = (options.createModel ?? createLanguageModel)({ provider: credential.provider, modelId, apiKey: credential.apiKey, baseUrl: credential.baseUrl ?? undefined })
   let ok = false
   let errorName: string | null = null
   try {

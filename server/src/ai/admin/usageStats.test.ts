@@ -19,7 +19,7 @@ describe('aggregateUsage', () => {
       { generation_id: 'g2', final_similarity: 0.5 },
     ])
 
-    expect(report.totals).toMatchObject({ generations: 4, succeeded: 3, failed: 1, tokensIn: 300, tokensOut: 150, estCost: 0.002, quotaCharged: 2, adopted: 2 })
+    expect(report.totals).toMatchObject({ generations: 4, succeeded: 3, failed: 1, tokensIn: 300, tokensOut: 150, estCost: 0.002, unpricedGenerations: 1, quotaCharged: 2, adopted: 2 })
     expect(report.totals.adoptionRate).toBeCloseTo(2 / 3)
     expect(report.totals.avgFinalSimilarity).toBeCloseTo(0.7)
     expect(report.byUser.map((bucket) => [bucket.key, bucket.generations, bucket.adopted])).toEqual([['u1', 3, 1], ['u2', 1, 1]])

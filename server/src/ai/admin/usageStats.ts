@@ -28,6 +28,8 @@ export interface UsageBucket {
   tokensOut: number
   estCost: number
   quotaCharged: number
+  /** Succeeded generations whose model has no price, so estCost leaves them out. */
+  unpricedGenerations: number
   /** Succeeded generations with at least one adopted section. */
   adopted: number
   adoptionRate: number | null
@@ -44,7 +46,7 @@ export interface UsageReport {
 const toNumber = (value: number | string | null | undefined) => (value == null || value === '' ? 0 : Number(value))
 
 function emptyBucket(key: string): UsageBucket & { similaritySum: number, similarityCount: number } {
-  return { key, generations: 0, succeeded: 0, failed: 0, cancelled: 0, tokensIn: 0, tokensOut: 0, estCost: 0, quotaCharged: 0, adopted: 0, adoptionRate: null, avgFinalSimilarity: null, similaritySum: 0, similarityCount: 0 }
+  return { key, generations: 0, succeeded: 0, failed: 0, cancelled: 0, tokensIn: 0, tokensOut: 0, estCost: 0, unpricedGenerations: 0, quotaCharged: 0, adopted: 0, adoptionRate: null, avgFinalSimilarity: null, similaritySum: 0, similarityCount: 0 }
 }
 
 export function aggregateUsage(generations: UsageGenerationRow[], adoptions: UsageAdoptionRow[]): UsageReport {
@@ -72,7 +74,12 @@ export function aggregateUsage(generations: UsageGenerationRow[], adoptions: Usa
       bucket[row.status] += 1
       bucket.tokensIn += row.tokens_in ?? 0
       bucket.tokensOut += row.tokens_out ?? 0
-      bucket.estCost += toNumber(row.est_cost)
+      // A missing price means unknown cost, not free: count it separately instead of adding 0.
+      if (row.est_cost == null || row.est_cost === '') {
+        if (row.status === 'succeeded') bucket.unpricedGenerations += 1
+      } else {
+        bucket.estCost += toNumber(row.est_cost)
+      }
       bucket.quotaCharged += toNumber(row.quota_charged)
       if (row.status === 'succeeded' && similarities) {
         bucket.adopted += 1

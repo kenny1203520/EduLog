@@ -12,8 +12,10 @@ import {
   modelInput,
   personalCredentialInput,
   testCredential,
+  loadUsableCredential,
   updateCredential,
 } from '../../ai/credentials/credentialStore.js'
+import { fetchModelCatalog, sharedModelCatalogCache } from '../../ai/providers/modelCatalog.js'
 import {
   buildAuthorizationUrl,
   createPkcePair,
@@ -32,6 +34,7 @@ import { isChatGptPlanCredential, sharedChatGptPlanTokens, type ChatGptPlanToken
 
 const uuid = z.string().uuid()
 const personalModelInput = modelInput.pick({ model_id: true, display_name: true, enabled: true }).strict()
+const personalModelPatch = modelInput.pick({ display_name: true, enabled: true }).partial().strict()
 const testInput = z.object({ model_id: z.string().trim().min(1).max(200) }).strict()
 const exchangeInput = z.object({ code: z.string().trim().min(1).max(2048) }).strict()
 const chatgptExchangeInput = z.object({ code: z.string().trim().min(1).max(4096), state: z.string().trim().min(1).max(200) }).strict()
@@ -123,6 +126,7 @@ export function createAiMeRouter(
     const input = credentialPatchInput.omit({ base_url: true }).strict().parse(req.body)
     await ownCredential(req, id)
     setAuditContext(req, { domain: 'teaching', resource: 'ai_credentials', resourceId: id, action: 'update' })
+    sharedModelCatalogCache.forget(id)
     return res.json(envelope(req, await updateCredential(req.adminDb!, cipher, id, input)))
   }))
 
@@ -134,7 +138,20 @@ export function createAiMeRouter(
     const result = await req.adminDb!.from('ai_credentials').delete().eq('id', id)
     if (result.error) throw mapDatabaseError(result.error)
     chatgptTokens?.forget(id)
+    sharedModelCatalogCache.forget(id)
     return res.json(envelope(req, { id, deleted: true }))
+  }))
+
+  /** Models this credential can use (cached an hour; ?refresh=1 to reload). ChatGPT plans fall back to manual entry. */
+  router.get('/ai/me/credentials/:id/catalog', wrap(async (req, res) => {
+    userOf(req)
+    const id = idParam(req)
+    await ownCredential(req, id)
+    const catalog = await sharedModelCatalogCache.get(id, req.query.refresh === '1', async () => {
+      const credential = await loadUsableCredential(req.adminDb!, cipher, id)
+      return fetchModelCatalog({ provider: credential.provider, authType: credential.authType, apiKey: credential.apiKey, baseUrl: credential.baseUrl })
+    })
+    return res.json(envelope(req, catalog))
   }))
 
   router.post('/ai/me/credentials/:id/models', wrap(async (req, res) => {
@@ -146,6 +163,20 @@ export function createAiMeRouter(
     const result = await req.adminDb!.from('ai_models').insert({ credential_id: id, model_id: input.model_id, display_name: input.display_name, enabled: input.enabled ?? true, quota_weight: 0 }).select(MODEL_FIELDS).single()
     if (result.error) throw mapDatabaseError(result.error)
     return res.status(201).json(envelope(req, result.data))
+  }))
+
+  router.patch('/ai/me/models/:id', wrap(async (req, res) => {
+    userOf(req)
+    const id = idParam(req)
+    const input = personalModelPatch.parse(req.body)
+    const model = await req.adminDb!.from('ai_models').select('id,credential_id').eq('id', id).maybeSingle()
+    if (model.error) throw mapDatabaseError(model.error)
+    if (!model.data) throw new ApiError(404, 'NOT_FOUND', 'Model was not found')
+    await ownCredential(req, model.data.credential_id)
+    setAuditContext(req, { domain: 'teaching', resource: 'ai_models', resourceId: id, action: 'update' })
+    const saved = await req.adminDb!.from('ai_models').update(input).eq('id', id).select(MODEL_FIELDS).single()
+    if (saved.error) throw mapDatabaseError(saved.error)
+    return res.json(envelope(req, saved.data))
   }))
 
   router.delete('/ai/me/models/:id', wrap(async (req, res) => {

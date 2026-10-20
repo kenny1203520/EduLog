@@ -247,6 +247,23 @@
     "chatgpt_description": "Generate reports on your own ChatGPT plan allowance instead of the site quota. You can set a weekly limit for this site in ChatGPT settings. Content is still de-identified before it is sent.",
     "chatgpt_connect": "Connect ChatGPT",
     "chatgpt_connected": "ChatGPT connected. Add the models you want to use below.",
-    "gemini_note": "Google offers no way to sign in to other sites with a Gemini subscription; to use Gemini, add a Gemini API key or use OpenRouter."
+    "gemini_note": "Google offers no way to sign in to other sites with a Gemini subscription; to use Gemini, add a Gemini API key or use OpenRouter.",
+    "edit_model": "Edit model \"{name}\"",
+    "model_id_fixed": "Model ID: {id} (cannot change; add a new model instead)",
+    "default_badge": "Default",
+    "unpriced": "No price",
+    "free": "Free",
+    "set_free": "Mark free",
+    "set_default": "Make default",
+    "price_hint": "Prices are USD per million tokens. Leave empty for unknown (left out of cost totals); mark local models as free (0).",
+    "picker_placeholder": "Choose a model from the provider's list",
+    "picker_other": "Other (type a model ID)",
+    "picker_price": "in ${input} / out ${output} per million tokens",
+    "picker_no_results": "Not in the list; choose Other to type it",
+    "picker_refresh": "Reload the model list",
+    "picker_show_all": "Show all (including {n} non-text models)",
+    "picker_manual_chatgpt": "ChatGPT plans don't publish a model list; type the model ID.",
+    "picker_manual_unavailable": "The model list for this source isn't available right now; type the model ID.",
+    "usage_unpriced": "{n} more generations used unpriced models and are not in the cost"
   }
 }
