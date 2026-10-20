@@ -5,6 +5,8 @@ dist-ssr
 *.local
 .npmrc
 .env
+.env.*
+!.env.example
 ssl
 ssl/*
 extension/tests/artifacts/
