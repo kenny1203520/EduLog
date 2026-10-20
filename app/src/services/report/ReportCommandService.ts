@@ -202,6 +202,23 @@ function timeoutResult(message = 'Report save request timed out'): SaveReportRes
     return { success: false, conflict: false, errorCode: 'request_timeout', message, messageKey: 'errors.request_timeout' }
 }
 
+/** Report fields the v1 API accepts in a patch (server `reportPatch`, which rejects any other key). */
+const REPORT_PATCH_FIELDS = [
+    'lesson_id', 'is_completed', 'progress_letter', 'attendance_status', 'absence_reason',
+    'class_participation', 'classroom_behavior', 'contact_notes', 'contact_notes_document',
+    'class_notes', 'class_notes_document', 'content', 'content_document', 'external_link'
+] as const
+
+/** The editable part of a report; ids, version and timestamps are owned by the server. */
+export function toReportPatch(report: OccurrenceReportDTO): Record<string, unknown> {
+    const patch: Record<string, unknown> = {}
+    for (const field of REPORT_PATCH_FIELDS) {
+        const value = (report as unknown as Record<string, unknown>)[field]
+        if (value !== undefined) patch[field] = value
+    }
+    return patch
+}
+
 function unknownOutcomeResult(): SaveReportResult {
     return { success: false, conflict: false, errorCode: 'save_outcome_unknown', message: 'The report save outcome could not be confirmed', messageKey: 'errors.save_outcome_unknown' }
 }
@@ -722,7 +739,7 @@ export class ReportCommandService {
     ): Promise<OccurrenceReport> {
         if (expectedVersion === undefined) throw new Error('expectedVersion is required to resolve a report conflict')
         if (getApiV1Mode() === 'v1') {
-            const response = await apiV1Client.post<any>(`/reports/${encodeURIComponent(reportId)}/conflicts/resolve`, { expected_version: expectedVersion, report: resolvedReport })
+            const response = await apiV1Client.post<any>(`/reports/${encodeURIComponent(reportId)}/conflicts/resolve`, { expected_version: expectedVersion, report: toReportPatch(resolvedReport) })
             return new OccurrenceReport(response.data)
         }
         const { data: current, error: fetchError } = await apiDataClient
