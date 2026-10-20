@@ -83,6 +83,9 @@
                     </svg>
                     {{ $t('report.saving') }}
                 </span>
+                <span v-else-if="saveProblemStatus" :class="saveProblemStatus.className" role="status" data-testid="report-save-problem">
+                    {{ saveProblemStatus.text }}
+                </span>
                 <span v-else-if="lastSaved" class="text-gray-500">
                     {{ getLastSavedString() }}
                 </span>
@@ -104,6 +107,24 @@
                         d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                 </svg>
                 <span class="hidden sm:inline">{{ $t('report.editor.delete_report') }}</span>
+            </button>
+        </div>
+
+        <!-- Unsaved draft kept on this device -->
+        <div v-if="pendingDraftRecovery" class="my-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"
+            role="alert" data-testid="report-draft-recovery">
+            <span class="min-w-0 flex-1">
+                {{ pendingDraftRecovery.action === 'merge'
+                    ? $t('report.editor.draft_recovery.merge_prompt', { time: draftRecoveryTime })
+                    : $t('report.editor.draft_recovery.restore_prompt', { time: draftRecoveryTime }) }}
+            </span>
+            <button type="button" data-testid="report-draft-restore" @click="restoreLocalDraft"
+                class="rounded-md bg-amber-600 px-3 py-1 font-medium text-white hover:bg-amber-700">
+                {{ $t('report.editor.draft_recovery.restore') }}
+            </button>
+            <button type="button" data-testid="report-draft-discard" @click="discardLocalDraft"
+                class="rounded-md px-3 py-1 font-medium text-amber-800 hover:bg-amber-100">
+                {{ $t('report.editor.draft_recovery.discard') }}
             </button>
         </div>
 
@@ -495,7 +516,7 @@
 
         <!-- Error Display -->
         <div v-if="saveError" class="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-            <strong>{{ $t('report.editor.error') }}:</strong> {{ saveError }}
+            <strong>{{ $t('report.editor.error') }}:</strong> {{ saveErrorMessage || saveError }}
         </div>
 
         <!-- Manual Save Button (Optional) -->
@@ -690,9 +711,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, type WatchStopHandle } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, inject, type WatchStopHandle } from 'vue'
+import { onBeforeRouteLeave, routerViewLocationKey } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAutoSave, type AutoSaveErrorContext } from '@/composables/useAutoSave'
+import { classifyDraftRecovery, mergeDraftOntoServer, useReportLocalDraft, type DraftRecoveryAction } from '@/composables/useReportLocalDraft'
+import type { LocalReportDraft } from '@/services/report/LocalDraftStore'
+import { isBrowserOffline, isNetworkError } from '@/utils/networkErrors'
+import { DateUtils } from '@/utils/DateUtils'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { useAuthStore } from '@/stores/useAuthStore'
 import RatingInput from '@/components/common/RatingInput.vue'
@@ -2413,7 +2439,7 @@ const canSave = computed(() => {
     return true
 })
 
-function snapshotToLocalReport(snapshot: ReportDraftSnapshot): OccurrenceReportDTO {
+function snapshotToLocalReport(snapshot: ReportDraftSnapshot, reportVersion = version.value): OccurrenceReportDTO {
     return {
         id: props.reportId,
         enrollment_id: props.enrollmentId || '',
@@ -2432,7 +2458,7 @@ function snapshotToLocalReport(snapshot: ReportDraftSnapshot): OccurrenceReportD
         class_notes: snapshot.classNotes,
         class_notes_document: snapshot.classNotesDocument,
         external_link: snapshot.externalLink,
-        version: version.value,
+        version: reportVersion,
         last_edited_at: new Date().toISOString(),
         last_edited_by: authStore.user?.id,
         created_at: props.initialCreatedAt,
@@ -2454,7 +2480,9 @@ const {
     retry: retrySave,
     drain,
     getLastSavedString,
-    reset
+    reset,
+    errorKind: saveErrorKind,
+    isOnline
 } = useAutoSave<ReportDraftSnapshot, SaveReportResult>({
     enabled: effectiveAutoSaveEnabled,
     debounceMs: computed(() => props.debounceMs ?? preferences.editorSettings.autoSave.debounceMs),
@@ -2529,6 +2557,14 @@ const {
             return result
         } catch (error: any) {
             const message = error.message || 'Failed to save report'
+            if (isNetworkError(error) || isBrowserOffline()) {
+                return {
+                    success: false,
+                    message,
+                    errorCode: 'network_error',
+                    messageKey: isBrowserOffline() ? 'report.editor.save_failed_offline' : 'report.editor.save_failed_network'
+                }
+            }
             return { success: false, message, messageKey: 'errors.unknown' }
         }
     },
@@ -2566,13 +2602,17 @@ const {
         if (updatedReport) {
             emit('save-success', updatedReport)
         }
+        networkFailureNotified = false
+        saveErrorMessage.value = ''
         editorNotifier.notify({ code: 'save-succeeded', level: 'success', message: t('report.save_success'), toast: false })
     },
     onError: (message, result, context?: AutoSaveErrorContext) => {
         emit('save-error', message)
         const errorCode = result?.errorCode
+        const networkFailure = errorCode === 'network_error' || (!result && (isNetworkError(message) || isBrowserOffline()))
         const messageKey = result?.messageKey
-            || (errorCode === 'request_timeout' ? 'errors.request_timeout'
+            || (networkFailure ? (isBrowserOffline() ? 'report.editor.save_failed_offline' : 'report.editor.save_failed_network')
+                : errorCode === 'request_timeout' ? 'errors.request_timeout'
                 : errorCode === 'save_outcome_unknown' ? 'errors.save_outcome_unknown'
                     : errorCode === 'permission_denied' ? 'errors.permission_denied'
                 : errorCode === 'validation_error' ? 'errors.validation_failed'
@@ -2580,6 +2620,13 @@ const {
                             : errorCode === 'conflict' ? 'errors.conflict'
                                 : 'errors.unknown')
         const translated = t(messageKey)
+        saveErrorMessage.value = translated
+        // Network failures retry on their own every few seconds; an error
+        // toast (which never auto-dismisses) per attempt would pile up, so
+        // only the first failure of a streak raises one.
+        const retrying = networkFailure || errorCode === 'request_timeout' || errorCode === 'save_outcome_unknown'
+        const showToast = !(retrying && networkFailureNotified)
+        if (retrying) networkFailureNotified = true
         console.error('Report editor save failed:', {
             reportId: props.reportId,
             revision: context?.revision,
@@ -2593,7 +2640,7 @@ const {
             message: translated,
             dedupeKey: `${props.reportId || 'new'}:${context?.revision ?? 'unknown'}:${errorCode || messageKey}`,
             context: { reportId: props.reportId, revision: context?.revision, errorCode: errorCode || messageKey },
-            toast: true
+            toast: showToast
         })
     }
 
@@ -2764,6 +2811,154 @@ watch(() => props.loading, (newLoading) => {
     }
 })
 
+// Device-local draft: unsaved edits survive a lost connection, a closed tab or
+// a crash. It is deleted as soon as the server has the same content.
+const localDraft = useReportLocalDraft({ userId: () => authStore.user?.id })
+const saveErrorMessage = ref('')
+let networkFailureNotified = false
+type PendingDraftRecovery = { reportId: string; draft: LocalReportDraft; action: Extract<DraftRecoveryAction, 'restore' | 'merge'> }
+const pendingDraftRecovery = ref<PendingDraftRecovery | null>(null)
+const draftRecoveryTime = computed(() => pendingDraftRecovery.value
+    ? DateUtils.displayDateTime(new Date(pendingDraftRecovery.value.draft.updatedAt))
+    : '')
+
+const saveProblemStatus = computed<{ text: string; className: string } | null>(() => {
+    if (!props.reportId) return null
+    if (!isOnline.value && hasUnsavedChanges.value) {
+        return {
+            text: t(localDraft.persisted.value ? 'report.editor.offline_saved_locally' : 'report.editor.offline_unsaved'),
+            className: 'text-amber-600'
+        }
+    }
+    if (saveError.value && saveErrorKind.value === 'network') return { text: t('report.editor.save_failed_retrying'), className: 'text-amber-600' }
+    if (saveError.value) return { text: t('report.editor.save_failed'), className: 'text-red-600' }
+    return null
+})
+
+function persistLocalDraft(snapshot: ReportDraftSnapshot) {
+    if (!props.reportId) return
+    localDraft.schedule(props.reportId, {
+        baseVersion: version.value ?? 0,
+        baseSnapshot: savedReportSnapshot.value,
+        snapshot
+    })
+}
+
+watch(autoSaveStatus, (status) => {
+    if (status === 'saved') void localDraft.discard(props.reportId)
+})
+
+function waitForCollaborationToSettle(timeoutMs = 3000): Promise<void> {
+    if (!effectiveCollaborationEnabled.value || ready.value || isBrowserOffline()) return Promise.resolve()
+    return new Promise((resolve) => {
+        const timer = setTimeout(done, timeoutMs)
+        const stop = watch(ready, (isReady) => { if (isReady) done() })
+        function done() {
+            clearTimeout(timer)
+            stop()
+            // Let the collab seeding and recovered-draft queueing settle first.
+            setTimeout(resolve, 300)
+        }
+    })
+}
+
+let draftCheckedReportId: string | null = null
+async function checkLocalDraft() {
+    const reportId = props.reportId
+    if (!reportId || props.loading || isInitializing.value || draftCheckedReportId === reportId) return
+    draftCheckedReportId = reportId
+    pendingDraftRecovery.value = null
+    const draft = await localDraft.load(reportId)
+    if (!draft || props.reportId !== reportId || reportEditorUnmounted) return
+    await waitForCollaborationToSettle()
+    if (props.reportId !== reportId || reportEditorUnmounted) return
+    syncTextRefsFromEditors()
+    const action = classifyDraftRecovery(
+        draft,
+        { version: version.value ?? 0, snapshot: savedReportSnapshot.value },
+        buildCurrentSnapshot()
+    )
+    if (action === 'discard') {
+        void localDraft.discard(reportId)
+        return
+    }
+    if (action === 'none') return
+    pendingDraftRecovery.value = { reportId, draft, action }
+}
+
+watch([() => props.reportId, () => props.loading, () => isInitializing.value], ([reportId]) => {
+    if (reportId !== draftCheckedReportId) pendingDraftRecovery.value = null
+    if (draftCheckedReportId && reportId !== draftCheckedReportId) draftCheckedReportId = null
+    void checkLocalDraft()
+}, { immediate: true })
+
+function applyDraftSnapshot(snapshot: ReportDraftSnapshot) {
+    const [start = '', end = ''] = (snapshot.progressLetter || '').split('-')
+    selectedLessonId.value = snapshot.lessonId || ''
+    isCompleted.value = snapshot.isCompleted
+    progressStart.value = start
+    progressEnd.value = end
+    if (!canonicalSystemManagedReason()) {
+        attendanceStatus.value = snapshot.attendanceStatus
+        absenceReason.value = normalizeAbsenceReasonCode(snapshot.absenceReason)
+    }
+    classParticipation.value = snapshot.classParticipation
+    classroomBehavior.value = snapshot.classroomBehavior
+    reportExternalLink.value = safeExternalHref(snapshot.externalLink) || ''
+
+    const main = createTextEditorContent(snapshot.contentDocument || snapshot.content || '')
+    const contact = createTextEditorContent(snapshot.contactNotesDocument || snapshot.contactNotes || '')
+    const classNotesContent = createTextEditorContent(snapshot.classNotesDocument || snapshot.classNotes || '')
+    localContent.value = main.plainText
+    contentDocument.value = main.richText
+    contactNotes.value = contact.plainText
+    contactNotesDocument.value = contact.richText
+    classNotes.value = classNotesContent.plainText
+    classNotesDocument.value = classNotesContent.richText
+    setEditorContentSilently(contentEditorRef, main)
+    setEditorContentSilently(contactNotesEditorRef, contact)
+    setEditorContentSilently(classNotesEditorRef, classNotesContent)
+}
+
+function restoreLocalDraft() {
+    const recovery = pendingDraftRecovery.value
+    if (!recovery || recovery.reportId !== props.reportId) return
+    pendingDraftRecovery.value = null
+    const { draft } = recovery
+
+    if (recovery.action === 'restore') {
+        applyDraftSnapshot(draft.snapshot)
+        handleInput()
+        editorNotifier.notify({ code: 'draft-recovered', level: 'success', message: t('report.editor.draft_recovery.restored'), toast: true })
+        return
+    }
+
+    // Someone saved the report after this draft was written: three-way merge
+    // against the draft's own base, and let the user settle real conflicts in
+    // the same ConflictModal used for save conflicts.
+    const serverSnapshot = savedReportSnapshot.value
+    const serverReport: OccurrenceReportDTO = {
+        ...snapshotToLocalReport(serverSnapshot, version.value),
+        last_edited_by: undefined,
+        last_edited_at: undefined
+    }
+    const merge = mergeReportConflict(draft.baseSnapshot, draft.snapshot, serverReport, false)
+    const merged = mergeDraftOntoServer(draft, serverSnapshot)
+    if (merge.conflictFields.length === 0) {
+        applyDraftSnapshot(merged)
+        handleInput()
+        editorNotifier.notify({ code: 'draft-recovered', level: 'success', message: t('report.editor.draft_recovery.merged'), toast: true })
+        return
+    }
+    emit('conflict', serverReport, snapshotToLocalReport(merged, draft.baseVersion))
+}
+
+function discardLocalDraft() {
+    const recovery = pendingDraftRecovery.value
+    pendingDraftRecovery.value = null
+    if (recovery) void localDraft.discard(recovery.reportId)
+}
+
 function handleInput() {
     if (isInitializing.value || isApplyingRemoteCollab) {
         // 如果正在初始化（從 props 同步中），我們不觸發自動儲存
@@ -2775,7 +2970,9 @@ function handleInput() {
     emit('update:report-external-link', reportExternalLink.value)
 
     if (props.reportId) {
-        triggerAutoSave(buildCurrentSnapshot())
+        const snapshot = buildCurrentSnapshot()
+        triggerAutoSave(snapshot)
+        persistLocalDraft(snapshot)
     }
 }
 
@@ -2827,6 +3024,7 @@ function queueRecoveredDraftWhenReady(attempt = 0) {
     if (buildDirtyPayload(recoveredSnapshot).keys.length > 0) {
         emit('update:content', recoveredSnapshot.content)
         triggerAutoSave(recoveredSnapshot)
+        persistLocalDraft(recoveredSnapshot)
     }
 }
 
@@ -2881,6 +3079,11 @@ function replaceWithCanonicalReport(report: OccurrenceReportDTO, notifyParent = 
     if (notifyParent) {
         emit('restored', report)
     }
+
+    // The server copy is now authoritative (conflict resolved or version
+    // restored), so the device-local draft is no longer needed.
+    void localDraft.discard(props.reportId)
+    pendingDraftRecovery.value = null
 
     // Clear unsaved changes flag
     reset()
@@ -2938,8 +3141,30 @@ defineExpose({
 // would otherwise be silently lost. visibilitychange also covers mobile
 // Safari, which does not reliably fire pagehide/beforeunload.
 function flushOnPageHide() {
-    if (hasUnsavedChanges.value) void saveNow()
+    if (hasUnsavedChanges.value) {
+        void localDraft.flush()
+        void saveNow()
+    }
     void saveSnapshot()
+}
+
+// The browser's own "leave site?" prompt while edits are not on the server.
+function warnBeforeUnload(event: BeforeUnloadEvent) {
+    if (!hasUnsavedChanges.value && !isSaving.value) return
+    void localDraft.flush()
+    event.preventDefault()
+    event.returnValue = ''
+}
+
+// In-app navigation: try to save first, then ask before leaving unsaved work.
+// Only registered when the editor sits inside a <router-view>.
+if (inject(routerViewLocationKey, null)) {
+    onBeforeRouteLeave(async () => {
+        if (!hasUnsavedChanges.value) return true
+        if (await saveNow()) return true
+        await localDraft.flush()
+        return window.confirm(t('report.editor.leave_unsaved_confirm'))
+    })
 }
 function handleVisibilityChange() {
     if (document.visibilityState === 'hidden') flushOnPageHide()
@@ -2947,14 +3172,15 @@ function handleVisibilityChange() {
 
 onMounted(() => {
     window.addEventListener('pagehide', flushOnPageHide)
+    window.addEventListener('beforeunload', warnBeforeUnload)
     document.addEventListener('visibilitychange', handleVisibilityChange)
 })
 
-// Warn before leaving with unsaved changes
 onBeforeUnmount(async () => {
     reportEditorUnmounted = true
     collabEditorGeneration++
     window.removeEventListener('pagehide', flushOnPageHide)
+    window.removeEventListener('beforeunload', warnBeforeUnload)
     document.removeEventListener('visibilitychange', handleVisibilityChange)
     cleanupReportCollabBindings()
     if (preferences.editorSettings.autoSave.saveOnUnmount) await saveNow()

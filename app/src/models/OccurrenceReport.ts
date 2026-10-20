@@ -308,7 +308,7 @@ export interface SaveReportResult {
     serverContent?: string
     serverReport?: OccurrenceReportDTO // Full server report for deep comparison
     updatedReport?: OccurrenceReportDTO // Authoritative row returned after a successful save
-    errorCode?: 'request_timeout' | 'save_outcome_unknown' | 'conflict' | 'permission_denied' | 'validation_error' | 'system_managed'
+    errorCode?: 'request_timeout' | 'save_outcome_unknown' | 'network_error' | 'conflict' | 'permission_denied' | 'validation_error' | 'system_managed'
     /** Latest canonical version observed while reconciling a conflict. */
     serverVersion?: number
     /** True when the local draft was safely merged and retried. */

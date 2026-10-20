@@ -38,6 +38,7 @@
         "@vitejs/plugin-vue": "^6.0.6",
         "@vue/test-utils": "^2.4.11",
         "@vue/tsconfig": "^0.9.1",
+        "fake-indexeddb": "^6.2.6",
         "jsdom": "^29.1.1",
         "typescript": "~6.0.3",
         "vite": "^8.0.11",
