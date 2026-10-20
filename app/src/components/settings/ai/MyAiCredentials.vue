@@ -15,6 +15,7 @@ const { reportError, success } = useFeedback()
 const loading = ref(true)
 const credentials = ref<AiCredentialDTO[]>([])
 const storageAvailable = ref(true)
+const chatgptAvailable = ref(false)
 const saving = ref(false)
 const connecting = ref(false)
 const form = reactive<{ provider: AiProvider, label: string, secret: string }>({ provider: 'anthropic', label: '', secret: '' })
@@ -25,6 +26,7 @@ async function load() {
         const data = await AiSettingsService.myCredentials()
         credentials.value = data.credentials
         storageAvailable.value = data.secret_storage_available
+        chatgptAvailable.value = data.chatgpt_available === true
     } catch (error) {
         reportError(error)
     } finally {
@@ -47,25 +49,35 @@ async function add() {
     }
 }
 
-async function connectOpenRouter() {
+async function connect(start: () => Promise<string>) {
     connecting.value = true
     try {
-        window.location.assign(await AiSettingsService.startOpenRouter())
+        window.location.assign(await start())
     } catch (error) {
         reportError(error)
         connecting.value = false
     }
 }
+const connectOpenRouter = () => connect(AiSettingsService.startOpenRouter)
+const connectChatGpt = () => connect(AiSettingsService.startChatGpt)
 
-/** OpenRouter sends the teacher back here with ?ai_oauth=openrouter&code=… */
+/** OpenRouter and ChatGPT send the teacher back here with ?ai_oauth=…&code=… (and state for ChatGPT). */
 async function finishOAuthIfReturning() {
     const code = typeof route.query.code === 'string' ? route.query.code : null
-    if (route.query.ai_oauth !== 'openrouter' || !code) return
-    const { code: _code, ai_oauth: _flag, ...rest } = route.query
+    const flow = route.query.ai_oauth
+    if ((flow !== 'openrouter' && flow !== 'chatgpt') || !code) return
+    const state = typeof route.query.state === 'string' ? route.query.state : ''
+    // Drop the one-time code from the address bar before using it.
+    const { code: _code, state: _state, ai_oauth: _flag, ...rest } = route.query
     await router.replace({ query: rest })
     try {
-        await AiSettingsService.finishOpenRouter(code)
-        success('ai.settings.openrouter_connected')
+        if (flow === 'chatgpt') {
+            await AiSettingsService.finishChatGpt(code, state)
+            success('ai.settings.chatgpt_connected')
+        } else {
+            await AiSettingsService.finishOpenRouter(code)
+            success('ai.settings.openrouter_connected')
+        }
     } catch (error) {
         reportError(error)
     }
@@ -81,6 +93,15 @@ onMounted(async () => {
     <div class="space-y-5">
         <p class="text-sm text-gray-600">{{ t('ai.settings.personal_description') }}</p>
         <p v-if="!storageAvailable" role="alert" class="rounded-xl bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900">{{ t('ai.settings.storage_unavailable') }}</p>
+
+        <div v-if="chatgptAvailable" class="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-5">
+            <h3 class="font-black text-gray-900">{{ t('ai.settings.chatgpt_title') }}</h3>
+            <p class="mt-1 text-sm text-gray-700">{{ t('ai.settings.chatgpt_description') }}</p>
+            <button type="button" data-testid="connect-chatgpt" class="mt-4 min-h-11 rounded-xl bg-emerald-700 px-4 text-sm font-black text-white hover:bg-emerald-800 disabled:opacity-50"
+                :disabled="connecting || !storageAvailable" @click="connectChatGpt">
+                {{ connecting ? t('ai.settings.redirecting') : t('ai.settings.chatgpt_connect') }}
+            </button>
+        </div>
 
         <div class="grid gap-4 lg:grid-cols-2">
             <div class="rounded-2xl border border-gray-200 p-5">
@@ -105,6 +126,7 @@ onMounted(async () => {
                     <input v-model="form.secret" type="password" autocomplete="off" required maxlength="4096" class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 px-3 text-sm" />
                 </label>
                 <p class="text-xs text-gray-600">{{ t('ai.settings.key_storage_note') }}</p>
+                <p class="text-xs text-gray-600">{{ t('ai.settings.gemini_note') }}</p>
                 <button type="submit" class="min-h-11 rounded-xl bg-emerald-600 px-4 text-sm font-black text-white disabled:opacity-50" :disabled="saving || !form.secret.trim() || !storageAvailable">
                     {{ saving ? t('common.saving') : t('ai.settings.add_key') }}
                 </button>

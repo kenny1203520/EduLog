@@ -111,7 +111,7 @@ export interface ModelInput {
 export const AiSettingsService = {
     // Personal --------------------------------------------------------------
     async myCredentials() {
-        return (await apiV1Client.get<{ credentials: AiCredentialDTO[], secret_storage_available: boolean }>('/ai/me/credentials')).data
+        return (await apiV1Client.get<{ credentials: AiCredentialDTO[], secret_storage_available: boolean, chatgpt_available?: boolean }>('/ai/me/credentials')).data
     },
     async addMyCredential(input: { provider: AiProvider, label: string, secret: string }) {
         return (await apiV1Client.post<AiCredentialDTO>('/ai/me/credentials', input)).data
@@ -129,6 +129,8 @@ export const AiSettingsService = {
     },
     async startOpenRouter() { return (await apiV1Client.post<{ url: string }>('/ai/me/openrouter/start', {})).data.url },
     async finishOpenRouter(code: string) { return (await apiV1Client.post<AiCredentialDTO>('/ai/me/openrouter/exchange', { code })).data },
+    async startChatGpt() { return (await apiV1Client.post<{ url: string }>('/ai/me/chatgpt/start', {})).data.url },
+    async finishChatGpt(code: string, state: string) { return (await apiV1Client.post<AiCredentialDTO>('/ai/me/chatgpt/exchange', { code, state })).data },
 
     // Admin -----------------------------------------------------------------
     async overview() { return (await apiV1Client.get<AiAdminOverview>('/ai/admin/overview')).data },

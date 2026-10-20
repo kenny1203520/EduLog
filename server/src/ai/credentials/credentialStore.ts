@@ -107,13 +107,16 @@ export async function updateCredential(db: Db, cipher: SecretCipher | null, id: 
  */
 export async function testCredential(db: Db, cipher: SecretCipher | null, credentialId: string, modelId: string, options: {
   createModel?: (target: ModelTarget) => LanguageModel
+  /** Bearer token for credentials that store no plain API key (see ReportGenerationDeps.resolveToken). */
+  resolveToken?: (credential: { provider: string, authType: string, credentialId: string }) => Promise<string | undefined>
 } = {}) {
   const row = await db.from('ai_credentials').select('id,provider,auth_type,secret_ciphertext,base_url').eq('id', credentialId).maybeSingle()
   if (row.error) throw mapDatabaseError(row.error)
   if (!row.data) throw new ApiError(404, 'NOT_FOUND', 'Credential was not found')
-  const apiKey = row.data.auth_type === 'none' || !row.data.secret_ciphertext
+  const token = await options.resolveToken?.({ provider: row.data.provider, authType: row.data.auth_type, credentialId })
+  const apiKey = token ?? (row.data.auth_type === 'none' || !row.data.secret_ciphertext
     ? undefined
-    : requireCipher(cipher).decrypt(row.data.secret_ciphertext, credentialAssociatedData(credentialId))
+    : requireCipher(cipher).decrypt(row.data.secret_ciphertext, credentialAssociatedData(credentialId)))
   const model = (options.createModel ?? createLanguageModel)({ provider: row.data.provider, modelId, apiKey, baseUrl: row.data.base_url ?? undefined })
   let ok = false
   let errorName: string | null = null

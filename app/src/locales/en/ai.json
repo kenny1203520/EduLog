@@ -96,7 +96,10 @@
     "AI_UNKNOWN_ERROR": "Something went wrong. Please try again later.",
     "AI_OAUTH_EXPIRED": "The sign-in expired. Connect OpenRouter again.",
     "AI_OAUTH_FAILED": "OpenRouter did not accept the sign-in. Please try again.",
-    "AI_EMPTY_OUTPUT": "The AI returned an empty draft; no quota was used. Try again or use another model."
+    "AI_EMPTY_OUTPUT": "The AI returned an empty draft; no quota was used. Try again or use another model.",
+    "AI_PLAN_LIMIT_REACHED": "Your ChatGPT plan allowance or this site's weekly limit is used up. Switch source or try again later.",
+    "AI_CHATGPT_PLAN_NOT_GRANTED": "This sign-in did not grant plan usage. It needs ChatGPT Plus or Pro and consent to use the plan allowance.",
+    "AI_CHATGPT_NOT_CONFIGURED": "Connecting a ChatGPT account is not available on this site yet."
   },
   "providers": {
     "anthropic": "Anthropic Claude",
@@ -239,6 +242,11 @@
     "log_status_cancelled": "Cancelled",
     "log_privacy": "Logs keep de-identified content only, so you will see codes such as [學生A].",
     "log_adoptions": "{n} sections used",
-    "log_meta": "Tokens in {tin} / out {tout} · cost {cost} · quota {quota} · {ms} ms · prompt {prompt}"
+    "log_meta": "Tokens in {tin} / out {tout} · cost {cost} · quota {quota} · {ms} ms · prompt {prompt}",
+    "chatgpt_title": "Connect your ChatGPT account (Plus/Pro)",
+    "chatgpt_description": "Generate reports on your own ChatGPT plan allowance instead of the site quota. You can set a weekly limit for this site in ChatGPT settings. Content is still de-identified before it is sent.",
+    "chatgpt_connect": "Connect ChatGPT",
+    "chatgpt_connected": "ChatGPT connected. Add the models you want to use below.",
+    "gemini_note": "Google offers no way to sign in to other sites with a Gemini subscription; to use Gemini, add a Gemini API key or use OpenRouter."
   }
 }

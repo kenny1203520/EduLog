@@ -710,6 +710,8 @@ services:
       # AI report assistant. Server-only; never pass to the Vue container.
       AI_SECRET_KEY: ${EDULOG_AI_SECRET_KEY:-}
       PRESIDIO_ANALYZER_URL: ${EDULOG_PRESIDIO_ANALYZER_URL:-}
+      OPENAI_SIWC_CLIENT_ID: ${EDULOG_OPENAI_SIWC_CLIENT_ID:-}
+      OPENAI_SIWC_CLIENT_SECRET: ${EDULOG_OPENAI_SIWC_CLIENT_SECRET:-}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r => { if (!r.ok) process.exit(1) })"]
       interval: 10s

@@ -8,6 +8,8 @@ const service = vi.hoisted(() => ({
     addMyCredential: vi.fn(),
     finishOpenRouter: vi.fn(),
     startOpenRouter: vi.fn(),
+    finishChatGpt: vi.fn(),
+    startChatGpt: vi.fn(),
 }))
 const route = vi.hoisted(() => ({ query: {} as Record<string, string> }))
 const replace = vi.hoisted(() => vi.fn())
@@ -53,5 +55,29 @@ describe('MyAiCredentials', () => {
         expect(service.addMyCredential).toHaveBeenCalledWith({ provider: 'openai', label: 'OpenAI', secret: 'sk-test-key' })
         expect((wrapper.find('input[type="password"]').element as HTMLInputElement).value).toBe('')
         expect(wrapper.text()).toContain('sk-…abcd')
+    })
+})
+
+describe('MyAiCredentials with ChatGPT', () => {
+    it('hides the ChatGPT card until the server offers it', async () => {
+        const wrapper = mount(MyAiCredentials, { global: { plugins: [i18n] } })
+        await flushPromises()
+        expect(wrapper.find('[data-testid="connect-chatgpt"]').exists()).toBe(false)
+
+        service.myCredentials.mockResolvedValue({ credentials: [], secret_storage_available: true, chatgpt_available: true })
+        const enabled = mount(MyAiCredentials, { global: { plugins: [i18n] } })
+        await flushPromises()
+        expect(enabled.find('[data-testid="connect-chatgpt"]').exists()).toBe(true)
+    })
+
+    it('finishes a ChatGPT sign-in with the returned code and state', async () => {
+        route.query = { tab: 'personal', ai_oauth: 'chatgpt', code: 'abc', state: 'st-1' }
+        service.finishChatGpt.mockResolvedValue({ id: 'c1' })
+        mount(MyAiCredentials, { global: { plugins: [i18n] } })
+        await flushPromises()
+
+        expect(replace).toHaveBeenCalledWith({ query: { tab: 'personal' } })
+        expect(service.finishChatGpt).toHaveBeenCalledWith('abc', 'st-1')
+        expect(feedback.success).toHaveBeenCalledWith('ai.settings.chatgpt_connected')
     })
 })

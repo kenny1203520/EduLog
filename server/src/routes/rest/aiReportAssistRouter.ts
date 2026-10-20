@@ -11,6 +11,8 @@ import { REPORT_LENGTHS, REPORT_TONES, assessReportContext } from '../../ai/repo
 import type { ReportAssistRepository } from '../../ai/report/reportAssistRepository.js'
 import { adoptionSnapshot, ReportGenerationService } from '../../ai/report/reportGenerationService.js'
 import { SupabaseReportAssistRepository } from '../../ai/report/supabaseReportAssistRepository.js'
+import { siwcClientFromConfig } from '../../ai/credentials/chatgptPlanOAuth.js'
+import { isChatGptPlanCredential, sharedChatGptPlanTokens } from '../../ai/credentials/chatgptPlanTokens.js'
 
 const uuid = z.string().uuid()
 
@@ -42,16 +44,24 @@ export const preferencesSchema = z.object({
 
 export interface AiReportAssistDeps {
   repository: (req: Request) => ReportAssistRepository
-  service: (repository: ReportAssistRepository) => ReportGenerationService
+  service: (repository: ReportAssistRepository, req: Request) => ReportGenerationService
 }
 
 /** Production wiring: Presidio and the secret cipher come from config; either may be absent. */
 export function defaultAiReportAssistDeps(config: ApiConfig): AiReportAssistDeps {
   const deidentifier = config.PRESIDIO_ANALYZER_URL ? new Deidentifier(new PresidioClient(config.PRESIDIO_ANALYZER_URL)) : null
   const cipher = config.AI_SECRET_KEY ? SecretCipher.fromBase64(config.AI_SECRET_KEY) : null
+  const siwc = siwcClientFromConfig(config)
+  const chatgpt = siwc && cipher ? sharedChatGptPlanTokens(siwc, cipher) : null
   return {
     repository: (req) => new SupabaseReportAssistRepository(req.db!, req.adminDb!),
-    service: (repository) => new ReportGenerationService({ repository, deidentifier, cipher }),
+    service: (repository, req) => new ReportGenerationService({
+      repository,
+      deidentifier,
+      cipher,
+      // "Sign in with ChatGPT" credentials store a refresh token; generation needs a fresh access token.
+      resolveToken: async (model) => (chatgpt && isChatGptPlanCredential(model) ? chatgpt.getAccessToken(req.adminDb!, model.credentialId) : undefined),
+    }),
   }
 }
 
@@ -111,7 +121,7 @@ export function createAiReportAssistRouter(deps: AiReportAssistDeps) {
     const reportId = param(req, 'reportId')
     await authorizeReport(req, reportId, 'read')
     const repository = deps.repository(req)
-    const service = deps.service(repository)
+    const service = deps.service(repository, req)
     const [settings, sources, quota, facts, preferences] = await Promise.all([
       repository.getSettings(),
       repository.listModelSources(userId),
@@ -150,7 +160,7 @@ export function createAiReportAssistRouter(deps: AiReportAssistDeps) {
     const reportId = param(req, 'reportId')
     const input = previewRequestSchema.parse(req.body)
     await authorizeReport(req, reportId, 'preview')
-    const service = deps.service(deps.repository(req))
+    const service = deps.service(deps.repository(req), req)
     await service.assertAvailable(userId)
     const context = await service.prepareContext(reportId, userId, toOptions(input.options))
     return res.json(envelope(req, {
@@ -166,7 +176,7 @@ export function createAiReportAssistRouter(deps: AiReportAssistDeps) {
     const reportId = param(req, 'reportId')
     const input = generationRequestSchema.parse(req.body)
     await authorizeReport(req, reportId, 'generate')
-    const service = deps.service(deps.repository(req))
+    const service = deps.service(deps.repository(req), req)
     // Every refusal (switch, notice, credential, quota, de-identification) is a normal JSON error before streaming.
     const prepared = await service.prepare({ reportId, userId, modelRowId: input.model_row_id, options: toOptions(input.options), sessionSeq: input.session_seq })
 

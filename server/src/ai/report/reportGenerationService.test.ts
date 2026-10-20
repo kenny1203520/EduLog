@@ -4,7 +4,7 @@ import { SecretCipher } from '../credentials/secretCipher.js'
 import { Deidentifier } from '../deidentify/deidentifier.js'
 import type { AnalyzeRequest, PresidioSpan, TextAnalyzer } from '../deidentify/presidioClient.js'
 import type { GenerationLogRow, ReportAssistRepository, ReportFacts, ResolvedModel, StoredGeneration } from './reportAssistRepository.js'
-import { adoptionSnapshot, credentialAssociatedData, parentSectionMap, ReportGenerationService } from './reportGenerationService.js'
+import { adoptionSnapshot, credentialAssociatedData, parentSectionMap, providerStatus, ReportGenerationService } from './reportGenerationService.js'
 
 class PatternAnalyzer implements TextAnalyzer {
   calls: AnalyzeRequest[] = []
@@ -236,5 +236,42 @@ describe('empty drafts', () => {
     await expect(svc.run(await svc.prepare(request))).rejects.toMatchObject({ code: 'AI_EMPTY_OUTPUT' })
     expect(repository.generations.map((row) => [row.status, row.error_code, row.quota_charged])).toEqual([['failed', 'EMPTY_OUTPUT', 0]])
     expect(repository.charges).toEqual([])
+  })
+})
+
+describe('ChatGPT plan credentials', () => {
+  const chatgpt = () => siteModel({ provider: 'openai', authType: 'oauth', credentialScope: 'user', quotaWeight: 0, secretCiphertext: 'refresh-token-ciphertext' })
+
+  it('uses the resolved access token instead of the stored refresh token', async () => {
+    const repository = new FakeRepository()
+    repository.model = chatgpt()
+    const targets: unknown[] = []
+    const svc = new ReportGenerationService({
+      repository, deidentifier: new Deidentifier(new PatternAnalyzer()), cipher,
+      createModel: (target) => { targets.push(target); return jsonModel(output) },
+      resolveToken: async (model) => model.authType === 'oauth' ? 'fresh-access-token' : undefined,
+    })
+    await svc.run(await svc.prepare(request))
+    expect(targets).toEqual([{ provider: 'openai', modelId: 'claude-sonnet-5-5', apiKey: 'fresh-access-token', baseUrl: undefined }])
+  })
+
+  it('reports a 429 from the plan as the plan limit, without charging', async () => {
+    const repository = new FakeRepository()
+    repository.model = chatgpt()
+    const limited = new MockLanguageModelV4({ doStream: async () => { throw Object.assign(new Error('Too Many Requests'), { statusCode: 429 }) } })
+    const svc = new ReportGenerationService({
+      repository, deidentifier: new Deidentifier(new PatternAnalyzer()), cipher,
+      createModel: () => limited, resolveToken: async () => 'token',
+    })
+    await expect(svc.run(await svc.prepare(request))).rejects.toMatchObject({ code: 'AI_PLAN_LIMIT_REACHED' })
+    expect(repository.generations.map((row) => [row.error_code, row.quota_charged])).toEqual([['PLAN_LIMIT', 0]])
+  })
+})
+
+describe('providerStatus', () => {
+  it('finds the status on the error or its causes', () => {
+    expect(providerStatus(Object.assign(new Error('x'), { statusCode: 401 }))).toBe(401)
+    expect(providerStatus(new Error('wrapped', { cause: { statusCode: 429 } }))).toBe(429)
+    expect(providerStatus(new Error('plain'))).toBeNull()
   })
 })

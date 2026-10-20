@@ -44,7 +44,7 @@ function memoryDb(tables: Record<string, Row[]>) {
 
 const config = { AI_SECRET_KEY: Buffer.alloc(32, 3).toString('base64'), EDULOG_WEB_BASE_URL: 'https://edulog.example' } as ApiConfig
 
-function app(tables: Record<string, Row[]>, userId = 'u1', fetchImpl: typeof fetch = fetch, pending = new PendingPkceStore()) {
+function app(tables: Record<string, Row[]>, userId = 'u1', fetchImpl: typeof fetch = fetch, pending = new PendingPkceStore(), routerConfig: ApiConfig = config, chatgptPending = new PendingPkceStore()) {
   const instance = express()
   instance.use(express.json())
   instance.use((req, _res, next) => {
@@ -53,7 +53,7 @@ function app(tables: Record<string, Row[]>, userId = 'u1', fetchImpl: typeof fet
     req.auditContext = {} as never
     next()
   })
-  instance.use('/api', createAiMeRouter(config, pending, fetchImpl))
+  instance.use('/api', createAiMeRouter(routerConfig, pending, fetchImpl, chatgptPending))
   instance.use(errorHandler)
   return instance
 }
@@ -99,5 +99,62 @@ describe('personal AI credentials', () => {
 
     const replay = await request(app(tables, 'u1', fetchImpl, pending)).post('/api/ai/me/openrouter/exchange').send({ code: 'auth-code' })
     expect(replay.status).toBe(409)
+  })
+})
+
+describe('Sign in with ChatGPT', () => {
+  const siwcConfig = {
+    ...config,
+    OPENAI_SIWC_CLIENT_ID: 'oaiapp_edulog',
+    OPENAI_SIWC_CLIENT_SECRET: 'client-secret',
+    OPENAI_SIWC_AUTHORIZE_URL: 'https://auth.openai.com/api/accounts/authorize',
+    OPENAI_SIWC_TOKEN_URL: 'https://auth.openai.com/api/accounts/oauth/token',
+  } as ApiConfig
+
+  it('is hidden and refused until an approved client is configured', async () => {
+    const listed = await request(app({ ai_credentials: [] })).get('/api/ai/me/credentials')
+    expect(listed.body.data.chatgpt_available).toBe(false)
+    const start = await request(app({ ai_credentials: [] })).post('/api/ai/me/chatgpt/start').send({})
+    expect(start.status).toBe(404)
+    expect(start.body.error.code).toBe('AI_CHATGPT_NOT_CONFIGURED')
+  })
+
+  it('connects with PKCE and state, storing only the encrypted refresh token', async () => {
+    const tables: Record<string, Row[]> = { ai_credentials: [] }
+    const chatgptPending = new PendingPkceStore()
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      access_token: 'chatgpt-access', refresh_token: 'chatgpt-refresh-token-value', expires_in: 3600,
+      scope: 'openid profile email offline_access resource.invoke chatgpt.tokens.use.direct',
+    }), { status: 200 }))
+    const make = () => app(tables, 'u1', fetchImpl, new PendingPkceStore(), siwcConfig, chatgptPending)
+
+    expect((await request(make()).get('/api/ai/me/credentials')).body.data.chatgpt_available).toBe(true)
+    const start = await request(make()).post('/api/ai/me/chatgpt/start').send({})
+    const url = new URL(start.body.data.url)
+    expect(url.searchParams.get('client_id')).toBe('oaiapp_edulog')
+    expect(url.searchParams.get('redirect_uri')).toBe('https://edulog.example/dashboard/settings?tab=personal&ai_oauth=chatgpt')
+    const state = url.searchParams.get('state')!
+
+    const wrongState = await request(make()).post('/api/ai/me/chatgpt/exchange').send({ code: 'code-1', state: 'forged' })
+    expect(wrongState.status).toBe(409)
+
+    await request(make()).post('/api/ai/me/chatgpt/start').send({})
+    const restart = new URL((await request(make()).post('/api/ai/me/chatgpt/start').send({})).body.data.url)
+    const exchanged = await request(make()).post('/api/ai/me/chatgpt/exchange').send({ code: 'code-1', state: restart.searchParams.get('state') })
+    expect(exchanged.status).toBe(201)
+    expect(tables.ai_credentials[0]).toMatchObject({ provider: 'openai', auth_type: 'oauth', owner_user_id: 'u1', label: 'ChatGPT' })
+    expect(JSON.stringify(exchanged.body)).not.toContain('chatgpt-refresh-token-value')
+    expect(String(tables.ai_credentials[0].secret_ciphertext)).not.toContain('chatgpt-refresh-token-value')
+    expect(state).not.toBe(restart.searchParams.get('state'))
+  })
+
+  it('explains when the plan scope was not granted', async () => {
+    const chatgptPending = new PendingPkceStore()
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({ access_token: 'a', refresh_token: 'r', scope: 'openid profile email' }), { status: 200 }))
+    const make = () => app({ ai_credentials: [] }, 'u1', fetchImpl, new PendingPkceStore(), siwcConfig, chatgptPending)
+    const state = new URL((await request(make()).post('/api/ai/me/chatgpt/start').send({})).body.data.url).searchParams.get('state')
+    const response = await request(make()).post('/api/ai/me/chatgpt/exchange').send({ code: 'c', state })
+    expect(response.status).toBe(403)
+    expect(response.body.error.code).toBe('AI_CHATGPT_PLAN_NOT_GRANTED')
   })
 })
