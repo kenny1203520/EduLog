@@ -1,10 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { mapDatabaseError } from '../../http/errors.js'
+import { DEID_RULE_FIELDS, deidRuleFromRow, type DeidRuleRow } from '../deidentify/customRules.js'
 import type { KnownEntity } from '../deidentify/knownEntities.js'
 import type { AiProvider } from '../providers/providerRegistry.js'
 import type { QuotaLedgerEntry, QuotaPolicyRow } from '../quota/quotaBalance.js'
 import type {
   AiSettings,
+  DeidentificationConfig,
   GenerationLogRow,
   ModelSource,
   ReportAssistRepository,
@@ -91,6 +93,15 @@ export class SupabaseReportAssistRepository implements ReportAssistRepository {
   async getSettings(): Promise<AiSettings> {
     const row = unwrap(await this.adminDb.from('ai_settings').select('enabled,notice_version,default_model_id').eq('id', true).maybeSingle())
     return { enabled: row?.enabled === true, noticeVersion: row?.notice_version ?? 1, defaultModelId: row?.default_model_id ?? null }
+  }
+
+  async loadDeidentificationConfig(): Promise<DeidentificationConfig> {
+    const [settings, rules] = await Promise.all([
+      this.adminDb.from('ai_settings').select('deid_languages').eq('id', true).maybeSingle().then(unwrap),
+      this.adminDb.from('ai_deid_rules').select(DEID_RULE_FIELDS).eq('enabled', true).order('created_at').then(many),
+    ])
+    const languages = (settings?.deid_languages as string[] | null) ?? []
+    return { languages: languages.length ? languages : ['zh'], rules: rules.map((row) => deidRuleFromRow(row as DeidRuleRow)) }
   }
 
   async hasAcknowledgedNotice(userId: string, version: number): Promise<boolean> {

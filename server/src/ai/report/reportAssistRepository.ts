@@ -1,3 +1,4 @@
+import type { DeidRule } from '../deidentify/customRules.js'
 import type { KnownEntity } from '../deidentify/knownEntities.js'
 import type { AiProvider } from '../providers/providerRegistry.js'
 import type { QuotaLedgerEntry, QuotaPolicyRow } from '../quota/quotaBalance.js'
@@ -8,6 +9,12 @@ export interface AiSettings {
   enabled: boolean
   noticeVersion: number
   defaultModelId: string | null
+}
+
+/** Enabled Presidio languages and administrator rules (Settings → AI → De-identification). */
+export interface DeidentificationConfig {
+  languages: string[]
+  rules: DeidRule[]
 }
 
 /** A model the user may pick in the panel's source picker. */
@@ -94,6 +101,8 @@ export interface StoredGeneration {
 
 export interface ReportAssistRepository {
   getSettings(): Promise<AiSettings>
+  /** Enabled languages and enabled rules, read for every request so changes apply at once. */
+  loadDeidentificationConfig(): Promise<DeidentificationConfig>
   hasAcknowledgedNotice(userId: string, version: number): Promise<boolean>
   acknowledgeNotice(userId: string, version: number): Promise<void>
   /** Active site models plus the user's own active models. */

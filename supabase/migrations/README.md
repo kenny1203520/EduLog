@@ -229,3 +229,7 @@ The backfill opens one segment per enrollment for its current class. A previous 
 ## Cleared report versions (1000150)
 
 `1000150_report_version_null_content.sql` fixes saving a report after its learning report was cleared. The lifecycle RPC stores an emptied body as NULL, but `report_versions.content` is NOT NULL, so the next change failed in `create_report_version_snapshot`. The snapshot now records NULL as an empty string; the full row stays in `snapshot`. Apply after `1000149_ai_report_assist.sql`.
+
+## AI de-identification rules (1000151)
+
+`1000151_ai_deidentification_rules.sql` lets administrators tune de-identification from Settings → AI report assistant → De-identification. `ai_deid_rules` holds custom rules: `deny_list` (words always replaced), `regex` (a pattern always replaced) and `allow_list` (exception words NER must not replace); `placeholder_kind` picks the token (`sensitive` is the new `[敏感A]`), and `languages` limits a rule to some languages (empty = every enabled one). Exceptions never override known students, teachers or schools; the API drops exception words that contain a known name and the residual check still fails closed. `ai_settings.deid_languages` (default `{zh}`) lists the Presidio languages analyzed for each request; every language must be installed in the analyzer image (`PRESIDIO_LANGUAGES` build argument). Only `system.ai.manage` reads the rules; writes go through the API's service role. Apply after `1000150_report_version_null_content.sql` and run `supabase/tests/ai_deidentification_rules_integration.sql`.

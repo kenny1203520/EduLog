@@ -30,6 +30,7 @@ import { createExtensionIntegrationRouter } from './routes/extension/extensionIn
 import { createAiReportAssistRouter, defaultAiReportAssistDeps } from './routes/rest/aiReportAssistRouter.js'
 import { createAiMeRouter } from './routes/rest/aiMeRouter.js'
 import { createAiAdminRouter } from './routes/rest/aiAdminRouter.js'
+import { createAiDeidRouter } from './routes/rest/aiDeidRouter.js'
 
 const LOCAL_DEVELOPMENT_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://[::1]:5173']
 
@@ -85,6 +86,7 @@ export function createApp(env: NodeJS.ProcessEnv = process.env) {
   protectedApi.use(createAiReportAssistRouter(defaultAiReportAssistDeps(config)))
   protectedApi.use(createAiMeRouter(config))
   protectedApi.use(createAiAdminRouter(config))
+  protectedApi.use(createAiDeidRouter(config))
   protectedApi.use(createOccurrenceRouter())
   protectedApi.use(createTransferRouter())
   protectedApi.use(createSyncRouter())

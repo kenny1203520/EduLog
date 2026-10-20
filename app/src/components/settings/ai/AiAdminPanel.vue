@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AiCredentialList from '@/components/settings/ai/AiCredentialList.vue'
+import AiDeidentificationPanel from '@/components/settings/ai/AiDeidentificationPanel.vue'
 import AiQuotaSettings from '@/components/settings/ai/AiQuotaSettings.vue'
 import AiUsagePanel from '@/components/settings/ai/AiUsagePanel.vue'
 import { useFeedback } from '@/composables/useFeedback'
@@ -12,7 +13,7 @@ import { AiSettingsService, SITE_PROVIDERS, type AiAdminOverview, type AiProvide
 const { t } = useI18n()
 const { reportError, success } = useFeedback()
 
-type Section = 'general' | 'providers' | 'prompt' | 'quota' | 'usage'
+type Section = 'general' | 'providers' | 'prompt' | 'quota' | 'deid' | 'usage'
 const section = ref<Section>('general')
 const overview = ref<AiAdminOverview | null>(null)
 const loading = ref(true)
@@ -75,10 +76,10 @@ onMounted(load)
             <h2 class="text-xl font-black text-gray-900">{{ t('ai.settings.admin_title') }}</h2>
             <p class="mt-1 text-sm text-gray-600">{{ t('ai.settings.admin_description') }}</p>
             <nav class="mt-5 flex flex-wrap gap-2" role="group" :aria-label="t('ai.settings.admin_title')">
-                <button v-for="item in (forbidden ? ['usage'] : ['general', 'providers', 'prompt', 'quota', 'usage']) as Section[]" :key="item" type="button"
+                <button v-for="item in (forbidden ? ['usage'] : ['general', 'providers', 'prompt', 'quota', 'deid', 'usage']) as Section[]" :key="item" type="button"
                     :aria-pressed="section === item" class="min-h-11 rounded-xl px-4 py-2 text-sm font-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600"
                     :class="section === item ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-700'" @click="section = item">
-                    {{ t(`ai.settings.sections.${item}`) }}
+                    {{ item === 'deid' ? t('aiDeid.tab') : t(`ai.settings.sections.${item}`) }}
                 </button>
             </nav>
         </div>
@@ -172,6 +173,7 @@ onMounted(load)
             </section>
 
             <AiQuotaSettings v-else-if="section === 'quota'" v-model:policies="overview.quota_policies" :user-names="overview.user_names" />
+            <AiDeidentificationPanel v-else-if="section === 'deid'" />
         </template>
 
         <AiUsagePanel v-if="section === 'usage' && !loading" />

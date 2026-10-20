@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Deidentifier, DeidentificationResidualError } from './deidentifier.js'
+import type { DeidRule } from './customRules.js'
 import type { KnownEntity } from './knownEntities.js'
 import { PresidioClient, type AnalyzeRequest, type PresidioSpan, type TextAnalyzer } from './presidioClient.js'
 
@@ -10,14 +11,21 @@ const entities: KnownEntity[] = [
   { id: 'sch-1', kind: 'school', name: '仁愛國小' },
 ]
 
-/** Applies ad-hoc patterns like Presidio does, plus scripted NER spans. */
+/** Applies ad-hoc patterns and the allow list like Presidio does, plus scripted NER spans. */
 class FakeAnalyzer implements TextAnalyzer {
-  constructor(private readonly ner: Array<{ text: string, type: string }> = [], private readonly ignoreAdHoc = false) {}
+  readonly requests: AnalyzeRequest[] = []
+
+  constructor(
+    private readonly ner: Array<{ text: string, type: string, language?: string }> = [],
+    private readonly ignoreAdHoc = false,
+  ) {}
 
   async analyze(request: AnalyzeRequest): Promise<PresidioSpan[]> {
+    this.requests.push(request)
     const spans: PresidioSpan[] = []
     if (!this.ignoreAdHoc) {
       for (const recognizer of request.adHocRecognizers) {
+        if (recognizer.supported_language !== request.language) continue
         for (const pattern of recognizer.patterns) {
           for (const match of request.text.matchAll(new RegExp(pattern.regex, 'g'))) {
             spans.push({ entity_type: recognizer.supported_entity, start: match.index, end: match.index + match[0].length, score: 1 })
@@ -25,12 +33,16 @@ class FakeAnalyzer implements TextAnalyzer {
         }
       }
     }
-    for (const { text, type } of this.ner) {
+    for (const { text, type, language = 'zh' } of this.ner) {
       const start = request.text.indexOf(text)
-      if (start >= 0) spans.push({ entity_type: type, start, end: start + text.length, score: 0.85 })
+      if (start >= 0 && language === request.language) spans.push({ entity_type: type, start, end: start + text.length, score: 0.85 })
     }
-    return spans
+    return spans.filter((span) => !request.allowList?.includes(request.text.slice(span.start, span.end)))
   }
+}
+
+function rule(overrides: Partial<DeidRule>): DeidRule {
+  return { name: 'rule', kind: 'deny_list', entries: [], pattern: null, placeholderKind: 'sensitive', languages: [], score: 0.85, ...overrides }
 }
 
 describe('Deidentifier', () => {
@@ -66,6 +78,72 @@ describe('Deidentifier', () => {
   })
 })
 
+describe('Deidentifier with languages and rules', () => {
+  it('analyzes each language separately and merges the spans', async () => {
+    const analyzer = new FakeAnalyzer([
+      { text: '張志豪', type: 'PERSON', language: 'zh' },
+      { text: 'Kevin Chen', type: 'PERSON', language: 'en' },
+      { text: 'Kevin', type: 'PERSON', language: 'zh' },
+    ])
+    const result = await new Deidentifier(analyzer).deidentify({
+      notes: '王小明和張志豪、Kevin Chen 一起做專題。',
+    }, entities, { languages: ['zh', 'en'] })
+
+    expect(analyzer.requests.map((request) => request.language)).toEqual(['zh', 'en'])
+    expect(analyzer.requests[1].adHocRecognizers.every((recognizer) => recognizer.supported_language === 'en')).toBe(true)
+    // The longer English span wins over the overlapping Chinese one; letters have no gaps.
+    expect(result.fields.notes).toBe('[學生A]和[人名A]、[人名B] 一起做專題。')
+    expect(result.spans.notes.map((span) => [span.source, span.language])).toEqual([['known', 'zh'], ['ner', 'zh'], ['ner', 'en']])
+  })
+
+  it('replaces custom rule matches with the rule’s placeholder and restores [敏感A]', async () => {
+    const rules = [
+      rule({ name: 'Club', entries: ['火箭社'], placeholderKind: 'organization' }),
+      rule({ name: 'Student number', kind: 'regex', pattern: String.raw`S\d{6}`, placeholderKind: 'sensitive' }),
+      rule({ name: 'English only', entries: ['火箭'], languages: ['en'] }),
+    ]
+    const result = await new Deidentifier(new FakeAnalyzer()).deidentify({
+      notes: '王小明參加火箭社，學號 S123456。',
+    }, entities, { rules })
+
+    expect(result.fields.notes).toBe('[學生A]參加[機構A]，學號 [敏感A]。')
+    expect(result.spans.notes.filter((span) => span.source === 'rule').map((span) => span.ruleIndex)).toEqual([0, 1])
+    expect(result.counts).toMatchObject({ organization: 1, sensitive: 1 })
+    expect(result.map.restore('[敏感 A] 已記錄').text).toBe('S123456 已記錄')
+  })
+
+  it('lets known names win over overlapping rule matches', async () => {
+    const result = await new Deidentifier(new FakeAnalyzer()).deidentify({
+      notes: '王小明同學',
+    }, entities, { rules: [rule({ kind: 'regex', pattern: '小明同學', placeholderKind: 'person' })] })
+
+    expect(result.fields.notes).toBe('[學生A]同學')
+  })
+
+  it('applies exception words to NER only and never to known names', async () => {
+    const analyzer = new FakeAnalyzer([
+      { text: '仁愛', type: 'LOCATION' },
+      { text: '張志豪', type: 'PERSON' },
+    ])
+    const rules = [rule({ kind: 'allow_list', placeholderKind: null, entries: ['仁愛', '王小明', '小明哥', '張志豪'] })]
+    const result = await new Deidentifier(analyzer).deidentify({
+      notes: '仁愛路上，王小明遇到張志豪。',
+    }, entities, { rules })
+
+    expect(analyzer.requests[0].allowList).toEqual(['仁愛', '張志豪'])
+    expect(result.ignoredExceptions).toEqual(['王小明', '小明哥'])
+    expect(result.fields.notes).toBe('仁愛路上，[學生A]遇到張志豪。')
+  })
+
+  it('still fails closed when an exception would expose a known name', async () => {
+    // An analyzer that wrongly honours the allow list for known names must not leak them.
+    const analyzer: TextAnalyzer = { analyze: async () => [] }
+    await expect(new Deidentifier(analyzer).deidentify({ notes: '小明表現很好' }, entities, {
+      rules: [rule({ kind: 'allow_list', placeholderKind: null, entries: ['小明'] })],
+    })).rejects.toBeInstanceOf(DeidentificationResidualError)
+  })
+})
+
 const presidioUrl = process.env.PRESIDIO_ANALYZER_URL
 describe.skipIf(!presidioUrl)('Deidentifier against Presidio (docker/presidio)', () => {
   it('removes known names, phone, email and national id from Chinese notes', async () => {
@@ -77,5 +155,36 @@ describe.skipIf(!presidioUrl)('Deidentifier against Presidio (docker/presidio)',
     expect(result.fields.notes).toContain('[學生A]')
     expect(result.fields.notes).toContain('[學生B]')
     expect(result.fields.notes).toContain('[老師A]')
+  })
+
+  it('analyzes mixed Chinese and English with custom rules and exception words', async () => {
+    const client = new PresidioClient(presidioUrl!)
+    expect(await client.supportedLanguages()).toEqual(expect.arrayContaining(['zh', 'en']))
+    const result = await new Deidentifier(client).deidentify({
+      notes: '王小明和 Kevin Chen 一起參加火箭社，學號 S123456。Ms. Linda Wu called from Taipei, phone 0912-345-678.',
+    }, entities, {
+      languages: ['zh', 'en'],
+      rules: [
+        { name: 'Club', kind: 'deny_list', entries: ['火箭社'], pattern: null, placeholderKind: 'organization', languages: [], score: 0.85 },
+        { name: 'Student number', kind: 'regex', entries: [], pattern: String.raw`S\d{6}`, placeholderKind: 'sensitive', languages: [], score: 0.9 },
+        { name: 'Exceptions', kind: 'allow_list', entries: ['Taipei', '王小明'], pattern: null, placeholderKind: null, languages: [], score: 1 },
+      ],
+    })
+
+    const notes = result.fields.notes
+    expect(notes).not.toMatch(/王小明|火箭社|S123456|0912|Linda Wu/)
+    expect(notes).toContain('[學生A]')
+    expect(notes).toContain('[機構A]')
+    expect(notes).toContain('[敏感A]')
+    expect(notes).toContain('Taipei')
+    expect(result.ignoredExceptions).toEqual(['王小明'])
+    expect(result.spans.notes.some((span) => span.language === 'en' && span.source === 'ner')).toBe(true)
+  })
+
+  it('reports a pattern Presidio cannot compile', async () => {
+    await expect(new PresidioClient(presidioUrl!).analyze({
+      text: 'abc', language: 'zh', scoreThreshold: 0,
+      adHocRecognizers: [{ name: 'r', supported_language: 'zh', supported_entity: 'EDULOG_RULE_0', patterns: [{ name: 'x', regex: '(unclosed', score: 0.8 }] }],
+    })).rejects.toMatchObject({ name: 'PresidioRequestError', detail: expect.stringMatching(/missing \)/) })
   })
 })

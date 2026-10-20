@@ -28,6 +28,7 @@ class Repo implements ReportAssistRepository {
     sanitizedInput: {}, sanitizedOutput: { sections: [{ key: 'today', title: '今日', body: '[學生A]很棒' }], teachingSuggestions: ['加深練習'] },
   }
   async getSettings() { return { enabled: true, noticeVersion: 2, defaultModelId: MODEL } }
+  async loadDeidentificationConfig() { return { languages: ['zh'], rules: [] } }
   async hasAcknowledgedNotice() { return true }
   async acknowledgeNotice() {}
   async listModelSources() {
