@@ -5,9 +5,10 @@ import { Deidentifier, DeidentificationResidualError } from '../deidentify/deide
 import type { KnownEntity } from '../deidentify/knownEntities.js'
 import { PlaceholderMap, type PlaceholderKind } from '../deidentify/placeholders.js'
 import { DeidentificationUnavailableError } from '../deidentify/presidioClient.js'
+import type { GenerationRegistry } from './generationRegistry.js'
 import { createLanguageModel, type ModelTarget } from '../providers/providerRegistry.js'
 import { computeQuotaBalance, pickEffectivePolicy, type QuotaBalance } from '../quota/quotaBalance.js'
-import { normalizeDraft, REPORT_SECTION_KEYS, streamReportDraft, type DeepPartialDraft, type ReportDraft, type ReportDraftResult } from './reportDraft.js'
+import { normalizeDraft, REPORT_SECTION_KEYS, restoreDraft, streamReportDraft, type DeepPartialDraft, type ReportDraft, type ReportDraftResult } from './reportDraft.js'
 import {
   assessReportContext,
   buildReportPrompt,
@@ -17,7 +18,8 @@ import {
   type ReportLength,
   type ReportTone,
 } from './reportPrompt.js'
-import type { ReportAssistRepository, ReportFacts, ResolvedModel } from './reportAssistRepository.js'
+import { STALE_RUNNING_MS } from './generationRegistry.js'
+import type { HistoryGeneration, ReportAssistRepository, ReportFacts, ResolvedModel } from './reportAssistRepository.js'
 
 export interface ReportAssistOptions {
   tone: ReportTone
@@ -65,6 +67,25 @@ export interface GenerationOutcome {
   quotaRemaining: number | null
 }
 
+/** One generation in the panel's history, restored for the teacher. */
+export interface GenerationHistoryEntry {
+  generationId: string
+  status: HistoryGeneration['status']
+  createdAt: string
+  completedAt: string | null
+  provider: string
+  modelId: string
+  errorCode: string | null
+  quotaCharged: number
+  draft: ReportDraft | null
+  /** Placeholders that cannot be restored (detected by NER, never stored with a name). */
+  unresolved: string[]
+  suggestionStates: Record<number, 'kept' | 'dismissed'>
+  adoptionCount: number
+}
+
+export const HISTORY_LIMIT = 30
+
 export interface ReportGenerationDeps {
   repository: ReportAssistRepository
   deidentifier: Deidentifier | null
@@ -76,6 +97,8 @@ export interface ReportGenerationDeps {
    * back to decrypting the stored secret.
    */
   resolveToken?: (model: ResolvedModel) => Promise<string | undefined>
+  /** Running generations, so a teacher can cancel one from another request. */
+  registry?: GenerationRegistry
   now?: () => Date
   timeoutMs?: number
   quotaTimeZone?: string
@@ -224,18 +247,19 @@ export class ReportGenerationService {
     return { request, context, resolved, model, quotaCost, quota }
   }
 
-  /** Call the model, log the generation (any outcome) and charge quota on success only. */
+  /**
+   * Call the model and log the generation: a `running` row first (so a
+   * teacher who lost the connection can find it), then its outcome. Quota is
+   * charged on success only. Only an explicit cancel (`hooks.signal` or the
+   * registry) or the timeout stops the model call.
+   */
   async run(
     prepared: PreparedGeneration,
-    hooks: { signal?: AbortSignal, onPartial?: (draft: DeepPartialDraft) => void } = {},
+    hooks: { signal?: AbortSignal, onStarted?: (generationId: string) => void, onPartial?: (draft: DeepPartialDraft) => void } = {},
   ): Promise<GenerationOutcome> {
     const { request, context, resolved } = prepared
     const startedAt = this.now().getTime()
-    const signal = AbortSignal.any([
-      ...(hooks.signal ? [hooks.signal] : []),
-      AbortSignal.timeout(this.deps.timeoutMs ?? DEFAULT_TIMEOUT_MS),
-    ])
-    const base = {
+    const generationId = await this.deps.repository.startGeneration({
       occurrence_report_id: request.reportId,
       user_id: request.userId,
       credential_id: resolved.credentialId,
@@ -257,80 +281,121 @@ export class ReportGenerationService {
         replacement_counts: context.counts,
         warnings: context.warnings.map((warning) => warning.code),
       },
+      sanitized_output: null,
+      status: 'running',
+      error_code: null,
+      tokens_in: null,
+      tokens_out: null,
+      est_cost: null,
+      quota_charged: 0,
+      latency_ms: null,
       session_seq: request.sessionSeq,
-    }
+    })
+    const cancel = this.deps.registry?.register(generationId, request.userId) ?? new AbortController()
+    const cancelSignal = hooks.signal ? AbortSignal.any([hooks.signal, cancel.signal]) : cancel.signal
+    const signal = AbortSignal.any([cancelSignal, AbortSignal.timeout(this.deps.timeoutMs ?? DEFAULT_TIMEOUT_MS)])
+    const latency = () => this.now().getTime() - startedAt
 
-    let result: ReportDraftResult
     try {
-      result = await streamReportDraft({
-        model: prepared.model,
-        prompt: context.prompt,
-        map: context.map,
-        sectionMap: parentSectionMap(context),
-        signal,
-        onPartial: hooks.onPartial,
-      })
-    } catch (error) {
-      const cancelled = hooks.signal?.aborted === true
-      // A ChatGPT plan answers 429 once the plan allowance or this app's weekly cap is used up.
-      const planLimit = !cancelled && resolved.provider === 'openai' && resolved.authType === 'oauth' && providerStatus(error) === 429
-      await this.deps.repository.insertGeneration({
-        ...base,
-        sanitized_output: null,
-        status: cancelled ? 'cancelled' : 'failed',
-        error_code: cancelled ? 'CANCELLED' : signal.aborted ? 'TIMEOUT' : planLimit ? 'PLAN_LIMIT' : errorCode(error),
-        tokens_in: null,
-        tokens_out: null,
-        est_cost: null,
-        quota_charged: 0,
-        latency_ms: this.now().getTime() - startedAt,
-      })
-      if (cancelled) throw new ApiError(499, 'AI_GENERATION_CANCELLED', 'Generation was cancelled')
-      if (signal.aborted) throw new ApiError(504, 'AI_GENERATION_TIMEOUT', 'The model took too long to respond')
-      if (planLimit) throw new ApiError(429, 'AI_PLAN_LIMIT_REACHED', 'Your ChatGPT plan allowance for this app is used up')
-      throw new ApiError(502, 'AI_PROVIDER_ERROR', 'The AI provider returned an error')
-    }
+      hooks.onStarted?.(generationId)
+      let result: ReportDraftResult
+      try {
+        result = await streamReportDraft({
+          model: prepared.model,
+          prompt: context.prompt,
+          map: context.map,
+          sectionMap: parentSectionMap(context),
+          signal,
+          onPartial: hooks.onPartial,
+        })
+      } catch (error) {
+        const cancelled = cancelSignal.aborted
+        // A ChatGPT plan answers 429 once the plan allowance or this app's weekly cap is used up.
+        const planLimit = !cancelled && resolved.provider === 'openai' && resolved.authType === 'oauth' && providerStatus(error) === 429
+        await this.deps.repository.finishGeneration(generationId, {
+          status: cancelled ? 'cancelled' : 'failed',
+          error_code: cancelled ? 'CANCELLED' : signal.aborted ? 'TIMEOUT' : planLimit ? 'PLAN_LIMIT' : errorCode(error),
+          latency_ms: latency(),
+        })
+        if (cancelled) throw new ApiError(499, 'AI_GENERATION_CANCELLED', 'Generation was cancelled')
+        if (signal.aborted) throw new ApiError(504, 'AI_GENERATION_TIMEOUT', 'The model took too long to respond')
+        if (planLimit) throw new ApiError(429, 'AI_PLAN_LIMIT_REACHED', 'Your ChatGPT plan allowance for this app is used up')
+        throw new ApiError(502, 'AI_PROVIDER_ERROR', 'The AI provider returned an error')
+      }
 
-    const tokensIn = result.usage.inputTokens ?? null
-    const tokensOut = result.usage.outputTokens ?? null
-
-    // A draft without any report section is not usable: log it as failed and charge nothing.
-    if (result.sanitized.sections.length === 0) {
-      await this.deps.repository.insertGeneration({
-        ...base,
+      const tokensIn = result.usage.inputTokens ?? null
+      const tokensOut = result.usage.outputTokens ?? null
+      const usage = {
         sanitized_output: result.sanitized,
-        status: 'failed',
-        error_code: 'EMPTY_OUTPUT',
         tokens_in: tokensIn,
         tokens_out: tokensOut,
         est_cost: estimateCost(resolved, tokensIn, tokensOut),
-        quota_charged: 0,
-        latency_ms: this.now().getTime() - startedAt,
-      })
-      throw new ApiError(502, 'AI_EMPTY_OUTPUT', 'The model returned an empty draft')
-    }
+        latency_ms: latency(),
+      }
 
-    const generationId = await this.deps.repository.insertGeneration({
-      ...base,
-      sanitized_output: result.sanitized,
-      status: 'succeeded',
-      error_code: null,
-      tokens_in: tokensIn,
-      tokens_out: tokensOut,
-      est_cost: estimateCost(resolved, tokensIn, tokensOut),
-      quota_charged: prepared.quotaCost,
-      latency_ms: this.now().getTime() - startedAt,
+      // A draft without any report section is not usable: log it as failed and charge nothing.
+      if (result.sanitized.sections.length === 0) {
+        await this.deps.repository.finishGeneration(generationId, { ...usage, status: 'failed', error_code: 'EMPTY_OUTPUT' })
+        throw new ApiError(502, 'AI_EMPTY_OUTPUT', 'The model returned an empty draft')
+      }
+
+      await this.deps.repository.finishGeneration(generationId, { ...usage, status: 'succeeded', quota_charged: prepared.quotaCost })
+      if (prepared.quotaCost > 0) await this.deps.repository.chargeQuota(request.userId, generationId, prepared.quotaCost)
+
+      return {
+        generationId,
+        draft: result.restored,
+        unresolved: result.unresolved,
+        warnings: context.warnings,
+        quotaCharged: prepared.quotaCost,
+        quotaRemaining: prepared.quota ? Math.max(0, prepared.quota.remaining - prepared.quotaCost) : null,
+      }
+    } catch (error) {
+      if (!(error instanceof ApiError)) {
+        // Logging or charging failed after the model call; never leave the row running.
+        await this.deps.repository.finishGeneration(generationId, { status: 'failed', error_code: 'INTERNAL', latency_ms: latency() }).catch(() => {})
+      }
+      throw error
+    } finally {
+      this.deps.registry?.unregister(generationId)
+    }
+  }
+
+  /**
+   * The user's generations on this report, newest first, restored with
+   * current names: classmates as 同學 in the parent-facing sections, full
+   * names in the teaching suggestions. A row still running past the model
+   * timeout was orphaned by a restart and is shown as interrupted.
+   */
+  async history(facts: ReportFacts, entities: KnownEntity[], userId: string): Promise<GenerationHistoryEntry[]> {
+    const rows = await this.deps.repository.listReportHistory(facts.reportId, userId, HISTORY_LIMIT)
+    const names = new Map(entities.map((entity) => [entity.id, entity.display ?? entity.name]))
+    const staleBefore = this.now().getTime() - STALE_RUNNING_MS
+    return rows.map((row) => {
+      const interrupted = row.status === 'running' && Date.parse(row.createdAt) < staleBefore
+      let draft: ReportDraft | null = null
+      let unresolved: string[] = []
+      if (row.sanitizedOutput && row.status === 'succeeded') {
+        const map = restoreMapFor(row, names)
+        const restored = restoreDraft(normalizeDraft(row.sanitizedOutput as ReportDraft), storedSectionMap(row, map, facts.studentId), map)
+        draft = restored.restored
+        unresolved = restored.unresolved
+      }
+      return {
+        generationId: row.id,
+        status: interrupted ? 'failed' : row.status,
+        createdAt: row.createdAt,
+        completedAt: row.completedAt,
+        provider: row.provider,
+        modelId: row.modelId,
+        errorCode: interrupted ? 'INTERRUPTED' : row.errorCode,
+        quotaCharged: row.quotaCharged,
+        draft,
+        unresolved,
+        suggestionStates: row.suggestionStates,
+        adoptionCount: row.adoptionCount,
+      }
     })
-    if (prepared.quotaCost > 0) await this.deps.repository.chargeQuota(request.userId, generationId, prepared.quotaCost)
-
-    return {
-      generationId,
-      draft: result.restored,
-      unresolved: result.unresolved,
-      warnings: context.warnings,
-      quotaCharged: prepared.quotaCost,
-      quotaRemaining: prepared.quota ? Math.max(0, prepared.quota.remaining - prepared.quotaCost) : null,
-    }
   }
 
   /**
@@ -373,6 +438,14 @@ export function parentSectionMap(context: Pick<PreparedContext, 'map' | 'facts'>
   }
   for (const token of context.map.tokens()) if (CONTACT_TOKEN.test(token)) overrides[token] = null
   return context.map.withOverrides(overrides)
+}
+
+/** {@link parentSectionMap} for a stored generation: classmates' tokens become 同學. */
+function storedSectionMap(generation: { sanitizedInput: Record<string, unknown> }, map: PlaceholderMap, studentId: string): PlaceholderMap {
+  const refs = (generation.sanitizedInput.known_refs ?? {}) as Record<string, string>
+  const overrides: Record<string, string> = {}
+  for (const [token, id] of Object.entries(refs)) if (token.startsWith('[學生') && id !== studentId) overrides[token] = '同學'
+  return map.withOverrides(overrides)
 }
 
 /** Rebuild a restore map for a stored generation from its known entity refs. */

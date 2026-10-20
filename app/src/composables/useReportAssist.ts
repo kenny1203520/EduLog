@@ -2,6 +2,7 @@ import { computed, ref, shallowRef, type Ref } from 'vue'
 import { ApiV1Error } from '@/services/api/ApiV1Client'
 import {
     ReportAssistService,
+    type GenerationHistoryEntry,
     type GenerationResult,
     type PartialReportDraft,
     type ReportAssistBootstrap,
@@ -16,6 +17,24 @@ export type ReportAssistStatus = 'idle' | 'loading' | 'ready' | 'generating' | '
 
 /** Quota-related errors that the panel answers by offering another source. */
 const SOURCE_ERRORS = new Set(['AI_QUOTA_EXHAUSTED', 'AI_PLAN_LIMIT_REACHED', 'AI_CREDENTIAL_INVALID', 'AI_MODEL_NOT_FOUND', 'AI_SECRET_KEY_MISSING'])
+
+/** How often, and for how long, the panel checks on a generation whose stream it lost. */
+export const FOLLOW_INTERVAL_MS = 5_000
+export const FOLLOW_LIMIT_MS = 5 * 60_000
+
+/** Panel error codes for how a generation ended, keyed by its logged error code. */
+const ENDED_ERRORS: Record<string, string> = {
+    CANCELLED: 'AI_GENERATION_CANCELLED',
+    TIMEOUT: 'AI_GENERATION_TIMEOUT',
+    PLAN_LIMIT: 'AI_PLAN_LIMIT_REACHED',
+    EMPTY_OUTPUT: 'AI_EMPTY_OUTPUT',
+    INTERRUPTED: 'AI_GENERATION_INTERRUPTED',
+}
+
+export function endedErrorCode(entry: Pick<GenerationHistoryEntry, 'status' | 'error_code'>): string {
+    if (entry.status === 'cancelled') return 'AI_GENERATION_CANCELLED'
+    return ENDED_ERRORS[entry.error_code ?? ''] ?? 'AI_PROVIDER_ERROR'
+}
 
 export interface ReportAssistVersion extends GenerationResult {
     suggestionStates: Record<number, 'kept' | 'dismissed'>
@@ -43,7 +62,15 @@ export function useReportAssist(reportId: Ref<string | undefined>, service = Rep
     const currentIndex = ref(-1)
     const preview = shallowRef<ReportAssistPreview | null>(null)
     const previewLoading = ref(false)
+    /** The generation in progress, once the server has recorded it. */
+    const runningId = ref<string | null>(null)
+    /** The stream was lost (or the panel reopened) while the server keeps generating. */
+    const following = ref(false)
+    const history = ref<GenerationHistoryEntry[]>([])
+    const historyLoading = ref(false)
     let controller: AbortController | null = null
+    let cancelRequested = false
+    let followTimer: ReturnType<typeof setTimeout> | null = null
 
     const current = computed(() => versions.value[currentIndex.value] ?? null)
     const selectedSource = computed(() => bootstrap.value?.sources.find((source) => source.model_row_id === modelRowId.value) ?? null)
@@ -76,6 +103,8 @@ export function useReportAssist(reportId: Ref<string | undefined>, service = Rep
             length.value = data.preferences.length ?? length.value
             chooseInitialSource(data)
             status.value = 'ready'
+            if (data.latest?.status === 'succeeded') addVersion(data.latest)
+            else if (data.latest?.status === 'running') follow(data.latest.generation_id)
         } catch (error) {
             errorCode.value = codeOf(error)
             status.value = 'error'
@@ -119,6 +148,8 @@ export function useReportAssist(reportId: Ref<string | undefined>, service = Rep
         status.value = 'generating'
         errorCode.value = null
         partial.value = null
+        runningId.value = null
+        cancelRequested = false
         controller = new AbortController()
         const source = selectedSource.value!
         try {
@@ -126,7 +157,14 @@ export function useReportAssist(reportId: Ref<string | undefined>, service = Rep
                 model_row_id: source.model_row_id,
                 options: options(),
                 session_seq: versions.value.length + 1,
-            }, { signal: controller.signal, onPartial: (draft) => { partial.value = draft } })
+            }, {
+                signal: controller.signal,
+                onStarted: (id) => {
+                    runningId.value = id
+                    if (cancelRequested) void service.cancel(id).catch(() => {})
+                },
+                onPartial: (draft) => { partial.value = draft },
+            })
             versions.value = [...versions.value, { ...result, suggestionStates: {} }]
             currentIndex.value = versions.value.length - 1
             if (bootstrap.value && result.quota_remaining !== null) {
@@ -134,17 +172,123 @@ export function useReportAssist(reportId: Ref<string | undefined>, service = Rep
             }
             void service.savePreferences({ tone: tone.value, length: length.value, last_model_row_id: source.model_row_id }).catch(() => {})
             status.value = 'ready'
+            runningId.value = null
         } catch (error) {
-            errorCode.value = controller.signal.aborted ? 'AI_GENERATION_CANCELLED' : codeOf(error)
-            status.value = 'ready'
+            if (runningId.value && !controller.signal.aborted && isDetached(error)) {
+                // The server is still generating; check the history until it finishes.
+                follow(runningId.value)
+            } else {
+                errorCode.value = controller.signal.aborted ? 'AI_GENERATION_CANCELLED' : codeOf(error)
+                status.value = 'ready'
+                runningId.value = null
+            }
         } finally {
             partial.value = null
             controller = null
         }
     }
 
-    function cancel() {
+    /** Wait for a generation whose stream is gone, by polling the report's history. */
+    function follow(generationId: string) {
+        stopFollowing()
+        runningId.value = generationId
+        following.value = true
+        status.value = 'generating'
+        errorCode.value = null
+        const deadline = Date.now() + FOLLOW_LIMIT_MS
+        const check = async () => {
+            followTimer = null
+            if (!following.value || !reportId.value) return
+            const entries = await service.history(reportId.value).catch(() => null)
+            if (!following.value) return
+            if (entries) history.value = entries
+            const entry = entries?.find((item) => item.generation_id === generationId)
+            if (entry && entry.status !== 'running') {
+                finishFollowing()
+                if (entry.status === 'succeeded') addVersion(entry)
+                else errorCode.value = endedErrorCode(entry)
+                if (entry.quota_charged > 0) void refreshQuota()
+                return
+            }
+            if (Date.now() > deadline) {
+                finishFollowing()
+                errorCode.value = 'AI_GENERATION_INTERRUPTED'
+                return
+            }
+            followTimer = setTimeout(check, FOLLOW_INTERVAL_MS)
+        }
+        followTimer = setTimeout(check, FOLLOW_INTERVAL_MS)
+    }
+
+    function stopFollowing() {
+        if (followTimer) clearTimeout(followTimer)
+        followTimer = null
+        following.value = false
+    }
+
+    function finishFollowing() {
+        stopFollowing()
+        runningId.value = null
+        status.value = 'ready'
+    }
+
+    async function refreshQuota() {
+        if (!reportId.value) return
+        const data = await service.bootstrap(reportId.value).catch(() => null)
+        if (data && bootstrap.value) bootstrap.value = { ...bootstrap.value, quota: data.quota }
+    }
+
+    /** Stop the generation on the server. Only this stops it; closing the panel or losing the connection does not. */
+    async function cancel() {
+        const id = runningId.value
+        if (!id) {
+            // Not recorded yet: stop it as soon as the server reports its id.
+            cancelRequested = true
+            return
+        }
+        try {
+            await service.cancel(id)
+        } catch (error) {
+            errorCode.value = codeOf(error)
+        }
+        // The stream (or, when following, the next history check) reports the outcome.
+    }
+
+    /** Leave the editor: stop listening but let the server finish; the result stays in the history. */
+    function dispose() {
+        stopFollowing()
         controller?.abort()
+    }
+
+    /** Show a stored generation in the result area. */
+    function addVersion(entry: GenerationHistoryEntry) {
+        if (!entry.draft) return
+        const existing = versions.value.findIndex((version) => version.generation_id === entry.generation_id)
+        if (existing >= 0) {
+            currentIndex.value = existing
+            return
+        }
+        versions.value = [...versions.value, {
+            generation_id: entry.generation_id,
+            draft: entry.draft,
+            unresolved_placeholders: entry.unresolved_placeholders,
+            quota_charged: entry.quota_charged,
+            quota_remaining: null,
+            suggestionStates: { ...entry.suggestion_states },
+        }]
+        currentIndex.value = versions.value.length - 1
+    }
+
+    async function loadHistory() {
+        if (!reportId.value) return
+        historyLoading.value = true
+        try {
+            history.value = await service.history(reportId.value)
+        } catch (error) {
+            errorCode.value = codeOf(error)
+        } finally {
+            historyLoading.value = false
+        }
     }
 
     function selectSource(id: string) {
@@ -190,8 +334,16 @@ export function useReportAssist(reportId: Ref<string | undefined>, service = Rep
         status, bootstrap, errorCode, tone, length, extraInstructions, focus, templateId, modelRowId,
         versions, currentIndex, current, preview, previewLoading, selectedSource, quotaRemaining,
         needsNotice, sourceProblem, alternativeSources, canGenerate, visibleSections, visibleSuggestions,
-        load, acknowledgeNotice, loadPreview, generate, cancel, selectSource, showVersion, recordAdoption, setSuggestionState,
+        following, history, historyLoading,
+        load, acknowledgeNotice, loadPreview, generate, cancel, dispose, selectSource, showVersion, recordAdoption, setSuggestionState,
+        loadHistory, addVersion,
     }
+}
+
+/** The stream broke rather than the server reporting a failure, so the generation may still finish. */
+function isDetached(error: unknown): boolean {
+    if (error instanceof ApiV1Error) return error.code === 'AI_STREAM_INTERRUPTED'
+    return true
 }
 
 function codeOf(error: unknown): string {

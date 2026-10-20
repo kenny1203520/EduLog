@@ -3,7 +3,8 @@ import { MockLanguageModelV4, convertArrayToReadableStream } from 'ai/test'
 import { SecretCipher } from '../credentials/secretCipher.js'
 import { Deidentifier } from '../deidentify/deidentifier.js'
 import type { AnalyzeRequest, PresidioSpan, TextAnalyzer } from '../deidentify/presidioClient.js'
-import type { DeidentificationConfig, GenerationLogRow, ReportAssistRepository, ReportFacts, ResolvedModel, StoredGeneration } from './reportAssistRepository.js'
+import { GenerationRegistry } from './generationRegistry.js'
+import type { DeidentificationConfig, GenerationLogRow, HistoryGeneration, ReportAssistRepository, ReportFacts, ResolvedModel, StoredGeneration } from './reportAssistRepository.js'
 import { adoptionSnapshot, credentialAssociatedData, parentSectionMap, providerStatus, ReportGenerationService } from './reportGenerationService.js'
 
 class PatternAnalyzer implements TextAnalyzer {
@@ -66,11 +67,18 @@ class FakeRepository implements ReportAssistRepository {
   async loadQuotaInputs() {
     return { policies: [{ scope: 'default' as const, target_id: null, one_time_total: 3, period: 'none' as const, period_amount: null }], roleIds: [], ledger: this.ledger }
   }
-  async insertGeneration(row: GenerationLogRow) {
+  async startGeneration(row: GenerationLogRow) {
     const id = `g${this.generations.length + 1}`
     this.generations.push({ ...row, id })
     return id
   }
+  async finishGeneration(id: string, outcome: Partial<GenerationLogRow>) {
+    const row = this.generations.find((generation) => generation.id === id)!
+    Object.assign(row, outcome)
+  }
+  async failStaleRunning() { return 0 }
+  history: HistoryGeneration[] = []
+  async listReportHistory() { return this.history }
   async chargeQuota(userId: string, generationId: string, amount: number) { this.charges.push({ userId, generationId, amount }) }
   async listGenerationsForReports() { return this.stored }
   async keptSuggestionIndexes() { return this.kept }
@@ -197,6 +205,43 @@ describe('ReportGenerationService', () => {
 
     expect(repository.generations.map((row) => [row.status, row.quota_charged])).toEqual([['failed', 0], ['cancelled', 0]])
     expect(repository.charges).toEqual([])
+  })
+
+  it('records the generation as running before the model answers', async () => {
+    const repository = new FakeRepository()
+    const { svc } = service(repository)
+    const seen: string[] = []
+    await svc.run(await svc.prepare(request), {
+      onStarted: (id) => seen.push(`${id}:${repository.generations.find((row) => row.id === id)?.status}`),
+    })
+    expect(seen).toEqual(['g1:running'])
+    expect(repository.generations.map((row) => row.status)).toEqual(['succeeded'])
+  })
+
+  it('stops only on an explicit cancel through the registry, without charging', async () => {
+    const repository = new FakeRepository()
+    const registry = new GenerationRegistry()
+    const svc = new ReportGenerationService({
+      repository, deidentifier: new Deidentifier(new PatternAnalyzer()), cipher, registry,
+      createModel: () => jsonModel(output), now: () => new Date('2026-10-20T08:00:00Z'),
+    })
+    await expect(svc.run(await svc.prepare(request), { onStarted: (id) => registry.cancel(id, 'u1') }))
+      .rejects.toMatchObject({ code: 'AI_GENERATION_CANCELLED' })
+    expect(repository.generations.map((row) => [row.status, row.error_code])).toEqual([['cancelled', 'CANCELLED']])
+    expect(repository.charges).toEqual([])
+    expect(registry.isRunning('g1')).toBe(false)
+  })
+
+  it('shows rows left running past the timeout as interrupted', async () => {
+    const repository = new FakeRepository()
+    const row = (id: string, createdAt: string): HistoryGeneration => ({
+      id, userId: 'u1', occurrenceReportId: facts.reportId, createdAt, completedAt: null, status: 'running',
+      provider: 'ollama', modelId: 'qwen', errorCode: null, quotaCharged: 0, sanitizedInput: {}, sanitizedOutput: null,
+      suggestionStates: {}, adoptionCount: 0,
+    })
+    repository.history = [row('fresh', '2026-10-20T07:59:00Z'), row('stale', '2026-10-20T07:00:00Z')]
+    const history = await service(repository).svc.history(facts, [], 'u1')
+    expect(history.map((entry) => [entry.generationId, entry.status, entry.errorCode])).toEqual([['fresh', 'running', null], ['stale', 'failed', 'INTERRUPTED']])
   })
 
   it('fails closed when de-identification is unavailable', async () => {

@@ -5,7 +5,8 @@ import { MockLanguageModelV4, convertArrayToReadableStream } from 'ai/test'
 import { errorHandler } from '../../http/errors.js'
 import { Deidentifier } from '../../ai/deidentify/deidentifier.js'
 import type { AnalyzeRequest, PresidioSpan } from '../../ai/deidentify/presidioClient.js'
-import type { GenerationLogRow, ReportAssistRepository, ReportFacts, StoredGeneration } from '../../ai/report/reportAssistRepository.js'
+import { GenerationRegistry } from '../../ai/report/generationRegistry.js'
+import type { GenerationLogRow, HistoryGeneration, ReportAssistRepository, ReportFacts, StoredGeneration } from '../../ai/report/reportAssistRepository.js'
 import { ReportGenerationService } from '../../ai/report/reportGenerationService.js'
 import { createAiReportAssistRouter } from './aiReportAssistRouter.js'
 
@@ -42,11 +43,15 @@ class Repo implements ReportAssistRepository {
   async loadQuotaInputs() {
     return { policies: [{ scope: 'default' as const, target_id: null, one_time_total: 1, period: 'none' as const, period_amount: null }], roleIds: [], ledger: this.quotaLedger }
   }
-  async insertGeneration(row: GenerationLogRow) { this.logs.push(row); return GENERATION }
+  async startGeneration(row: GenerationLogRow) { this.logs.push({ ...row }); return GENERATION }
+  async finishGeneration(_id: string, outcome: Partial<GenerationLogRow>) { Object.assign(this.logs[this.logs.length - 1], outcome) }
+  async failStaleRunning() { return 0 }
   async chargeQuota() { this.quotaLedger.push({ kind: 'consume', delta: -1, created_at: '2026-10-20T00:00:00Z' }) }
   async listGenerationsForReports() { return [] }
   async keptSuggestionIndexes() { return new Map() }
   async getGeneration(id: string) { return id === GENERATION ? this.stored : null }
+  history: HistoryGeneration[] = []
+  async listReportHistory() { return this.history }
   async setSuggestionState() {}
   async insertAdoption(row: unknown) { this.adoptions.push(row); return 'adoption-1' }
 }
@@ -71,7 +76,7 @@ const model = () => new MockLanguageModelV4({
   }),
 })
 
-function app(repo: Repo, allow = true) {
+function app(repo: Repo, allow = true, registry = new GenerationRegistry()) {
   const instance = express()
   instance.use(express.json())
   instance.use((req, _res, next) => {
@@ -83,7 +88,8 @@ function app(repo: Repo, allow = true) {
   })
   instance.use('/api', createAiReportAssistRouter({
     repository: () => repo,
-    service: (repository) => new ReportGenerationService({ repository, deidentifier: new Deidentifier(analyzer), cipher: null, createModel: model }),
+    registry,
+    service: (repository) => new ReportGenerationService({ repository, deidentifier: new Deidentifier(analyzer), cipher: null, createModel: model, registry }),
   }))
   instance.use(errorHandler)
   return instance
@@ -102,7 +108,7 @@ describe('AI report assist router', () => {
       const [eventLine, dataLine] = chunk.split('\n')
       return { event: eventLine.slice(7), data: JSON.parse(dataLine.slice(6)) }
     })
-    expect(events[0].event).toBe('start')
+    expect(events[0]).toMatchObject({ event: 'start', data: { generation_id: GENERATION } })
     expect(events.some((event) => event.event === 'partial')).toBe(true)
     const done = events.at(-1)!
     expect(done.event).toBe('done')
@@ -110,6 +116,37 @@ describe('AI report assist router', () => {
     expect(done.data.quota_remaining).toBe(0)
     expect(JSON.stringify(repo.logs)).not.toContain('王小明')
     expect(repo.quotaLedger).toHaveLength(1)
+    expect(repo.logs.map((row) => row.status)).toEqual(['succeeded'])
+  })
+
+  it('cancels only a running generation of the caller', async () => {
+    const registry = new GenerationRegistry()
+    const controller = registry.register(GENERATION, 'u1')
+    const response = await request(app(new Repo(), true, registry)).post(`/api/ai/report-assist/generations/${GENERATION}/cancel`)
+    expect(response.body.data).toEqual({ generation_id: GENERATION, cancelled: true })
+    expect(controller.signal.aborted).toBe(true)
+
+    const other = new GenerationRegistry()
+    other.register(GENERATION, 'someone-else')
+    const refused = await request(app(new Repo(), true, other)).post(`/api/ai/report-assist/generations/${GENERATION}/cancel`)
+    expect(refused.body.data.cancelled).toBe(false)
+  })
+
+  it('lists the history restored for the teacher, classmates as 同學 in parent sections', async () => {
+    const repo = new Repo()
+    repo.history = [{
+      id: GENERATION, userId: 'u1', occurrenceReportId: REPORT, createdAt: '2026-10-20T00:00:00Z', completedAt: '2026-10-20T00:00:20Z',
+      status: 'succeeded', provider: 'ollama', modelId: 'qwen', errorCode: null, quotaCharged: 1, adoptionCount: 2, suggestionStates: { 0: 'kept' },
+      sanitizedInput: { known_refs: { '[學生A]': 's1', '[學生B]': 's2' } },
+      sanitizedOutput: { sections: [{ key: 'today', title: '今日', body: '[學生A]幫助[學生B]，[電話A]' }], teachingSuggestions: ['讓[學生A]與[學生B]分組'] },
+    }]
+    const response = await request(app(repo)).get(`/api/ai/report-assist/reports/${REPORT}/generations`)
+    expect(response.status).toBe(200)
+    const [entry] = response.body.data
+    expect(entry).toMatchObject({ generation_id: GENERATION, status: 'succeeded', adoption_count: 2, suggestion_states: { 0: 'kept' } })
+    expect(entry.draft.sections[0].body).toBe('王小明幫助同學，[電話A]')
+    expect(entry.draft.teachingSuggestions[0]).toBe('讓王小明與[學生B]分組')
+    expect(entry.unresolved_placeholders).toEqual(expect.arrayContaining(['[電話A]']))
   })
 
   it('refuses with JSON before streaming once quota is spent', async () => {

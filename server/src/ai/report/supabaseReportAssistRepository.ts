@@ -8,6 +8,7 @@ import type {
   AiSettings,
   DeidentificationConfig,
   GenerationLogRow,
+  HistoryGeneration,
   ModelSource,
   ReportAssistRepository,
   ReportFacts,
@@ -259,9 +260,22 @@ export class SupabaseReportAssistRepository implements ReportAssistRepository {
     return { policies: policies as QuotaPolicyRow[], roleIds, ledger: ledger as QuotaLedgerEntry[] }
   }
 
-  async insertGeneration(row: GenerationLogRow): Promise<string> {
+  async startGeneration(row: GenerationLogRow): Promise<string> {
     const inserted = unwrap(await this.adminDb.from('ai_generations').insert(row).select('id').single())
     return inserted!.id as string
+  }
+
+  async finishGeneration(generationId: string, outcome: Partial<GenerationLogRow>): Promise<void> {
+    // completed_at is set by the database when the status leaves 'running'.
+    unwrap(await this.adminDb.from('ai_generations').update(outcome).eq('id', generationId))
+  }
+
+  async failStaleRunning(olderThan: Date): Promise<number> {
+    const updated = many(await this.adminDb.from('ai_generations')
+      .update({ status: 'failed', error_code: 'INTERRUPTED' })
+      .eq('status', 'running').lt('created_at', olderThan.toISOString())
+      .select('id'))
+    return updated.length
   }
 
   async chargeQuota(userId: string, generationId: string, amount: number): Promise<void> {
@@ -291,6 +305,34 @@ export class SupabaseReportAssistRepository implements ReportAssistRepository {
       .select('id,user_id,occurrence_report_id,created_at,sanitized_input,sanitized_output')
       .eq('id', generationId).maybeSingle())
     return row ? toStored(row) : null
+  }
+
+  async listReportHistory(reportId: string, userId: string, limit: number): Promise<HistoryGeneration[]> {
+    const rows = many(await this.adminDb.from('ai_generations')
+      .select('id,user_id,occurrence_report_id,created_at,completed_at,status,provider,model_id,error_code,quota_charged,sanitized_input,sanitized_output')
+      .eq('occurrence_report_id', reportId).eq('user_id', userId)
+      .order('created_at', { ascending: false }).limit(limit))
+    const ids = rows.map((row) => row.id as string)
+    if (ids.length === 0) return []
+    const [states, adoptions] = await Promise.all([
+      this.adminDb.from('ai_teaching_suggestion_states').select('generation_id,suggestion_index,state').in('generation_id', ids),
+      this.adminDb.from('ai_adoptions').select('generation_id').in('generation_id', ids),
+    ])
+    const statesById = new Map<string, Record<number, 'kept' | 'dismissed'>>()
+    for (const row of many(states)) statesById.set(row.generation_id, { ...statesById.get(row.generation_id), [row.suggestion_index]: row.state })
+    const adoptionCounts = new Map<string, number>()
+    for (const row of many(adoptions)) adoptionCounts.set(row.generation_id, (adoptionCounts.get(row.generation_id) ?? 0) + 1)
+    return rows.map((row) => ({
+      ...toStored(row),
+      status: row.status,
+      completedAt: row.completed_at ?? null,
+      provider: row.provider,
+      modelId: row.model_id,
+      errorCode: row.error_code ?? null,
+      quotaCharged: Number(row.quota_charged ?? 0),
+      suggestionStates: statesById.get(row.id) ?? {},
+      adoptionCount: adoptionCounts.get(row.id) ?? 0,
+    }))
   }
 
   async setSuggestionState(generationId: string, index: number, state: 'kept' | 'dismissed', userId: string): Promise<void> {

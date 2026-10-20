@@ -1,8 +1,8 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 import { ApiV1Error } from '@/services/api/ApiV1Client'
-import type { ReportAssistBootstrap, ReportAssistService } from '@/services/ai/ReportAssistService'
-import { useReportAssist } from './useReportAssist'
+import type { GenerationHistoryEntry, ReportAssistBootstrap, ReportAssistService } from '@/services/ai/ReportAssistService'
+import { FOLLOW_INTERVAL_MS, useReportAssist } from './useReportAssist'
 
 const site = { model_row_id: 'site', model_id: 'sonnet', display_name: 'Sonnet', provider: 'anthropic' as const, credential_scope: 'site' as const, credential_label: 'School', quota_weight: 2, is_default: true }
 const mine = { ...site, model_row_id: 'mine', credential_scope: 'user' as const, credential_label: 'My key', quota_weight: 0, is_default: false }
@@ -11,7 +11,7 @@ function bootstrap(overrides: Partial<ReportAssistBootstrap> = {}): ReportAssist
     return {
         enabled: true, notice: { version: 1, acknowledged: true }, default_model_row_id: 'site', sources: [site, mine],
         quota: { remaining: 5, periodic: null, one_time: { total: 5, used: 0, remaining: 5 } },
-        warnings: [], kept_suggestions: [], preferences: {},
+        warnings: [], kept_suggestions: [], latest: null, preferences: {},
         ...overrides,
     }
 }
@@ -24,12 +24,26 @@ function fakeService(data = bootstrap()) {
         savePreferences: vi.fn().mockResolvedValue(undefined),
         setSuggestionState: vi.fn().mockResolvedValue(undefined),
         recordAdoption: vi.fn().mockResolvedValue(undefined),
+        history: vi.fn().mockResolvedValue([] as GenerationHistoryEntry[]),
+        cancel: vi.fn().mockResolvedValue(true),
         generate: vi.fn(async (_id: string, body: { session_seq: number }, hooks: { onPartial?: (d: unknown) => void }) => {
             hooks.onPartial?.({ sections: [{ key: 'today', body: '部分' }] })
             return { generation_id: `g${body.session_seq}`, draft: { sections: [{ key: 'today', title: '今日', body: `v${body.session_seq}` }], teachingSuggestions: ['建議'] }, unresolved_placeholders: [], quota_charged: 2, quota_remaining: 3 }
         }),
     } satisfies Record<keyof typeof ReportAssistService, unknown>
 }
+
+function entry(overrides: Partial<GenerationHistoryEntry> = {}): GenerationHistoryEntry {
+    return {
+        generation_id: 'g9', status: 'succeeded', created_at: '2026-10-20T08:00:00Z', completed_at: '2026-10-20T08:00:20Z',
+        provider: 'ollama', model_id: 'qwen', error_code: null, quota_charged: 2,
+        draft: { sections: [{ key: 'today', title: '今日', body: '已存的結果' }], teachingSuggestions: ['建議'] },
+        unresolved_placeholders: [], suggestion_states: { 0: 'kept' }, adoption_count: 0,
+        ...overrides,
+    }
+}
+
+afterEach(() => { vi.useRealTimers() })
 
 describe('useReportAssist', () => {
     it('restores remembered preferences and source on load', async () => {
@@ -90,5 +104,83 @@ describe('useReportAssist', () => {
         service.setSuggestionState.mockRejectedValueOnce(new ApiV1Error(404, { error: { code: 'NOT_FOUND', message: '', request_id: '', trace_id: '' } }))
         await assist.setSuggestionState(0, 'kept')
         expect(assist.current.value?.suggestionStates[0]).toBeUndefined()
+    })
+
+    it('reopens on the latest saved result with its kept suggestions', async () => {
+        const assist = useReportAssist(ref('r1'), fakeService(bootstrap({ latest: entry() })) as never)
+        await assist.load()
+        expect(assist.current.value?.generation_id).toBe('g9')
+        expect(assist.visibleSections.value[0].body).toBe('已存的結果')
+        expect(assist.current.value?.suggestionStates).toEqual({ 0: 'kept' })
+    })
+
+    it('keeps waiting for the server when the stream drops after the generation started', async () => {
+        vi.useFakeTimers()
+        const service = fakeService()
+        service.generate.mockImplementationOnce(async (_id, _body, hooks: { onStarted?: (id: string) => void }) => {
+            hooks.onStarted?.('g9')
+            throw new TypeError('network error')
+        })
+        service.history
+            .mockResolvedValueOnce([entry({ status: 'running', draft: null })])
+            .mockResolvedValueOnce([entry()])
+        const assist = useReportAssist(ref('r1'), service as never)
+        await assist.load()
+        await assist.generate()
+
+        expect(assist.following.value).toBe(true)
+        expect(assist.status.value).toBe('generating')
+        expect(assist.errorCode.value).toBeNull()
+
+        await vi.advanceTimersByTimeAsync(FOLLOW_INTERVAL_MS)
+        expect(assist.following.value).toBe(true)
+        await vi.advanceTimersByTimeAsync(FOLLOW_INTERVAL_MS)
+        expect(assist.following.value).toBe(false)
+        expect(assist.status.value).toBe('ready')
+        expect(assist.current.value?.generation_id).toBe('g9')
+    })
+
+    it('reports how a followed generation ended when it did not succeed', async () => {
+        vi.useFakeTimers()
+        const service = fakeService(bootstrap({ latest: entry({ status: 'running', draft: null }) }))
+        service.history.mockResolvedValueOnce([entry({ status: 'failed', error_code: 'TIMEOUT', draft: null, quota_charged: 0 })])
+        const assist = useReportAssist(ref('r1'), service as never)
+        await assist.load()
+        expect(assist.following.value).toBe(true)
+        await vi.advanceTimersByTimeAsync(FOLLOW_INTERVAL_MS)
+        expect(assist.errorCode.value).toBe('AI_GENERATION_TIMEOUT')
+        expect(assist.versions.value).toEqual([])
+    })
+
+    it('stops a generation through the cancel request, also before the server reported its id', async () => {
+        const service = fakeService()
+        let started: ((id: string) => void) | undefined
+        let finish: (() => void) | undefined
+        service.generate.mockImplementationOnce((_id, _body, hooks: { onStarted?: (id: string) => void }) => new Promise((_, reject) => {
+            started = hooks.onStarted
+            finish = () => reject(new ApiV1Error(502, { error: { code: 'AI_GENERATION_CANCELLED', message: '', request_id: '', trace_id: '' } }))
+        }))
+        const assist = useReportAssist(ref('r1'), service as never)
+        await assist.load()
+        const running = assist.generate()
+        await assist.cancel()
+        expect(service.cancel).not.toHaveBeenCalled()
+        started!('g7')
+        expect(service.cancel).toHaveBeenCalledWith('g7')
+        finish!()
+        await running
+        expect(assist.errorCode.value).toBe('AI_GENERATION_CANCELLED')
+        expect(assist.following.value).toBe(false)
+    })
+
+    it('leaving the panel stops listening without cancelling', async () => {
+        vi.useFakeTimers()
+        const service = fakeService(bootstrap({ latest: entry({ status: 'running', draft: null }) }))
+        const assist = useReportAssist(ref('r1'), service as never)
+        await assist.load()
+        assist.dispose()
+        await vi.advanceTimersByTimeAsync(FOLLOW_INTERVAL_MS * 2)
+        expect(service.history).not.toHaveBeenCalled()
+        expect(service.cancel).not.toHaveBeenCalled()
     })
 })

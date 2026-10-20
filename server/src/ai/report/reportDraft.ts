@@ -51,6 +51,8 @@ export interface DeepPartialDraft {
 export async function streamReportDraft(options: StreamReportDraftOptions): Promise<ReportDraftResult> {
   const { model, prompt, map, signal, onPartial } = options
   const sectionMap = options.sectionMap ?? map
+  // Cancelled before the call started: do not open a stream just to abort it.
+  signal?.throwIfAborted()
   // The SDK reports a failed stream as NoOutputGeneratedError without the
   // provider error; keep the original (with its HTTP status) from onError.
   let streamError: unknown
@@ -74,6 +76,11 @@ export async function streamReportDraft(options: StreamReportDraftOptions): Prom
   }
 
   const sanitized = normalizeDraft(output)
+  return { sanitized, ...restoreDraft(sanitized, sectionMap, map), usage: await result.usage }
+}
+
+/** Restore a sanitized draft: sections with `sectionMap`, teaching suggestions with `map`. */
+export function restoreDraft(sanitized: ReportDraft, sectionMap: PlaceholderMap, map: PlaceholderMap): { restored: ReportDraft, unresolved: string[] } {
   const unresolved = new Set<string>()
   const restoreWith = (restoreMap: PlaceholderMap) => (text: string) => {
     const restored = restoreMap.restore(text)
@@ -84,7 +91,7 @@ export async function streamReportDraft(options: StreamReportDraftOptions): Prom
     sections: sanitized.sections.map((section) => ({ ...section, title: restoreWith(sectionMap)(section.title), body: restoreWith(sectionMap)(section.body) })),
     teachingSuggestions: sanitized.teachingSuggestions.map(restoreWith(map)),
   }
-  return { sanitized, restored, unresolved: [...unresolved], usage: await result.usage }
+  return { restored, unresolved: [...unresolved] }
 }
 
 /** Keep the first section per key, in canonical order, and drop empty suggestions. */

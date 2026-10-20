@@ -51,7 +51,8 @@
     "suggestions_title": "Teaching suggestions",
     "no_suggestions": "No teaching suggestions this time.",
     "keep": "Keep for next lesson",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "following": "The server is still generating this draft (closing the page or losing the connection does not stop it); the result will appear here when it is done."
   },
   "tone": {
     "warm": "Warm",
@@ -99,7 +100,8 @@
     "AI_EMPTY_OUTPUT": "The AI returned an empty draft; no quota was used. Try again or use another model.",
     "AI_PLAN_LIMIT_REACHED": "Your ChatGPT plan allowance or this site's weekly limit is used up. Switch source or try again later.",
     "AI_CHATGPT_PLAN_NOT_GRANTED": "This sign-in did not grant plan usage. It needs ChatGPT Plus or Pro and consent to use the plan allowance.",
-    "AI_CHATGPT_NOT_CONFIGURED": "Connecting a ChatGPT account is not available on this site yet."
+    "AI_CHATGPT_NOT_CONFIGURED": "Connecting a ChatGPT account is not available on this site yet.",
+    "AI_GENERATION_INTERRUPTED": "This generation was interrupted (the server restarted or it took too long); no quota was used. Please try again."
   },
   "providers": {
     "anthropic": "Anthropic Claude",
@@ -265,5 +267,22 @@
     "picker_manual_chatgpt": "ChatGPT plans don't publish a model list; type the model ID.",
     "picker_manual_unavailable": "The model list for this source isn't available right now; type the model ID.",
     "usage_unpriced": "{n} more generations used unpriced models and are not in the cost"
+  },
+  "history": {
+    "tabs_label": "AI assistant tabs",
+    "tab_generate": "Generate",
+    "tab_history": "History",
+    "empty": "You have no AI generations for this report yet.",
+    "open": "Open this version (insert, copy or keep suggestions)",
+    "adopted": "Used {n} times",
+    "kept": "Kept",
+    "running_hint": "Still generating; this updates when it is done.",
+    "unrestorable": "{tokens} were detected as personal data during de-identification; only the placeholder is stored, so they cannot be restored.",
+    "status": {
+      "running": "Generating",
+      "succeeded": "Done",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    }
   }
 }
