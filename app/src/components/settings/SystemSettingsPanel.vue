@@ -9,6 +9,7 @@ import RolePermissionEditor from '@/components/settings/RolePermissionEditor.vue
 import TeachingRolePermissionsPanel from '@/components/settings/TeachingRolePermissionsPanel.vue'
 import PlatformTeachingRoleAssignmentsPanel from '@/components/settings/PlatformTeachingRoleAssignmentsPanel.vue'
 import AuditLogPanel from '@/components/settings/AuditLogPanel.vue'
+import AiAdminPanel from '@/components/settings/ai/AiAdminPanel.vue'
 import IncompleteReportNotificationSettings from '@/components/settings/IncompleteReportNotificationSettings.vue'
 import DashboardScheduleVisibilitySettings from '@/components/settings/DashboardScheduleVisibilitySettings.vue'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
@@ -35,7 +36,7 @@ const selectedRoleId = ref('')
 const selectedStatus = ref<'active' | 'disabled'>('active')
 const statusReason = ref('')
 const epoch = ref(1)
-const activeSection = ref<'permissions' | 'teaching_permissions' | 'teaching_assignments' | 'notifications' | 'dashboard_schedule' | 'assignments' | 'users' | 'audit'>('permissions')
+const activeSection = ref<'permissions' | 'teaching_permissions' | 'teaching_assignments' | 'notifications' | 'dashboard_schedule' | 'assignments' | 'users' | 'audit' | 'ai'>('permissions')
 const loading = ref(false)
 const userLoading = ref(false)
 const assignmentLoading = ref(false)
@@ -235,7 +236,7 @@ watch(assignmentPageSize, () => { assignmentPage.value = 1; void loadAssignments
             <h2 class="text-xl font-black text-gray-900">{{ t('rbac.system_title') }}</h2>
             <p class="mt-1 text-sm font-bold text-gray-400">{{ t('rbac.system_subtitle') }}</p>
             <nav class="mt-5 flex flex-wrap gap-2" role="group" :aria-label="t('rbac.system_sections.label')">
-                <button v-for="section in ['permissions', 'teaching_permissions', 'assignments', 'teaching_assignments', 'users', 'notifications', 'dashboard_schedule', 'audit'] as const" :key="section" type="button" :aria-pressed="activeSection === section" class="min-h-11 rounded-xl px-4 py-2 text-sm font-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600" :class="activeSection === section ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600'" @click="selectSection(section)">
+                <button v-for="section in ['permissions', 'teaching_permissions', 'assignments', 'teaching_assignments', 'users', 'notifications', 'dashboard_schedule', 'audit', 'ai'] as const" :key="section" type="button" :aria-pressed="activeSection === section" class="min-h-11 rounded-xl px-4 py-2 text-sm font-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600" :class="activeSection === section ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600'" @click="selectSection(section)">
                     {{ t(`rbac.system_sections.${section}`) }}
                 </button>
             </nav>
@@ -303,5 +304,6 @@ watch(assignmentPageSize, () => { assignmentPage.value = 1; void loadAssignments
         <DashboardScheduleVisibilitySettings v-else-if="activeSection === 'dashboard_schedule'" />
 
         <AuditLogPanel v-if="activeSection === 'audit'" />
+        <AiAdminPanel v-if="activeSection === 'ai'" />
     </section>
 </template>

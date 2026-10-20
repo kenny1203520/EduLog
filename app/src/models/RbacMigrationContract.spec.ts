@@ -1,7 +1,9 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync as readFileSyncRaw } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
+// Checkouts with CRLF line endings (Windows) must compare like LF ones.
+const readFileSync = (path: string, encoding: 'utf8') => readFileSyncRaw(path, encoding).replace(/\r\n/g, '\n')
 const migration = readFileSync(resolve(process.cwd(), '../supabase/migrations/1000027_rbac_foundation_and_scoped_permissions.sql'), 'utf8')
 const correction = readFileSync(resolve(process.cwd(), '../supabase/migrations/1000028_rbac_security_performance_and_enrollment_completion.sql'), 'utf8')
 const strictNotificationEligibility = readFileSync(resolve(process.cwd(), '../supabase/migrations/1000029_strict_incomplete_report_notification_eligibility.sql'), 'utf8')

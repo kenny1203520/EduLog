@@ -13,7 +13,7 @@
 "system_permissions": "系統角色權限",
 "system_title": "系統管理",
 "system_subtitle": "管理系統角色、指派與帳號狀態，所有變更都會經過版本檢查與稽核。",
-"system_sections": { "label": "系統設定分區", "permissions": "系統角色權限", "teaching_permissions": "教學角色權限", "teaching_assignments": "教學角色指派", "notifications": "報告通知設定", "dashboard_schedule": "今日課表顯示範圍", "assignments": "系統角色指派", "users": "使用者狀態", "audit": "稽核紀錄" },
+"system_sections": { "label": "系統設定分區", "permissions": "系統角色權限", "teaching_permissions": "教學角色權限", "teaching_assignments": "教學角色指派", "notifications": "報告通知設定", "dashboard_schedule": "今日課表顯示範圍", "assignments": "系統角色指派", "users": "使用者狀態", "audit": "稽核紀錄", "ai": "AI 報告助手" },
 "system_ui": { "role_assignments": "角色指派", "user": "使用者", "select_user": "搜尋並選擇使用者", "user_search": "依姓名或 Email 搜尋使用者", "user_search_hint": "輸入姓名或 Email 即可搜尋使用者。", "no_users_found": "找不到符合條件的使用者，請嘗試其他姓名或 Email。", "search_user_to_view": "先搜尋並選取使用者，再檢視此人的系統角色。", "no_assignments_for_user": "此使用者目前沒有系統角色指派。", "system_role": "系統角色", "select_system_role": "選擇系統角色", "system_role_search": "搜尋系統角色", "assign_role": "指派角色", "effective_from": "生效日", "effective_to": "結束日（選填）", "no_end_date": "無結束日", "assignment_overlap": "此使用者在重疊期間已具有相同的系統角色。", "unknown_user": "無法取得使用者資料", "account_status": "帳號狀態", "status_user": "狀態使用者", "active": "啟用中", "scheduled": "尚未生效", "expired": "已到期", "disabled": "停用", "disable_reason": "停用理由", "last_owner_guard": "最後一位系統擁有者無法被移除、降級或停用。", "remove_assignment_confirm": "確定要移除此系統角色指派嗎？", "assignments_loading": "正在載入 {user} 的角色…", "assignment_load_failed": "無法載入此使用者的系統角色指派。", "retry": "重試", "current_status": "目前狀態", "change_to": "變更為", "disabled_at": "停用日期", "disabled_reason_recorded": "停用原因", "no_disable_reason": "未記錄停用原因。" },
 "audit_title": "稽核紀錄",
 "audit_description": "搜尋並檢視已記錄的系統與教學事件。",
@@ -115,7 +115,8 @@
     "templates": { "name": "範本", "description": "報告與教學範本" },
     "report-templates": { "name": "報告範本", "description": "建立與管理學生報告使用的範本" },
     "dashboard": { "name": "儀表板", "description": "首頁儀表板與今日課表" },
-    "holidays": { "name": "假日", "description": "教學行事曆假日" }
+    "holidays": { "name": "假日", "description": "教學行事曆假日" },
+    "ai": { "name": "AI 報告助手", "description": "AI 生成學習報告與教學建議、供應商憑證與生成紀錄" }
   },
   "actions": {
     "list": { "name": "列表", "description": "查看資料集合" },
@@ -128,7 +129,9 @@
     "schedule_all": { "name": "查看所有今日課表", "description": "在今日課表中查看所有課程，而非僅限自己授課的課程" },
     "schedule_view": { "name": "顯示今日課表", "description": "拒絕時，該範圍的課程（包含自己授課的班級）不會出現在今日課表" },
     "read_sensitive": { "name": "讀取敏感資料", "description": "查看受保護的個人資料" },
-    "update_sensitive": { "name": "更新敏感資料", "description": "編輯受保護的個人資料" }
+    "update_sensitive": { "name": "更新敏感資料", "description": "編輯受保護的個人資料" },
+    "generate": { "name": "AI 生成", "description": "在報告編輯器使用 AI 生成學習報告與教學建議" },
+    "logs_view_all": { "name": "查看所有 AI 紀錄", "description": "查看所有使用者的 AI 生成與採用紀錄" }
   },
   "roles": {
     "system_owner": { "name": "系統擁有者", "description": "EduLog 系統的受保護擁有者" },

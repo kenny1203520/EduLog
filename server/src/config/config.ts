@@ -1,4 +1,8 @@
 import { z } from 'zod'
+import { decodeSecretKey } from '../ai/credentials/secretCipher.js'
+
+/** Treats an empty environment value (e.g. `KEY=` in an env file) as unset. */
+const emptyAsUnset = (value: unknown) => value === '' ? undefined : value
 
 const ConfigSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -31,6 +35,14 @@ const ConfigSchema = z.object({
   API_ALLOWED_ORIGINS: z.string().default(''),
   API_EXTENSION_ALLOWED_ORIGINS: z.string().default(''),
   API_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(120),
+  // AES-256-GCM key for AI provider credentials stored in ai_credentials:
+  // 32 random bytes, base64 (`openssl rand -base64 32`). Optional so existing
+  // deployments boot; AI credential storage stays unavailable until it is set.
+  AI_SECRET_KEY: z.preprocess(emptyAsUnset, z.string().refine((value) => decodeSecretKey(value) !== null, {
+    message: 'AI_SECRET_KEY must be 32 bytes encoded as base64',
+  }).optional()),
+  // Presidio analyzer REST endpoint used to de-identify AI prompts.
+  PRESIDIO_ANALYZER_URL: z.preprocess(emptyAsUnset, z.url().optional()),
 })
 
 export type ApiConfig = z.infer<typeof ConfigSchema>

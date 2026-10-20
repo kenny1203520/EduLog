@@ -33,6 +33,8 @@ export function createRequestId() { return `edulog-${randomHex(24)}` }
 export function createTraceparent() { return `00-${randomHex(32)}-${randomHex(16)}-01` }
 function legacyBaseUrl() { return getRuntimeConfigValue('VITE_LEGACY_API_BASE_URL') || '/api' }
 function readCookie(name: string) { if (typeof document === 'undefined') return ''; const value = document.cookie.split('; ').find((item) => item.startsWith(`${name}=`))?.slice(name.length + 1); return value ? decodeURIComponent(value) : '' }
+/** CSRF token for requests that cannot go through {@link ApiV1Client.request}, such as streamed responses. */
+export function readCsrfToken() { return readCookie('edulog_csrf') }
 
 export class ApiV1Client {
   private readonly baseUrl: string; private readonly sameOrigin: boolean

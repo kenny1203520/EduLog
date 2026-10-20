@@ -198,20 +198,23 @@ export function createRbacRouter() {
 
   router.get('/pages/settings/overview', wrap(async (req, res) => {
     requireRequest(req)
-    const [preferences, capabilities] = await Promise.all([
+    const aiPermission = (key: string) => req.db!.rpc('has_api_permission', { p_user_id: req.user!.id, p_permission_key: key, p_classroom_id: null, p_class_session_id: null })
+    const [preferences, capabilities, aiManage, aiLogs] = await Promise.all([
       req.db!.from('user_preferences').select('time_zone,editor_settings,created_at,updated_at').eq('user_id', req.user!.id).maybeSingle(),
       req.db!.rpc('get_rbac_capabilities', { p_teaching_id: null }),
+      aiPermission('system.ai.manage'),
+      aiPermission('system.ai.logs.view_all'),
     ])
     if (preferences.error) throw mapDatabaseError(preferences.error)
     if (capabilities.error) throw mapDatabaseError(capabilities.error)
     const caps = (capabilities.data ?? {}) as Record<string, unknown>
-    const system = (caps.system ?? {}) as Record<string, unknown>
+    const system: Record<string, unknown> = { ...(caps.system ?? {}) as Record<string, unknown>, ai_manage: aiManage.data === true, ai_logs_view_all: aiLogs.data === true }
     const teaching = (caps.teaching ?? {}) as Record<string, unknown>
     return sendData(req, res, {
       preferences: preferences.data, capabilities: caps,
     tabs: {
       personal: true,
-      system: Boolean(system.users_manage || system.roles_manage || system.assignments_manage || system.permissions_read || system.audit_read || system.is_owner),
+      system: Boolean(system.users_manage || system.roles_manage || system.assignments_manage || system.permissions_read || system.audit_read || system.is_owner || system.ai_manage || system.ai_logs_view_all),
     },
     sections: { teaching: { roles: Boolean(teaching.roles_manage), permissions: Boolean(teaching.permissions_read) }, system },
     })
