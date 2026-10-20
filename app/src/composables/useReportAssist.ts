@@ -15,7 +15,7 @@ import {
 export type ReportAssistStatus = 'idle' | 'loading' | 'ready' | 'generating' | 'error'
 
 /** Quota-related errors that the panel answers by offering another source. */
-const SOURCE_ERRORS = new Set(['AI_QUOTA_EXHAUSTED', 'AI_CREDENTIAL_INVALID', 'AI_MODEL_NOT_FOUND', 'AI_SECRET_KEY_MISSING'])
+const SOURCE_ERRORS = new Set(['AI_QUOTA_EXHAUSTED', 'AI_PLAN_LIMIT_REACHED', 'AI_CREDENTIAL_INVALID', 'AI_MODEL_NOT_FOUND', 'AI_SECRET_KEY_MISSING'])
 
 export interface ReportAssistVersion extends GenerationResult {
     suggestionStates: Record<number, 'kept' | 'dismissed'>

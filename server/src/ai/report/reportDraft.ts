@@ -51,21 +51,29 @@ export interface DeepPartialDraft {
 export async function streamReportDraft(options: StreamReportDraftOptions): Promise<ReportDraftResult> {
   const { model, prompt, map, signal, onPartial } = options
   const sectionMap = options.sectionMap ?? map
+  // The SDK reports a failed stream as NoOutputGeneratedError without the
+  // provider error; keep the original (with its HTTP status) from onError.
+  let streamError: unknown
   const result = streamText({
     model,
     system: prompt.system,
     prompt: prompt.prompt,
     output: Output.object({ schema: ReportDraftSchema }),
     abortSignal: signal,
-    // Errors surface through the awaited promises; skip the SDK's console logging.
-    onError: () => {},
+    onError: ({ error }) => { streamError ??= error },
   })
 
-  for await (const partial of result.partialOutputStream) {
-    onPartial?.(restorePartial(partial as DeepPartialDraft, sectionMap, map))
+  let output: ReportDraft
+  try {
+    for await (const partial of result.partialOutputStream) {
+      onPartial?.(restorePartial(partial as DeepPartialDraft, sectionMap, map))
+    }
+    output = await result.output
+  } catch (error) {
+    throw streamError ?? error
   }
 
-  const sanitized = normalizeDraft(await result.output)
+  const sanitized = normalizeDraft(output)
   const unresolved = new Set<string>()
   const restoreWith = (restoreMap: PlaceholderMap) => (text: string) => {
     const restored = restoreMap.restore(text)

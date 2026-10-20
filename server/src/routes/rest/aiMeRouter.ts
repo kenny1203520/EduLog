@@ -21,11 +21,20 @@ import {
   OpenRouterExchangeError,
   PendingPkceStore,
 } from '../../ai/credentials/openRouterOAuth.js'
+import {
+  buildChatGptAuthorizationUrl,
+  ChatGptOAuthError,
+  createOAuthState,
+  exchangeChatGptCode,
+  siwcClientFromConfig,
+} from '../../ai/credentials/chatgptPlanOAuth.js'
+import { isChatGptPlanCredential, sharedChatGptPlanTokens, type ChatGptPlanTokens } from '../../ai/credentials/chatgptPlanTokens.js'
 
 const uuid = z.string().uuid()
 const personalModelInput = modelInput.pick({ model_id: true, display_name: true, enabled: true }).strict()
 const testInput = z.object({ model_id: z.string().trim().min(1).max(200) }).strict()
 const exchangeInput = z.object({ code: z.string().trim().min(1).max(2048) }).strict()
+const chatgptExchangeInput = z.object({ code: z.string().trim().min(1).max(4096), state: z.string().trim().min(1).max(200) }).strict()
 
 function wrap(handler: (req: Request, res: Response) => Promise<unknown>) {
   return (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res)).catch(next)
@@ -61,8 +70,25 @@ async function ownCredential(req: Request, id: string) {
  * - POST   /ai/me/openrouter/start                OAuth PKCE authorization URL
  * - POST   /ai/me/openrouter/exchange             turn the returned code into a credential
  */
-export function createAiMeRouter(config: ApiConfig, pending = new PendingPkceStore(), fetchImpl: typeof fetch = fetch) {
+export function createAiMeRouter(
+  config: ApiConfig,
+  pending = new PendingPkceStore(),
+  fetchImpl: typeof fetch = fetch,
+  chatgptPending = new PendingPkceStore(),
+  chatgptTokensOverride?: ChatGptPlanTokens,
+) {
   const cipher = config.AI_SECRET_KEY ? SecretCipher.fromBase64(config.AI_SECRET_KEY) : null
+  // "Sign in with ChatGPT" stays hidden until an OpenAI-approved client is configured.
+  const siwc = siwcClientFromConfig(config)
+  const chatgptTokens = chatgptTokensOverride ?? (siwc && cipher ? sharedChatGptPlanTokens(siwc, cipher) : null)
+  const resolveTokenFor = (req: Request) => async (credential: { provider: string, authType: string, credentialId: string }) =>
+    chatgptTokens && isChatGptPlanCredential(credential) ? chatgptTokens.getAccessToken(req.adminDb!, credential.credentialId) : undefined
+  const chatgptCallback = () => {
+    const url = new URL('/dashboard/settings', config.EDULOG_WEB_BASE_URL)
+    url.searchParams.set('tab', 'personal')
+    url.searchParams.set('ai_oauth', 'chatgpt')
+    return url.toString()
+  }
   const router = Router()
 
   router.get('/ai/me/credentials', wrap(async (req, res) => {
@@ -75,6 +101,7 @@ export function createAiMeRouter(config: ApiConfig, pending = new PendingPkceSto
     return res.json(envelope(req, {
       credentials: (credentials.data ?? []).map((credential) => ({ ...credential, models: (models.data ?? []).filter((model) => model.credential_id === credential.id) })),
       openrouter_available: true,
+      chatgpt_available: chatgptTokens !== null,
       secret_storage_available: cipher !== null,
     }))
   }))
@@ -106,6 +133,7 @@ export function createAiMeRouter(config: ApiConfig, pending = new PendingPkceSto
     setAuditContext(req, { domain: 'teaching', resource: 'ai_credentials', resourceId: id, action: 'delete' })
     const result = await req.adminDb!.from('ai_credentials').delete().eq('id', id)
     if (result.error) throw mapDatabaseError(result.error)
+    chatgptTokens?.forget(id)
     return res.json(envelope(req, { id, deleted: true }))
   }))
 
@@ -139,7 +167,7 @@ export function createAiMeRouter(config: ApiConfig, pending = new PendingPkceSto
     const input = testInput.parse(req.body)
     await ownCredential(req, id)
     setAuditContext(req, { domain: 'teaching', resource: 'ai_credentials', resourceId: id, action: 'test' })
-    return res.json(envelope(req, await testCredential(req.adminDb!, cipher, id, input.model_id)))
+    return res.json(envelope(req, await testCredential(req.adminDb!, cipher, id, input.model_id, { resolveToken: resolveTokenFor(req) })))
   }))
 
   router.post('/ai/me/openrouter/start', wrap(async (req, res) => {
@@ -169,6 +197,42 @@ export function createAiMeRouter(config: ApiConfig, pending = new PendingPkceSto
     const created = await createCredential(req.adminDb!, cipher, {
       scope: 'user', ownerUserId: userId, provider: 'openrouter', authType: 'oauth', secret: key, label: 'OpenRouter', createdBy: userId,
     })
+    return res.status(201).json(envelope(req, created))
+  }))
+
+  /** Sign in with ChatGPT: spend the teacher's own Plus/Pro allowance (OpenAI-approved client only). */
+  router.post('/ai/me/chatgpt/start', wrap(async (req, res) => {
+    const userId = userOf(req)
+    if (!siwc || !chatgptTokens) throw new ApiError(404, 'AI_CHATGPT_NOT_CONFIGURED', 'Sign in with ChatGPT is not available on this server')
+    const { verifier, challenge } = createPkcePair()
+    const state = createOAuthState()
+    chatgptPending.put(userId, JSON.stringify({ verifier, state }))
+    return res.json(envelope(req, { url: buildChatGptAuthorizationUrl(siwc, chatgptCallback(), challenge, state) }))
+  }))
+
+  router.post('/ai/me/chatgpt/exchange', wrap(async (req, res) => {
+    const userId = userOf(req)
+    if (!siwc || !chatgptTokens) throw new ApiError(404, 'AI_CHATGPT_NOT_CONFIGURED', 'Sign in with ChatGPT is not available on this server')
+    const input = chatgptExchangeInput.parse(req.body)
+    setAuditContext(req, { domain: 'teaching', resource: 'ai_credentials', action: 'oauth_connect' })
+    const stored = chatgptPending.take(userId)
+    const pendingFlow = stored ? JSON.parse(stored) as { verifier: string, state: string } : null
+    if (!pendingFlow || pendingFlow.state !== input.state) throw new ApiError(409, 'AI_OAUTH_EXPIRED', 'The ChatGPT sign-in expired; start again')
+    let tokens
+    try {
+      tokens = await exchangeChatGptCode(siwc, { code: input.code, verifier: pendingFlow.verifier, redirectUri: chatgptCallback() }, fetchImpl)
+    } catch (error) {
+      if (error instanceof ChatGptOAuthError && error.code === 'plan_not_granted') {
+        throw new ApiError(403, 'AI_CHATGPT_PLAN_NOT_GRANTED', 'ChatGPT plan usage was not granted; a Plus or Pro plan and consent are required')
+      }
+      if (error instanceof ChatGptOAuthError) throw new ApiError(502, 'AI_OAUTH_FAILED', 'OpenAI did not accept the sign-in')
+      throw error
+    }
+    // The refresh token is the stored secret; the first access token is cached in memory.
+    const created = await createCredential(req.adminDb!, cipher, {
+      scope: 'user', ownerUserId: userId, provider: 'openai', authType: 'oauth', secret: tokens.refreshToken!, label: 'ChatGPT', createdBy: userId,
+    })
+    chatgptTokens.remember(created.id as string, tokens.accessToken, tokens.expiresIn)
     return res.status(201).json(envelope(req, created))
   }))
 

@@ -96,7 +96,10 @@
     "AI_UNKNOWN_ERROR": "發生未預期的錯誤，請稍後再試。",
     "AI_OAUTH_EXPIRED": "登入逾時，請重新連接 OpenRouter。",
     "AI_OAUTH_FAILED": "OpenRouter 未接受這次登入，請再試一次。",
-    "AI_EMPTY_OUTPUT": "AI 沒有產生內容，未扣額度。請再試一次或改用其他模型。"
+    "AI_EMPTY_OUTPUT": "AI 沒有產生內容，未扣額度。請再試一次或改用其他模型。",
+    "AI_PLAN_LIMIT_REACHED": "你的 ChatGPT 方案額度或本站每週上限已用完，請改用其他來源或稍後再試。",
+    "AI_CHATGPT_PLAN_NOT_GRANTED": "這次登入沒有取得方案使用權限。需要 ChatGPT Plus 或 Pro，並在授權畫面同意使用方案額度。",
+    "AI_CHATGPT_NOT_CONFIGURED": "本站尚未開放連接 ChatGPT 帳號。"
   },
   "providers": {
     "anthropic": "Anthropic Claude",
@@ -239,6 +242,11 @@
     "log_status_cancelled": "已取消",
     "log_privacy": "紀錄只保存去識別化內容，因此這裡會看到 [學生A] 這類代號。",
     "log_adoptions": "採用 {n} 段",
-    "log_meta": "Token 輸入 {tin} / 輸出 {tout} · 成本 {cost} · 扣額度 {quota} · {ms} ms · 提示詞 {prompt}"
+    "log_meta": "Token 輸入 {tin} / 輸出 {tout} · 成本 {cost} · 扣額度 {quota} · {ms} ms · 提示詞 {prompt}",
+    "chatgpt_title": "連接 ChatGPT 帳號（Plus／Pro 方案）",
+    "chatgpt_description": "用你自己 ChatGPT 方案的額度產生報告，不扣站台額度。可在 ChatGPT 設定裡為本站設定每週上限。內容一樣會先去識別化後才送出。",
+    "chatgpt_connect": "連接 ChatGPT",
+    "chatgpt_connected": "已連接 ChatGPT，請在下方加入要使用的模型。",
+    "gemini_note": "Google 不提供用 Gemini 訂閱額度登入第三方網站的方式；要用 Gemini，請貼上 Gemini API 金鑰或透過 OpenRouter。"
   }
 }

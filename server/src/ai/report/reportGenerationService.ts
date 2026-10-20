@@ -70,6 +70,12 @@ export interface ReportGenerationDeps {
   deidentifier: Deidentifier | null
   cipher: SecretCipher | null
   createModel?: (target: ModelTarget) => LanguageModel
+  /**
+   * Bearer token for credentials that do not store a plain API key, such as
+   * "Sign in with ChatGPT" (a fresh access token). Return undefined to fall
+   * back to decrypting the stored secret.
+   */
+  resolveToken?: (model: ResolvedModel) => Promise<string | undefined>
   now?: () => Date
   timeoutMs?: number
   quotaTimeZone?: string
@@ -187,8 +193,8 @@ export class ReportGenerationService {
     const resolved = await this.deps.repository.resolveModel(request.modelRowId, request.userId)
     if (!resolved) throw new ApiError(404, 'AI_MODEL_NOT_FOUND', 'The selected model is not available')
 
-    let apiKey: string | undefined
-    if (resolved.authType !== 'none') {
+    let apiKey = this.deps.resolveToken ? await this.deps.resolveToken(resolved) : undefined
+    if (apiKey === undefined && resolved.authType !== 'none') {
       if (!this.deps.cipher) throw new ApiError(503, 'AI_SECRET_KEY_MISSING', 'AI credentials cannot be decrypted on this server')
       if (!resolved.secretCiphertext) throw new ApiError(409, 'AI_CREDENTIAL_INVALID', 'The selected credential has no secret')
       try {
@@ -265,11 +271,13 @@ export class ReportGenerationService {
       })
     } catch (error) {
       const cancelled = hooks.signal?.aborted === true
+      // A ChatGPT plan answers 429 once the plan allowance or this app's weekly cap is used up.
+      const planLimit = !cancelled && resolved.provider === 'openai' && resolved.authType === 'oauth' && providerStatus(error) === 429
       await this.deps.repository.insertGeneration({
         ...base,
         sanitized_output: null,
         status: cancelled ? 'cancelled' : 'failed',
-        error_code: cancelled ? 'CANCELLED' : signal.aborted ? 'TIMEOUT' : errorCode(error),
+        error_code: cancelled ? 'CANCELLED' : signal.aborted ? 'TIMEOUT' : planLimit ? 'PLAN_LIMIT' : errorCode(error),
         tokens_in: null,
         tokens_out: null,
         est_cost: null,
@@ -278,6 +286,7 @@ export class ReportGenerationService {
       })
       if (cancelled) throw new ApiError(499, 'AI_GENERATION_CANCELLED', 'Generation was cancelled')
       if (signal.aborted) throw new ApiError(504, 'AI_GENERATION_TIMEOUT', 'The model took too long to respond')
+      if (planLimit) throw new ApiError(429, 'AI_PLAN_LIMIT_REACHED', 'Your ChatGPT plan allowance for this app is used up')
       throw new ApiError(502, 'AI_PROVIDER_ERROR', 'The AI provider returned an error')
     }
 
@@ -395,4 +404,15 @@ function estimateCost(model: ResolvedModel, tokensIn: number | null, tokensOut: 
 function errorCode(error: unknown): string {
   const name = error instanceof Error ? error.name : 'Error'
   return name.replace(/[^A-Za-z0-9_]/g, '').slice(0, 120) || 'PROVIDER_ERROR'
+}
+
+/** HTTP status of a provider error, looking through wrapped causes (AI SDK APICallError). */
+export function providerStatus(error: unknown): number | null {
+  let current: unknown = error
+  for (let depth = 0; depth < 5 && current && typeof current === 'object'; depth++) {
+    const status = (current as { statusCode?: unknown }).statusCode
+    if (typeof status === 'number') return status
+    current = (current as { cause?: unknown }).cause
+  }
+  return null
 }
