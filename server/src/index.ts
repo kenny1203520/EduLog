@@ -3,7 +3,9 @@ import { createApp } from './app.js'
 import { loadConfig } from './config/config.js'
 import { createSupabaseClients } from './infra/supabase.js'
 import { attachRealtimeProxy } from './realtime/realtime.js'
+import { installProcessGuards } from './processGuards.js'
 
+installProcessGuards()
 const config = loadConfig()
 const clients = createSupabaseClients(config)
 const server = createServer(createApp())
