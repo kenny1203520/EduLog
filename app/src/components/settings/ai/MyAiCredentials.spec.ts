@@ -25,6 +25,7 @@ vi.mock('@/composables/useFeedback', () => ({ useFeedback: () => feedback }))
 beforeEach(() => {
     vi.clearAllMocks()
     route.query = {}
+    sessionStorage.clear()
     i18n.global.locale.value = 'zh-TW'
     service.myCredentials.mockResolvedValue({ credentials: [], secret_storage_available: true })
 })
@@ -40,6 +41,46 @@ describe('MyAiCredentials', () => {
         expect(service.finishOpenRouter).toHaveBeenCalledWith('abc')
         expect(feedback.success).toHaveBeenCalledWith('ai.settings.openrouter_connected')
         expect(service.myCredentials).toHaveBeenCalled()
+    })
+
+    it('finishes an OpenRouter sign-in when OpenRouter dropped our query and only ?code= came back', async () => {
+        sessionStorage.setItem('edulog.aiOAuthPending', JSON.stringify({ flow: 'openrouter', startedAt: Date.now() - 60_000 }))
+        route.query = { code: 'c2af0bce' }
+        service.finishOpenRouter.mockResolvedValue({ id: 'c1' })
+        mount(MyAiCredentials, { global: { plugins: [i18n] } })
+        await flushPromises()
+
+        expect(replace).toHaveBeenCalledWith({ query: { tab: 'personal' } })
+        expect(service.finishOpenRouter).toHaveBeenCalledWith('c2af0bce')
+        expect(sessionStorage.getItem('edulog.aiOAuthPending')).toBeNull()
+    })
+
+    it('ignores a ?code= without a recent sign-in from this tab', async () => {
+        route.query = { code: 'unrelated' }
+        mount(MyAiCredentials, { global: { plugins: [i18n] } })
+        await flushPromises()
+
+        sessionStorage.setItem('edulog.aiOAuthPending', JSON.stringify({ flow: 'openrouter', startedAt: Date.now() - 11 * 60_000 }))
+        mount(MyAiCredentials, { global: { plugins: [i18n] } })
+        await flushPromises()
+
+        expect(service.finishOpenRouter).not.toHaveBeenCalled()
+        expect(replace).not.toHaveBeenCalled()
+        expect(sessionStorage.getItem('edulog.aiOAuthPending')).toBeNull()
+    })
+
+    it('remembers the flow before leaving for OpenRouter', async () => {
+        service.startOpenRouter.mockResolvedValue('https://openrouter.ai/auth?x=1')
+        const assign = vi.fn()
+        vi.stubGlobal('location', { ...window.location, assign })
+        const wrapper = mount(MyAiCredentials, { global: { plugins: [i18n] } })
+        await flushPromises()
+        await wrapper.find('[data-testid="connect-openrouter"]').trigger('click')
+        await flushPromises()
+
+        expect(assign).toHaveBeenCalledWith('https://openrouter.ai/auth?x=1')
+        expect(JSON.parse(sessionStorage.getItem('edulog.aiOAuthPending')!).flow).toBe('openrouter')
+        vi.unstubAllGlobals()
     })
 
     it('adds an API key and clears the key field', async () => {

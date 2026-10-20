@@ -350,6 +350,8 @@ export class ReportGenerationService {
         if (invalid) throw new ApiError(502, 'AI_INVALID_OUTPUT', 'The model did not return a usable draft', undefined, undefined, undefined, { reason: (error as Error).message })
         if (failure === 'RATE_LIMITED') throw new ApiError(429, 'AI_RATE_LIMITED', 'The AI provider is rate limiting this model', undefined, undefined, undefined, reason)
         if (failure === 'MODEL_UNSUPPORTED') throw new ApiError(502, 'AI_MODEL_UNSUPPORTED', 'The model does not support this kind of request', undefined, undefined, undefined, reason)
+        if (failure === 'DATA_POLICY') throw new ApiError(502, 'AI_DATA_POLICY', 'The provider account settings do not allow this model', undefined, undefined, undefined, reason)
+        if (failure === 'AUTH_FAILED') throw new ApiError(409, 'AI_CREDENTIAL_INVALID', 'The provider rejected the credential', undefined, undefined, undefined, reason)
         throw new ApiError(502, 'AI_PROVIDER_ERROR', 'The AI provider returned an error', undefined, undefined, undefined, reason)
       }
 

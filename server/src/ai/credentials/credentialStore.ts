@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { generateText, type LanguageModel } from 'ai'
 import { z } from 'zod'
 import { ApiError, mapDatabaseError } from '../../http/errors.js'
+import { classifyProviderFailure, providerErrorDetail, type ProviderErrorDetail, type ProviderFailure } from '../providers/providerErrors.js'
 import { createLanguageModel, AI_PROVIDERS, type AiProvider, type ModelTarget } from '../providers/providerRegistry.js'
 import { credentialAssociatedData } from '../report/reportGenerationService.js'
 import { maskSecret, type SecretCipher } from './secretCipher.js'
@@ -136,6 +137,8 @@ export async function testCredential(db: Db, cipher: SecretCipher | null, creden
   const model = (options.createModel ?? createLanguageModel)({ provider: credential.provider, modelId, apiKey: credential.apiKey, baseUrl: credential.baseUrl ?? undefined })
   let ok = false
   let errorName: string | null = null
+  let detail: ProviderErrorDetail | null = null
+  let failure: ProviderFailure | null = null
   try {
     // Any successful response proves the endpoint, key and model id; reasoning
     // models may spend the small budget thinking and return no text.
@@ -143,10 +146,15 @@ export async function testCredential(db: Db, cipher: SecretCipher | null, creden
     ok = true
   } catch (error) {
     errorName = error instanceof Error ? error.name : 'Error'
+    detail = providerErrorDetail(error)
+    failure = classifyProviderFailure(detail)
   }
-  const update = await db.from('ai_credentials').update(ok
-    ? { status: 'active', last_verified_at: new Date().toISOString() }
-    : { status: 'invalid' }).eq('id', credentialId)
-  if (update.error) throw mapDatabaseError(update.error)
-  return { ok, error: errorName }
+  // Only a rejected key makes the credential invalid; a rate limit or a model
+  // the account cannot use says nothing about the key itself.
+  const status = ok ? { status: 'active', last_verified_at: new Date().toISOString() } : failure === 'AUTH_FAILED' ? { status: 'invalid' } : null
+  if (status) {
+    const update = await db.from('ai_credentials').update(status).eq('id', credentialId)
+    if (update.error) throw mapDatabaseError(update.error)
+  }
+  return { ok, error: errorName, failure, status: detail?.status ?? null, message: detail?.message ?? null }
 }

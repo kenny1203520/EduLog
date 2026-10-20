@@ -2,9 +2,10 @@
 import { reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
+import AiNotice from '@/components/report-ai/AiNotice.vue'
 import ModelPicker from '@/components/settings/ai/ModelPicker.vue'
 import { useFeedback } from '@/composables/useFeedback'
-import { AiSettingsService, type AiCredentialDTO, type AiModelDTO } from '@/services/ai/AiSettingsService'
+import { AiSettingsService, type AiCredentialDTO, type AiModelDTO, type CredentialTestResult } from '@/services/ai/AiSettingsService'
 
 /**
  * Credentials with their models, for personal (`mode="personal"`) or site
@@ -17,7 +18,22 @@ const { t } = useI18n()
 const { reportError, success } = useFeedback()
 
 const busy = ref<string | null>(null)
-const testResult = ref<Record<string, 'ok' | 'failed'>>({})
+const testResult = ref<Record<string, CredentialTestResult>>({})
+
+/** Plain explanation of a failed test; the provider's own words go under 詳細原因. */
+function testFailureMessage(result: CredentialTestResult) {
+    switch (result.failure) {
+        case 'AUTH_FAILED': return t('ai.settings.test_failure.auth')
+        case 'RATE_LIMITED': return t('ai.settings.test_failure.rate_limited')
+        case 'DATA_POLICY': return t('ai.settings.test_failure.data_policy')
+        case 'MODEL_UNSUPPORTED': return t('ai.errors.AI_MODEL_UNSUPPORTED')
+        default: return t('ai.settings.test_failed')
+    }
+}
+
+function testFailureDetail(result: CredentialTestResult) {
+    return [result.status ? `HTTP ${result.status}` : null, result.message].filter(Boolean).join(' – ') || null
+}
 const replacing = ref<Record<string, string>>({})
 const newModel = reactive<Record<string, { model_id: string, display_name: string, quota_weight: number, price_input_per_mtok: string, price_output_per_mtok: string }>>({})
 const pendingDelete = ref<{ kind: 'credential' | 'model', id: string, label: string } | null>(null)
@@ -102,8 +118,10 @@ async function test(credential: AiCredentialDTO) {
         const result = site
             ? await AiSettingsService.testSiteCredential(credential.id, model.model_id)
             : await AiSettingsService.testMyCredential(credential.id, model.model_id)
-        testResult.value = { ...testResult.value, [credential.id]: result.ok ? 'ok' : 'failed' }
-        replaceCredential({ ...credential, status: result.ok ? 'active' : 'invalid', last_verified_at: result.ok ? new Date().toISOString() : credential.last_verified_at })
+        testResult.value = { ...testResult.value, [credential.id]: result }
+        // Only a rejected key makes the credential invalid (same rule as the server).
+        const status = result.ok ? 'active' : result.failure === 'AUTH_FAILED' ? 'invalid' : credential.status
+        replaceCredential({ ...credential, status, last_verified_at: result.ok ? new Date().toISOString() : credential.last_verified_at })
     })
 }
 
@@ -195,9 +213,15 @@ const statusClass: Record<AiCredentialDTO['status'], string> = {
                         <template v-else-if="credential.secret_hint">{{ t('ai.settings.key_hint', { hint: credential.secret_hint }) }}</template>
                         <template v-if="credential.base_url"> · {{ credential.base_url }}</template>
                     </p>
-                    <p v-if="testResult[credential.id]" role="status" class="mt-1 text-sm font-bold" :class="testResult[credential.id] === 'ok' ? 'text-emerald-700' : 'text-red-700'">
-                        {{ testResult[credential.id] === 'ok' ? t('ai.settings.test_ok') : t('ai.settings.test_failed') }}
-                    </p>
+                    <p v-if="testResult[credential.id]?.ok" role="status" class="mt-1 text-sm font-bold text-emerald-700">{{ t('ai.settings.test_ok') }}</p>
+                    <AiNotice v-else-if="testResult[credential.id]" class="mt-2" live="status" data-testid="credential-test-failure"
+                        :tone="testResult[credential.id].failure === 'RATE_LIMITED' || testResult[credential.id].failure === 'DATA_POLICY' ? 'warning' : 'error'"
+                        :message="testFailureMessage(testResult[credential.id])" :detail="testFailureDetail(testResult[credential.id])">
+                        <template v-if="testResult[credential.id].failure === 'DATA_POLICY'" #actions>
+                            <a href="https://openrouter.ai/settings/privacy" target="_blank" rel="noopener noreferrer"
+                                class="inline-flex min-h-11 cursor-pointer items-center rounded-lg bg-white px-3 font-semibold text-amber-900 ring-1 ring-amber-300 hover:bg-amber-100">{{ t('ai.settings.test_failure.open_privacy') }}</a>
+                        </template>
+                    </AiNotice>
                 </div>
                 <div class="flex flex-wrap gap-2">
                     <button type="button" class="min-h-11 rounded-xl border border-gray-200 px-3 text-sm font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-50"

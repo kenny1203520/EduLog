@@ -27,7 +27,7 @@ describe('providerErrorDetail', () => {
     expect(classifyProviderFailure({ status: 400, message: "Invalid parameter: 'response_format' of type 'json_schema' is not supported" })).toBe('MODEL_UNSUPPORTED')
     expect(classifyProviderFailure({ status: 404, message: 'No endpoints found for google/unknown' })).toBe('PROVIDER_ERROR')
     expect(classifyProviderFailure({ status: 500, message: 'response_format failed' })).toBe('PROVIDER_ERROR')
-    expect(classifyProviderFailure({ status: 401, message: 'User not found' })).toBe('PROVIDER_ERROR')
+    expect(classifyProviderFailure({ status: 502, message: 'Upstream error' })).toBe('PROVIDER_ERROR')
   })
 
   it('never keeps keys or bearer tokens and stays short', () => {
@@ -40,5 +40,13 @@ describe('providerErrorDetail', () => {
 
   it('falls back to the error message when there is no response body', () => {
     expect(providerErrorDetail(new Error('fetch failed'))).toEqual({ status: null, message: 'fetch failed' })
+  })
+})
+
+describe('account and key failures', () => {
+  it('recognises OpenRouter data-policy refusals and rejected keys', () => {
+    expect(classifyProviderFailure({ status: 404, message: 'No endpoints found matching your data policy (Free model publication)' })).toBe('DATA_POLICY')
+    expect(classifyProviderFailure({ status: 401, message: 'User not found.' })).toBe('AUTH_FAILED')
+    expect(classifyProviderFailure({ status: 403, message: 'Key disabled' })).toBe('AUTH_FAILED')
   })
 })

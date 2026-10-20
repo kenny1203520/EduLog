@@ -206,6 +206,8 @@ export function createAiMeRouter(
     if (!cipher) throw new ApiError(503, 'AI_SECRET_KEY_MISSING', 'AI_SECRET_KEY is not configured on the server')
     const { verifier, challenge } = createPkcePair()
     pending.put(userId, verifier)
+    // OpenRouter may replace this query with ?code=; the settings page also
+    // remembers the pending sign-in itself (see MyAiCredentials.vue).
     const callback = new URL('/dashboard/settings', openRouterReturnOrigin(config, req.get('origin')))
     callback.searchParams.set('tab', 'personal')
     callback.searchParams.set('ai_oauth', 'openrouter')

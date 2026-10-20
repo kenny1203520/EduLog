@@ -32,6 +32,8 @@ const ENDED_ERRORS: Record<string, string> = {
     RATE_LIMITED: 'AI_RATE_LIMITED',
     MODEL_UNSUPPORTED: 'AI_MODEL_UNSUPPORTED',
     INVALID_OUTPUT: 'AI_INVALID_OUTPUT',
+    DATA_POLICY: 'AI_DATA_POLICY',
+    AUTH_FAILED: 'AI_CREDENTIAL_INVALID',
 }
 
 /** "HTTP 429 – Rate limit exceeded", from a stored provider error. */
