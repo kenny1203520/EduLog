@@ -13,8 +13,11 @@ import { mapSupabaseError } from './services/errors/mapSupabaseError'
 import { AppError } from './services/errors/AppError'
 import { usePreferencesStore } from './stores/usePreferencesStore'
 import { preventIosInputZoom } from './lib/iosViewport'
+import { localDraftStore } from './services/report/LocalDraftStore'
 
 preventIosInputZoom(document, navigator)
+// Unsaved report drafts are kept for at most 7 days on this device.
+void localDraftStore.purgeExpired()
 
 const app = createApp(App)
 

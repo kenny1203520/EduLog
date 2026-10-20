@@ -1,7 +1,8 @@
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
-import { computed, isRef, reactive, ref, watch, type Ref } from 'vue'
+import { computed, getCurrentScope, isRef, onScopeDispose, reactive, ref, watch, type Ref } from 'vue'
 import i18n from '@/i18n'
 import { DateUtils } from '@/utils/DateUtils'
+import { isBrowserOffline, isNetworkError } from '@/utils/networkErrors'
 
 export interface AutoSaveResult {
     success: boolean
@@ -13,7 +14,7 @@ export interface AutoSaveResult {
     message?: string
     /** i18n key the UI should translate and show instead of `message`. */
     messageKey?: string
-    errorCode?: 'request_timeout' | 'save_outcome_unknown' | 'conflict' | 'permission_denied' | 'validation_error' | 'system_managed'
+    errorCode?: 'request_timeout' | 'save_outcome_unknown' | 'network_error' | 'conflict' | 'permission_denied' | 'validation_error' | 'system_managed'
     conflictFields?: string[]
 }
 
@@ -50,6 +51,25 @@ export interface AutoSaveOptions<TSnapshot, TResult extends AutoSaveResult = Aut
     onSuccess?: (saved: AutoSaveSuccess<TSnapshot, TResult>) => void | Promise<void>
     /** `result` is the failed TResult when available (absent for a thrown exception). */
     onError?: (message: string, result?: TResult, context?: AutoSaveErrorContext) => void
+    /**
+     * Backoff schedule for automatic retries after a network failure; the last
+     * delay repeats. Version conflicts and other failures are never retried
+     * automatically. Pass [] to disable.
+     */
+    retryDelaysMs?: number[]
+    /** Decides whether a failure is a transient network one. Defaults to {@link isNetworkSaveFailure}. */
+    isRetryable?: (message: string, result?: TResult) => boolean
+}
+
+export const DEFAULT_SAVE_RETRY_DELAYS_MS = [5000, 10000, 30000, 60000]
+
+const NETWORK_ERROR_CODES = new Set(['network_error', 'request_timeout', 'save_outcome_unknown'])
+
+/** Offline, timeouts, unreachable server and 5xx: worth resending the same snapshot. */
+export function isNetworkSaveFailure(message: string, result?: AutoSaveResult): boolean {
+    if (result?.conflict) return false
+    if (result?.errorCode) return NETWORK_ERROR_CODES.has(result.errorCode)
+    return isNetworkError(message)
 }
 
 interface PendingSave<TSnapshot> {
@@ -86,6 +106,12 @@ export function useAutoSave<TSnapshot, TResult extends AutoSaveResult = AutoSave
     const hasConflict = ref(false)
     const currentRevision = ref(0)
     const persistedRevision = ref(0)
+    /** 'network' while the last failure is one that will be retried automatically. */
+    const errorKind = ref<'network' | 'other' | null>(null)
+    const nextRetryAt = ref<Date | null>(null)
+    const isOnline = ref(!isBrowserOffline())
+    const retryDelays = options.retryDelaysMs ?? DEFAULT_SAVE_RETRY_DELAYS_MS
+    const isRetryable = options.isRetryable ?? isNetworkSaveFailure
 
     let debounceTimer: ReturnType<typeof setTimeout> | null = null
     let processingPromise: Promise<void> | null = null
@@ -93,6 +119,8 @@ export function useAutoSave<TSnapshot, TResult extends AutoSaveResult = AutoSave
     let generation = 0
     let queueBlocked = false
     let drainRequested = false
+    let retryTimer: ReturnType<typeof setTimeout> | null = null
+    let retryAttempt = 0
 
     const status = computed<AutoSaveStatus>(() => {
         if (hasConflict.value) return 'conflict'
@@ -111,11 +139,53 @@ export function useAutoSave<TSnapshot, TResult extends AutoSaveResult = AutoSave
         isScheduled.value = false
     }
 
+    function clearRetry() {
+        if (retryTimer) clearTimeout(retryTimer)
+        retryTimer = null
+        nextRetryAt.value = null
+    }
+
+    function scheduleRetry() {
+        clearRetry()
+        if (retryDelays.length === 0) return
+        const delay = retryDelays[Math.min(retryAttempt, retryDelays.length - 1)]
+        retryAttempt += 1
+        const retryGeneration = generation
+        nextRetryAt.value = new Date(Date.now() + delay)
+        retryTimer = setTimeout(() => {
+            retryTimer = null
+            nextRetryAt.value = null
+            resumeAfterNetworkFailure(retryGeneration)
+        }, delay)
+    }
+
+    function resumeAfterNetworkFailure(retryGeneration = generation) {
+        if (retryGeneration !== generation || !pendingSave || !configuration.enabled || hasConflict.value) return
+        queueBlocked = false
+        clearTimer()
+        void ensureProcessing()
+    }
+
+    function handleFailure(message: string, job: PendingSave<TSnapshot>, result?: TResult) {
+        saveError.value = message
+        restoreFailedJob(job)
+        queueBlocked = true
+        if (isRetryable(message, result)) {
+            errorKind.value = 'network'
+            scheduleRetry()
+        } else {
+            errorKind.value = 'other'
+            clearRetry()
+        }
+        options.onError?.(message, result, { revision: job.revision })
+    }
+
     function enqueue(snapshot: TSnapshot): PendingSave<TSnapshot> {
         const job = { generation, revision: ++currentRevision.value, snapshot }
         pendingSave = job
         hasUnsavedChanges.value = true
         saveError.value = null
+        errorKind.value = null
         hasConflict.value = false
         // A previous failure must not permanently stall autosave: new input means
         // a fresh attempt is warranted, so the queue is unblocked here rather than
@@ -148,16 +218,14 @@ export function useAutoSave<TSnapshot, TResult extends AutoSaveResult = AutoSave
             result = await options.onSave(job.snapshot)
         } catch (error: any) {
             if (queueGeneration !== generation) return
-            const message = error?.message || 'Unknown error during save'
-            saveError.value = message
-            restoreFailedJob(job)
-            queueBlocked = true
-            options.onError?.(message, undefined, { revision: job.revision })
+            handleFailure(error?.message || 'Unknown error during save', job)
             return
         }
 
         if (queueGeneration !== generation) return
         if (result.conflict) {
+            clearRetry()
+            errorKind.value = null
             restoreFailedJob(job)
             queueBlocked = true
             hasConflict.value = true
@@ -165,14 +233,13 @@ export function useAutoSave<TSnapshot, TResult extends AutoSaveResult = AutoSave
             return
         }
         if (!result.success) {
-            const message = result.message || 'Failed to save'
-            saveError.value = message
-            restoreFailedJob(job)
-            queueBlocked = true
-            options.onError?.(message, result, { revision: job.revision })
+            handleFailure(result.message || 'Failed to save', job, result)
             return
         }
 
+        clearRetry()
+        retryAttempt = 0
+        errorKind.value = null
         persistedRevision.value = Math.max(persistedRevision.value, job.revision)
         lastSaved.value = new Date()
         await options.onSuccess?.({ snapshot: job.snapshot, result, revision: job.revision })
@@ -260,6 +327,9 @@ export function useAutoSave<TSnapshot, TResult extends AutoSaveResult = AutoSave
 
     function reset() {
         clearTimer()
+        clearRetry()
+        retryAttempt = 0
+        errorKind.value = null
         generation += 1
         currentRevision.value = 0
         persistedRevision.value = 0
@@ -287,6 +357,30 @@ export function useAutoSave<TSnapshot, TResult extends AutoSaveResult = AutoSave
         return DateUtils.displayDateTime(lastSaved.value)
     }
 
+    function handleOnline() {
+        isOnline.value = true
+        // The connection is back: resend now instead of waiting out the backoff.
+        retryAttempt = 0
+        clearRetry()
+        resumeAfterNetworkFailure()
+    }
+    function handleOffline() { isOnline.value = false }
+
+    if (typeof window !== 'undefined') {
+        window.addEventListener('online', handleOnline)
+        window.addEventListener('offline', handleOffline)
+    }
+
+    function dispose() {
+        clearTimer()
+        clearRetry()
+        if (typeof window !== 'undefined') {
+            window.removeEventListener('online', handleOnline)
+            window.removeEventListener('offline', handleOffline)
+        }
+    }
+    if (getCurrentScope()) onScopeDispose(dispose)
+
     ;(['enabled', 'debounceMs', 'saveOnBlur', 'saveOnSwitch', 'saveOnUnmount'] as const).forEach(key => {
         const source = options[key]
         if (isRef(source)) watch(source, value => configure({ [key]: value } as Partial<EditorAutoSaveConfiguration>))
@@ -294,8 +388,8 @@ export function useAutoSave<TSnapshot, TResult extends AutoSaveResult = AutoSave
 
     return {
         configuration, status, isSaving, isScheduled, lastSaved, hasUnsavedChanges, saveError, hasConflict,
-        currentRevision, persistedRevision, saveNow, drain: saveNow, retry, triggerAutoSave,
-        setEnabled, configure, getConfiguration, cancelScheduled, cancelAutoSave, reset, getLastSavedString
+        currentRevision, persistedRevision, errorKind, nextRetryAt, isOnline, saveNow, drain: saveNow, retry, triggerAutoSave,
+        setEnabled, configure, getConfiguration, cancelScheduled, cancelAutoSave, reset, getLastSavedString, dispose
     }
 }
 
