@@ -36,15 +36,20 @@ export class PermissionPolicyService {
     }
 
     static async canManageRbac(): Promise<boolean> {
+        return this.hasPermission('teaching.roles.manage')
+    }
+
+    /** Whether the signed-in user holds `permissionKey` at system scope. */
+    static async hasPermission(permissionKey: string): Promise<boolean> {
         if (getApiV1Mode() === 'mock') {
             const user = await apiDataClient.auth.getUser()
             if (user.error || !user.data.user) return false
-            const result = await apiDataClient.rpc('resolve_user_permission', { p_user_id: user.data.user.id, p_permission_key: 'teaching.roles.manage' })
+            const result = await apiDataClient.rpc('resolve_user_permission', { p_user_id: user.data.user.id, p_permission_key: permissionKey })
             const row = Array.isArray(result.data) ? result.data[0] : result.data
             return !result.error && row?.is_allowed === true && row?.is_denied !== true
         }
         try {
-            const path = `/rbac/capability?permission=${encodeURIComponent('teaching.roles.manage')}`
+            const path = `/rbac/capability?permission=${encodeURIComponent(permissionKey)}`
             return (await apiV1Client.get<{ allowed: boolean }>(path)).data?.allowed === true
         } catch { return false }
     }

@@ -2,7 +2,7 @@
     <div
         class="flex flex-col bg-gray-50 overflow-hidden h-[calc(100dvh-4rem)] lg:h-[calc(100vh-5rem)] -mx-3 -mb-2 lg:-mx-6 lg:-mb-2 relative">
         <BasePageHeader :overline="t('nav.incomplete_reports')" :title="t('report.incomplete_reports_title')"
-            :subtitle="t('report.incomplete_reports_subtitle')" :hide-background="true" :compact="true"
+            :subtitle="scope === 'all' ? t('report.incomplete_reports_subtitle_all') : t('report.incomplete_reports_subtitle')" :hide-background="true" :compact="true"
             :inline-actions-mobile="true"
             class="z-20 bg-white/80 backdrop-blur-md border-b border-gray-100 shadow-sm px-4 sm:px-6 lg:px-8">
             <template #icon>
@@ -69,6 +69,24 @@
                     'hidden xl:flex': selectedReport,
                     'xl:!w-0 xl:!min-w-0 xl:!max-w-0 xl:opacity-0 xl:pointer-events-none xl:-translate-x-full': isSidebarCollapsed
                 }">
+
+                <!-- Scope Switch -->
+                <div v-if="canListAllReports"
+                    class="px-4 pt-4 bg-gray-50/30 flex items-center gap-2" data-testid="incomplete-scope-switch">
+                    <span class="text-xs font-black text-gray-500 uppercase tracking-widest">{{ t('report.incomplete_scope') }}</span>
+                    <div class="flex bg-gray-100 p-1 rounded-xl border border-gray-100">
+                        <button type="button" @click="setScope('my_notifications')" data-scope="my_notifications"
+                            class="px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all"
+                            :class="scope === 'my_notifications' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+                            {{ t('report.incomplete_scope_my_notifications') }}
+                        </button>
+                        <button type="button" @click="setScope('all')" data-scope="all"
+                            class="px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all"
+                            :class="scope === 'all' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+                            {{ t('report.incomplete_scope_all') }}
+                        </button>
+                    </div>
+                </div>
 
                 <!-- Search/Filter Bar for List -->
                 <div class="p-4 border-b border-gray-50 bg-gray-50/30 flex items-center gap-2">
@@ -402,10 +420,20 @@ import { useToast } from 'vue-toastification'
 import { apiResourceClient } from '@/services/api/ApiResourceClient'
 import { DateUtils } from '@/utils/DateUtils'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
+import { useRoute, useRouter } from 'vue-router'
+import { PermissionPolicyService } from '@/services/rbac/PermissionPolicyService'
+
+type IncompleteReportScope = 'my_notifications' | 'all'
+const LIST_ALL_REPORTS_PERMISSION = 'teaching.reports.list'
 
 const { locale, t } = useI18n()
 const toast = useToast()
 const preferences = usePreferencesStore()
+const route = useRoute()
+const router = useRouter()
+
+const scope = ref<IncompleteReportScope>(route.query.scope === 'all' ? 'all' : 'my_notifications')
+const canListAllReports = ref(false)
 
 const loading = ref(true)
 const isRefreshing = ref(false)
@@ -437,7 +465,7 @@ async function loadReports(refreshEditor = true) {
     }
 
     try {
-        const response = await ReportQueryService.getGlobalIncompleteReportsPage('my_notifications', {
+        const response = await ReportQueryService.getGlobalIncompleteReportsPage(scope.value, {
             limit: pageSize,
             offset: pageOffset.value,
             search: searchQuery.value.trim(),
@@ -538,6 +566,14 @@ function goToPage(delta: number) {
     void loadReports(false)
 }
 
+function setScope(next: IncompleteReportScope) {
+    if (next === scope.value) return
+    scope.value = next
+    pageOffset.value = 0
+    void router.replace({ query: { ...route.query, scope: next === 'all' ? 'all' : undefined } })
+    void loadReports(false)
+}
+
 watch(searchQuery, () => {
     pageOffset.value = 0
     if (searchTimer) clearTimeout(searchTimer)
@@ -618,8 +654,20 @@ function formatWeekday(dateVal: string | Date) {
     return date?.toLocaleDateString(locale.value, { weekday: 'short' }) || ''
 }
 
-onMounted(() => {
-    loadReports()
+onMounted(async () => {
+    const permissionCheck = PermissionPolicyService.hasPermission(LIST_ALL_REPORTS_PERMISSION)
+    if (scope.value === 'all') {
+        // A shared ?scope=all link must not query the broader scope for users who lack it.
+        canListAllReports.value = await permissionCheck
+        if (!canListAllReports.value) {
+            scope.value = 'my_notifications'
+            void router.replace({ query: { ...route.query, scope: undefined } })
+        }
+        void loadReports()
+        return
+    }
+    void loadReports()
+    canListAllReports.value = await permissionCheck
 })
 </script>
 
