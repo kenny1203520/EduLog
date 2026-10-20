@@ -2,6 +2,19 @@ export type PolicyEffect = 'allow' | 'deny'
 export type RbacDomain = 'system' | 'teaching'
 export type PolicyScope = 'system' | 'classroom' | 'class_session'
 
+/**
+ * Permission keys of the AI report assistant. `generate` (teaching domain) is
+ * allowed for teachers by default; `manage` and `logsViewAll` are system
+ * permissions for AI settings and the site-wide generation log.
+ */
+export const AI_PERMISSIONS = {
+    generate: 'teaching.ai.generate',
+    manage: 'system.ai.manage',
+    logsViewAll: 'system.ai.logs.view_all',
+} as const
+
+export type AiPermission = typeof AI_PERMISSIONS[keyof typeof AI_PERMISSIONS]
+
 export interface RoleDTO {
     id: string
     code?: string | null

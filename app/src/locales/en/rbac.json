@@ -115,7 +115,8 @@
     "templates": { "name": "Templates", "description": "Report and teaching templates" },
     "report-templates": { "name": "Report templates", "description": "Reusable templates for student reports" },
     "dashboard": { "name": "Dashboard", "description": "Home dashboard and today's schedule" },
-    "holidays": { "name": "Holidays", "description": "Teaching calendar holidays" }
+    "holidays": { "name": "Holidays", "description": "Teaching calendar holidays" },
+    "ai": { "name": "AI report assistant", "description": "AI-generated learning reports and teaching suggestions, provider credentials and generation logs" }
   },
   "actions": {
     "list": { "name": "List", "description": "View a collection of records" },
@@ -128,7 +129,9 @@
     "schedule_all": { "name": "View all of today's schedule", "description": "See every class in today's schedule, not only classes you teach" },
     "schedule_view": { "name": "Show today's schedule", "description": "When denied, classes in that scope are left out of today's schedule, including classes you teach" },
     "read_sensitive": { "name": "Read sensitive", "description": "View protected personal data" },
-    "update_sensitive": { "name": "Update sensitive", "description": "Edit protected personal data" }
+    "update_sensitive": { "name": "Update sensitive", "description": "Edit protected personal data" },
+    "generate": { "name": "Generate with AI", "description": "Use AI in the report editor to generate learning reports and teaching suggestions" },
+    "logs_view_all": { "name": "View all AI logs", "description": "View every user's AI generation and adoption records" }
   },
   "roles": {
     "system_owner": { "name": "System Owner", "description": "Protected owner of the EduLog system" },

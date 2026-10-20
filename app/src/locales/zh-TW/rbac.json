@@ -115,7 +115,8 @@
     "templates": { "name": "範本", "description": "報告與教學範本" },
     "report-templates": { "name": "報告範本", "description": "建立與管理學生報告使用的範本" },
     "dashboard": { "name": "儀表板", "description": "首頁儀表板與今日課表" },
-    "holidays": { "name": "假日", "description": "教學行事曆假日" }
+    "holidays": { "name": "假日", "description": "教學行事曆假日" },
+    "ai": { "name": "AI 報告助手", "description": "AI 生成學習報告與教學建議、供應商憑證與生成紀錄" }
   },
   "actions": {
     "list": { "name": "列表", "description": "查看資料集合" },
@@ -128,7 +129,9 @@
     "schedule_all": { "name": "查看所有今日課表", "description": "在今日課表中查看所有課程，而非僅限自己授課的課程" },
     "schedule_view": { "name": "顯示今日課表", "description": "拒絕時，該範圍的課程（包含自己授課的班級）不會出現在今日課表" },
     "read_sensitive": { "name": "讀取敏感資料", "description": "查看受保護的個人資料" },
-    "update_sensitive": { "name": "更新敏感資料", "description": "編輯受保護的個人資料" }
+    "update_sensitive": { "name": "更新敏感資料", "description": "編輯受保護的個人資料" },
+    "generate": { "name": "AI 生成", "description": "在報告編輯器使用 AI 生成學習報告與教學建議" },
+    "logs_view_all": { "name": "查看所有 AI 紀錄", "description": "查看所有使用者的 AI 生成與採用紀錄" }
   },
   "roles": {
     "system_owner": { "name": "系統擁有者", "description": "EduLog 系統的受保護擁有者" },
