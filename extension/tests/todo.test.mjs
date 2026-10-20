@@ -57,6 +57,29 @@ test('readers extract unfilled, calendar, hours and attendance facts from provid
   dom.window.close()
 })
 
+test('unfilled student cells split br-separated names and courses while ignoring decorations', async () => {
+  const rows = [
+    '<tr><td> 林子謙 <a class="admission-comment" href="/admissions/comments/1/edit_teacher"><div class="admission-comment-box">備註文字</div></a><span data-bs-toggle="tooltip">電話</span><br> 菁英_AI人工智慧班 2.0 </td><td>週六第 1 時段</td><td>週六第 1 時段</td><td><a href="/dt_admissions/164634/reports/264234/edit">記錄</a></td></tr>',
+    '<tr><td> 林子謙 <a class="admission-comment" href="/admissions/comments/2/edit_teacher">備註</a><br> </td><td>週六第 1 時段</td><td>週六第 1 時段</td><td><a href="/dt_admissions/174634/reports/264234/edit">記錄</a></td></tr>',
+  ].join('')
+  const fixture = read('fixtures/unfilled-current.html').replace(/<tbody>[\s\S]*?<\/tbody>/, `<tbody>${rows}</tbody>`)
+  const s = overview(pages({ '/admissions/unfilled_report': fixture, '/admissions/month_unfilled_report': fixture }))
+  const parse = html => new s.w.DOMParser().parseFromString(html, 'text/html')
+  const items = s.w.edulogSiteTodo.extractUnfilled(parse(fixture), false)
+  assert.deepEqual(JSON.parse(JSON.stringify(items.map(item => [item.student, item.course, item.studentPath, item.action]))), [
+    ['林子謙', '菁英_AI人工智慧班 2.0', null, '/dt_admissions/174634/reports/264635/edit'],
+    ['林子謙', '', null, '/dt_admissions/174634/reports/264635/edit'],
+  ])
+
+  const { view } = s.enhance()
+  await view.todo.ready
+  const first = section(s.doc, 'reports').querySelector('.edulog-todo-group-item')
+  assert.equal(first.querySelector('.edulog-todo-name').textContent, '林子謙')
+  assert.equal(first.querySelector('.edulog-todo-fill').getAttribute('aria-label'), '林子謙 去填寫')
+  assert.equal(first.querySelector('.edulog-todo-fill').getAttribute('href'), '/dt_admissions/269041/reports/6713932/edit')
+  s.dom.window.close()
+})
+
 test('overview leads with the weekly to-do and renders every section exceptions-first', async () => {
   const s = overview()
   const { result, view } = s.enhance()

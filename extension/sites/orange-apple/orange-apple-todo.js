@@ -47,10 +47,20 @@
     return [...table.tBodies].flatMap(body => [...body.rows]).filter(row => row.cells.length > columns.record).map(row => {
       const studentCell = row.cells[columns.student]
       const studentLink = [...studentCell.querySelectorAll('a[href]')].find(a => paths.enrollment.test(new URL(a.getAttribute('href'), ORIGIN).pathname))
-      const course = collapse(studentCell.querySelector('small')?.textContent)
+      const studentCopy = studentCell.cloneNode(true)
+      studentCopy.querySelectorAll('a[href]').forEach(link => {
+        if (!paths.enrollment.test(new URL(link.getAttribute('href'), ORIGIN).pathname)) link.remove()
+      })
+      studentCopy.querySelectorAll('button,input,select,textarea,svg,i,[data-bs-toggle="tooltip"],[data-admission-id],.admission-comment-box,[data-edulog-owned]').forEach(node => node.remove())
+      studentCopy.querySelectorAll('br').forEach(node => node.replaceWith(doc.createTextNode('\n')))
+      const segments = studentCopy.textContent.split('\n').map(collapse).filter(Boolean)
+      const courseNode = studentCopy.querySelector('small')
+      const course = collapse(courseNode?.textContent) || (studentLink ? '' : segments[1] || '')
+      if (segments.length < 2) courseNode?.remove()
+      const student = collapse(studentLink?.textContent) || (segments.length > 1 ? segments[0] : collapse(studentCopy.textContent)) || plain(studentCell).replace(course, '').trim()
       const action = [...row.cells[columns.record].querySelectorAll('a[href]')].map(a => sameOriginPath(a.getAttribute('href'))).find(Boolean) || null
       return {
-        student: collapse(studentLink?.textContent) || plain(studentCell).replace(course, '').trim(),
+        student,
         studentPath: studentLink ? new URL(studentLink.getAttribute('href'), ORIGIN).pathname : null,
         course, slot: columns.slot >= 0 ? collapse(row.cells[columns.slot]?.textContent) : '', action, overdue,
       }
