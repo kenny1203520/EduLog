@@ -139,7 +139,7 @@ onMounted(load)
                         <button type="submit" class="min-h-11 rounded-xl bg-emerald-600 px-4 text-sm font-black text-white disabled:opacity-50" :disabled="saving || !overview.secret_storage_available">{{ t('ai.settings.add_key') }}</button>
                     </div>
                 </form>
-                <AiCredentialList v-model="credentials" mode="site" />
+                <AiCredentialList v-model="credentials" mode="site" :default-model-id="overview.settings?.default_model_id ?? null" @set-default="saveSettings({ default_model_id: $event })" />
             </section>
 
             <!-- Prompt -->

@@ -395,7 +395,8 @@ export function adoptionSnapshot(output: Record<string, unknown> | null, section
 }
 
 function estimateCost(model: ResolvedModel, tokensIn: number | null, tokensOut: number | null): number | null {
-  if (model.priceInputPerMtok == null && model.priceOutputPerMtok == null) return null
+  // Both prices are needed; a missing one means the cost is unknown, never zero.
+  if (model.priceInputPerMtok == null || model.priceOutputPerMtok == null) return null
   if (tokensIn == null && tokensOut == null) return null
   const cost = ((tokensIn ?? 0) * (model.priceInputPerMtok ?? 0) + (tokensOut ?? 0) * (model.priceOutputPerMtok ?? 0)) / 1_000_000
   return Math.round(cost * 1e6) / 1e6

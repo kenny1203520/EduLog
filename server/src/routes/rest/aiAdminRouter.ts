@@ -14,8 +14,10 @@ import {
   modelInput,
   siteCredentialInput,
   testCredential,
+  loadUsableCredential,
   updateCredential,
 } from '../../ai/credentials/credentialStore.js'
+import { fetchModelCatalog, sharedModelCatalogCache } from '../../ai/providers/modelCatalog.js'
 import { computeQuotaBalance, pickEffectivePolicy, QUOTA_PERIODS } from '../../ai/quota/quotaBalance.js'
 import { DEFAULT_REPORT_SYSTEM_RULES, REPORT_SYSTEM_PROMPT_KEY } from '../../ai/report/reportPrompt.js'
 import { SupabaseReportAssistRepository } from '../../ai/report/supabaseReportAssistRepository.js'
@@ -165,6 +167,7 @@ export function createAiAdminRouter(config: ApiConfig) {
     const input = credentialPatchInput.parse(req.body)
     await requireManage(req, 'update', 'ai_credentials')
     await siteCredential(req, id)
+    sharedModelCatalogCache.forget(id)
     return res.json(envelope(req, await updateCredential(req.adminDb!, cipher, id, input)))
   }))
 
@@ -173,7 +176,20 @@ export function createAiAdminRouter(config: ApiConfig) {
     await requireManage(req, 'delete', 'ai_credentials')
     await siteCredential(req, id)
     check(await req.adminDb!.from('ai_credentials').delete().eq('id', id))
+    sharedModelCatalogCache.forget(id)
     return res.json(envelope(req, { id, deleted: true }))
+  }))
+
+  /** Models this credential can use, from the provider's own list (cached an hour; ?refresh=1 to reload). */
+  router.get('/ai/admin/credentials/:id/catalog', wrap(async (req, res) => {
+    const id = idParam(req)
+    await requireManage(req, 'read', 'ai_credentials')
+    await siteCredential(req, id)
+    const catalog = await sharedModelCatalogCache.get(id, req.query.refresh === '1', async () => {
+      const credential = await loadUsableCredential(req.adminDb!, cipher, id)
+      return fetchModelCatalog({ provider: credential.provider, authType: credential.authType, apiKey: credential.apiKey, baseUrl: credential.baseUrl })
+    })
+    return res.json(envelope(req, catalog))
   }))
 
   router.post('/ai/admin/credentials/:id/test', wrap(async (req, res) => {

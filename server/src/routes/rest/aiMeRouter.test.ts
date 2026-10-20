@@ -158,3 +158,41 @@ describe('Sign in with ChatGPT', () => {
     expect(response.body.error.code).toBe('AI_CHATGPT_PLAN_NOT_GRANTED')
   })
 })
+
+describe('personal models and catalog', () => {
+  const credentialId = 'a1000000-0000-4000-8000-000000000011'
+  const modelId = 'b1000000-0000-4000-8000-000000000011'
+
+  it('renames only models on the teacher’s own credentials', async () => {
+    const tables: Record<string, Row[]> = {
+      ai_credentials: [{ id: credentialId, scope: 'user', owner_user_id: 'u1' }],
+      ai_models: [{ id: modelId, credential_id: credentialId, model_id: 'gpt-5', display_name: 'old' }],
+    }
+    const renamed = await request(app(tables)).patch(`/api/ai/me/models/${modelId}`).send({ display_name: '我的 GPT' })
+    expect(renamed.status).toBe(200)
+    expect(tables.ai_models[0].display_name).toBe('我的 GPT')
+
+    const someoneElse = await request(app(tables, 'u2')).patch(`/api/ai/me/models/${modelId}`).send({ display_name: 'x' })
+    expect(someoneElse.status).toBe(404)
+    const idChange = await request(app(tables)).patch(`/api/ai/me/models/${modelId}`).send({ model_id: 'other' })
+    expect(idChange.status).toBe(422)
+  })
+
+  it('returns the provider list for an own credential', async () => {
+    const { SecretCipher } = await import('../../ai/credentials/secretCipher.js')
+    const { credentialAssociatedData } = await import('../../ai/report/reportGenerationService.js')
+    const cipher = SecretCipher.fromBase64(config.AI_SECRET_KEY!)
+    const tables: Record<string, Row[]> = {
+      ai_credentials: [{ id: credentialId, scope: 'user', owner_user_id: 'u1', provider: 'anthropic', auth_type: 'api_key', base_url: null, secret_ciphertext: cipher.encrypt('sk-ant-x', credentialAssociatedData(credentialId)) }],
+    }
+    const providerFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [{ id: 'claude-sonnet-5-5', display_name: 'Claude Sonnet 5.5' }] }), { status: 200 }))
+    vi.stubGlobal('fetch', providerFetch)
+    try {
+      const response = await request(app(tables)).get(`/api/ai/me/credentials/${credentialId}/catalog?refresh=1`)
+      expect(response.body.data).toMatchObject({ supported: true, models: [{ id: 'claude-sonnet-5-5', name: 'Claude Sonnet 5.5', textCapable: true }] })
+      expect(providerFetch.mock.calls[0][1].headers['x-api-key']).toBe('sk-ant-x')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+})
