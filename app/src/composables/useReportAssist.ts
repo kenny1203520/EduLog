@@ -1,4 +1,4 @@
-import { computed, ref, shallowRef, type Ref } from 'vue'
+import { computed, ref, shallowRef, watch, type Ref } from 'vue'
 import { ApiV1Error } from '@/services/api/ApiV1Client'
 import {
     ReportAssistService,
@@ -93,6 +93,19 @@ export function useReportAssist(reportId: Ref<string | undefined>, service = Rep
     ))
     const alternativeSources = computed(() => (bootstrap.value?.sources ?? []).filter((source) =>
         source.model_row_id !== modelRowId.value && (source.credential_scope === 'user' || quotaRemaining.value >= source.quota_weight)))
+    /**
+     * The settings block is open until there is a result, and whenever the
+     * source needs attention; the teacher can still open or close it.
+     */
+    const settingsOverride = ref<boolean | null>(null)
+    const settingsExpanded = computed(() => settingsOverride.value
+        ?? ((!current.value && status.value !== 'generating') || Boolean(sourceProblem.value)))
+    function toggleSettings() {
+        settingsOverride.value = !settingsExpanded.value
+    }
+    watch(() => versions.value.length, () => { settingsOverride.value = null })
+    watch(sourceProblem, (problem) => { if (problem) settingsOverride.value = null })
+
     const canGenerate = computed(() => Boolean(reportId.value && bootstrap.value?.enabled && !needsNotice.value && selectedSource.value && status.value !== 'generating' && !sourceProblem.value))
 
     function chooseInitialSource(data: ReportAssistBootstrap) {
@@ -355,7 +368,7 @@ export function useReportAssist(reportId: Ref<string | undefined>, service = Rep
         status, bootstrap, errorCode, errorReason, tone, length, extraInstructions, focus, templateId, modelRowId,
         versions, currentIndex, current, preview, previewLoading, selectedSource, quotaRemaining,
         needsNotice, sourceProblem, alternativeSources, canGenerate, visibleSections, visibleSuggestions,
-        following, history, historyLoading,
+        following, history, historyLoading, settingsExpanded, toggleSettings,
         load, acknowledgeNotice, loadPreview, generate, cancel, dispose, selectSource, showVersion, recordAdoption, setSuggestionState,
         loadHistory, addVersion,
     }

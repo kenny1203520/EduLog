@@ -8,7 +8,6 @@
     "save_first": "Save the report before using AI.",
     "retry": "Retry",
     "disabled": "The AI report assistant is turned off by an administrator.",
-    "previous_suggestions": "Teaching suggestions you kept last time",
     "internal_only": "Internal",
     "context_title": "Data check",
     "context_ok": "Enough information to generate",
@@ -28,8 +27,6 @@
     "quota_remaining": "{n} site generations left",
     "personal_no_quota": "Uses your own account or key; site quota is not used",
     "no_sources": "No models are available. Ask an administrator, or add your own AI credential in personal settings.",
-    "switch_to": "Switch to {name}",
-    "no_alternative": "No other source is available. Ask an administrator or add your own AI credential.",
     "preview_title": "See exactly what is sent (de-identified)",
     "preview_hint": "Names, phone numbers and other personal data are replaced with codes such as [學生A] before sending and restored afterwards.",
     "preview_loading": "Building preview…",
@@ -44,7 +41,6 @@
     "insert": "Insert",
     "copy": "Copy",
     "copied": "Copied",
-    "append_all": "Append all to the report",
     "replace_all": "Replace the report",
     "replace_confirm_title": "Replace the learning report?",
     "replace_confirm_message": "The current learning report will be replaced by the AI draft. You can restore it from version history.",
@@ -54,7 +50,24 @@
     "dismiss": "Dismiss",
     "following": "The server is still generating this draft (closing the page or losing the connection does not stop it); the result will appear here when it is done.",
     "provider_reason": "AI service response: {reason}",
-    "tone_draft_hint": "The report already has a draft: its voice and paragraphs are kept, and this tone only applies to text the AI adds."
+    "tone_draft_hint": "The report already has a draft: its voice and paragraphs are kept, and this tone only applies to text the AI adds.",
+    "settings_title": "Generation settings",
+    "has_extra": "extra instructions",
+    "personal_no_quota_short": "Personal quota",
+    "not_enough_quota": "Not enough quota",
+    "quota_left": "{n} left",
+    "insert_all": "Insert all",
+    "more": "More",
+    "copy_all": "Copy all",
+    "version_label": "Version {n} of {total}",
+    "all_records": "All records",
+    "generating_status": "Generating; sections appear as they are written…",
+    "kept_suggestions_count": "Suggestions kept earlier ({n})",
+    "section_titles": {
+      "today": "Today",
+      "performance": "In class",
+      "home": "At home"
+    }
   },
   "tone": {
     "warm": "Warm",
@@ -298,5 +311,9 @@
     "system_prompt": "System prompt",
     "system_prompt_version_only": "Only the prompt version was recorded: {version}",
     "prompt": "Prompt sent"
+  },
+  "notice_detail": {
+    "title": "Details",
+    "copy": "Copy details"
   }
 }

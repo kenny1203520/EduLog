@@ -17,6 +17,8 @@ export interface ReportAssistSource {
     /** Generations this model costs on the site quota; 0 for personal credentials. */
     quota_weight: number
     is_default: boolean
+    /** Called in compatibility mode (the model lacks structured output). */
+    compat_mode?: boolean
 }
 
 export interface ReportAssistPreferences {

@@ -8,7 +8,6 @@
     "save_first": "請先儲存報告，再使用 AI 生成。",
     "retry": "重試",
     "disabled": "系統管理員目前未開放 AI 報告助手。",
-    "previous_suggestions": "上次保留的教學建議",
     "internal_only": "僅內部",
     "context_title": "資料檢查",
     "context_ok": "資料充足，可以生成",
@@ -28,8 +27,6 @@
     "quota_remaining": "站台額度剩餘 {n} 次",
     "personal_no_quota": "使用你自己的帳號或金鑰，不扣站台額度",
     "no_sources": "目前沒有可用的模型，請聯絡系統管理員，或在個人設定加入自己的 AI 憑證。",
-    "switch_to": "改用 {name}",
-    "no_alternative": "沒有其他可用來源，請聯絡系統管理員或加入自己的 AI 憑證。",
     "preview_title": "查看實際送出的內容（已去識別化）",
     "preview_hint": "姓名、電話等個資會換成 [學生A] 這類代號後才送出，回傳後再自動還原。",
     "preview_loading": "正在產生預覽…",
@@ -44,7 +41,6 @@
     "insert": "插入",
     "copy": "複製",
     "copied": "已複製",
-    "append_all": "全部附加到學習報告",
     "replace_all": "全部取代學習報告",
     "replace_confirm_title": "取代學習報告？",
     "replace_confirm_message": "目前學習報告的內容會被 AI 草稿取代，可從版本紀錄還原。",
@@ -54,7 +50,24 @@
     "dismiss": "略過",
     "following": "伺服器仍在生成這次的草稿（關閉頁面或斷線也不會中斷），完成後會自動顯示在這裡。",
     "provider_reason": "AI 服務的回應：{reason}",
-    "tone_draft_hint": "學習報告已有草稿：會沿用草稿的語氣與段落，這裡的語氣只用在 AI 補充的文字。"
+    "tone_draft_hint": "學習報告已有草稿：會沿用草稿的語氣與段落，這裡的語氣只用在 AI 補充的文字。",
+    "settings_title": "生成設定",
+    "has_extra": "有補充指示",
+    "personal_no_quota_short": "個人額度",
+    "not_enough_quota": "額度不足",
+    "quota_left": "剩 {n} 次",
+    "insert_all": "全部插入",
+    "more": "更多",
+    "copy_all": "複製全文",
+    "version_label": "第 {n} 版／共 {total} 版",
+    "all_records": "全部紀錄",
+    "generating_status": "生成中，內容會逐段出現…",
+    "kept_suggestions_count": "先前保留的建議（{n}）",
+    "section_titles": {
+      "today": "今日學習",
+      "performance": "課堂表現",
+      "home": "居家建議"
+    }
   },
   "tone": {
     "warm": "溫暖",
@@ -298,5 +311,9 @@
     "system_prompt": "系統提示詞",
     "system_prompt_version_only": "這筆紀錄只保存了提示詞版本：{version}",
     "prompt": "送出的提示詞"
+  },
+  "notice_detail": {
+    "title": "詳細原因",
+    "copy": "複製詳細原因"
   }
 }

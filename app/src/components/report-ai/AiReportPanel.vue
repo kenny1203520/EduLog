@@ -2,15 +2,19 @@
 import { computed, onBeforeUnmount, onMounted, ref, toRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
+import AiGenerateSettings from '@/components/report-ai/AiGenerateSettings.vue'
 import AiHistoryList from '@/components/report-ai/AiHistoryList.vue'
-import AiSectionCard from '@/components/report-ai/AiSectionCard.vue'
+import AiNotice from '@/components/report-ai/AiNotice.vue'
+import AiResultView from '@/components/report-ai/AiResultView.vue'
 import { useReportAssist } from '@/composables/useReportAssist'
-import type { GenerationHistoryEntry, ReportAssistSource, ReportDraftSection, ReportLength, ReportTone } from '@/services/ai/ReportAssistService'
+import type { GenerationHistoryEntry, ReportDraftSection } from '@/services/ai/ReportAssistService'
 import { copyToClipboard } from '@/utils/clipboard'
 
 /**
  * Right-hand drawer of the AI report assistant. It never edits the report by
  * itself: the teacher inserts or replaces text, which the editor applies.
+ * Results come first; the settings fold away once there is a draft, and the
+ * generate / stop button stays in the bar at the bottom.
  */
 const props = defineProps<{
     show: boolean
@@ -33,22 +37,18 @@ const assist = useReportAssist(toRef(props, 'reportId'))
 const {
     status, bootstrap, errorCode, errorReason, tone, length, extraInstructions, focus, templateId, modelRowId,
     versions, currentIndex, current, preview, previewLoading, selectedSource, quotaRemaining,
-    needsNotice, sourceProblem, alternativeSources, canGenerate, visibleSections, visibleSuggestions,
-    following, history, historyLoading,
+    needsNotice, sourceProblem, canGenerate, visibleSections, visibleSuggestions,
+    following, history, historyLoading, settingsExpanded,
 } = assist
 
-const TONES: ReportTone[] = ['warm', 'formal', 'concise']
-const LENGTHS: ReportLength[] = ['short', 'medium', 'long']
 const confirmReplace = ref(false)
 const copiedKey = ref<string | null>(null)
 const acknowledging = ref(false)
 const tab = ref<'generate' | 'history'>('generate')
 
 const generating = computed(() => status.value === 'generating')
-const warnings = computed(() => bootstrap.value?.warnings ?? [])
-const thinContext = computed(() => warnings.value.includes('thin_class_notes') || warnings.value.includes('missing_lesson_title'))
-const siteSources = computed(() => bootstrap.value?.sources.filter((source) => source.credential_scope === 'site') ?? [])
-const personalSources = computed(() => bootstrap.value?.sources.filter((source) => source.credential_scope === 'user') ?? [])
+const hasResult = computed(() => generating.value || current.value !== null)
+const ready = computed(() => Boolean(props.reportId && bootstrap.value?.enabled && !needsNotice.value && status.value !== 'loading' && status.value !== 'idle'))
 const fullText = computed(() => (current.value?.draft.sections ?? []).map((section) => section.body).join('\n\n'))
 const errorMessage = computed(() => {
     if (!errorCode.value) return ''
@@ -56,16 +56,19 @@ const errorMessage = computed(() => {
     const message = t(key)
     return message === key ? t('ai.errors.AI_UNKNOWN_ERROR') : message
 })
+const sourceProblemMessage = computed(() => (errorCode.value && errorCode.value !== 'AI_QUOTA_EXHAUSTED' ? errorMessage.value : t('ai.errors.AI_QUOTA_EXHAUSTED')))
+const footerError = computed(() => (errorMessage.value && !sourceProblem.value && status.value !== 'error' ? errorMessage.value : ''))
+const costLabel = computed(() => {
+    const source = selectedSource.value
+    if (!source) return ''
+    return source.credential_scope === 'site'
+        ? t('ai.panel.quota_left', { n: quotaRemaining.value })
+        : t('ai.panel.personal_no_quota_short')
+})
 
 watch(() => [props.show, props.reportId] as const, ([show, reportId], previous) => {
     if (show && reportId && (status.value === 'idle' || reportId !== previous?.[1])) void assist.load()
 }, { immediate: true })
-
-function sourceLabel(source: ReportAssistSource) {
-    const owner = source.credential_scope === 'site' ? t('ai.panel.source_site') : t('ai.panel.source_personal')
-    const cost = source.credential_scope === 'site' ? ` · ${t('ai.panel.costs', { n: source.quota_weight })}` : ''
-    return `${source.display_name} — ${owner}（${source.credential_label}）${cost}`
-}
 
 async function acknowledge() {
     acknowledging.value = true
@@ -87,10 +90,18 @@ async function copySection(section: Partial<ReportDraftSection>) {
     }
 }
 
-function appendAll() {
+function insertAll() {
     if (!fullText.value) return
     emit('insert', fullText.value)
     void assist.recordAdoption('all', 'adopt_all')
+}
+
+async function copyAll() {
+    if (fullText.value && await copyToClipboard(fullText.value)) {
+        copiedKey.value = 'all'
+        setTimeout(() => { if (copiedKey.value === 'all') copiedKey.value = null }, 1500)
+        void assist.recordAdoption('all', 'copy')
+    }
 }
 
 function replaceAll() {
@@ -113,10 +124,6 @@ function showTab(next: 'generate' | 'history') {
 function openFromHistory(entry: GenerationHistoryEntry) {
     assist.addVersion(entry)
     tab.value = 'generate'
-}
-
-function onPreviewToggle(event: Event) {
-    if ((event.target as HTMLDetailsElement).open) void assist.loadPreview()
 }
 
 function handleKeydown(event: KeyboardEvent) {
@@ -149,11 +156,11 @@ onBeforeUnmount(() => {
                         </div>
                         <div>
                             <h2 id="ai-panel-title" class="text-lg font-bold leading-tight text-gray-900">{{ $t('ai.panel.title') }}</h2>
-                            <p class="text-xs text-gray-600">{{ $t('ai.panel.subtitle') }}</p>
+                            <p class="text-sm text-gray-600">{{ $t('ai.panel.subtitle') }}</p>
                         </div>
                     </div>
                     <button type="button"
-                        class="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full text-gray-500 transition-colors duration-200 hover:bg-gray-100 hover:text-gray-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600"
+                        class="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full text-gray-600 transition-colors duration-200 hover:bg-gray-100 hover:text-gray-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600"
                         :aria-label="$t('common.close')" @click="emit('close')">
                         <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" />
@@ -161,26 +168,22 @@ onBeforeUnmount(() => {
                     </button>
                 </header>
 
-                <div class="flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:px-6">
+                <div class="flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-6">
                     <!-- Loading -->
                     <div v-if="status === 'loading' || status === 'idle'" class="space-y-3" aria-busy="true">
                         <div v-for="n in 3" :key="n" class="h-20 animate-pulse rounded-xl bg-gray-200 motion-reduce:animate-none"></div>
                     </div>
 
-                    <div v-else-if="!reportId" class="rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-700">
-                        {{ $t('ai.panel.save_first') }}
-                    </div>
+                    <AiNotice v-else-if="!reportId" tone="info" :message="$t('ai.panel.save_first')" />
 
-                    <div v-else-if="status === 'error' && !bootstrap" role="alert"
-                        class="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-                        <p>{{ errorMessage }}</p>
-                        <button type="button" class="mt-3 min-h-[44px] cursor-pointer rounded-lg bg-white px-3 font-semibold text-red-700 ring-1 ring-red-200 hover:bg-red-100"
-                            @click="assist.load()">{{ $t('ai.panel.retry') }}</button>
-                    </div>
+                    <AiNotice v-else-if="status === 'error' && !bootstrap" tone="error" live="alert" :message="errorMessage" :detail="errorReason">
+                        <template #actions>
+                            <button type="button" class="min-h-[44px] cursor-pointer rounded-lg bg-white px-3 font-semibold text-red-800 ring-1 ring-red-200 hover:bg-red-100"
+                                @click="assist.load()">{{ $t('ai.panel.retry') }}</button>
+                        </template>
+                    </AiNotice>
 
-                    <div v-else-if="bootstrap && !bootstrap.enabled" class="rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-700">
-                        {{ $t('ai.panel.disabled') }}
-                    </div>
+                    <AiNotice v-else-if="bootstrap && !bootstrap.enabled" tone="info" :message="$t('ai.panel.disabled')" />
 
                     <!-- First-use notice -->
                     <section v-else-if="needsNotice" class="space-y-4 rounded-xl border border-emerald-200 bg-white p-5" aria-labelledby="ai-notice-title">
@@ -210,223 +213,53 @@ onBeforeUnmount(() => {
                             <AiHistoryList :entries="history" :loading="historyLoading" @open="openFromHistory" />
                         </div>
 
-                        <div v-else id="ai-tab-panel" role="tabpanel" aria-labelledby="ai-tab-generate" class="space-y-5">
-                        <!-- Kept suggestions from earlier lessons -->
-                        <details v-if="bootstrap.kept_suggestions.length" class="rounded-xl border border-slate-300 bg-slate-100 p-4">
-                            <summary class="cursor-pointer text-sm font-semibold text-slate-800">
-                                {{ $t('ai.panel.previous_suggestions') }}
-                                <span class="ml-1 text-xs font-normal text-slate-600">{{ $t('ai.panel.internal_only') }}</span>
-                            </summary>
-                            <div v-for="item in bootstrap.kept_suggestions" :key="item.generationId" class="mt-3">
-                                <p class="text-xs font-semibold text-slate-600">{{ item.date }}</p>
-                                <ul class="mt-1 list-disc space-y-1 pl-5 text-sm text-slate-800">
-                                    <li v-for="(text, i) in item.suggestions" :key="i">{{ text }}</li>
-                                </ul>
-                            </div>
-                        </details>
+                        <div v-else id="ai-tab-panel" role="tabpanel" aria-labelledby="ai-tab-generate" class="space-y-4">
+                            <AiResultView v-if="hasResult"
+                                :generating="generating" :following="following"
+                                :sections="visibleSections" :suggestions="visibleSuggestions" :current="current"
+                                :version-index="currentIndex" :version-count="versions.length"
+                                :kept-suggestions="bootstrap.kept_suggestions" :copied-key="copiedKey"
+                                @insert-section="insertSection" @copy-section="copySection"
+                                @insert-all="insertAll" @replace-all="replaceAll" @copy-all="copyAll"
+                                @show-version="assist.showVersion" @open-history="showTab('history')"
+                                @set-suggestion="assist.setSuggestionState" />
 
-                        <!-- Context check -->
-                        <section class="space-y-3 rounded-xl border border-gray-200 bg-white p-4" aria-labelledby="ai-context-title">
-                            <h3 id="ai-context-title" class="text-sm font-bold text-gray-900">{{ $t('ai.panel.context_title') }}</h3>
-                            <ul v-if="warnings.length" class="space-y-1 text-sm text-amber-800">
-                                <li v-for="code in warnings" :key="code" class="flex items-start gap-2">
-                                    <svg class="mt-0.5 h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                                    </svg>
-                                    {{ $t(`ai.warnings.${code}`) }}
-                                </li>
-                            </ul>
-                            <p v-else class="flex items-center gap-2 text-sm text-emerald-700">
-                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                                </svg>
-                                {{ $t('ai.panel.context_ok') }}
-                            </p>
-                            <label class="block">
-                                <span class="text-sm font-medium text-gray-800">{{ $t('ai.panel.focus_label') }}</span>
-                                <textarea v-model="focus" rows="3" maxlength="4000"
-                                    class="mt-1 w-full rounded-lg border px-3 py-2 text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                    :class="thinContext ? 'border-amber-400 bg-amber-50' : 'border-gray-300'"
-                                    :placeholder="$t('ai.panel.focus_placeholder')"></textarea>
-                            </label>
-                        </section>
-
-                        <!-- Style -->
-                        <section class="space-y-3 rounded-xl border border-gray-200 bg-white p-4" aria-labelledby="ai-style-title">
-                            <h3 id="ai-style-title" class="text-sm font-bold text-gray-900">{{ $t('ai.panel.style_title') }}</h3>
-                            <fieldset>
-                                <legend class="text-sm font-medium text-gray-800">{{ $t('ai.panel.tone') }}</legend>
-                                <p v-if="bootstrap.has_draft" class="mt-1 text-xs text-gray-600">{{ $t('ai.panel.tone_draft_hint') }}</p>
-                                <div class="mt-1 flex flex-wrap gap-2">
-                                    <label v-for="option in TONES" :key="option"
-                                        class="inline-flex min-h-[44px] cursor-pointer items-center rounded-full border px-4 text-sm font-medium transition-colors duration-200 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-500"
-                                        :class="tone === option ? 'border-emerald-600 bg-emerald-50 text-emerald-800' : 'border-gray-300 text-gray-700 hover:bg-gray-50'">
-                                        <input v-model="tone" type="radio" name="ai-tone" :value="option" class="sr-only" />
-                                        {{ $t(`ai.tone.${option}`) }}
-                                    </label>
-                                </div>
-                            </fieldset>
-                            <fieldset>
-                                <legend class="text-sm font-medium text-gray-800">{{ $t('ai.panel.length') }}</legend>
-                                <div class="mt-1 flex flex-wrap gap-2">
-                                    <label v-for="option in LENGTHS" :key="option"
-                                        class="inline-flex min-h-[44px] cursor-pointer items-center rounded-full border px-4 text-sm font-medium transition-colors duration-200 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-500"
-                                        :class="length === option ? 'border-emerald-600 bg-emerald-50 text-emerald-800' : 'border-gray-300 text-gray-700 hover:bg-gray-50'">
-                                        <input v-model="length" type="radio" name="ai-length" :value="option" class="sr-only" />
-                                        {{ $t(`ai.length.${option}`) }}
-                                    </label>
-                                </div>
-                            </fieldset>
-                            <label v-if="templates?.length" class="block">
-                                <span class="text-sm font-medium text-gray-800">{{ $t('ai.panel.template') }}</span>
-                                <select v-model="templateId"
-                                    class="mt-1 min-h-[44px] w-full rounded-lg border border-gray-300 bg-white px-3 text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                                    <option value="">{{ $t('ai.panel.template_none') }}</option>
-                                    <option v-for="template in templates" :key="template.id" :value="template.id">{{ template.name }}</option>
-                                </select>
-                            </label>
-                            <label class="block">
-                                <span class="text-sm font-medium text-gray-800">{{ $t('ai.panel.extra_label') }}</span>
-                                <textarea v-model="extraInstructions" rows="2" maxlength="2000"
-                                    class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                    :placeholder="$t('ai.panel.extra_placeholder')"></textarea>
-                            </label>
-                        </section>
-
-                        <!-- Source -->
-                        <section class="space-y-2 rounded-xl border border-gray-200 bg-white p-4" aria-labelledby="ai-source-title">
-                            <h3 id="ai-source-title" class="text-sm font-bold text-gray-900">{{ $t('ai.panel.source_title') }}</h3>
-                            <p v-if="!bootstrap.sources.length" class="text-sm text-gray-700">{{ $t('ai.panel.no_sources') }}</p>
-                            <template v-else>
-                                <select :value="modelRowId" :aria-label="$t('ai.panel.source_title')"
-                                    class="min-h-[44px] w-full rounded-lg border border-gray-300 bg-white px-3 text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                    @change="assist.selectSource(($event.target as HTMLSelectElement).value)">
-                                    <optgroup v-if="siteSources.length" :label="$t('ai.panel.source_site')">
-                                        <option v-for="source in siteSources" :key="source.model_row_id" :value="source.model_row_id">{{ sourceLabel(source) }}</option>
-                                    </optgroup>
-                                    <optgroup v-if="personalSources.length" :label="$t('ai.panel.source_personal')">
-                                        <option v-for="source in personalSources" :key="source.model_row_id" :value="source.model_row_id">{{ sourceLabel(source) }}</option>
-                                    </optgroup>
-                                </select>
-                                <p class="text-sm text-gray-600">
-                                    <template v-if="selectedSource?.credential_scope === 'site'">{{ $t('ai.panel.quota_remaining', { n: quotaRemaining }) }}</template>
-                                    <template v-else>{{ $t('ai.panel.personal_no_quota') }}</template>
-                                </p>
-                            </template>
-                            <div v-if="sourceProblem" role="alert" class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-                                <p>{{ errorCode === 'AI_QUOTA_EXHAUSTED' || !errorCode ? $t('ai.errors.AI_QUOTA_EXHAUSTED') : errorMessage }}</p>
-                                <div v-if="alternativeSources.length" class="mt-2 flex flex-wrap gap-2">
-                                    <button v-for="source in alternativeSources" :key="source.model_row_id" type="button"
-                                        class="min-h-[44px] cursor-pointer rounded-lg bg-white px-3 text-left font-semibold text-amber-900 ring-1 ring-amber-300 transition-colors duration-200 hover:bg-amber-100"
-                                        @click="assist.selectSource(source.model_row_id)">{{ $t('ai.panel.switch_to', { name: sourceLabel(source) }) }}</button>
-                                </div>
-                                <p v-else class="mt-1">{{ $t('ai.panel.no_alternative') }}</p>
-                            </div>
-                        </section>
-
-                        <!-- De-identified preview -->
-                        <details class="rounded-xl border border-gray-200 bg-white p-4" @toggle="onPreviewToggle">
-                            <summary class="cursor-pointer text-sm font-semibold text-gray-800">{{ $t('ai.panel.preview_title') }}</summary>
-                            <p class="mt-2 text-xs text-gray-600">{{ $t('ai.panel.preview_hint') }}</p>
-                            <p v-if="previewLoading" class="mt-2 text-sm text-gray-600" role="status">{{ $t('ai.panel.preview_loading') }}</p>
-                            <pre v-else-if="preview" class="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-gray-100 p-3 text-xs text-gray-800">{{ preview.prompt }}</pre>
-                        </details>
-
-                        <!-- Generate -->
-                        <div class="space-y-2">
-                            <button v-if="!generating" type="button" :disabled="!canGenerate"
-                                class="inline-flex min-h-[48px] w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-base font-bold text-white shadow-sm transition-colors duration-200 hover:bg-emerald-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
-                                @click="assist.generate(beforeGenerate)">
-                                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                </svg>
-                                {{ versions.length ? $t('ai.panel.regenerate') : $t('ai.panel.generate') }}
-                                <span v-if="selectedSource?.credential_scope === 'site'" class="text-sm font-normal opacity-90">
-                                    （{{ $t('ai.panel.costs', { n: selectedSource.quota_weight }) }}）</span>
-                            </button>
-                            <button v-else type="button"
-                                class="inline-flex min-h-[48px] w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-4 text-base font-semibold text-gray-800 transition-colors duration-200 hover:bg-gray-50"
-                                @click="assist.cancel()">
-                                <span class="h-4 w-4 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent motion-reduce:animate-none" aria-hidden="true"></span>
-                                {{ $t('ai.panel.cancel') }}
-                            </button>
-                            <div v-if="errorMessage && !sourceProblem" role="alert" class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-                                <p>{{ errorMessage }}</p>
-                                <p v-if="errorReason" class="mt-1 break-words text-xs text-red-700">{{ $t('ai.panel.provider_reason', { reason: errorReason }) }}</p>
-                            </div>
-                        </div>
-
-                        <!-- Results -->
-                        <section v-if="generating || current" class="space-y-3" aria-labelledby="ai-result-title" aria-live="polite" :aria-busy="generating">
-                            <div class="flex items-center justify-between">
-                                <h3 id="ai-result-title" class="text-sm font-bold text-gray-900">
-                                    {{ generating ? $t('ai.panel.generating') : $t('ai.panel.result_title') }}
-                                </h3>
-                                <div v-if="versions.length > 1 && !generating" class="flex items-center gap-1">
-                                    <button type="button" :disabled="currentIndex === 0" :aria-label="$t('ai.panel.previous_version')"
-                                        class="flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg text-gray-700 hover:bg-gray-100 disabled:opacity-40"
-                                        @click="assist.showVersion(currentIndex - 1)">‹</button>
-                                    <span class="text-sm tabular-nums text-gray-700">{{ currentIndex + 1 }} / {{ versions.length }}</span>
-                                    <button type="button" :disabled="currentIndex === versions.length - 1" :aria-label="$t('ai.panel.next_version')"
-                                        class="flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg text-gray-700 hover:bg-gray-100 disabled:opacity-40"
-                                        @click="assist.showVersion(currentIndex + 1)">›</button>
-                                </div>
-                            </div>
-
-                            <p v-if="following" role="status" class="flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
-                                <span class="mt-0.5 h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-sky-600 border-t-transparent motion-reduce:animate-none" aria-hidden="true"></span>
-                                {{ $t('ai.panel.following') }}
-                            </p>
-
-                            <p v-if="current?.unresolved_placeholders.length && !generating" class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-                                {{ $t('ai.panel.unresolved', { tokens: current.unresolved_placeholders.join('、') }) }}
-                            </p>
-
-                            <AiSectionCard v-for="(section, i) in visibleSections" :key="section.key ?? i"
-                                :title="section.title" :body="section.body" :streaming="generating"
-                                @insert="insertSection(section)" @copy="copySection(section)" />
-                            <p v-if="copiedKey" class="text-sm text-emerald-700" role="status">{{ $t('ai.panel.copied') }}</p>
-
-                            <div v-if="current && !generating" class="flex flex-wrap gap-2">
-                                <button type="button"
-                                    class="min-h-[44px] cursor-pointer rounded-lg border border-emerald-600 bg-white px-4 text-sm font-semibold text-emerald-700 transition-colors duration-200 hover:bg-emerald-50"
-                                    @click="appendAll">{{ $t('ai.panel.append_all') }}</button>
-                                <button type="button"
-                                    class="min-h-[44px] cursor-pointer rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white transition-colors duration-200 hover:bg-emerald-700"
-                                    @click="replaceAll">{{ $t('ai.panel.replace_all') }}</button>
-                            </div>
-
-                            <!-- Internal teaching suggestions -->
-                            <article v-if="visibleSuggestions.length || (current && !generating)"
-                                class="rounded-xl border border-slate-300 bg-slate-100 p-4">
-                                <h4 class="flex items-center gap-2 text-sm font-bold text-slate-900">
-                                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                    </svg>
-                                    {{ $t('ai.panel.suggestions_title') }}
-                                    <span class="rounded-full bg-slate-700 px-2 py-0.5 text-xs font-semibold text-white">{{ $t('ai.panel.internal_only') }}</span>
-                                </h4>
-                                <p v-if="!visibleSuggestions.length" class="mt-2 text-sm text-slate-700">{{ $t('ai.panel.no_suggestions') }}</p>
-                                <ul class="mt-2 space-y-3">
-                                    <li v-for="(text, index) in visibleSuggestions" :key="index" class="text-sm text-slate-800">
-                                        <p class="whitespace-pre-wrap">{{ text }}</p>
-                                        <div v-if="current && !generating" class="mt-2 flex gap-2">
-                                            <button type="button" :aria-pressed="current.suggestionStates[index] === 'kept'"
-                                                class="min-h-[44px] cursor-pointer rounded-lg px-3 text-sm font-semibold transition-colors duration-200"
-                                                :class="current.suggestionStates[index] === 'kept' ? 'bg-slate-800 text-white' : 'bg-white text-slate-800 ring-1 ring-slate-300 hover:bg-slate-50'"
-                                                @click="assist.setSuggestionState(index, 'kept')">{{ $t('ai.panel.keep') }}</button>
-                                            <button type="button" :aria-pressed="current.suggestionStates[index] === 'dismissed'"
-                                                class="min-h-[44px] cursor-pointer rounded-lg px-3 text-sm font-semibold transition-colors duration-200"
-                                                :class="current.suggestionStates[index] === 'dismissed' ? 'bg-slate-500 text-white' : 'bg-white text-slate-700 ring-1 ring-slate-300 hover:bg-slate-50'"
-                                                @click="assist.setSuggestionState(index, 'dismissed')">{{ $t('ai.panel.dismiss') }}</button>
-                                        </div>
-                                    </li>
-                                </ul>
-                            </article>
-                        </section>
+                            <AiGenerateSettings
+                                v-model:focus="focus" v-model:tone="tone" v-model:length="length"
+                                v-model:template-id="templateId" v-model:extra-instructions="extraInstructions" v-model:model-row-id="modelRowId"
+                                :expanded="settingsExpanded" :warnings="bootstrap.warnings" :has-draft="bootstrap.has_draft"
+                                :templates="templates" :sources="bootstrap.sources" :selected-source="selectedSource"
+                                :quota-remaining="quotaRemaining" :source-problem="Boolean(sourceProblem)" :source-problem-message="sourceProblemMessage"
+                                :preview="preview" :preview-loading="previewLoading"
+                                :kept-suggestions="hasResult ? [] : bootstrap.kept_suggestions"
+                                @toggle="assist.toggleSettings()" @load-preview="assist.loadPreview()" />
                         </div>
                     </template>
                 </div>
+
+                <!-- Bottom bar: the one primary action, always in reach -->
+                <footer v-if="ready && bootstrap && tab === 'generate'"
+                    class="shrink-0 space-y-2 border-t border-gray-200 bg-white px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6">
+                    <AiNotice v-if="footerError" tone="error" live="alert" :message="footerError" :detail="errorReason" />
+                    <div class="flex items-center gap-3">
+                        <button v-if="!generating" type="button" :disabled="!canGenerate" data-testid="ai-generate"
+                            class="inline-flex min-h-[48px] flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-base font-bold text-white shadow-sm transition-colors duration-200 hover:bg-emerald-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
+                            @click="assist.generate(beforeGenerate)">
+                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                            {{ versions.length ? $t('ai.panel.regenerate') : $t('ai.panel.generate') }}
+                            <span v-if="selectedSource?.credential_scope === 'site'" class="text-sm font-normal">（{{ $t('ai.panel.costs', { n: selectedSource.quota_weight }) }}）</span>
+                        </button>
+                        <button v-else type="button" data-testid="ai-stop"
+                            class="inline-flex min-h-[48px] flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-4 text-base font-semibold text-gray-800 transition-colors duration-200 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600"
+                            @click="assist.cancel()">
+                            <span class="h-4 w-4 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent motion-reduce:animate-none" aria-hidden="true"></span>
+                            {{ $t('ai.panel.cancel') }}
+                        </button>
+                        <span v-if="costLabel" class="shrink-0 text-sm text-gray-700" data-testid="ai-quota-left">{{ costLabel }}</span>
+                    </div>
+                </footer>
             </section>
         </div>
 

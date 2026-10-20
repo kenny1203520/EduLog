@@ -5,6 +5,8 @@ defineProps<{
     body?: string
     streaming?: boolean
     disabled?: boolean
+    /** Placeholder card while the section has not arrived yet. */
+    skeleton?: boolean
 }>()
 
 defineEmits<{
@@ -14,12 +16,17 @@ defineEmits<{
 </script>
 
 <template>
-    <article class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+    <article class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm" :aria-busy="skeleton || streaming">
         <h4 class="mb-2 text-sm font-bold text-gray-900">{{ title || '…' }}</h4>
-        <p class="whitespace-pre-wrap text-[15px] leading-relaxed text-gray-800">{{ body }}<span v-if="streaming"
+        <div v-if="skeleton" class="space-y-2" data-testid="ai-section-skeleton" aria-hidden="true">
+            <div class="h-4 w-full animate-pulse rounded bg-gray-200 motion-reduce:animate-none"></div>
+            <div class="h-4 w-11/12 animate-pulse rounded bg-gray-200 motion-reduce:animate-none"></div>
+            <div class="h-4 w-2/3 animate-pulse rounded bg-gray-200 motion-reduce:animate-none"></div>
+        </div>
+        <p v-else class="whitespace-pre-wrap text-[15px] leading-relaxed text-gray-800">{{ body }}<span v-if="streaming"
                 class="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-emerald-500 align-middle motion-reduce:animate-none"
                 aria-hidden="true"></span></p>
-        <div v-if="!streaming" class="mt-3 flex flex-wrap gap-2">
+        <div v-if="!streaming && !skeleton" class="mt-3 flex flex-wrap gap-2">
             <button type="button" :disabled="disabled || !body"
                 class="inline-flex min-h-[44px] cursor-pointer items-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-sm font-semibold text-white transition-colors duration-200 hover:bg-emerald-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
                 @click="$emit('insert')">
