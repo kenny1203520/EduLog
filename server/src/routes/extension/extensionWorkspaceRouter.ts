@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
 import { Router, type Request, type Response, type NextFunction } from 'express'
+import { measureReportAdoptions } from '../../ai/adoption/adoptionTracker.js'
 import { z } from 'zod'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { ApiError, mapDatabaseError } from '../../http/errors.js'
@@ -272,6 +273,12 @@ export function createExtensionWorkspaceRouter(admin: SupabaseClient) {
   router.patch('/imports/:id', wrap(async (req, res) => reply(req, res, await run(req, 'job-status', { job_id: uuid.parse(req.params.id), ...jobStatus.parse(req.body) }))))
   router.get('/work', wrap(async (req, res) => reply(req, res, await run(req, 'work', {}))))
   // Confirmation is intentionally absent until the adapter has a verified success contract.
-  router.post('/report-pushes', wrap(async (req, res) => reply(req, res, await run(req, 'pending-push', pendingPush.parse(req.body)))))
+  router.post('/report-pushes', wrap(async (req, res) => {
+    const input = pendingPush.parse(req.body)
+    const result = await run(req, 'pending-push', input)
+    // The pushed report is what parents receive: record how much adopted AI text it kept.
+    void measureReportAdoptions(admin, input.report_id, 'push').catch((error) => req.log?.warn?.({ err: error, report_id: input.report_id }, 'ai_adoption_measure_failed'))
+    return reply(req, res, result)
+  }))
   return router
 }

@@ -95,7 +95,8 @@
     "NETWORK_OFFLINE": "目前離線，請連線後再試。",
     "AI_UNKNOWN_ERROR": "發生未預期的錯誤，請稍後再試。",
     "AI_OAUTH_EXPIRED": "登入逾時，請重新連接 OpenRouter。",
-    "AI_OAUTH_FAILED": "OpenRouter 未接受這次登入，請再試一次。"
+    "AI_OAUTH_FAILED": "OpenRouter 未接受這次登入，請再試一次。",
+    "AI_EMPTY_OUTPUT": "AI 沒有產生內容，未扣額度。請再試一次或改用其他模型。"
   },
   "providers": {
     "anthropic": "Anthropic Claude",
