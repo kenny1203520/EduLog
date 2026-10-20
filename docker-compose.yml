@@ -715,6 +715,17 @@ services:
       start_period: 20s
     networks:
       - frontend
+      - ai
+  presidio-analyzer:
+    build:
+      context: ./docker/presidio
+    container_name: edulog-presidio-analyzer
+    restart: unless-stopped
+    # Point the API at it with EDULOG_PRESIDIO_ANALYZER_URL=http://presidio-analyzer:3000.
+    # No published ports: only the API may reach it. Text sent here is raw
+    # report content, so it must stay on the internal network.
+    networks:
+      - ai
   edulog:
     container_name: edulog-frontend
     image: ghcr.io/kenny1203520/edulog:${EDULOG_IMAGE_TAG:-latest}
@@ -756,3 +767,6 @@ networks:
     driver: bridge
   frontend:
     driver: bridge
+  ai:
+    driver: bridge
+    internal: true

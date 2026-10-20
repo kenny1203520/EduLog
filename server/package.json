@@ -16,7 +16,13 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.84",
+    "@ai-sdk/google": "^4.0.101",
+    "@ai-sdk/openai": "^4.0.98",
+    "@openrouter/ai-sdk-provider": "^3.1.0",
     "@supabase/supabase-js": "^2.105.3",
+    "ai": "^7.0.146",
+    "ai-sdk-ollama": "^4.5.1",
     "cookie-parser": "^1.4.7",
     "express": "^5.1.0",
     "helmet": "^8.1.0",
