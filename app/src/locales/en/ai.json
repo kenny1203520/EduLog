@@ -95,7 +95,8 @@
     "NETWORK_OFFLINE": "You are offline. Reconnect and try again.",
     "AI_UNKNOWN_ERROR": "Something went wrong. Please try again later.",
     "AI_OAUTH_EXPIRED": "The sign-in expired. Connect OpenRouter again.",
-    "AI_OAUTH_FAILED": "OpenRouter did not accept the sign-in. Please try again."
+    "AI_OAUTH_FAILED": "OpenRouter did not accept the sign-in. Please try again.",
+    "AI_EMPTY_OUTPUT": "The AI returned an empty draft; no quota was used. Try again or use another model."
   },
   "providers": {
     "anthropic": "Anthropic Claude",

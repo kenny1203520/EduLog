@@ -283,6 +283,23 @@ export class ReportGenerationService {
 
     const tokensIn = result.usage.inputTokens ?? null
     const tokensOut = result.usage.outputTokens ?? null
+
+    // A draft without any report section is not usable: log it as failed and charge nothing.
+    if (result.sanitized.sections.length === 0) {
+      await this.deps.repository.insertGeneration({
+        ...base,
+        sanitized_output: result.sanitized,
+        status: 'failed',
+        error_code: 'EMPTY_OUTPUT',
+        tokens_in: tokensIn,
+        tokens_out: tokensOut,
+        est_cost: estimateCost(resolved, tokensIn, tokensOut),
+        quota_charged: 0,
+        latency_ms: this.now().getTime() - startedAt,
+      })
+      throw new ApiError(502, 'AI_EMPTY_OUTPUT', 'The model returned an empty draft')
+    }
+
     const generationId = await this.deps.repository.insertGeneration({
       ...base,
       sanitized_output: result.sanitized,

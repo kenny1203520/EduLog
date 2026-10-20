@@ -5,6 +5,7 @@ import { complete, idempotency } from './resourceRouter.js'
 import { initialReportAttendance } from '../../domain/reportSemantics.js'
 import { setAuditContext } from '../../http/context.js'
 import { requireAuthorizationDecision } from '../../auth/authorization.js'
+import { measureReportAdoptions } from '../../ai/adoption/adoptionTracker.js'
 
 const fields = 'id,enrollment_id,class_occurrence_id,lesson_id,is_completed,progress_letter,attendance_status,absence_reason,class_participation,classroom_behavior,contact_notes,contact_notes_document,class_notes,class_notes_document,content,content_document,external_link,source_origin,source_admission_id,source_report_id,version,last_edited_by,last_edited_at,created_at,updated_at'
 const writable = ['lesson_id', 'is_completed', 'progress_letter', 'attendance_status', 'absence_reason', 'class_participation', 'classroom_behavior', 'contact_notes', 'contact_notes_document', 'class_notes', 'class_notes_document', 'content', 'content_document', 'external_link'] as const
@@ -172,6 +173,8 @@ async function update(req: Request, res: Response) {
   const result = await req.db.rpc('apply_occurrence_report_lifecycle', { p_report_id: id, p_expected_version: input.expected_version, p_patch: pick(input), p_actor: req.user.id, p_operation: 'update' })
   if (result.error) throw mapDatabaseError(result.error); if (!result.data) throw new ApiError(409, 'VERSION_CONFLICT', 'The report was modified by another user')
   setAuditContext(req, { domain: 'teaching', resource: 'reports', resourceId: id, teachingId: context.teaching_id, permission: 'teaching.reports.update', scopeId: context.class_occurrence_id, scopeType: 'class_occurrence' })
+  // Track how much adopted AI text the saved report keeps; never blocks or fails the save.
+  if (input.content !== undefined && req.adminDb) void measureReportAdoptions(req.adminDb, id, 'save').catch((error) => req.log?.warn({ err: error, report_id: id }, 'ai_adoption_measure_failed'))
   const envelope = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, envelope); return res.json(envelope)
 }
 export async function remove(req: Request, res: Response) {

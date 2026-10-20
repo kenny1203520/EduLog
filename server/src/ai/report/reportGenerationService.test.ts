@@ -228,3 +228,13 @@ describe('parentSectionMap', () => {
     expect(map.restore('[學生B] [電話A]').text).toBe('陳大文 0912-345-678')
   })
 })
+
+describe('empty drafts', () => {
+  it('are logged as failed and never charge quota', async () => {
+    const repository = new FakeRepository()
+    const { svc } = service(repository, jsonModel({ sections: [], teachingSuggestions: [] }))
+    await expect(svc.run(await svc.prepare(request))).rejects.toMatchObject({ code: 'AI_EMPTY_OUTPUT' })
+    expect(repository.generations.map((row) => [row.status, row.error_code, row.quota_charged])).toEqual([['failed', 'EMPTY_OUTPUT', 0]])
+    expect(repository.charges).toEqual([])
+  })
+})
