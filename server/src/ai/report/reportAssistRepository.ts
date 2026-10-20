@@ -104,6 +104,8 @@ export interface ReportAssistRepository {
   /** Student first, then classmates in the same session, teachers and schools. */
   loadKnownEntities(facts: ReportFacts, userId: string): Promise<KnownEntity[]>
   loadTemplate(templateId: string, userId: string): Promise<string | null>
+  /** The active administrator override for a prompt key, if any. */
+  getActivePromptOverride(promptKey: string): Promise<{ version: number, body: string } | null>
   loadQuotaInputs(userId: string): Promise<{ policies: QuotaPolicyRow[], roleIds: string[], ledger: QuotaLedgerEntry[] }>
   insertGeneration(row: GenerationLogRow): Promise<string>
   chargeQuota(userId: string, generationId: string, amount: number): Promise<void>

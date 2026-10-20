@@ -37,6 +37,7 @@ class Repo implements ReportAssistRepository {
   async loadReportFacts() { return facts }
   async loadKnownEntities() { return [{ id: 's1', kind: 'student' as const, name: '王小明' }] }
   async loadTemplate() { return null }
+  async getActivePromptOverride() { return null }
   async loadQuotaInputs() {
     return { policies: [{ scope: 'default' as const, target_id: null, one_time_total: 1, period: 'none' as const, period_amount: null }], roleIds: [], ledger: this.quotaLedger }
   }

@@ -69,9 +69,20 @@ export interface BuiltPrompt {
   prompt: string
 }
 
-/** Build the system and user prompt for one generation. */
-export function buildReportPrompt(context: ReportPromptContext, options: ReportPromptOptions): BuiltPrompt {
-  const system = [
+/** Key of the overridable system rules in ai_prompt_versions. */
+export const REPORT_SYSTEM_PROMPT_KEY = 'report.system'
+
+/** An administrator override of the system rules (see ai_prompt_versions). */
+export interface PromptOverride {
+  version: number
+  body: string
+}
+
+/**
+ * Built-in system rules. Administrators may replace them; tone and length are
+ * always appended so the panel's choices keep working with any override.
+ */
+export const DEFAULT_REPORT_SYSTEM_RULES = [
     '你是補習班老師的課後報告助手，使用繁體中文（台灣用語）。',
     '你要產出兩樣東西：',
     '1. sections：給家長閱讀的學習報告，依序為 today（今日學習）、performance（課堂表現）、home（居家建議）。',
@@ -83,8 +94,12 @@ export function buildReportPrompt(context: ReportPromptContext, options: ReportP
     '- 負面狀況要委婉、具建設性，並搭配具體的改進方向。',
     '- 若有「老師草稿」，那是老師已寫好的內容：保留其中所有事實與用語，在此基礎上潤飾、擴寫並補齊缺少的段落。',
     '- 若有「報告樣板」，只參考它的格式與段落安排，不要照抄其中的範例內容。',
-    `- 語氣：${TONE_TEXT[options.tone]}。長度：${LENGTH_TEXT[options.length]}。`,
-  ].join('\n')
+].join('\n')
+
+/** Build the system and user prompt for one generation. */
+export function buildReportPrompt(context: ReportPromptContext, options: ReportPromptOptions, override?: PromptOverride | null): BuiltPrompt {
+  const rules = override?.body.trim() || DEFAULT_REPORT_SYSTEM_RULES
+  const system = `${rules}\n- 語氣：${TONE_TEXT[options.tone]}。長度：${LENGTH_TEXT[options.length]}。`
 
   const lines: string[] = []
   lines.push(`學生：${context.studentToken}`)
@@ -114,7 +129,8 @@ export function buildReportPrompt(context: ReportPromptContext, options: ReportP
   }
   section(lines, '老師的額外指示', options.extraInstructions)
 
-  return { version: REPORT_PROMPT_VERSION, system, prompt: lines.join('\n') }
+  const version = override ? `${REPORT_SYSTEM_PROMPT_KEY}.override.v${override.version}` : REPORT_PROMPT_VERSION
+  return { version, system, prompt: lines.join('\n') }
 }
 
 function attendanceText(context: ReportPromptContext): string {

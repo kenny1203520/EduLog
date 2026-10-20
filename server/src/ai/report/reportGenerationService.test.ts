@@ -60,6 +60,7 @@ class FakeRepository implements ReportAssistRepository {
     ]
   }
   async loadTemplate() { return null }
+  async getActivePromptOverride() { return null }
   async loadQuotaInputs() {
     return { policies: [{ scope: 'default' as const, target_id: null, one_time_total: 3, period: 'none' as const, period_amount: null }], roleIds: [], ledger: this.ledger }
   }

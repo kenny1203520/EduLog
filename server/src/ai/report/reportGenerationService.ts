@@ -11,6 +11,7 @@ import { normalizeDraft, REPORT_SECTION_KEYS, streamReportDraft, type DeepPartia
 import {
   assessReportContext,
   buildReportPrompt,
+  REPORT_SYSTEM_PROMPT_KEY,
   type BuiltPrompt,
   type ContextWarning,
   type ReportLength,
@@ -114,9 +115,10 @@ export class ReportGenerationService {
     if (!this.deps.deidentifier) throw new ApiError(503, 'AI_DEIDENTIFICATION_UNAVAILABLE', 'De-identification is not configured')
     const facts = await this.deps.repository.loadReportFacts(reportId)
     if (!facts) throw new ApiError(404, 'NOT_FOUND', 'Report was not found')
-    const [entities, template] = await Promise.all([
+    const [entities, template, promptOverride] = await Promise.all([
       this.deps.repository.loadKnownEntities(facts, userId),
       options.templateId ? this.deps.repository.loadTemplate(options.templateId, userId) : Promise.resolve(null),
+      this.deps.repository.getActivePromptOverride(REPORT_SYSTEM_PROMPT_KEY),
     ])
 
     const fields: Record<string, string> = {
@@ -174,7 +176,7 @@ export class ReportGenerationService {
       tone: options.tone,
       length: options.length,
       extraInstructions: sanitized.extraInstructions,
-    })
+    }, promptOverride)
     const warnings = assessReportContext({ ...promptContext, lessonTitle: facts.lessonTitle })
     return { facts, entities, map: result.map, sanitizedFields: sanitized, counts: result.counts, warnings, prompt }
   }

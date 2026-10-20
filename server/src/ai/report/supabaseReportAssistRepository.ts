@@ -229,6 +229,12 @@ export class SupabaseReportAssistRepository implements ReportAssistRepository {
     return row?.content ?? null
   }
 
+  async getActivePromptOverride(promptKey: string): Promise<{ version: number, body: string } | null> {
+    const row = unwrap(await this.adminDb.from('ai_prompt_versions').select('version,body')
+      .eq('prompt_key', promptKey).eq('source', 'override').eq('is_active', true).maybeSingle())
+    return row ? { version: row.version, body: row.body } : null
+  }
+
   async loadQuotaInputs(userId: string): Promise<{ policies: QuotaPolicyRow[], roleIds: string[], ledger: QuotaLedgerEntry[] }> {
     const today = new Date().toISOString().slice(0, 10)
     const [policies, roles, ledger] = await Promise.all([
