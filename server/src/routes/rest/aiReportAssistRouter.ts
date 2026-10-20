@@ -9,7 +9,8 @@ import { Deidentifier } from '../../ai/deidentify/deidentifier.js'
 import { PresidioClient } from '../../ai/deidentify/presidioClient.js'
 import { REPORT_LENGTHS, REPORT_TONES, assessReportContext } from '../../ai/report/reportPrompt.js'
 import type { ReportAssistRepository } from '../../ai/report/reportAssistRepository.js'
-import { adoptionSnapshot, ReportGenerationService } from '../../ai/report/reportGenerationService.js'
+import { GenerationRegistry, sharedGenerationRegistry } from '../../ai/report/generationRegistry.js'
+import { adoptionSnapshot, ReportGenerationService, type GenerationHistoryEntry } from '../../ai/report/reportGenerationService.js'
 import { SupabaseReportAssistRepository } from '../../ai/report/supabaseReportAssistRepository.js'
 import { siwcClientFromConfig } from '../../ai/credentials/chatgptPlanOAuth.js'
 import { isChatGptPlanCredential, sharedChatGptPlanTokens } from '../../ai/credentials/chatgptPlanTokens.js'
@@ -45,6 +46,8 @@ export const preferencesSchema = z.object({
 export interface AiReportAssistDeps {
   repository: (req: Request) => ReportAssistRepository
   service: (repository: ReportAssistRepository, req: Request) => ReportGenerationService
+  /** Running generations in this process; the same instance must be passed to the service. */
+  registry: GenerationRegistry
 }
 
 /** Production wiring: Presidio and the secret cipher come from config; either may be absent. */
@@ -55,13 +58,32 @@ export function defaultAiReportAssistDeps(config: ApiConfig): AiReportAssistDeps
   const chatgpt = siwc && cipher ? sharedChatGptPlanTokens(siwc, cipher) : null
   return {
     repository: (req) => new SupabaseReportAssistRepository(req.db!, req.adminDb!),
+    registry: sharedGenerationRegistry,
     service: (repository, req) => new ReportGenerationService({
       repository,
       deidentifier,
       cipher,
+      registry: sharedGenerationRegistry,
       // "Sign in with ChatGPT" credentials store a refresh token; generation needs a fresh access token.
       resolveToken: async (model) => (chatgpt && isChatGptPlanCredential(model) ? chatgpt.getAccessToken(req.adminDb!, model.credentialId) : undefined),
     }),
+  }
+}
+
+function historyJson(entry: GenerationHistoryEntry) {
+  return {
+    generation_id: entry.generationId,
+    status: entry.status,
+    created_at: entry.createdAt,
+    completed_at: entry.completedAt,
+    provider: entry.provider,
+    model_id: entry.modelId,
+    error_code: entry.errorCode,
+    quota_charged: entry.quotaCharged,
+    draft: entry.draft,
+    unresolved_placeholders: entry.unresolved,
+    suggestion_states: entry.suggestionStates,
+    adoption_count: entry.adoptionCount,
   }
 }
 
@@ -98,7 +120,9 @@ function toOptions(input: z.infer<typeof optionsSchema>) {
   return { tone: input.tone, length: input.length, extraInstructions: input.extra_instructions, focus: input.focus, templateId: input.template_id }
 }
 
+/** Write an SSE event; a closed connection is ignored because the generation carries on regardless. */
 function writeEvent(res: Response, event: string, data: unknown) {
+  if (res.writableEnded || res.destroyed) return
   res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
 }
 
@@ -107,7 +131,9 @@ function writeEvent(res: Response, event: string, data: unknown) {
  *
  * - GET  /ai/report-assist/reports/:reportId             panel bootstrap
  * - POST /ai/report-assist/reports/:reportId/preview     de-identified preview, no model call
- * - POST /ai/report-assist/reports/:reportId/generations Server-Sent Events: `partial`, then `done` or `error`
+ * - GET  /ai/report-assist/reports/:reportId/generations the user's history on this report
+ * - POST /ai/report-assist/reports/:reportId/generations Server-Sent Events: `start`, `partial`, then `done` or `error`
+ * - POST /ai/report-assist/generations/:id/cancel        stop a running generation (closing the stream does not)
  * - POST /ai/report-assist/notice/acknowledge
  * - PUT  /ai/report-assist/preferences
  * - PUT  /ai/report-assist/generations/:id/suggestions/:index
@@ -132,7 +158,12 @@ export function createAiReportAssistRouter(deps: AiReportAssistDeps) {
     if (!facts) throw new ApiError(404, 'NOT_FOUND', 'Report was not found')
     if (preferences.error) throw mapDatabaseError(preferences.error)
     const entities = await repository.loadKnownEntities(facts, userId)
-    const keptSuggestions = await service.keptSuggestions(facts, entities, userId)
+    const [keptSuggestions, history] = await Promise.all([
+      service.keptSuggestions(facts, entities, userId),
+      service.history(facts, entities, userId),
+    ])
+    // The panel reopens on the newest result, or follows a generation still running.
+    const latest = history.find((entry) => entry.status === 'succeeded' || entry.status === 'running')
     const acknowledged = await repository.hasAcknowledgedNotice(userId, settings.noticeVersion)
     return res.json(envelope(req, {
       enabled: settings.enabled,
@@ -151,8 +182,21 @@ export function createAiReportAssistRouter(deps: AiReportAssistDeps) {
       quota: { remaining: quota.remaining, periodic: quota.periodic, one_time: quota.oneTime },
       warnings: assessReportContext({ lessonTitle: facts.lessonTitle, classNotes: facts.classNotes, draft: facts.content, attendance: facts.attendance }).map((warning) => warning.code),
       kept_suggestions: keptSuggestions,
+      latest: latest ? historyJson(latest) : null,
       preferences: preferences.data?.ai_settings ?? {},
     }))
+  }))
+
+  router.get('/ai/report-assist/reports/:reportId/generations', wrap(async (req, res) => {
+    const userId = requireUser(req)
+    const reportId = param(req, 'reportId')
+    await authorizeReport(req, reportId, 'read_history')
+    const repository = deps.repository(req)
+    const facts = await repository.loadReportFacts(reportId)
+    if (!facts) throw new ApiError(404, 'NOT_FOUND', 'Report was not found')
+    const entities = await repository.loadKnownEntities(facts, userId)
+    const history = await deps.service(repository, req).history(facts, entities, userId)
+    return res.json(envelope(req, history.map(historyJson)))
   }))
 
   router.post('/ai/report-assist/reports/:reportId/preview', wrap(async (req, res) => {
@@ -180,16 +224,15 @@ export function createAiReportAssistRouter(deps: AiReportAssistDeps) {
     // Every refusal (switch, notice, credential, quota, de-identification) is a normal JSON error before streaming.
     const prepared = await service.prepare({ reportId, userId, modelRowId: input.model_row_id, options: toOptions(input.options), sessionSeq: input.session_seq })
 
-    const controller = new AbortController()
-    res.on('close', () => { if (!res.writableFinished) controller.abort() })
+    // A dropped connection does not stop the model call: the result is saved
+    // and the teacher finds it in the history. Only the cancel route stops it.
     res.status(200)
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
     res.setHeader('X-Accel-Buffering', 'no')
     res.flushHeaders()
-    writeEvent(res, 'start', { warnings: prepared.context.warnings.map((warning) => warning.code) })
     try {
       const outcome = await service.run(prepared, {
-        signal: controller.signal,
+        onStarted: (generationId) => writeEvent(res, 'start', { generation_id: generationId, warnings: prepared.context.warnings.map((warning) => warning.code) }),
         onPartial: (draft) => writeEvent(res, 'partial', draft),
       })
       setAuditContext(req, { domain: 'teaching', resource: 'ai_generations', resourceId: outcome.generationId, action: 'generate', permission: AI_PERMISSIONS.generate })
@@ -203,9 +246,15 @@ export function createAiReportAssistRouter(deps: AiReportAssistDeps) {
     } catch (error) {
       const apiError = error instanceof ApiError ? error : new ApiError(500, 'INTERNAL_ERROR', 'An unexpected error occurred')
       if (!(error instanceof ApiError)) req.log?.error({ err: error, event: 'ai_generation_failed' }, 'ai_generation_failed')
-      if (!res.writableEnded) writeEvent(res, 'error', { code: apiError.code, message: apiError.message, request_id: req.requestId })
+      writeEvent(res, 'error', { code: apiError.code, message: apiError.message, request_id: req.requestId })
     }
-    res.end()
+    if (!res.writableEnded && !res.destroyed) res.end()
+  }))
+
+  router.post('/ai/report-assist/generations/:id/cancel', wrap(async (req, res) => {
+    const { userId, generation } = await ownGeneration(req, 'cancel')
+    const cancelled = deps.registry.cancel(generation.id, userId)
+    return res.json(envelope(req, { generation_id: generation.id, cancelled }))
   }))
 
   router.post('/ai/report-assist/notice/acknowledge', wrap(async (req, res) => {

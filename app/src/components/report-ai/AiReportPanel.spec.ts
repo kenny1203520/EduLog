@@ -11,6 +11,8 @@ const service = vi.hoisted(() => ({
     setSuggestionState: vi.fn(),
     recordAdoption: vi.fn(),
     generate: vi.fn(),
+    history: vi.fn(),
+    cancel: vi.fn(),
 }))
 vi.mock('@/services/ai/ReportAssistService', () => ({ ReportAssistService: service }))
 
@@ -20,7 +22,7 @@ function bootstrap(acknowledged = true) {
     return {
         enabled: true, notice: { version: 1, acknowledged }, default_model_row_id: 'm1', sources: [source],
         quota: { remaining: 3, periodic: null, one_time: { total: 3, used: 0, remaining: 3 } },
-        warnings: ['thin_class_notes'], kept_suggestions: [], preferences: {},
+        warnings: ['thin_class_notes'], kept_suggestions: [], latest: null, preferences: {},
     }
 }
 
@@ -88,5 +90,27 @@ describe('AiReportPanel', () => {
         await wrapper.findAll('button').find((button) => button.text() === '全部取代學習報告')!.trigger('click')
         expect(wrapper.emitted('replace')).toBeUndefined()
         expect(wrapper.text()).toContain('取代學習報告？')
+    })
+
+    it('lists earlier generations and opens one in the result area', async () => {
+        service.bootstrap.mockResolvedValue(bootstrap())
+        service.history.mockResolvedValue([
+            { generation_id: 'g2', status: 'failed', created_at: '2026-10-20T09:00:00Z', completed_at: '2026-10-20T09:00:05Z', provider: 'ollama', model_id: 'qwen', error_code: 'TIMEOUT', quota_charged: 0, draft: null, unresolved_placeholders: [], suggestion_states: {}, adoption_count: 0 },
+            { generation_id: 'g1', status: 'succeeded', created_at: '2026-10-20T08:00:00Z', completed_at: '2026-10-20T08:00:20Z', provider: 'ollama', model_id: 'qwen', error_code: null, quota_charged: 1, draft: { sections: [{ key: 'today', title: '今日學習', body: '先前的版本' }], teachingSuggestions: [] }, unresolved_placeholders: [], suggestion_states: {}, adoption_count: 1 },
+        ])
+        const wrapper = mountPanel()
+        await flushPromises()
+
+        await wrapper.find('#ai-tab-history').trigger('click')
+        await flushPromises()
+        const entries = wrapper.findAll('[data-testid="ai-history-entry"]')
+        expect(entries).toHaveLength(2)
+        expect(entries[0].text()).toContain('失敗')
+        expect(entries[0].text()).toContain('AI 回應逾時')
+        expect(entries[1].text()).toContain('已採用 1 次')
+
+        await entries[1].findAll('button').find((button) => button.text().startsWith('開啟此版本'))!.trigger('click')
+        expect(wrapper.find('#ai-tab-generate').attributes('aria-selected')).toBe('true')
+        expect(wrapper.text()).toContain('先前的版本')
     })
 })

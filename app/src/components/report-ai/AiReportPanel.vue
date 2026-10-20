@@ -2,9 +2,10 @@
 import { computed, onBeforeUnmount, onMounted, ref, toRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
+import AiHistoryList from '@/components/report-ai/AiHistoryList.vue'
 import AiSectionCard from '@/components/report-ai/AiSectionCard.vue'
 import { useReportAssist } from '@/composables/useReportAssist'
-import type { ReportAssistSource, ReportDraftSection, ReportLength, ReportTone } from '@/services/ai/ReportAssistService'
+import type { GenerationHistoryEntry, ReportAssistSource, ReportDraftSection, ReportLength, ReportTone } from '@/services/ai/ReportAssistService'
 import { copyToClipboard } from '@/utils/clipboard'
 
 /**
@@ -33,6 +34,7 @@ const {
     status, bootstrap, errorCode, tone, length, extraInstructions, focus, templateId, modelRowId,
     versions, currentIndex, current, preview, previewLoading, selectedSource, quotaRemaining,
     needsNotice, sourceProblem, alternativeSources, canGenerate, visibleSections, visibleSuggestions,
+    following, history, historyLoading,
 } = assist
 
 const TONES: ReportTone[] = ['warm', 'formal', 'concise']
@@ -40,6 +42,7 @@ const LENGTHS: ReportLength[] = ['short', 'medium', 'long']
 const confirmReplace = ref(false)
 const copiedKey = ref<string | null>(null)
 const acknowledging = ref(false)
+const tab = ref<'generate' | 'history'>('generate')
 
 const generating = computed(() => status.value === 'generating')
 const warnings = computed(() => bootstrap.value?.warnings ?? [])
@@ -102,6 +105,16 @@ function applyReplace() {
     void assist.recordAdoption('all', 'replace')
 }
 
+function showTab(next: 'generate' | 'history') {
+    tab.value = next
+    if (next === 'history') void assist.loadHistory()
+}
+
+function openFromHistory(entry: GenerationHistoryEntry) {
+    assist.addVersion(entry)
+    tab.value = 'generate'
+}
+
 function onPreviewToggle(event: Event) {
     if ((event.target as HTMLDetailsElement).open) void assist.loadPreview()
 }
@@ -112,7 +125,8 @@ function handleKeydown(event: KeyboardEvent) {
 onMounted(() => window.addEventListener('keydown', handleKeydown))
 onBeforeUnmount(() => {
     window.removeEventListener('keydown', handleKeydown)
-    assist.cancel()
+    // Leaving does not stop a generation; it is saved and shows up when the panel reopens.
+    assist.dispose()
 })
 </script>
 
@@ -184,6 +198,19 @@ onBeforeUnmount(() => {
                     </section>
 
                     <template v-else-if="bootstrap">
+                        <div role="tablist" :aria-label="$t('ai.history.tabs_label')" class="grid grid-cols-2 gap-1 rounded-xl bg-gray-200 p-1">
+                            <button v-for="name in (['generate', 'history'] as const)" :key="name" type="button" role="tab"
+                                :id="`ai-tab-${name}`" :aria-selected="tab === name" aria-controls="ai-tab-panel"
+                                class="min-h-[44px] cursor-pointer rounded-lg text-sm font-semibold transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600"
+                                :class="tab === name ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-700 hover:text-gray-900'"
+                                @click="showTab(name)">{{ $t(`ai.history.tab_${name}`) }}</button>
+                        </div>
+
+                        <div v-if="tab === 'history'" id="ai-tab-panel" role="tabpanel" aria-labelledby="ai-tab-history">
+                            <AiHistoryList :entries="history" :loading="historyLoading" @open="openFromHistory" />
+                        </div>
+
+                        <div v-else id="ai-tab-panel" role="tabpanel" aria-labelledby="ai-tab-generate" class="space-y-5">
                         <!-- Kept suggestions from earlier lessons -->
                         <details v-if="bootstrap.kept_suggestions.length" class="rounded-xl border border-slate-300 bg-slate-100 p-4">
                             <summary class="cursor-pointer text-sm font-semibold text-slate-800">
@@ -342,6 +369,11 @@ onBeforeUnmount(() => {
                                 </div>
                             </div>
 
+                            <p v-if="following" role="status" class="flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
+                                <span class="mt-0.5 h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-sky-600 border-t-transparent motion-reduce:animate-none" aria-hidden="true"></span>
+                                {{ $t('ai.panel.following') }}
+                            </p>
+
                             <p v-if="current?.unresolved_placeholders.length && !generating" class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
                                 {{ $t('ai.panel.unresolved', { tokens: current.unresolved_placeholders.join('、') }) }}
                             </p>
@@ -388,6 +420,7 @@ onBeforeUnmount(() => {
                                 </ul>
                             </article>
                         </section>
+                        </div>
                     </template>
                 </div>
             </section>

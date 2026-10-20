@@ -37,7 +37,28 @@ export interface ReportAssistBootstrap {
     }
     warnings: ContextWarningCode[]
     kept_suggestions: Array<{ generationId: string, date: string | null, suggestions: string[] }>
+    /** The newest succeeded or still running generation, so the panel reopens where it was. */
+    latest: GenerationHistoryEntry | null
     preferences: ReportAssistPreferences
+}
+
+export type GenerationStatus = 'running' | 'succeeded' | 'failed' | 'cancelled'
+
+/** One of the teacher's generations on a report, restored for display. */
+export interface GenerationHistoryEntry {
+    generation_id: string
+    status: GenerationStatus
+    created_at: string
+    completed_at: string | null
+    provider: ReportAssistSource['provider']
+    model_id: string
+    error_code: string | null
+    quota_charged: number
+    /** Only for succeeded generations. */
+    draft: ReportDraft | null
+    unresolved_placeholders: string[]
+    suggestion_states: Record<number, 'kept' | 'dismissed'>
+    adoption_count: number
 }
 
 export interface ReportAssistOptions {
@@ -115,6 +136,15 @@ export const ReportAssistService = {
         await apiV1Client.put(`${base}/generations/${generationId}/suggestions/${index}`, { state })
     },
 
+    async history(reportId: string): Promise<GenerationHistoryEntry[]> {
+        return (await apiV1Client.get<GenerationHistoryEntry[]>(`${base}/reports/${reportId}/generations`)).data
+    },
+
+    /** Stop a running generation. Closing the stream does not stop it; this does. */
+    async cancel(generationId: string): Promise<boolean> {
+        return (await apiV1Client.post<{ cancelled: boolean }>(`${base}/generations/${generationId}/cancel`, {})).data.cancelled
+    },
+
     async recordAdoption(generationId: string, sectionKey: ReportSectionKey | 'all', action: 'insert' | 'replace' | 'copy' | 'adopt_all'): Promise<void> {
         await apiV1Client.post(`${base}/generations/${generationId}/adoptions`, { section_key: sectionKey, action })
     },
@@ -122,12 +152,14 @@ export const ReportAssistService = {
     /**
      * Start a generation and stream it. Refusals before the model runs (quota,
      * notice, de-identification…) reject with ApiV1Error; failures mid-stream
-     * arrive as an `error` event and also reject with ApiV1Error.
+     * arrive as an `error` event and also reject with ApiV1Error. If the
+     * connection drops after `onStarted`, the server keeps generating and the
+     * result appears in the history.
      */
     async generate(
         reportId: string,
         body: { model_row_id: string, options: ReportAssistOptions, session_seq: number },
-        hooks: { signal?: AbortSignal, onPartial?: (draft: PartialReportDraft) => void } = {},
+        hooks: { signal?: AbortSignal, onStarted?: (generationId: string) => void, onPartial?: (draft: PartialReportDraft) => void } = {},
     ): Promise<GenerationResult> {
         const requestId = createRequestId()
         const response = await fetch(`/api${base}/reports/${reportId}/generations`, {
@@ -158,7 +190,8 @@ export const ReportAssistService = {
             buffer = parsed.rest
             for (const event of parsed.events) {
                 const data = JSON.parse(event.data)
-                if (event.event === 'partial') hooks.onPartial?.(data as PartialReportDraft)
+                if (event.event === 'start' && data.generation_id) hooks.onStarted?.(data.generation_id as string)
+                else if (event.event === 'partial') hooks.onPartial?.(data as PartialReportDraft)
                 else if (event.event === 'done') return data as GenerationResult
                 else if (event.event === 'error') {
                     throw new ApiV1Error(502, { error: { code: data.code, message: data.message, request_id: data.request_id ?? requestId, trace_id: '' } })

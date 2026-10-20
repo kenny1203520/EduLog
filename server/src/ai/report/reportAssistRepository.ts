@@ -80,7 +80,7 @@ export interface GenerationLogRow {
   options: Record<string, unknown>
   sanitized_input: Record<string, unknown>
   sanitized_output: Record<string, unknown> | null
-  status: 'succeeded' | 'failed' | 'cancelled'
+  status: 'running' | 'succeeded' | 'failed' | 'cancelled'
   error_code: string | null
   tokens_in: number | null
   tokens_out: number | null
@@ -97,6 +97,18 @@ export interface StoredGeneration {
   createdAt: string
   sanitizedInput: Record<string, unknown>
   sanitizedOutput: Record<string, unknown> | null
+}
+
+/** A generation as listed in the panel's history, with what the teacher did with it. */
+export interface HistoryGeneration extends StoredGeneration {
+  status: GenerationLogRow['status']
+  completedAt: string | null
+  provider: string
+  modelId: string
+  errorCode: string | null
+  quotaCharged: number
+  suggestionStates: Record<number, 'kept' | 'dismissed'>
+  adoptionCount: number
 }
 
 export interface ReportAssistRepository {
@@ -116,13 +128,20 @@ export interface ReportAssistRepository {
   /** The active administrator override for a prompt key, if any. */
   getActivePromptOverride(promptKey: string): Promise<{ version: number, body: string } | null>
   loadQuotaInputs(userId: string): Promise<{ policies: QuotaPolicyRow[], roleIds: string[], ledger: QuotaLedgerEntry[] }>
-  insertGeneration(row: GenerationLogRow): Promise<string>
+  /** Record a generation as running when it starts; returns its id. */
+  startGeneration(row: GenerationLogRow): Promise<string>
+  /** Record how a generation ended (succeeded, failed or cancelled). */
+  finishGeneration(generationId: string, outcome: Partial<GenerationLogRow>): Promise<void>
+  /** Close generations left running by an API restart. */
+  failStaleRunning(olderThan: Date): Promise<number>
   chargeQuota(userId: string, generationId: string, amount: number): Promise<void>
   /** The user's own generations on the given reports, newest first. */
   listGenerationsForReports(reportIds: string[], userId: string): Promise<StoredGeneration[]>
   /** Suggestion indexes the user marked as kept, per generation. */
   keptSuggestionIndexes(generationIds: string[]): Promise<Map<string, number[]>>
   getGeneration(generationId: string): Promise<StoredGeneration | null>
+  /** The user's generations on one report (any status), newest first. */
+  listReportHistory(reportId: string, userId: string, limit: number): Promise<HistoryGeneration[]>
   setSuggestionState(generationId: string, index: number, state: 'kept' | 'dismissed', userId: string): Promise<void>
   insertAdoption(row: { generation_id: string, section_key: string, action: 'insert' | 'replace' | 'copy' | 'adopt_all', sanitized_snapshot: string, adopted_by: string }): Promise<string>
 }
