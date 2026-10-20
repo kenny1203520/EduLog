@@ -39,6 +39,7 @@ function entry(overrides: Partial<GenerationHistoryEntry> = {}): GenerationHisto
         provider: 'ollama', model_id: 'qwen', error_code: null, quota_charged: 2,
         draft: { sections: [{ key: 'today', title: '今日', body: '已存的結果' }], teachingSuggestions: ['建議'] },
         unresolved_placeholders: [], suggestion_states: { 0: 'kept' }, adoption_count: 0,
+        input: { system_prompt: null, prompt_version: null, prompt: null }, error_detail: null,
         ...overrides,
     }
 }
@@ -182,5 +183,25 @@ describe('useReportAssist', () => {
         await vi.advanceTimersByTimeAsync(FOLLOW_INTERVAL_MS * 2)
         expect(service.history).not.toHaveBeenCalled()
         expect(service.cancel).not.toHaveBeenCalled()
+    })
+
+    it('shows what the AI service said, from the stream or from a followed generation', async () => {
+        vi.useFakeTimers()
+        const service = fakeService()
+        service.generate.mockRejectedValueOnce(new ApiV1Error(502, { error: { code: 'AI_RATE_LIMITED', message: '', request_id: '', trace_id: '', details: { reason: 'HTTP 429 – Rate limit exceeded' } } }))
+        const assist = useReportAssist(ref('r1'), service as never)
+        await assist.load()
+        await assist.generate()
+        expect([assist.errorCode.value, assist.errorReason.value]).toEqual(['AI_RATE_LIMITED', 'HTTP 429 – Rate limit exceeded'])
+
+        service.generate.mockImplementationOnce(async (_id, _body, hooks: { onStarted?: (id: string) => void }) => {
+            hooks.onStarted?.('g9')
+            throw new TypeError('network error')
+        })
+        service.history.mockResolvedValueOnce([entry({ status: 'failed', error_code: 'MODEL_UNSUPPORTED', draft: null, quota_charged: 0, error_detail: { status: 404, message: 'No endpoints found that support response_format' } })])
+        await assist.generate()
+        expect(assist.errorReason.value).toBeNull()
+        await vi.advanceTimersByTimeAsync(FOLLOW_INTERVAL_MS)
+        expect([assist.errorCode.value, assist.errorReason.value]).toEqual(['AI_MODEL_UNSUPPORTED', 'HTTP 404 – No endpoints found that support response_format'])
     })
 })

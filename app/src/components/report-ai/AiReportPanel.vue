@@ -31,7 +31,7 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const assist = useReportAssist(toRef(props, 'reportId'))
 const {
-    status, bootstrap, errorCode, tone, length, extraInstructions, focus, templateId, modelRowId,
+    status, bootstrap, errorCode, errorReason, tone, length, extraInstructions, focus, templateId, modelRowId,
     versions, currentIndex, current, preview, previewLoading, selectedSource, quotaRemaining,
     needsNotice, sourceProblem, alternativeSources, canGenerate, visibleSections, visibleSuggestions,
     following, history, historyLoading,
@@ -256,6 +256,7 @@ onBeforeUnmount(() => {
                             <h3 id="ai-style-title" class="text-sm font-bold text-gray-900">{{ $t('ai.panel.style_title') }}</h3>
                             <fieldset>
                                 <legend class="text-sm font-medium text-gray-800">{{ $t('ai.panel.tone') }}</legend>
+                                <p v-if="bootstrap.has_draft" class="mt-1 text-xs text-gray-600">{{ $t('ai.panel.tone_draft_hint') }}</p>
                                 <div class="mt-1 flex flex-wrap gap-2">
                                     <label v-for="option in TONES" :key="option"
                                         class="inline-flex min-h-[44px] cursor-pointer items-center rounded-full border px-4 text-sm font-medium transition-colors duration-200 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-500"
@@ -349,7 +350,10 @@ onBeforeUnmount(() => {
                                 <span class="h-4 w-4 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent motion-reduce:animate-none" aria-hidden="true"></span>
                                 {{ $t('ai.panel.cancel') }}
                             </button>
-                            <p v-if="errorMessage && !sourceProblem" role="alert" class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{{ errorMessage }}</p>
+                            <div v-if="errorMessage && !sourceProblem" role="alert" class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                                <p>{{ errorMessage }}</p>
+                                <p v-if="errorReason" class="mt-1 break-words text-xs text-red-700">{{ $t('ai.panel.provider_reason', { reason: errorReason }) }}</p>
+                            </div>
                         </div>
 
                         <!-- Results -->

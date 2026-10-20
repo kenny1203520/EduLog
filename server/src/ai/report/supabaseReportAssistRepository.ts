@@ -45,6 +45,7 @@ interface ModelRow {
   quota_weight: number | string
   price_input_per_mtok: number | string | null
   price_output_per_mtok: number | string | null
+  supports_structured_output?: boolean | null
   ai_credentials: {
     id: string
     scope: 'site' | 'user'
@@ -58,7 +59,7 @@ interface ModelRow {
   } | null
 }
 
-const MODEL_FIELDS = 'id,model_id,display_name,enabled,is_default,quota_weight,price_input_per_mtok,price_output_per_mtok'
+const MODEL_FIELDS = 'id,model_id,display_name,enabled,is_default,quota_weight,price_input_per_mtok,price_output_per_mtok,supports_structured_output'
 
 function toSource(row: ModelRow): ModelSource {
   const credential = row.ai_credentials!
@@ -74,6 +75,7 @@ function toSource(row: ModelRow): ModelSource {
     credentialScope: credential.scope,
     credentialLabel: credential.label,
     provider: credential.provider,
+    supportsStructuredOutput: row.supports_structured_output ?? null,
   }
 }
 
@@ -270,6 +272,10 @@ export class SupabaseReportAssistRepository implements ReportAssistRepository {
     unwrap(await this.adminDb.from('ai_generations').update(outcome).eq('id', generationId))
   }
 
+  async markStructuredOutputUnsupported(modelRowId: string): Promise<void> {
+    unwrap(await this.adminDb.from('ai_models').update({ supports_structured_output: false }).eq('id', modelRowId))
+  }
+
   async failStaleRunning(olderThan: Date): Promise<number> {
     const updated = many(await this.adminDb.from('ai_generations')
       .update({ status: 'failed', error_code: 'INTERRUPTED' })
@@ -309,7 +315,7 @@ export class SupabaseReportAssistRepository implements ReportAssistRepository {
 
   async listReportHistory(reportId: string, userId: string, limit: number): Promise<HistoryGeneration[]> {
     const rows = many(await this.adminDb.from('ai_generations')
-      .select('id,user_id,occurrence_report_id,created_at,completed_at,status,provider,model_id,error_code,quota_charged,sanitized_input,sanitized_output')
+      .select('id,user_id,occurrence_report_id,created_at,completed_at,status,provider,model_id,error_code,error_detail,system_prompt,prompt_versions,quota_charged,sanitized_input,sanitized_output')
       .eq('occurrence_report_id', reportId).eq('user_id', userId)
       .order('created_at', { ascending: false }).limit(limit))
     const ids = rows.map((row) => row.id as string)
@@ -332,6 +338,9 @@ export class SupabaseReportAssistRepository implements ReportAssistRepository {
       quotaCharged: Number(row.quota_charged ?? 0),
       suggestionStates: statesById.get(row.id) ?? {},
       adoptionCount: adoptionCounts.get(row.id) ?? 0,
+      systemPrompt: row.system_prompt ?? null,
+      promptVersion: row.prompt_versions?.report ?? null,
+      errorDetail: row.error_detail ?? null,
     }))
   }
 

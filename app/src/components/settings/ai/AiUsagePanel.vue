@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import Pagination from '@/components/common/Pagination.vue'
 import { useFeedback } from '@/composables/useFeedback'
 import { AiSettingsService, type GenerationLogRow, type UsageReport } from '@/services/ai/AiSettingsService'
+import { copyToClipboard } from '@/utils/clipboard'
 
 /** Usage statistics for a date range, and the de-identified generation log. */
 const { t, n } = useI18n()
@@ -22,6 +23,20 @@ const page = ref(1)
 const statusFilter = ref('')
 const log = ref<{ rows: GenerationLogRow[], user_names: Record<string, string>, total: number | null }>({ rows: [], user_names: {}, total: null })
 const expanded = ref<string | null>(null)
+const copied = ref<string | null>(null)
+
+/** Copy a stored prompt (already de-identified) for review elsewhere. */
+async function copyText(key: string, text: string | null | undefined) {
+    if (!text || !await copyToClipboard(text)) return
+    copied.value = key
+    setTimeout(() => { if (copied.value === key) copied.value = null }, 1500)
+}
+
+function errorDetailText(row: GenerationLogRow) {
+    const detail = row.error_detail
+    if (!detail) return ''
+    return [detail.status ? `HTTP ${detail.status}` : null, detail.message].filter(Boolean).join(' – ')
+}
 
 const totalPages = computed(() => Math.max(1, Math.ceil((log.value.total ?? 0) / PAGE_SIZE)))
 const percent = (value: number | null) => value == null ? '—' : n(value, 'percent')
@@ -105,7 +120,7 @@ onMounted(() => { void loadUsage(); void loadLog() })
                 <h3 class="font-black text-gray-900">{{ t('ai.settings.log_title') }}</h3>
                 <select v-model="statusFilter" class="min-h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm" :aria-label="t('ai.settings.log_status')" @change="page = 1">
                     <option value="">{{ t('ai.settings.log_all') }}</option>
-                    <option v-for="status in ['succeeded', 'failed', 'cancelled']" :key="status" :value="status">{{ t(`ai.settings.log_status_${status}`) }}</option>
+                    <option v-for="status in ['running', 'succeeded', 'failed', 'cancelled']" :key="status" :value="status">{{ t(`ai.settings.log_status_${status}`) }}</option>
                 </select>
             </div>
             <p class="text-xs text-gray-600">{{ t('ai.settings.log_privacy') }}</p>
@@ -117,7 +132,7 @@ onMounted(() => { void loadUsage(); void loadLog() })
                             <span class="ml-2 text-gray-600">{{ new Date(row.created_at).toLocaleString() }}</span>
                         </span>
                         <span class="flex flex-wrap items-center gap-2 text-xs">
-                            <span class="rounded-full px-2 py-0.5 font-bold" :class="row.status === 'succeeded' ? 'bg-emerald-50 text-emerald-800' : row.status === 'failed' ? 'bg-red-50 text-red-800' : 'bg-gray-100 text-gray-700'">{{ t(`ai.settings.log_status_${row.status}`) }}</span>
+                            <span class="rounded-full px-2 py-0.5 font-bold" :class="row.status === 'succeeded' ? 'bg-emerald-50 text-emerald-800' : row.status === 'failed' ? 'bg-red-50 text-red-800' : row.status === 'running' ? 'bg-sky-50 text-sky-800' : 'bg-gray-100 text-gray-700'">{{ t(`ai.settings.log_status_${row.status}`) }}</span>
                             <span class="text-gray-700">{{ row.provider }}/{{ row.model_id }}</span>
                             <span class="text-gray-600">{{ t('ai.settings.log_adoptions', { n: row.adoption_count }) }}</span>
                         </span>
@@ -125,6 +140,22 @@ onMounted(() => { void loadUsage(); void loadLog() })
                     <div v-if="expanded === row.id" class="mt-2 space-y-2 rounded-xl bg-gray-50 p-3 text-xs text-gray-800">
                         <p>{{ t('ai.settings.log_meta', { tin: row.tokens_in ?? '—', tout: row.tokens_out ?? '—', cost: money(row.est_cost), quota: row.quota_charged, ms: row.latency_ms ?? '—', prompt: Object.values(row.prompt_versions).join(', ') }) }}</p>
                         <p v-if="row.error_code" class="font-bold text-red-700">{{ row.error_code }}</p>
+                        <p v-if="row.error_detail" class="break-words text-red-700">{{ t('ai.panel.provider_reason', { reason: errorDetailText(row) }) }}</p>
+                        <p v-if="row.options?.output_mode === 'json_text'" class="text-gray-600">{{ t('ai.settings.log_compat_mode') }}</p>
+                        <details class="rounded-lg border border-gray-200 bg-white p-2">
+                            <summary class="min-h-11 cursor-pointer content-center font-bold">{{ t('ai.settings.log_input') }}</summary>
+                            <div class="mt-2 flex items-center justify-between gap-2">
+                                <p class="font-bold">{{ t('ai.history.system_prompt') }}</p>
+                                <button v-if="row.system_prompt" type="button" class="min-h-11 rounded-lg px-2 font-bold text-emerald-700 hover:bg-emerald-50" @click="copyText(`${row.id}:system`, row.system_prompt)">{{ copied === `${row.id}:system` ? t('ai.panel.copied') : t('ai.panel.copy') }}</button>
+                            </div>
+                            <pre v-if="row.system_prompt" class="max-h-64 overflow-auto whitespace-pre-wrap rounded bg-gray-50 p-2">{{ row.system_prompt }}</pre>
+                            <p v-else class="text-gray-600">{{ t('ai.history.system_prompt_version_only', { version: Object.values(row.prompt_versions).join(', ') || '—' }) }}</p>
+                            <div class="mt-2 flex items-center justify-between gap-2">
+                                <p class="font-bold">{{ t('ai.history.prompt') }}</p>
+                                <button v-if="row.sanitized_input?.prompt" type="button" class="min-h-11 rounded-lg px-2 font-bold text-emerald-700 hover:bg-emerald-50" @click="copyText(`${row.id}:prompt`, row.sanitized_input?.prompt)">{{ copied === `${row.id}:prompt` ? t('ai.panel.copied') : t('ai.panel.copy') }}</button>
+                            </div>
+                            <pre class="max-h-80 overflow-auto whitespace-pre-wrap rounded bg-gray-50 p-2">{{ row.sanitized_input?.prompt ?? '—' }}</pre>
+                        </details>
                         <div v-for="(section, i) in row.sanitized_output?.sections ?? []" :key="i"><p class="font-bold">{{ section.title }}</p><p class="whitespace-pre-wrap">{{ section.body }}</p></div>
                         <div v-if="row.sanitized_output?.teachingSuggestions?.length"><p class="font-bold">{{ t('ai.panel.suggestions_title') }}</p>
                             <ul class="list-disc pl-5"><li v-for="(text, i) in row.sanitized_output.teachingSuggestions" :key="i">{{ text }}</li></ul></div>

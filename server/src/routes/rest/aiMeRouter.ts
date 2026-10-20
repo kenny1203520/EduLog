@@ -160,7 +160,7 @@ export function createAiMeRouter(
     const input = personalModelInput.parse(req.body)
     await ownCredential(req, id)
     setAuditContext(req, { domain: 'teaching', resource: 'ai_models', action: 'create' })
-    const result = await req.adminDb!.from('ai_models').insert({ credential_id: id, model_id: input.model_id, display_name: input.display_name, enabled: input.enabled ?? true, quota_weight: 0 }).select(MODEL_FIELDS).single()
+    const result = await req.adminDb!.from('ai_models').insert({ credential_id: id, model_id: input.model_id, display_name: input.display_name, enabled: input.enabled ?? true, quota_weight: 0, supports_structured_output: sharedModelCatalogCache.structuredOutputSupport(id, input.model_id) }).select(MODEL_FIELDS).single()
     if (result.error) throw mapDatabaseError(result.error)
     return res.status(201).json(envelope(req, result.data))
   }))
@@ -206,7 +206,7 @@ export function createAiMeRouter(
     if (!cipher) throw new ApiError(503, 'AI_SECRET_KEY_MISSING', 'AI_SECRET_KEY is not configured on the server')
     const { verifier, challenge } = createPkcePair()
     pending.put(userId, verifier)
-    const callback = new URL('/dashboard/settings', config.EDULOG_WEB_BASE_URL)
+    const callback = new URL('/dashboard/settings', openRouterReturnOrigin(config, req.get('origin')))
     callback.searchParams.set('tab', 'personal')
     callback.searchParams.set('ai_oauth', 'openrouter')
     return res.json(envelope(req, { url: buildAuthorizationUrl(callback.toString(), challenge) }))
@@ -268,4 +268,25 @@ export function createAiMeRouter(
   }))
 
   return router
+}
+
+/**
+ * OpenRouter sends the teacher back to the page that started the sign-in, so
+ * it works whatever port or host the web app is served from. Only origins the
+ * API already trusts are used (configured origins, the web base URL, and
+ * localhost outside production); anything else falls back to the base URL.
+ */
+export function openRouterReturnOrigin(config: Pick<ApiConfig, 'EDULOG_WEB_BASE_URL' | 'API_ALLOWED_ORIGINS' | 'NODE_ENV'>, origin: string | undefined): string {
+  const base = new URL(config.EDULOG_WEB_BASE_URL).origin
+  if (!origin) return base
+  let parsed: URL
+  try {
+    parsed = new URL(origin)
+  } catch {
+    return base
+  }
+  if (parsed.origin !== origin) return base
+  const configured = config.API_ALLOWED_ORIGINS.split(',').map((value) => value.trim()).filter(Boolean)
+  const localDevelopment = config.NODE_ENV !== 'production' && parsed.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(parsed.hostname)
+  return origin === base || configured.includes(origin) || localDevelopment ? origin : base
 }

@@ -84,6 +84,8 @@ function historyJson(entry: GenerationHistoryEntry) {
     unresolved_placeholders: entry.unresolved,
     suggestion_states: entry.suggestionStates,
     adoption_count: entry.adoptionCount,
+    input: { system_prompt: entry.input.systemPrompt, prompt_version: entry.input.promptVersion, prompt: entry.input.prompt },
+    error_detail: entry.errorDetail,
   }
 }
 
@@ -183,6 +185,7 @@ export function createAiReportAssistRouter(deps: AiReportAssistDeps) {
       warnings: assessReportContext({ lessonTitle: facts.lessonTitle, classNotes: facts.classNotes, draft: facts.content, attendance: facts.attendance }).map((warning) => warning.code),
       kept_suggestions: keptSuggestions,
       latest: latest ? historyJson(latest) : null,
+      has_draft: facts.content.trim().length > 0,
       preferences: preferences.data?.ai_settings ?? {},
     }))
   }))
@@ -246,7 +249,16 @@ export function createAiReportAssistRouter(deps: AiReportAssistDeps) {
     } catch (error) {
       const apiError = error instanceof ApiError ? error : new ApiError(500, 'INTERNAL_ERROR', 'An unexpected error occurred')
       if (!(error instanceof ApiError)) req.log?.error({ err: error, event: 'ai_generation_failed' }, 'ai_generation_failed')
-      writeEvent(res, 'error', { code: apiError.code, message: apiError.message, request_id: req.requestId })
+      else if (apiError.code !== 'AI_GENERATION_CANCELLED') {
+        req.log?.warn({
+          event: 'ai_generation_failed',
+          code: apiError.code,
+          provider: prepared.resolved.provider,
+          model_id: prepared.resolved.modelId,
+          reason: apiError.details?.reason,
+        }, 'ai_generation_failed')
+      }
+      writeEvent(res, 'error', { code: apiError.code, message: apiError.message, reason: apiError.details?.reason ?? null, request_id: req.requestId })
     }
     if (!res.writableEnded && !res.destroyed) res.end()
   }))

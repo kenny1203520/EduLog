@@ -6,7 +6,7 @@
  * logs can tell which prompt produced an output.
  */
 
-export const REPORT_PROMPT_VERSION = 'report.v1'
+export const REPORT_PROMPT_VERSION = 'report.v2'
 
 export const REPORT_TONES = ['warm', 'formal', 'concise'] as const
 export const REPORT_LENGTHS = ['short', 'medium', 'long'] as const
@@ -92,16 +92,31 @@ export const DEFAULT_REPORT_SYSTEM_RULES = [
     '- 不可推測學生性別，不使用「他／她」，以佔位符或「孩子」稱呼。',
     '- 只根據提供的資料撰寫，不可捏造沒有提到的事件、成績或行為。資料不足時寫得保守簡短。',
     '- 負面狀況要委婉、具建設性，並搭配具體的改進方向。',
-    '- 若有「老師草稿」，那是老師已寫好的內容：保留其中所有事實與用語，在此基礎上潤飾、擴寫並補齊缺少的段落。',
+    '- 若有「老師草稿」，依下方「老師草稿規則」處理。',
     '- 若有「報告樣板」，只參考它的格式與段落安排，不要照抄其中的範例內容。',
     '- sections 是給這位學生的家長看的：不要提到其他同學的名字（需要時寫「同學」），不要寫電話、Email、身分證或地址等聯絡資料。',
     '- 除了上述佔位符，不要使用方括號，也不要寫「[家長您好]」這類待填欄位。',
 ].join('\n')
 
+/**
+ * How to treat the teacher's draft (the text already in 學習報告). Always
+ * appended when there is a draft, so an administrator override cannot drop it.
+ */
+export const DRAFT_RULES = [
+  '老師草稿規則（優先於其他風格設定）：',
+  '- 「老師草稿」是老師自己寫的內容。保留其中所有事實、用詞、句型、人稱與段落順序，只做潤飾、修正錯字與語句不通順處，並補上缺少的資訊。',
+  '- 草稿已經寫得完整通順時，幾乎原樣保留，不要改寫成你自己的風格。',
+  '- 草稿沒有分段時，把整篇放在 today 一段，不要拆開重組；只有在課堂筆記等資料裡有草稿沒寫到的重要資訊時，才另外寫 performance 或 home，並沿用草稿的口吻。',
+  '- 草稿已有自己的分段時，依原本的段落順序對應到 today、performance、home，不要搬動內容。',
+].join('\n')
+
 /** Build the system and user prompt for one generation. */
 export function buildReportPrompt(context: ReportPromptContext, options: ReportPromptOptions, override?: PromptOverride | null): BuiltPrompt {
   const rules = override?.body.trim() || DEFAULT_REPORT_SYSTEM_RULES
-  const system = `${rules}\n- 語氣：${TONE_TEXT[options.tone]}。長度：${LENGTH_TEXT[options.length]}。`
+  // Appended after any override, like tone and length: a teacher's draft always keeps its voice.
+  const system = context.draft?.trim()
+    ? `${rules}\n${DRAFT_RULES}\n- 語氣：沿用老師草稿的語氣；你補充的文字才使用「${TONE_TEXT[options.tone]}」。長度：以草稿為準，補充的部分整體不超過${LENGTH_TEXT[options.length]}。`
+    : `${rules}\n- 語氣：${TONE_TEXT[options.tone]}。長度：${LENGTH_TEXT[options.length]}。`
 
   const lines: string[] = []
   lines.push(`學生：${context.studentToken}`)

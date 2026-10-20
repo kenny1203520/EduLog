@@ -52,7 +52,9 @@
     "no_suggestions": "本次沒有教學建議。",
     "keep": "保留到下次",
     "dismiss": "略過",
-    "following": "伺服器仍在生成這次的草稿（關閉頁面或斷線也不會中斷），完成後會自動顯示在這裡。"
+    "following": "伺服器仍在生成這次的草稿（關閉頁面或斷線也不會中斷），完成後會自動顯示在這裡。",
+    "provider_reason": "AI 服務的回應：{reason}",
+    "tone_draft_hint": "學習報告已有草稿：會沿用草稿的語氣與段落，這裡的語氣只用在 AI 補充的文字。"
   },
   "tone": {
     "warm": "溫暖",
@@ -101,7 +103,10 @@
     "AI_PLAN_LIMIT_REACHED": "你的 ChatGPT 方案額度或本站每週上限已用完，請改用其他來源或稍後再試。",
     "AI_CHATGPT_PLAN_NOT_GRANTED": "這次登入沒有取得方案使用權限。需要 ChatGPT Plus 或 Pro，並在授權畫面同意使用方案額度。",
     "AI_CHATGPT_NOT_CONFIGURED": "本站尚未開放連接 ChatGPT 帳號。",
-    "AI_GENERATION_INTERRUPTED": "這次生成中斷了（伺服器重新啟動或等待過久），未扣額度。請再試一次。"
+    "AI_GENERATION_INTERRUPTED": "這次生成中斷了（伺服器重新啟動或等待過久），未扣額度。請再試一次。",
+    "AI_RATE_LIMITED": "這個模型目前被 AI 服務限流（免費模型常見），請稍後再試或改用其他模型。",
+    "AI_MODEL_UNSUPPORTED": "這個模型不支援這種請求，請改用其他模型。",
+    "AI_INVALID_OUTPUT": "AI 回傳的內容無法解讀成報告，未扣額度。請再試一次或改用其他模型。"
   },
   "providers": {
     "anthropic": "Anthropic Claude",
@@ -266,7 +271,12 @@
     "picker_show_all": "顯示全部（含 {n} 個非文字模型）",
     "picker_manual_chatgpt": "ChatGPT 方案沒有提供模型清單，請手動輸入模型 ID。",
     "picker_manual_unavailable": "暫時取不到這個來源的模型清單，請手動輸入模型 ID。",
-    "usage_unpriced": "另有 {n} 次使用未設價格的模型，未計入成本"
+    "usage_unpriced": "另有 {n} 次使用未設價格的模型，未計入成本",
+    "log_status_running": "生成中",
+    "log_input": "輸入內容（系統提示詞與送出的提示詞，已去識別化）",
+    "log_compat_mode": "以相容模式生成（模型不支援結構化輸出）",
+    "compat_mode": "相容模式",
+    "compat_mode_hint": "這個模型不支援結構化輸出，系統會改用提示詞要求 JSON，結果一樣可用。"
   },
   "history": {
     "tabs_label": "AI 助理分頁",
@@ -283,6 +293,10 @@
       "succeeded": "完成",
       "failed": "失敗",
       "cancelled": "已取消"
-    }
+    },
+    "input_title": "當時送出的內容（已去識別化）",
+    "system_prompt": "系統提示詞",
+    "system_prompt_version_only": "這筆紀錄只保存了提示詞版本：{version}",
+    "prompt": "送出的提示詞"
   }
 }

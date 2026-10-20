@@ -52,7 +52,9 @@
     "no_suggestions": "No teaching suggestions this time.",
     "keep": "Keep for next lesson",
     "dismiss": "Dismiss",
-    "following": "The server is still generating this draft (closing the page or losing the connection does not stop it); the result will appear here when it is done."
+    "following": "The server is still generating this draft (closing the page or losing the connection does not stop it); the result will appear here when it is done.",
+    "provider_reason": "AI service response: {reason}",
+    "tone_draft_hint": "The report already has a draft: its voice and paragraphs are kept, and this tone only applies to text the AI adds."
   },
   "tone": {
     "warm": "Warm",
@@ -101,7 +103,10 @@
     "AI_PLAN_LIMIT_REACHED": "Your ChatGPT plan allowance or this site's weekly limit is used up. Switch source or try again later.",
     "AI_CHATGPT_PLAN_NOT_GRANTED": "This sign-in did not grant plan usage. It needs ChatGPT Plus or Pro and consent to use the plan allowance.",
     "AI_CHATGPT_NOT_CONFIGURED": "Connecting a ChatGPT account is not available on this site yet.",
-    "AI_GENERATION_INTERRUPTED": "This generation was interrupted (the server restarted or it took too long); no quota was used. Please try again."
+    "AI_GENERATION_INTERRUPTED": "This generation was interrupted (the server restarted or it took too long); no quota was used. Please try again.",
+    "AI_RATE_LIMITED": "The AI service is rate limiting this model (common for free models). Try again later or use another model.",
+    "AI_MODEL_UNSUPPORTED": "This model does not support this kind of request. Use another model.",
+    "AI_INVALID_OUTPUT": "The AI reply could not be read as a report; no quota was used. Try again or use another model."
   },
   "providers": {
     "anthropic": "Anthropic Claude",
@@ -266,7 +271,12 @@
     "picker_show_all": "Show all (including {n} non-text models)",
     "picker_manual_chatgpt": "ChatGPT plans don't publish a model list; type the model ID.",
     "picker_manual_unavailable": "The model list for this source isn't available right now; type the model ID.",
-    "usage_unpriced": "{n} more generations used unpriced models and are not in the cost"
+    "usage_unpriced": "{n} more generations used unpriced models and are not in the cost",
+    "log_status_running": "Generating",
+    "log_input": "Input (system prompt and prompt sent, de-identified)",
+    "log_compat_mode": "Generated in compatibility mode (model lacks structured output)",
+    "compat_mode": "Compatibility mode",
+    "compat_mode_hint": "This model does not support structured output, so JSON is requested in the prompt instead; results work the same."
   },
   "history": {
     "tabs_label": "AI assistant tabs",
@@ -283,6 +293,10 @@
       "succeeded": "Done",
       "failed": "Failed",
       "cancelled": "Cancelled"
-    }
+    },
+    "input_title": "What was sent (de-identified)",
+    "system_prompt": "System prompt",
+    "system_prompt_version_only": "Only the prompt version was recorded: {version}",
+    "prompt": "Prompt sent"
   }
 }

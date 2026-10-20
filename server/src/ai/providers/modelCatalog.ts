@@ -14,6 +14,8 @@ export interface CatalogModel {
   /** USD per million tokens, when the provider lists it. */
   priceInputPerMtok?: number
   priceOutputPerMtok?: number
+  /** Accepts JSON schema output, when the provider lists it (OpenRouter's supported_parameters). */
+  supportsStructuredOutput?: boolean
 }
 
 export type ModelCatalog = { supported: true, models: CatalogModel[], fetchedAt: string } | { supported: false, reason: string }
@@ -98,12 +100,16 @@ async function listModels(target: CatalogTarget, fetchImpl: typeof fetch): Promi
         const id = String(row.id)
         const output = (row.architecture as { output_modalities?: unknown[] } | undefined)?.output_modalities
         const pricing = (row.pricing ?? {}) as Record<string, unknown>
+        const parameters = row.supported_parameters
         return {
           id,
           name: String(row.name ?? id),
           textCapable: Array.isArray(output) ? output.includes('text') : !NON_TEXT.test(id),
           priceInputPerMtok: perMillion(pricing.prompt),
           priceOutputPerMtok: perMillion(pricing.completion),
+          ...(Array.isArray(parameters)
+            ? { supportsStructuredOutput: parameters.includes('structured_outputs') || parameters.includes('response_format') }
+            : {}),
         }
       })
     }
@@ -138,6 +144,16 @@ export class ModelCatalogCache {
 
   forget(credentialId: string): void {
     this.entries.delete(credentialId)
+  }
+
+  /**
+   * Whether a model accepts JSON schema output, from the cached list the
+   * picker just loaded; null when unknown (not cached or not listed).
+   */
+  structuredOutputSupport(credentialId: string, modelId: string): boolean | null {
+    const cached = this.entries.get(credentialId)
+    if (!cached || cached.expiresAt <= this.now() || !cached.catalog.supported) return null
+    return cached.catalog.models.find((model) => model.id === modelId)?.supportsStructuredOutput ?? null
   }
 }
 

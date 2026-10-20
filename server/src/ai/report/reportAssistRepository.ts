@@ -30,6 +30,8 @@ export interface ModelSource {
   credentialScope: 'site' | 'user'
   credentialLabel: string
   provider: AiProvider
+  /** Whether the model accepts JSON schema output; null when unknown. */
+  supportsStructuredOutput?: boolean | null
 }
 
 export interface ResolvedModel extends ModelSource {
@@ -88,6 +90,10 @@ export interface GenerationLogRow {
   quota_charged: number
   latency_ms: number | null
   session_seq: number
+  /** Full system prompt sent (no personal data). */
+  system_prompt?: string | null
+  /** Provider status and a short redacted message, for failures. */
+  error_detail?: { status: number | null, message: string | null } | null
 }
 
 export interface StoredGeneration {
@@ -109,6 +115,10 @@ export interface HistoryGeneration extends StoredGeneration {
   quotaCharged: number
   suggestionStates: Record<number, 'kept' | 'dismissed'>
   adoptionCount: number
+  /** Full system prompt; null on rows from before 1000154. */
+  systemPrompt?: string | null
+  promptVersion?: string | null
+  errorDetail?: { status: number | null, message: string | null } | null
 }
 
 export interface ReportAssistRepository {
@@ -132,6 +142,8 @@ export interface ReportAssistRepository {
   startGeneration(row: GenerationLogRow): Promise<string>
   /** Record how a generation ended (succeeded, failed or cancelled). */
   finishGeneration(generationId: string, outcome: Partial<GenerationLogRow>): Promise<void>
+  /** Remember that a model rejected JSON schema output, so later calls use json_text mode. */
+  markStructuredOutputUnsupported(modelRowId: string): Promise<void>
   /** Close generations left running by an API restart. */
   failStaleRunning(olderThan: Date): Promise<number>
   chargeQuota(userId: string, generationId: string, amount: number): Promise<void>

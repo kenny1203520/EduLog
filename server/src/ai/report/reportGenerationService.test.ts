@@ -77,6 +77,8 @@ class FakeRepository implements ReportAssistRepository {
     Object.assign(row, outcome)
   }
   async failStaleRunning() { return 0 }
+  unsupported: string[] = []
+  async markStructuredOutputUnsupported(id: string) { this.unsupported.push(id) }
   history: HistoryGeneration[] = []
   async listReportHistory() { return this.history }
   async chargeQuota(userId: string, generationId: string, amount: number) { this.charges.push({ userId, generationId, amount }) }
@@ -205,6 +207,67 @@ describe('ReportGenerationService', () => {
 
     expect(repository.generations.map((row) => [row.status, row.quota_charged])).toEqual([['failed', 0], ['cancelled', 0]])
     expect(repository.charges).toEqual([])
+  })
+
+  it('falls back to JSON in the prompt when the model rejects structured output, charging once', async () => {
+    const repository = new FakeRepository()
+    const formats: string[] = []
+    const answer = jsonModel(output)
+    const model = new MockLanguageModelV4({
+      doStream: async (options) => {
+        formats.push(options.responseFormat?.type ?? 'text')
+        if (options.responseFormat?.type === 'json') {
+          throw Object.assign(new Error('Provider returned error'), {
+            statusCode: 404,
+            responseBody: JSON.stringify({ error: { message: 'No endpoints found that support the requested output format' } }),
+          })
+        }
+        return answer.doStream(options)
+      },
+    })
+    const { svc } = service(repository, model)
+
+    const outcome = await svc.run(await svc.prepare(request))
+
+    expect(formats).toEqual(['json', 'text'])
+    expect(outcome.draft.sections[0].body).toBe('王小明完成迴圈，林雅婷很肯定。')
+    const [log] = repository.generations
+    expect([log.status, log.options.output_mode]).toEqual(['succeeded', 'json_text'])
+    expect(log.system_prompt).toContain('你是補習班老師的課後報告助手')
+    expect(repository.unsupported).toEqual(['m1'])
+    expect(repository.charges).toHaveLength(1)
+  })
+
+  it('goes straight to JSON in the prompt for models known not to support structured output', async () => {
+    const repository = new FakeRepository()
+    repository.model = siteModel({ supportsStructuredOutput: false })
+    const formats: string[] = []
+    const base = jsonModel(output)
+    const model = new MockLanguageModelV4({ doStream: async (options) => { formats.push(options.responseFormat?.type ?? 'text'); return base.doStream(options) } })
+    const { svc } = service(repository, model)
+    await svc.run(await svc.prepare(request))
+    expect(formats).toEqual(['text'])
+  })
+
+  it('records the provider status and message when a free model is rate limited', async () => {
+    const repository = new FakeRepository()
+    const limited = new MockLanguageModelV4({
+      doStream: async () => {
+        throw Object.assign(new Error('Provider returned error'), {
+          statusCode: 429,
+          responseBody: JSON.stringify({ error: { message: 'Rate limit exceeded: free-models-per-min' } }),
+        })
+      },
+    })
+    const { svc } = service(repository, limited)
+    await expect(svc.run(await svc.prepare(request))).rejects.toMatchObject({
+      code: 'AI_RATE_LIMITED',
+      details: { reason: 'HTTP 429 – Rate limit exceeded: free-models-per-min' },
+    })
+    const [log] = repository.generations
+    expect([log.status, log.error_code, log.quota_charged]).toEqual(['failed', 'RATE_LIMITED', 0])
+    expect(log.error_detail).toEqual({ status: 429, message: 'Rate limit exceeded: free-models-per-min' })
+    expect(repository.unsupported).toEqual([])
   })
 
   it('records the generation as running before the model answers', async () => {

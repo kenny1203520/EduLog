@@ -29,6 +29,16 @@ const ENDED_ERRORS: Record<string, string> = {
     PLAN_LIMIT: 'AI_PLAN_LIMIT_REACHED',
     EMPTY_OUTPUT: 'AI_EMPTY_OUTPUT',
     INTERRUPTED: 'AI_GENERATION_INTERRUPTED',
+    RATE_LIMITED: 'AI_RATE_LIMITED',
+    MODEL_UNSUPPORTED: 'AI_MODEL_UNSUPPORTED',
+    INVALID_OUTPUT: 'AI_INVALID_OUTPUT',
+}
+
+/** "HTTP 429 – Rate limit exceeded", from a stored provider error. */
+export function providerReason(detail: GenerationHistoryEntry['error_detail']): string | null {
+    if (!detail) return null
+    const parts = [detail.status ? `HTTP ${detail.status}` : null, detail.message].filter(Boolean)
+    return parts.length ? parts.join(' – ') : null
 }
 
 export function endedErrorCode(entry: Pick<GenerationHistoryEntry, 'status' | 'error_code'>): string {
@@ -49,6 +59,8 @@ export function useReportAssist(reportId: Ref<string | undefined>, service = Rep
     const status = ref<ReportAssistStatus>('idle')
     const bootstrap = shallowRef<ReportAssistBootstrap | null>(null)
     const errorCode = ref<string | null>(null)
+    /** What the AI provider said about the last failure, shown under the error. */
+    const errorReason = ref<string | null>(null)
 
     const tone = ref<ReportTone>('warm')
     const length = ref<ReportLength>('medium')
@@ -147,6 +159,7 @@ export function useReportAssist(reportId: Ref<string | undefined>, service = Rep
         }
         status.value = 'generating'
         errorCode.value = null
+        errorReason.value = null
         partial.value = null
         runningId.value = null
         cancelRequested = false
@@ -179,6 +192,7 @@ export function useReportAssist(reportId: Ref<string | undefined>, service = Rep
                 follow(runningId.value)
             } else {
                 errorCode.value = controller.signal.aborted ? 'AI_GENERATION_CANCELLED' : codeOf(error)
+                errorReason.value = error instanceof ApiV1Error ? error.reason ?? null : null
                 status.value = 'ready'
                 runningId.value = null
             }
@@ -195,6 +209,7 @@ export function useReportAssist(reportId: Ref<string | undefined>, service = Rep
         following.value = true
         status.value = 'generating'
         errorCode.value = null
+        errorReason.value = null
         const deadline = Date.now() + FOLLOW_LIMIT_MS
         const check = async () => {
             followTimer = null
@@ -206,7 +221,10 @@ export function useReportAssist(reportId: Ref<string | undefined>, service = Rep
             if (entry && entry.status !== 'running') {
                 finishFollowing()
                 if (entry.status === 'succeeded') addVersion(entry)
-                else errorCode.value = endedErrorCode(entry)
+                else {
+                    errorCode.value = endedErrorCode(entry)
+                    errorReason.value = providerReason(entry.error_detail)
+                }
                 if (entry.quota_charged > 0) void refreshQuota()
                 return
             }
@@ -293,7 +311,10 @@ export function useReportAssist(reportId: Ref<string | undefined>, service = Rep
 
     function selectSource(id: string) {
         modelRowId.value = id
-        if (errorCode.value && SOURCE_ERRORS.has(errorCode.value)) errorCode.value = null
+        if (errorCode.value && SOURCE_ERRORS.has(errorCode.value)) {
+            errorCode.value = null
+            errorReason.value = null
+        }
     }
 
     function showVersion(index: number) {
@@ -331,7 +352,7 @@ export function useReportAssist(reportId: Ref<string | undefined>, service = Rep
     })
 
     return {
-        status, bootstrap, errorCode, tone, length, extraInstructions, focus, templateId, modelRowId,
+        status, bootstrap, errorCode, errorReason, tone, length, extraInstructions, focus, templateId, modelRowId,
         versions, currentIndex, current, preview, previewLoading, selectedSource, quotaRemaining,
         needsNotice, sourceProblem, alternativeSources, canGenerate, visibleSections, visibleSuggestions,
         following, history, historyLoading,

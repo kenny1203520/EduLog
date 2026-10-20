@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { REPORT_PROMPT_VERSION, assessReportContext, buildReportPrompt, type ReportPromptContext } from './reportPrompt.js'
+import { DRAFT_RULES, REPORT_PROMPT_VERSION, assessReportContext, buildReportPrompt, type ReportPromptContext } from './reportPrompt.js'
 
 const base: ReportPromptContext = {
   studentToken: '[學生A]',
@@ -55,5 +55,23 @@ describe('course line', () => {
   it('does not repeat subject and stage already in the display name', () => {
     const built = buildReportPrompt({ ...base, courseName: 'Scratch 程式設計 階段 2', subject: 'Scratch 程式設計', stage: '階段 2' }, { tone: 'warm', length: 'short' })
     expect(built.prompt).toContain('課程：Scratch 程式設計 階段 2\n')
+  })
+})
+
+describe('teacher draft', () => {
+  const withDraft: ReportPromptContext = { ...base, attendance: 'present', previousReports: [], draft: '[學生A]今天很專心，把迴圈作品做完了！' }
+
+  it('keeps the draft voice even when an administrator override replaces the rules', () => {
+    const built = buildReportPrompt(withDraft, { tone: 'formal', length: 'short' }, { version: 2, body: '自訂規則：請寫得很正式。' })
+    expect(built.system).toContain('自訂規則')
+    expect(built.system).toContain(DRAFT_RULES)
+    expect(built.system).toContain('語氣：沿用老師草稿的語氣')
+    expect(built.system).not.toContain('語氣：正式')
+  })
+
+  it('uses the selected tone when there is no draft', () => {
+    const built = buildReportPrompt({ ...withDraft, draft: '  ' }, { tone: 'formal', length: 'short' })
+    expect(built.system).not.toContain(DRAFT_RULES)
+    expect(built.system).toContain('語氣：正式')
   })
 })

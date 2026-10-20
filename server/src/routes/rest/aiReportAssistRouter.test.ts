@@ -46,6 +46,8 @@ class Repo implements ReportAssistRepository {
   async startGeneration(row: GenerationLogRow) { this.logs.push({ ...row }); return GENERATION }
   async finishGeneration(_id: string, outcome: Partial<GenerationLogRow>) { Object.assign(this.logs[this.logs.length - 1], outcome) }
   async failStaleRunning() { return 0 }
+  unsupported: string[] = []
+  async markStructuredOutputUnsupported(id: string) { this.unsupported.push(id) }
   async chargeQuota() { this.quotaLedger.push({ kind: 'consume', delta: -1, created_at: '2026-10-20T00:00:00Z' }) }
   async listGenerationsForReports() { return [] }
   async keptSuggestionIndexes() { return new Map() }
@@ -137,7 +139,8 @@ describe('AI report assist router', () => {
     repo.history = [{
       id: GENERATION, userId: 'u1', occurrenceReportId: REPORT, createdAt: '2026-10-20T00:00:00Z', completedAt: '2026-10-20T00:00:20Z',
       status: 'succeeded', provider: 'ollama', modelId: 'qwen', errorCode: null, quotaCharged: 1, adoptionCount: 2, suggestionStates: { 0: 'kept' },
-      sanitizedInput: { known_refs: { '[學生A]': 's1', '[學生B]': 's2' } },
+      sanitizedInput: { known_refs: { '[學生A]': 's1', '[學生B]': 's2' }, prompt: '學生：[學生A]' },
+      systemPrompt: '你是補習班老師的課後報告助手', promptVersion: 'report.v2', errorDetail: null,
       sanitizedOutput: { sections: [{ key: 'today', title: '今日', body: '[學生A]幫助[學生B]，[電話A]' }], teachingSuggestions: ['讓[學生A]與[學生B]分組'] },
     }]
     const response = await request(app(repo)).get(`/api/ai/report-assist/reports/${REPORT}/generations`)
@@ -147,6 +150,7 @@ describe('AI report assist router', () => {
     expect(entry.draft.sections[0].body).toBe('王小明幫助同學，[電話A]')
     expect(entry.draft.teachingSuggestions[0]).toBe('讓王小明與[學生B]分組')
     expect(entry.unresolved_placeholders).toEqual(expect.arrayContaining(['[電話A]']))
+    expect(entry.input).toEqual({ system_prompt: '你是補習班老師的課後報告助手', prompt_version: 'report.v2', prompt: '學生：[學生A]' })
   })
 
   it('refuses with JSON before streaming once quota is spent', async () => {

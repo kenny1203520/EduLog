@@ -54,7 +54,7 @@ const logQuery = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(25),
   offset: z.coerce.number().int().min(0).default(0),
   user_id: uuid.optional(),
-  status: z.enum(['succeeded', 'failed', 'cancelled']).optional(),
+  status: z.enum(['running', 'succeeded', 'failed', 'cancelled']).optional(),
 })
 
 /** Usage stats read at most this many generations per request. */
@@ -205,7 +205,7 @@ export function createAiAdminRouter(config: ApiConfig) {
     const input = modelInput.parse(req.body)
     await requireManage(req, 'create', 'ai_models')
     await siteCredential(req, id)
-    const created = check(await req.adminDb!.from('ai_models').insert({ credential_id: id, ...input }).select(MODEL_FIELDS).single())
+    const created = check(await req.adminDb!.from('ai_models').insert({ credential_id: id, ...input, supports_structured_output: sharedModelCatalogCache.structuredOutputSupport(id, input.model_id) }).select(MODEL_FIELDS).single())
     return res.status(201).json(envelope(req, created.data))
   }))
 
@@ -320,7 +320,7 @@ export function createAiAdminRouter(config: ApiConfig) {
     const query = logQuery.parse(req.query)
     await requireLogsView(req)
     let select = req.adminDb!.from('ai_generations')
-      .select('id,created_at,user_id,occurrence_report_id,credential_scope,provider,model_id,prompt_versions,options,status,error_code,tokens_in,tokens_out,est_cost,quota_charged,latency_ms,sanitized_output', { count: 'exact' })
+      .select('id,created_at,user_id,occurrence_report_id,credential_scope,provider,model_id,prompt_versions,options,status,error_code,tokens_in,tokens_out,est_cost,quota_charged,latency_ms,sanitized_input,sanitized_output,system_prompt,error_detail', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(query.offset, query.offset + query.limit - 1)
     if (query.user_id) select = select.eq('user_id', query.user_id)

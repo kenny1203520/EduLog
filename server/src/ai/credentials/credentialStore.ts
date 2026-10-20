@@ -11,7 +11,7 @@ import { maskSecret, type SecretCipher } from './secretCipher.js'
 export const PERSONAL_PROVIDERS = ['anthropic', 'openai', 'google', 'openrouter'] as const
 
 export const CREDENTIAL_FIELDS = 'id,scope,owner_user_id,provider,auth_type,secret_hint,base_url,label,status,last_verified_at,created_at,updated_at'
-export const MODEL_FIELDS = 'id,credential_id,model_id,display_name,enabled,is_default,quota_weight,price_input_per_mtok,price_output_per_mtok,created_at,updated_at'
+export const MODEL_FIELDS = 'id,credential_id,model_id,display_name,enabled,is_default,quota_weight,price_input_per_mtok,price_output_per_mtok,supports_structured_output,created_at,updated_at'
 
 const httpUrl = z.url().refine((value) => /^https?:\/\//.test(value), 'Only http(s) URLs are allowed').max(2048)
 
