@@ -8,12 +8,15 @@ export interface ProviderErrorDetail {
 }
 
 /** Why a model call failed, as recorded in ai_generations.error_code. */
-export type ProviderFailure = 'RATE_LIMITED' | 'MODEL_UNSUPPORTED' | 'PROVIDER_ERROR'
+export type ProviderFailure = 'RATE_LIMITED' | 'MODEL_UNSUPPORTED' | 'DATA_POLICY' | 'AUTH_FAILED' | 'PROVIDER_ERROR'
 
 const MESSAGE_LIMIT = 500
 
 /** The model or its route rejected JSON schema output ("No endpoints found that support response_format", …). */
 const UNSUPPORTED_OUTPUT = /response[_ ]format|json[_ ]schema|structured[_ ]output|No endpoints found that (support|can handle)/i
+
+/** OpenRouter: the account's privacy settings exclude every provider of this (often free) model. */
+const DATA_POLICY = /data policy|privacy settings/i
 
 /** Walk wrapped causes (AI SDK RetryError → APICallError) up to a few levels. */
 function* causes(error: unknown): Generator<Record<string, unknown>> {
@@ -70,6 +73,8 @@ export function providerErrorDetail(error: unknown): ProviderErrorDetail {
 
 export function classifyProviderFailure(detail: ProviderErrorDetail): ProviderFailure {
   if (detail.status === 429) return 'RATE_LIMITED'
+  if (detail.status === 401 || detail.status === 403) return 'AUTH_FAILED'
+  if (detail.message && DATA_POLICY.test(detail.message)) return 'DATA_POLICY'
   if ((detail.status === null || [400, 404, 422].includes(detail.status)) && detail.message && UNSUPPORTED_OUTPUT.test(detail.message)) {
     return 'MODEL_UNSUPPORTED'
   }

@@ -49,27 +49,60 @@ async function add() {
     }
 }
 
-async function connect(start: () => Promise<string>) {
+type OAuthFlow = 'openrouter' | 'chatgpt'
+
+/** Remembered across the redirect: OpenRouter replaces our callback's query string, so ?ai_oauth= may not come back. */
+const OAUTH_PENDING_KEY = 'edulog.aiOAuthPending'
+/** Matches how long the server keeps the PKCE verifier. */
+const OAUTH_PENDING_TTL_MS = 10 * 60_000
+
+function rememberPendingFlow(flow: OAuthFlow) {
+    try { sessionStorage.setItem(OAUTH_PENDING_KEY, JSON.stringify({ flow, startedAt: Date.now() })) } catch { /* storage blocked: rely on ?ai_oauth= */ }
+}
+
+/** The flow started from this tab in the last few minutes, if any; always cleared once read. */
+function takePendingFlow(): OAuthFlow | null {
+    try {
+        const raw = sessionStorage.getItem(OAUTH_PENDING_KEY)
+        sessionStorage.removeItem(OAUTH_PENDING_KEY)
+        if (!raw) return null
+        const pending = JSON.parse(raw) as { flow?: unknown, startedAt?: unknown }
+        const fresh = typeof pending.startedAt === 'number' && Date.now() - pending.startedAt <= OAUTH_PENDING_TTL_MS
+        return fresh && (pending.flow === 'openrouter' || pending.flow === 'chatgpt') ? pending.flow : null
+    } catch {
+        return null
+    }
+}
+
+async function connect(flow: OAuthFlow, start: () => Promise<string>) {
     connecting.value = true
     try {
-        window.location.assign(await start())
+        const url = await start()
+        rememberPendingFlow(flow)
+        window.location.assign(url)
     } catch (error) {
         reportError(error)
         connecting.value = false
     }
 }
-const connectOpenRouter = () => connect(AiSettingsService.startOpenRouter)
-const connectChatGpt = () => connect(AiSettingsService.startChatGpt)
+const connectOpenRouter = () => connect('openrouter', AiSettingsService.startOpenRouter)
+const connectChatGpt = () => connect('chatgpt', AiSettingsService.startChatGpt)
 
-/** OpenRouter and ChatGPT send the teacher back here with ?ai_oauth=…&code=… (and state for ChatGPT). */
+/**
+ * OpenRouter and ChatGPT send the teacher back here with ?code=… (and state
+ * for ChatGPT). Our ?ai_oauth= flag may be dropped on the way, so the flow
+ * remembered before leaving also counts; a code with neither is ignored.
+ */
 async function finishOAuthIfReturning() {
+    const pending = takePendingFlow()
     const code = typeof route.query.code === 'string' ? route.query.code : null
-    const flow = route.query.ai_oauth
-    if ((flow !== 'openrouter' && flow !== 'chatgpt') || !code) return
+    const flagged = route.query.ai_oauth === 'openrouter' || route.query.ai_oauth === 'chatgpt' ? route.query.ai_oauth : null
+    const flow = flagged ?? pending
+    if (!flow || !code) return
     const state = typeof route.query.state === 'string' ? route.query.state : ''
     // Drop the one-time code from the address bar before using it.
     const { code: _code, state: _state, ai_oauth: _flag, ...rest } = route.query
-    await router.replace({ query: rest })
+    await router.replace({ query: { ...rest, tab: 'personal' } })
     try {
         if (flow === 'chatgpt') {
             await AiSettingsService.finishChatGpt(code, state)
@@ -107,7 +140,7 @@ onMounted(async () => {
             <div class="rounded-2xl border border-gray-200 p-5">
                 <h3 class="font-black text-gray-900">{{ t('ai.settings.openrouter_title') }}</h3>
                 <p class="mt-1 text-sm text-gray-600">{{ t('ai.settings.openrouter_description') }}</p>
-                <button type="button" class="mt-4 min-h-11 rounded-xl bg-gray-900 px-4 text-sm font-black text-white hover:bg-gray-800 disabled:opacity-50"
+                <button type="button" data-testid="connect-openrouter" class="mt-4 min-h-11 rounded-xl bg-gray-900 px-4 text-sm font-black text-white hover:bg-gray-800 disabled:opacity-50"
                     :disabled="connecting || !storageAvailable" @click="connectOpenRouter">
                     {{ connecting ? t('ai.settings.redirecting') : t('ai.settings.openrouter_connect') }}
                 </button>

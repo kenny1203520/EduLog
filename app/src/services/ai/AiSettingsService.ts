@@ -18,6 +18,15 @@ export interface CatalogModel {
 
 export type ModelCatalog = { supported: true, models: CatalogModel[], fetchedAt: string } | { supported: false, reason: string }
 
+/** Outcome of the test call; status and message are what the provider said, without secrets. */
+export interface CredentialTestResult {
+    ok: boolean
+    error: string | null
+    failure?: 'RATE_LIMITED' | 'MODEL_UNSUPPORTED' | 'DATA_POLICY' | 'AUTH_FAILED' | 'PROVIDER_ERROR' | null
+    status?: number | null
+    message?: string | null
+}
+
 export interface AiModelDTO {
     id: string
     credential_id: string
@@ -151,7 +160,7 @@ export const AiSettingsService = {
         return (await apiV1Client.get<ModelCatalog>(`${base}/${credentialId}/catalog${refresh ? '?refresh=1' : ''}`)).data
     },
     async testMyCredential(id: string, modelId: string) {
-        return (await apiV1Client.post<{ ok: boolean, error: string | null }>(`/ai/me/credentials/${id}/test`, { model_id: modelId })).data
+        return (await apiV1Client.post<CredentialTestResult>(`/ai/me/credentials/${id}/test`, { model_id: modelId })).data
     },
     async startOpenRouter() { return (await apiV1Client.post<{ url: string }>('/ai/me/openrouter/start', {})).data.url },
     async finishOpenRouter(code: string) { return (await apiV1Client.post<AiCredentialDTO>('/ai/me/openrouter/exchange', { code })).data },
@@ -171,7 +180,7 @@ export const AiSettingsService = {
     },
     async deleteSiteCredential(id: string) { await apiV1Client.delete(`/ai/admin/credentials/${id}`) },
     async testSiteCredential(id: string, modelId: string) {
-        return (await apiV1Client.post<{ ok: boolean, error: string | null }>(`/ai/admin/credentials/${id}/test`, { model_id: modelId })).data
+        return (await apiV1Client.post<CredentialTestResult>(`/ai/admin/credentials/${id}/test`, { model_id: modelId })).data
     },
     async addSiteModel(credentialId: string, input: ModelInput) {
         return (await apiV1Client.post<AiModelDTO>(`/ai/admin/credentials/${credentialId}/models`, input)).data

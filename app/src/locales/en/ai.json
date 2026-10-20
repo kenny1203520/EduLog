@@ -119,7 +119,8 @@
     "AI_GENERATION_INTERRUPTED": "This generation was interrupted (the server restarted or it took too long); no quota was used. Please try again.",
     "AI_RATE_LIMITED": "The AI service is rate limiting this model (common for free models). Try again later or use another model.",
     "AI_MODEL_UNSUPPORTED": "This model does not support this kind of request. Use another model.",
-    "AI_INVALID_OUTPUT": "The AI reply could not be read as a report; no quota was used. Try again or use another model."
+    "AI_INVALID_OUTPUT": "The AI reply could not be read as a report; no quota was used. Try again or use another model.",
+    "AI_DATA_POLICY": "Your OpenRouter privacy settings do not allow this model (common for free models). Allow the free models' data policy under OpenRouter → Settings → Privacy, or use a paid model."
   },
   "providers": {
     "anthropic": "Anthropic Claude",
@@ -289,7 +290,13 @@
     "log_input": "Input (system prompt and prompt sent, de-identified)",
     "log_compat_mode": "Generated in compatibility mode (model lacks structured output)",
     "compat_mode": "Compatibility mode",
-    "compat_mode_hint": "This model does not support structured output, so JSON is requested in the prompt instead; results work the same."
+    "compat_mode_hint": "This model does not support structured output, so JSON is requested in the prompt instead; results work the same.",
+    "test_failure": {
+      "auth": "The key is invalid or disabled. Check it or connect again.",
+      "rate_limited": "This model is rate limited right now (common for free models). The key is probably fine; try later or test another model.",
+      "data_policy": "Your OpenRouter privacy settings do not allow this free model. Allow the free models' data policy under OpenRouter → Settings → Privacy, or use a paid model. The key itself works.",
+      "open_privacy": "Open OpenRouter privacy settings"
+    }
   },
   "history": {
     "tabs_label": "AI assistant tabs",
