@@ -87,9 +87,70 @@ describe('AiReportPanel', () => {
         await wrapper.findAll('button').find((button) => button.text().includes('生成報告草稿'))!.trigger('click')
         await flushPromises()
 
-        await wrapper.findAll('button').find((button) => button.text() === '全部取代學習報告')!.trigger('click')
+        await wrapper.find('[data-testid="ai-more"]').trigger('click')
+        await wrapper.find('[data-testid="ai-replace-all"]').trigger('click')
         expect(wrapper.emitted('replace')).toBeUndefined()
         expect(wrapper.text()).toContain('取代學習報告？')
+    })
+
+    it('puts the result first, folds the settings into a summary and keeps the action at the bottom', async () => {
+        service.bootstrap.mockResolvedValue({ ...bootstrap(), kept_suggestions: [{ generationId: 'old', date: '2026-10-13', suggestions: ['換座位'] }] })
+        const wrapper = mountPanel()
+        await flushPromises()
+
+        // Before any result: settings open, kept suggestions under the focus field, button in the bottom bar.
+        expect(wrapper.find('[data-testid="ai-settings-toggle"]').attributes('aria-expanded')).toBe('true')
+        expect(wrapper.find('#ai-settings-body [data-testid="ai-kept-suggestions"]').exists()).toBe(true)
+        expect(wrapper.find('footer [data-testid="ai-generate"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="ai-quota-left"]').text()).toBe('剩 3 次')
+
+        await wrapper.find('[data-testid="ai-generate"]').trigger('click')
+        await flushPromises()
+
+        const tabPanel = wrapper.find('#ai-tab-panel')
+        expect(tabPanel.element.firstElementChild?.getAttribute('aria-labelledby')).toBe('ai-result-title')
+        expect(wrapper.find('[data-testid="ai-settings-toggle"]').attributes('aria-expanded')).toBe('false')
+        expect(wrapper.find('[data-testid="ai-settings-summary"]').text()).toContain('Sonnet')
+        expect(wrapper.find('[data-testid="ai-version-label"]').text()).toBe('第 1 版／共 1 版')
+        expect(wrapper.find('section[aria-labelledby="ai-result-title"] [data-testid="ai-kept-suggestions"]').exists()).toBe(true)
+
+        await wrapper.find('[data-testid="ai-settings-toggle"]').trigger('click')
+        expect(wrapper.find('#ai-settings-body').exists()).toBe(true)
+    })
+
+    it('shows placeholders for sections still being written and a stop button', async () => {
+        service.bootstrap.mockResolvedValue(bootstrap())
+        let finish: (() => void) | undefined
+        service.generate.mockImplementationOnce((_id: string, _body: unknown, hooks: { onPartial?: (draft: unknown) => void }) => new Promise((resolve) => {
+            hooks.onPartial?.({ sections: [{ key: 'today', title: '今日學習', body: '王小明' }] })
+            finish = () => resolve({ generation_id: 'g1', draft: { sections: [{ key: 'today', title: '今日學習', body: '王小明完成迴圈。' }], teachingSuggestions: [] }, unresolved_placeholders: [], quota_charged: 1, quota_remaining: 2 })
+        }))
+        const wrapper = mountPanel()
+        await flushPromises()
+        await wrapper.find('[data-testid="ai-generate"]').trigger('click')
+        await flushPromises()
+
+        expect(wrapper.findAll('[data-testid="ai-section-skeleton"]')).toHaveLength(2)
+        expect(wrapper.find('[data-testid="ai-stop"]').exists()).toBe(true)
+        expect(wrapper.text()).toContain('生成中，內容會逐段出現')
+        finish!()
+        await flushPromises()
+        expect(wrapper.findAll('[data-testid="ai-section-skeleton"]')).toHaveLength(0)
+    })
+
+    it('explains errors above the button and keeps the AI service reply under details', async () => {
+        service.bootstrap.mockResolvedValue(bootstrap())
+        const { ApiV1Error } = await import('@/services/api/ApiV1Client')
+        service.generate.mockRejectedValueOnce(new ApiV1Error(502, { error: { code: 'AI_RATE_LIMITED', message: '', request_id: '', trace_id: '', details: { reason: 'HTTP 429 – Rate limit exceeded' } } }))
+        const wrapper = mountPanel()
+        await flushPromises()
+        await wrapper.find('[data-testid="ai-generate"]').trigger('click')
+        await flushPromises()
+
+        const notice = wrapper.find('footer [data-testid="ai-notice"]')
+        expect(notice.attributes('role')).toBe('alert')
+        expect(notice.text()).toContain('限流')
+        expect(notice.find('details').text()).toContain('HTTP 429 – Rate limit exceeded')
     })
 
     it('lists earlier generations and opens one in the result area', async () => {

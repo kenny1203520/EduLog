@@ -180,6 +180,7 @@ export function createAiReportAssistRouter(deps: AiReportAssistDeps) {
         credential_label: source.credentialLabel,
         quota_weight: source.credentialScope === 'site' ? source.quotaWeight : 0,
         is_default: source.isDefault,
+        compat_mode: source.supportsStructuredOutput === false,
       })),
       quota: { remaining: quota.remaining, periodic: quota.periodic, one_time: quota.oneTime },
       warnings: assessReportContext({ lessonTitle: facts.lessonTitle, classNotes: facts.classNotes, draft: facts.content, attendance: facts.attendance }).map((warning) => warning.code),
