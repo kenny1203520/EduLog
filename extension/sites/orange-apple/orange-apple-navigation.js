@@ -16,7 +16,7 @@
   function parseClassName(name) {
     const text = collapse(name), schedule = globalThis.edulogSiteModel?.classSchedule(text)
     if (!schedule) return { primary: text, secondary: '', branch: '', weekday: 7, start: '99:99', full: text }
-    return { primary: `${schedule.weekdayLabel} ${schedule.start.replace(/^0/, '')}–${schedule.end.replace(/^0/, '')}`, secondary: schedule.room, branch: schedule.branch, weekday: schedule.weekday, start: schedule.start, full: text }
+    return { primary: `${tx(schedule.weekdayLabel)} ${schedule.start.replace(/^0/, '')}–${schedule.end.replace(/^0/, '')}`, secondary: schedule.room, branch: schedule.branch, weekday: schedule.weekday, start: schedule.start, full: text }
   }
   // The branch is only shown when the teacher's classes are in more than one branch.
   function placeLabels(classes) {

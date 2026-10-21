@@ -116,7 +116,7 @@
       input.value = view.studentQuery || ''
       const headerRow = [...students.rows].find(r => [...r.cells].some(c => words.nameHeader.test(c.textContent))) || students.tHead?.rows[0]
       mark(headerRow, 'data-edulog-student-header', '')
-      for (const row of students.rows) if (row.querySelector(lexicon.selectors.studentPicker) || row.querySelector('input[type=search],input[placeholder*="學生"]')) mark(row, 'data-edulog-student-search', '')
+      for (const row of students.rows) if (row.querySelector(lexicon.selectors.studentPicker) || row.querySelector('input[type=search],input[placeholder*="學生"],input[placeholder*="学生"],input[placeholder*="student" i]')) mark(row, 'data-edulog-student-search', '')
       const headers = [...(headerRow?.cells || [])].map(h => h.textContent.trim())
       const nameIndex = Math.max(0, headers.findIndex(h => words.nameHeader.test(h)))
       // Roster cards replace the table view; the native rows stay the source and filter target.
@@ -219,7 +219,7 @@
         if(changed&&typeof refreshReports==='function')refreshReports()
       }
       for (const week of weeks) {
-        const button = element('button');button.textContent=week.label
+        const button = element('button');button.textContent=model.weekTitle(week.label)
         button.type = 'button'; button.dataset.week = String(week.index)
         listen(button, 'click', () => selectWeek(week.index)); weekButtons.append(button)
       }

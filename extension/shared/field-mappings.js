@@ -3,7 +3,9 @@
 (() => {
   const attendance = { present: '出席', absent: '未出席', pending: '待確認' }
   const reasons = { busy_with_schoolwork:'課業繁忙', school_event:'校慶/運動會/畢業典禮', family_matter:'家裡有事', sick_or_injured:'生病/受傷', reason_not_provided:'未告知原因', travel_abroad:'出國', holiday:'休假日', family_ceremony:'喜慶/喪假', school_activity:'學校活動', suspension:'停課/停學', other:'其他原因' }
-  const empty = value => value === '' || value === undefined || value === null
+  // The source report form's absence-reason option values → the codes above.
+  const sourceReasons = { busy_schoolwork:'busy_with_schoolwork', school_event:'school_event', family_matter:'family_matter', sick_injured:'sick_or_injured', no_reason:'reason_not_provided', abroad:'travel_abroad', celebration_funeral:'family_ceremony', school_activity:'school_activity', other:'other' }
+  const empty = value =>value === '' || value === undefined || value === null
   const signature = field => JSON.stringify((field.options || []).map(o => [String(o.value),o.label,Boolean(o.disabled)]))
   const learningStatus = Object.freeze({on_track:'能跟上進度',hard_to_follow:'跟不上進度 (太難)',distracted:'跟不上進度 (分心)'})
   function splitClassNotes(value='') {
@@ -21,12 +23,13 @@
   }
   function scalar(field, option) {
     const label = (option?.label || '').trim(), value = option?.value
+    // The source's option values are the same codes in every site language; labels are a fallback.
     if (field.key === 'attendance_status') {
-      if (/^(出席|到課|present)$/i.test(label)) return 'present'
-      if (/^(不出席|未出席|缺席|未到課|absent)$/i.test(label)) return 'absent'
+      if (/^(出席|到課|present)$/i.test(label) || value === 'attended') return 'present'
+      if (/^(不出席|未出席|缺席|未到課|absent)$/i.test(label) || value === 'absent') return 'absent'
       if (/^(待確認|未確認|pending)$/i.test(label)) return 'pending'
     }
-    if (field.key === 'absence_reason') return Object.entries(reasons).find(([code,text]) => label === text || value === code)?.[0]
+    if (field.key === 'absence_reason') return Object.entries(reasons).find(([code,text]) => label === text || value === code)?.[0] || sourceReasons[value]
     if(field.key==='learning_status')return Object.entries(learningStatus).find(([code,name])=>code===value||name===label)?.[0]
     if (field.key === 'is_completed') {
       if (/^(完整完成|已完成|完成|已結課|all_done|complete|completed|是|yes)$/i.test(label) || /^(?:all_done|complete|completed)$/i.test(value||'')) return true

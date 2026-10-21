@@ -19,7 +19,7 @@ try{
   try{
    for(const width of [360,390,768,1024,1200,1440,1920]){
     const page=await browser.newPage({locale:'zh-TW',viewport:{width,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message))
-    await page.goto(url);await page.addStyleTag({content:'.modal{z-index:1050}'});await page.addScriptTag({url:new URL('/shared/source-date.js',url).href});await page.addScriptTag({url:new URL('/shared/field-mappings.js',url).href});await page.addScriptTag({url:new URL('/shared/field-mapping-ui.js',url).href});await page.addScriptTag({url:new URL('/sites/orange-apple/orange-apple-integration.js',url).href})
+    await page.goto(url);await page.addStyleTag({content:'.modal{z-index:1050}'});await page.addScriptTag({url:new URL('/shared/source-date.js',url).href});await page.addScriptTag({url:new URL('/shared/field-mappings.js',url).href});await page.addScriptTag({url:new URL('/shared/field-mapping-ui.js',url).href});await page.addScriptTag({url:new URL('/sites/orange-apple/orange-apple-lexicon.js',url).href});await page.addScriptTag({url:new URL('/sites/orange-apple/orange-apple-integration.js',url).href})
     await page.evaluate(()=>{
      const a=document.querySelector('#reports a');a.addEventListener('click',e=>e.preventDefault());a.click()
      window.originalForm=document.querySelector('form');window.originalForm.sentinel='native';window.submitCount=0;window.editorCalls=[];window.editorDelayed=[];window.delayDetails=false

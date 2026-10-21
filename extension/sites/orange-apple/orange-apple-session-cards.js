@@ -414,7 +414,7 @@
           const card = cardFor(student)
           card.li.dataset.group = student.group
           card.li.dataset.closed = String(Boolean(student.closed))
-          fillFace(card.face, student, session.label)
+          fillFace(card.face, student, model.weekTitle(session.label))
           if (open.has(card.li)) card.face.querySelector('.edulog-card-more').open = true
           return card.li
         })

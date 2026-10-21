@@ -18,8 +18,8 @@
   let view = {}, lastPath = location.pathname
   const pageViews = new Map()
   // The teaching site's own language, read from the active choice in its locale switcher.
-  // Pages are read with zh-TW vocabulary; other languages keep the native page until supported.
-  const SOURCE_READY = new Set(['zh-TW'])
+  // The lexicon reads all three of the site's languages; any other keeps the native page.
+  const SOURCE_READY = new Set(['zh-TW', 'zh-CN', 'en'])
   function siteLocale() {
     const active = document.querySelector('.locale-selector a.btn-primary[href*="locale="]')
     let value = document.documentElement.lang || ''

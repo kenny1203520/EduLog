@@ -9,6 +9,7 @@ function adapter(html, pathname = '/courses/dt/11') {
   Object.defineProperty(dom.window, 'crypto', { value: webcrypto }); dom.window.TextEncoder = TextEncoder
   dom.window.eval(readFileSync(new URL('../shared/source-date.js', import.meta.url), 'utf8'))
   dom.window.eval(readFileSync(new URL('../shared/field-mappings.js', import.meta.url), 'utf8'))
+  dom.window.eval(readFileSync(new URL('../sites/orange-apple/orange-apple-lexicon.js', import.meta.url), 'utf8'))
   dom.window.eval(readFileSync(new URL('../sites/orange-apple/orange-apple-integration.js', import.meta.url), 'utf8'))
   return { dom, doc: dom.window.document, api: dom.window.edulogSourceIntegration }
 }

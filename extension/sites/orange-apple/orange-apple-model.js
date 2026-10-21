@@ -14,7 +14,7 @@
     if (!cell) return ''
     const copy = cell.cloneNode(true)
     copy.querySelectorAll('a,button,input,select,textarea,[data-edulog-owned]').forEach(node => node.remove())
-    return collapse(copy.textContent)
+    return lexicon.locale.canonStatus(collapse(copy.textContent), cell.ownerDocument)
   }
   function classifySession(raw) {
     const attendancePending = words.attendancePending.test(raw)
@@ -80,11 +80,13 @@
     }
   }
   function readWeekColumns(headerCells) {
-    return [...headerCells].map((cell, index) => ({ cell, index, label: collapse(cell.textContent) })).filter(item => words.weekLabel.test(item.label))
+    return [...headerCells].map((cell, index) => ({ cell, index, label: lexicon.locale.canonWeekLabel(collapse(cell.textContent), cell.ownerDocument) })).filter(item => words.weekLabel.test(item.label))
   }
   function pickWeek(weeks, index) {
     return weeks.find(week => week.index === index) || weeks.find(week => words.currentWeek.test(week.label)) || weeks[0] || null
   }
+  // Week labels stay in zh-TW wording for reading (see lexicon.locale); this is the form teachers see.
+  const weekTitle = label => String(label || '').replace(/上週|本週|下週/g, word => globalThis.edulogUi?.tx(word) ?? word)
   // Health check before enhancing. `denied` is a legitimate provider page;
   // `missing` means the markup no longer matches what this adapter expects.
   function checkPage(doc, kind) {
@@ -95,7 +97,7 @@
   }
   // "樹林_非凡文理_201教室（菁英） - 週六 第 1 時段 (10:00 ~ 12:00)" → weekday, times and place parts.
   function classSchedule(name) {
-    const text = collapse(name), match = lexicon.navigation.className.exec(text)
+    const text = lexicon.locale.canonClassName(collapse(name)), match = lexicon.navigation.className.exec(text)
     if (!match) return null
     const place = match[1].split('_').filter(Boolean)
     return { weekday: lexicon.navigation.weekdays.indexOf(match[2]), weekdayLabel: match[2], start: match[3].padStart(5, '0'), end: match[4].padStart(5, '0'), branch: place.slice(0, -1).join(' '), room: place.at(-1) || match[1] }
@@ -122,5 +124,5 @@
     const { year, month, day } = siteParts(date)
     return now >= siteTime(year, month, day, Number(time[1]), Number(time[2]))
   }
-  globalThis.edulogSiteModel = Object.freeze({ matchPage, sessionText, classifySession, readSessionCell, readWeekColumns, pickWeek, checkPage, classSchedule, weekDate, sessionStarted, siteParts })
+  globalThis.edulogSiteModel = Object.freeze({ matchPage, sessionText, classifySession, readSessionCell, readWeekColumns, pickWeek, checkPage, classSchedule, weekDate, weekTitle, sessionStarted, siteParts })
 })()

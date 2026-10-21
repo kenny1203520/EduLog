@@ -1,5 +1,7 @@
 (() => {
   const ORIGIN = 'https://corp.orangeapple.co'
+  // Source pages may be zh-TW, zh-CN or English; labels are compared through the lexicon's term table.
+  const site = globalThis.edulogSiteLexicon.locale
   // UI wording goes through the shared phrasebook (zh-TW / zh-CN / en); data stays in params.
   const tx = (text, params = {}) => globalThis.edulogUi?.tx(text, params) ?? String(text).replace(/\{(\w+)\}/g, (_, name) => String(params[name] ?? ''))
   const text = node => node?.textContent?.trim().replace(/\s+/g, ' ').slice(0, 256) || ''
@@ -15,7 +17,8 @@
     const cell=link?.closest('td'),row=cell?.parentElement,table=cell?.closest('table')
     if(!cell||!row||!table)return {date:null,dateRaw:'',dateInfo:dates.resolve([]),headers:[],courseRange:[],cellText:''}
     const column=logicalColumn(row,cell),rows=[...table.rows]
-    const headers=[...new Set(rows.filter(r=>r.querySelector('th')).map(r=>logicalCell(r,column)).filter(Boolean).map(cellText).filter(Boolean))]
+    // Week headers in month/day order whatever the site language (English shows day first).
+    const headers=[...new Set(rows.filter(r=>r.querySelector('th')).map(r=>logicalCell(r,column)).filter(Boolean).map(c=>site.canonWeekLabel(cellText(c),c.ownerDocument)).filter(Boolean))]
     const cellRaw=reportText(cell),cellValue=dateTokens(cellRaw).join(' | '),explicit=link.getAttribute('data-date')||''
     const courseCell=teachingCell(row,['課程','課程名稱'])||(!headerCells(table).length?row.cells[1]:null)
     const courseValue=cellText(courseCell)
@@ -161,7 +164,7 @@
     return cellText(header) || fallback
   }
   function headerCells(table) {
-    return [...(table?.rows || [])].find(r => r.querySelector('th') && [...r.cells].some(c => /^(姓名|學生|上課日期|課次日期|日期)$/.test(cellText(c))))?.cells || []
+    return [...(table?.rows || [])].find(r => r.querySelector('th') && [...r.cells].some(c => site.isTerm(cellText(c), '姓名', '學生', '上課日期', '課次日期', '日期')))?.cells || []
   }
   const tableGrids=new WeakMap()
   function tableGrid(table){
@@ -174,8 +177,8 @@
   function logicalCell(row,column){const table=row?.closest('table'),index=table?[...table.rows].indexOf(row):-1;return index>=0?tableGrid(table)[index]?.[column]||null:null}
   function logicalColumn(row,cell){const grid=tableGrid(row?.closest('table'))[[...row.closest('table').rows].indexOf(row)]||[];return grid.indexOf(cell)}
   function teachingCell(row, labels) {
-    const table=row.closest('table'),headerRow=[...(table?.rows||[])].find(r=>r.querySelector('th')&&[...r.cells].some(c=>labels.includes(cellText(c))))
-    const header=[...(headerRow?.cells||[])].find(c=>labels.includes(cellText(c)))
+    const table=row.closest('table'),headerRow=[...(table?.rows||[])].find(r=>r.querySelector('th')&&[...r.cells].some(c=>site.isTerm(cellText(c),...labels)))
+    const header=[...(headerRow?.cells||[])].find(c=>site.isTerm(cellText(c),...labels))
     const column=header?logicalColumn(headerRow,header):-1
     return column>=0?logicalCell(row,column):null
   }
@@ -188,7 +191,7 @@
   }
   function labeledValue(container, labelText) {
     for (const label of container?.querySelectorAll('label,strong,b,dt')||[]) {
-      if (text(label).replace(/[：:]$/,'').trim()!==labelText) continue
+      if (!site.isTerm(text(label), labelText)) continue
       const parent=label.parentElement
       let value='',found=false
       for (const child of parent.childNodes) {
@@ -204,25 +207,25 @@
       const next=label.nextElementSibling
       if(next&&['P','DD','SPAN'].includes(next.tagName))return next.textContent.trim().slice(0,10000)
     }
-    const inline=[...(container?.querySelectorAll('p')||[])].find(node=>new RegExp(`^${labelText.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\$&')}[：:]`).test(node.textContent.trim()))
+    const inline=[...(container?.querySelectorAll('p')||[])].find(node=>site.leadTerm(node.textContent,labelText)!==null)
     if(inline)return inline.textContent.trim().replace(/^[^：:]+[：:]\s*/,'').slice(0,10000)
     return undefined
   }
-  const completionValue=value=>/^(?:完整完成|已完成|完成|all_done|complete|completed)$/i.test(value.trim())?true:/^(?:尚未完成|未完成|not_all_done|incomplete)$/i.test(value.trim())?false:undefined
+  const completionValue=value=>{const v=site.canonLabel(value.trim());return /^(?:完整完成|已完成|完成|all_done|complete|completed)$/i.test(v)?true:/^(?:尚未完成|未完成|not_all_done|incomplete)$/i.test(v)?false:undefined}
   const lessonStage=value=>{const m=value.match(/(?:Lesson|L)\s*(\d+)/i);return m?Number(m[1]):undefined}
   const learningStatusLabels={on_track:'能跟上進度',hard_to_follow:'跟不上進度 (太難)',distracted:'跟不上進度 (分心)'}
   const markedLearningStatus=(status,notes='')=>{const label=learningStatusLabels[status];return label?`[corp.learning_status:${status}]\n${label}\n[/corp.learning_status]${notes?`\n\n${notes}`:''}`:notes}
   function admissionCourse(doc) {
-    const item=[...doc.querySelectorAll('#admission-data li')].find(li=>/^課程名稱[：:]/.test(text(li)))
-    const raw=item?.textContent.replace(/^\s*課程名稱[：:]\s*/,'').trim()||''
+    const item=[...doc.querySelectorAll('#admission-data li')].find(li=>site.leadTerm(text(li),'課程名稱')!==null)
+    const raw=site.leadTerm(item?.textContent||'','課程名稱')||''
     const match=raw.match(/^(.*?)\s*\(([a-z][a-z0-9-]{1,63})\)\s*$/i)
     return {sourceCourseName:(match?.[1]||raw).trim(),sourceCourseCode:match?.[2]?.toLowerCase()||null,sourceCourseLabel:raw||null}
   }
   function admissionStudent(doc) {
-    const item=[...doc.querySelectorAll('#admission-data li')].find(li=>/^學生[：:]/.test(text(li)))
+    const item=[...doc.querySelectorAll('#admission-data li')].find(li=>site.leadTerm(text(li),'學生')!==null)
     const link=[...(item?.querySelectorAll('a[href]')||[])].map(a=>({node:a,path:(()=>{try{const u=new URL(a.getAttribute('href'),ORIGIN);return u.origin===ORIGIN?u.pathname:''}catch{return ''}})()})).find(a=>/^\/students\/\d+$/.test(a.path))
     const id=link?.path.match(/^\/students\/(\d+)$/)?.[1]||null
-    const name=link?text(link.node):item?.textContent.replace(/^\s*學生[：:]\s*/,'').trim()||''
+    const name=link?text(link.node):site.leadTerm(item?.textContent||'','學生')||''
     return {sourceStudentName:name,student_source_id:id}
   }
   function sourceCourseCode(label) { return label?.match(/\(([a-z][a-z0-9-]{1,63})\)\s*$/i)?.[1]?.toLowerCase()||null }
@@ -305,11 +308,11 @@
       const lookupReportIds=[...new Set(queryIds)]
       // The history page uses label + sibling paragraphs as well as table columns.
       // Never capture administrative cells or the whole evaluation container.
-      const assessment=teachingCell(row,['學習評估'])||cells.find(c=>c.querySelector('label,strong,b')||/評語[：:]|學習表現[：:]|聯絡欄[：:]|紀錄[：:]|內部紀錄[：:]/.test(reportText(c)))
+      const assessment=teachingCell(row,['學習評估'])||cells.find(c=>c.querySelector('label,strong,b')||site.labelPattern('評語','學習表現','聯絡欄','紀錄','內部紀錄').test(reportText(c)))
       const sourceFields=[],data={}
       const field=(key,label,value,{internal=false,type='text',options=[{value,label:value,disabled:false}]}={})=>{if(value===undefined)return;sourceFields.push({key,label,type,value,options,internal,disabled:false})}
       const setValue=(key,label,value,canonical,config)=>{field(key,label,value,config);if(canonical!==undefined)data[key]=canonical}
-      const attendance=teachingCell(row,['出席狀況','出席狀態']);if(attendance){const raw=reportText(attendance).split('\n')[0].trim(),canonical=/^(?:不出席|未出席|缺席)$/.test(raw)?'absent':/^(?:出席|出席試聽|試聽出席)$/.test(raw)?'present':undefined;if(raw&&raw!=='設為不出席')setValue('attendance_status','出席狀況',raw,canonical,{type:'select',options:[{value:raw,label:raw,disabled:false}]})}
+      const attendance=teachingCell(row,['出席狀況','出席狀態']);if(attendance){const raw=reportText(attendance).split('\n')[0].trim(),term=site.canonLabel(raw),canonical=/^(?:不出席|未出席|缺席)$/.test(term)?'absent':/^(?:出席|出席試聽|試聽出席)$/.test(term)?'present':undefined;if(raw&&!site.isTerm(raw,'設為不出席'))setValue('attendance_status','出席狀況',raw,canonical,{type:'select',options:[{value:raw,label:raw,disabled:false}]})}
       const progressCell=teachingCell(row,['課程進度']);const stageRaw=progressCell?reportText(progressCell):''
       const stageLabel=labeledValue(assessment,'最新課程階段')??labeledValue(assessment,'學習課程')??labeledValue(assessment,'教材')
       const stageSource=stageLabel||stageRaw,stageNumber=lessonStage(stageSource||'')
@@ -319,11 +322,11 @@
       for(const [i,key] of ['class_participation','classroom_behavior'].entries()){const label=i?'課堂秩序':'課程參與',raw=labeledValue(assessment,i?'課堂秩序':'課程參與評分')??(i?labeledValue(assessment,'課堂表現'):labeledValue(assessment,'課程參與'))??scores[i];if(i<2&&/^(?:[0-5](?:\.5)?)$/.test(raw||'')){const value=Number(raw);field(key,label,raw,{type:'score'});data[key]=value}}
       const details=[['content','評語'],['contact_notes','聯絡欄']];for(const [key,label]of details){const value=labeledValue(assessment,label);if(value!==undefined){field(key,label,value);data[key]=value}}
       const recordLabel=labeledValue(assessment,'紀錄')??labeledValue(assessment,'內部紀錄');
-      if(recordLabel!==undefined){const labelNode=[...(assessment?.querySelectorAll('label,strong,b,dt')||[])].find(n=>['紀錄','內部紀錄'].includes(text(n).replace(/[：:]$/,'')));let paragraphs=[];if(labelNode){for(let n=labelNode.nextElementSibling;n&&n.tagName==='P';n=n.nextElementSibling)paragraphs.push(n.textContent.trim())}if(!paragraphs.length)paragraphs=recordLabel.split('\n');const statusText=paragraphs[0]||'',statusEntry=Object.entries(learningStatusLabels).find(([,label])=>label===statusText),internalNotes=paragraphs.slice(1).join('\n');if(statusText){const known=statusEntry?.[0];field('class_notes','學習狀態原文',statusText,{internal:true});if(known)sourceFields.at(-1).learningStatus=known;else sourceFields.at(-1).unknownLearningStatus=true}if(internalNotes)field('class_notes','內部紀錄',internalNotes,{internal:true})}
-      const detailProgress=labeledValue(assessment,'進度細項')??labeledValue(assessment,'章節進度');if(detailProgress){field('progress_letter','進度細項',detailProgress);const m=detailProgress.match(/^(?:Section\s*)?([A-Z])\s*(?:(?:到|至|–|-)\s*(?:Section\s*)?([A-Z]))?$/);if(m)data.progress_letter=m[2]?`${m[1]}-${m[2]}`:m[1]}
+      if(recordLabel!==undefined){const labelNode=[...(assessment?.querySelectorAll('label,strong,b,dt')||[])].find(n=>site.isTerm(text(n),'紀錄','內部紀錄'));let paragraphs=[];if(labelNode){for(let n=labelNode.nextElementSibling;n&&n.tagName==='P';n=n.nextElementSibling)paragraphs.push(n.textContent.trim())}if(!paragraphs.length)paragraphs=recordLabel.split('\n');const statusText=paragraphs[0]||'',statusEntry=Object.entries(learningStatusLabels).find(([,label])=>label===site.canonLabel(statusText)),internalNotes=paragraphs.slice(1).join('\n');if(statusText){const known=statusEntry?.[0];field('class_notes','學習狀態原文',statusText,{internal:true});if(known)sourceFields.at(-1).learningStatus=known;else sourceFields.at(-1).unknownLearningStatus=true}if(internalNotes)field('class_notes','內部紀錄',internalNotes,{internal:true})}
+      const detailProgress=labeledValue(assessment,'進度細項')??labeledValue(assessment,'章節進度');if(detailProgress){field('progress_letter','進度細項',detailProgress);const m=detailProgress.match(/^(?:Section\s*)?([A-Z])\s*(?:(?:到|至|to|–|-)\s*(?:Section\s*)?([A-Z]))?$/);if(m)data.progress_letter=m[2]?`${m[1]}-${m[2]}`:m[1]}
       const statusCell=teachingCell(row,['出席狀況','出席狀態']),statusText=statusCell?reportText(statusCell):''
-      const attendanceAction=rowLinks.some(a=>a.path==='/dt/admissions/lesson_reports/attendance_status')||/設為不出席/.test(statusText)
-      const holiday=/休假日|停課|課程取消/.test(statusText||sessionRaw)
+      const attendanceAction=rowLinks.some(a=>a.path==='/dt/admissions/lesson_reports/attendance_status')||site.pattern('設為不出席').test(statusText)
+      const holiday=site.pattern('休假日','停課','課程取消').test(statusText||sessionRaw)
       const persistedValues=Object.entries(data).filter(([key,value])=>key!=='external_link'&&!(holiday&&key==='attendance_status')&&value!==undefined&&value!==null&&value!=='')
       const hasTeachingContent=persistedValues.length>0||sourceFields.some(f=>!(holiday&&f.key==='attendance_status')&&f.value!==''&&f.value!==undefined&&f.value!==null)
       const rowType=isPreviousAdmission?(ownerRef?'previous-admission':'other-admission'):holiday&&!hasTeachingContent?'system-excluded':attendanceAction&&!hasTeachingContent?'unfilled':'report'

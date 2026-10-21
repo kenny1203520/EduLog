@@ -89,10 +89,99 @@
     enrollment: /^\/dt_admissions\/(\d+)\/?$/,
     reportEditor: /^\/dt_admissions\/(\d+)\/reports\/(\d+)\/edit\/?$/,
   })
+  // The provider shows zh-TW, zh-CN or English (its locale switch), and translates only some
+  // pages. Readers compare zh-TW terms; these map the other wordings back to them. Each entry is
+  // [zh-TW, ...zh-CN and English forms seen on the site]. Add only wording confirmed from pages.
+  const TERMS = [
+    // Class page: header, roster, lesson records
+    ['節次資訊', '节次信息', 'Stage Info'], ['總覽', '总览', 'Overview'], ['課堂記錄', '课堂记录', 'Lesson Records'], ['教室', 'Classroom'], ['時段', '时段', 'Time Slot'],
+    ['上課 / 報名 / 上限', '上课 / 报名 / 上限', 'Classes / Enrolled / Capacity'], ['本週試聽學生', '本周试听学生', "This Week's Trial Students"], ['已試聽學生', '已试听学生', 'Auditioned Students'],
+    ['調課學生', '调课学生', 'Transferred Students'], ['進度較慢學生', '进度较慢学生', 'Slow Progress Students'], ['姓名', 'Name'], ['年級', '年级', 'Grade'], ['課程', '课程', 'Course'],
+    ['訂單狀態', '订单状态', 'Order Status'], ['報名時間', '报名时间', 'Enrolled At'], ['剩餘堂數', '剩余堂数', 'Remaining'], ['可上堂數', '可上堂数', 'Available'], ['已用補課數', '已用补课数', 'Used Makeup'],
+    ['可補課數', '可补课数', 'Available Makeup'], ['操作', 'Actions'], ['預計開課日期', '预计开课日期', 'Expected start date'], ['學生', '学生', 'Student', 'Students'], ['出席統計', '出席统计', 'Attendance'],
+    ['上週', '上周', 'Last Week'], ['本週', '本周', 'This Week'], ['下週', '下周', 'Next Week'], ['查看完整紀錄', '查看完整记录', 'View Full Record'], ['設定', '设定', 'Settings'], ['總評', '总评', 'Overall Comment'],
+    ['專案檢查', '项目检查', '专案检查', 'Project Check', 'Check Project'], ['記錄', '记录', 'Record'], ['此週非本班學生', '此周非本班学生', 'Not in class this week'], ['已完課', '已完课', 'Completed'],
+    ['暫停課程', '暂停课程', 'Suspended'], ['休假日'], ['停課', '停课'], ['課程取消', '课程取消'], ['待確認', '待确认'], ['顯示本週上課', '显示本周上课', 'Show This Week'], ['顯示全部', '显示全部', 'Show All'],
+    ['搜尋學生姓名', '搜索学生姓名', 'Search student name'],
+    // Calendar
+    ['前一週', '前一周', 'Previous Week'], ['下一週', '下一周', 'Next Week'], ['請選擇區域', '请选择区域', 'Please select a region'], ['選擇欲前往的日期', '选择欲前往的日期', 'Select a date'],
+    // Enrollment history
+    ['梯次/節次', '梯次/节次', 'Stage/Section'], ['課程名稱', '课程名称', 'Course'], ['總堂數', '总堂数', 'Total Lessons'], ['可補課次數', '可补课次数', 'Makeup Lessons'], ['堂次', 'Lesson'], ['日期', 'Date'],
+    ['啟用進度', '启用进度', 'Enable Progress'], ['課程進度', '课程进度', 'Course Progress', 'Progress'], ['出席狀況', '出席状况', 'Attendance'], ['學習評估', '学习评估', 'Learning Eval'], ['出席試聽', '出席试听', 'AttendedTrial'],
+    ['最新課程階段', '最新课程阶段', 'Latest Stage'], ['完整完成', 'Completed in full'], ['評語', '评语', 'Feedback'], ['聯絡欄', '联络栏', 'Contact'], ['紀錄', '记录', 'Notes'], ['能跟上進度', '能跟上进度', 'Able to keep up with the lesson'],
+    ['出席', 'Attended'], ['進度細項', '进度细项', 'Progress Detail'], ['尚未完成', 'Not completed'], ['設為不出席', '设为不出席', 'Mark Absent'], ['補課', '补课', 'Make-up'], ['已調課', '已调课', 'Rescheduled'], ['假期', 'Holiday'],
+    ['目前進度', '目前进度', 'Progress'], ['實際出席', '实际出席', 'Attended'], ['不出席', 'Absent'],
+    // Report editor
+    ['不出席原因', 'Absence Reason'], ['專案進度', '专案进度', 'Project Progress'], ['學習課程', '学习课程', 'Learning Course'], ['完成狀況', '完成状况', 'Completion Status'], ['章節進度', '章节进度', 'Section Progress'],
+    ['課程參與', '课程参与', 'Course Participation'], ['課堂秩序', 'Class Order'], ['學習表現', '学习表现', 'Learning Performance'], ['跟不上進度 (太難)', '跟不上进度（太难）', 'Unable to keep up (too difficult)'],
+    ['跟不上進度 (分心)', '跟不上进度（分心）', 'Unable to keep up (distracted)'], ['課堂紀錄', '课堂记录', 'Lesson Record'],
+  ]
+  const fold = value => String(value ?? '').trim().replace(/\s+/g, ' ').replace(/\s*[：:]$/, '').toLowerCase()
+  const forms = new Map(), canonical = new Map()
+  for (const [zh, ...others] of TERMS) {
+    forms.set(zh, [...new Set([...(forms.get(zh) || [zh]), ...others])])
+    for (const form of [zh, ...others]) if (!canonical.has(fold(form))) canonical.set(fold(form), zh)
+  }
+  const escape = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  // Every wording of a zh-TW term, e.g. for building selectors from provider placeholders.
+  const termForms = term => forms.get(term) || [term]
+  // Whether a label (trailing colon ignored) is any wording of one of these zh-TW terms.
+  const isTerm = (value, ...terms) => terms.some(term => termForms(term).some(form => fold(form) === fold(value)))
+  // A label in zh-TW wording when it is a known term; other text is returned unchanged.
+  const canonLabel = value => canonical.get(fold(value)) || value
+  // The provider's active locale, from its language switch; zh-TW when it cannot tell.
+  function siteLocale(doc = globalThis.document) {
+    const href = doc?.querySelector?.('.locale-selector a.btn-primary')?.getAttribute('href') || ''
+    const code = /[?&]locale=([\w-]+)/.exec(href)?.[1] || doc?.documentElement?.lang || ''
+    return /^en/i.test(code) ? 'en' : /^zh-(?:CN|Hans)/i.test(code) ? 'zh-CN' : 'zh-TW'
+  }
+  // Session cells, week headers and class names carry short status phrases; these become
+  // zh-TW so the patterns in `text` and `navigation` read every locale. Course and student
+  // names never pass through here.
+  const WEEKDAYS_EN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+  const PHRASES = ['此週非本班學生', '暫停課程', '已完課', '停課', '課程取消', '待確認', '上週', '本週', '下週', '記錄']
+    .flatMap(zh => termForms(zh).filter(form => form !== zh).map(form => [form, zh]))
+    .sort((a, b) => b[0].length - a[0].length)
+    .map(([form, zh]) => [new RegExp(/^[\x20-\x7e]+$/.test(form) ? `(?<![A-Za-z])${escape(form)}(?![A-Za-z])` : escape(form), 'g'), zh])
+  function canonStatus(raw, doc) {
+    let out = String(raw ?? '')
+    if (siteLocale(doc) === 'zh-TW') return out
+    out = out.replace(/(?<![A-Za-z])Week\s*(\d+)\s*\(/g, '第 $1 週(').replace(/第\s*(\d+)\s*周/g, '第 $1 週')
+      .replace(/(?<![A-Za-z])Enabled\s+(L\d*)/g, '已啟用 $1').replace(/已启用/g, '已啟用').replace(/(?<![A-Za-z])Enable\s+L/g, '啟用 L').replace(/启用 L/g, '啟用 L')
+    for (const [pattern, zh] of PHRASES) out = out.replace(pattern, zh)
+    return out
+  }
+  // English week headers read "Last Week (18/10)": day first. Readers expect month/day.
+  function canonWeekLabel(label, doc) {
+    const out = canonStatus(label, doc)
+    return siteLocale(doc) === 'en' ? out.replace(/(?<![\d/])(\d{1,2})\/(\d{1,2})(?![\d/])/g, '$2/$1') : out
+  }
+  // "… - Sunday Period 1 (10:00 ~ 12:00)" / "… - 周日 第 1 时段 (…)" → the zh-TW form.
+  function canonClassName(name) {
+    return String(name ?? '').replace(new RegExp(`(?<![A-Za-z])(${WEEKDAYS_EN.join('|')})\\s+Period\\s+(\\d+)`), (_, day, slot) => `${navigation.weekdays[WEEKDAYS_EN.indexOf(day)]} 第 ${slot} 時段`)
+      .replace(/周([一二三四五六日])/g, '週$1').replace(/时段/g, '時段')
+  }
+  // A pattern matching any wording of these terms. No word boundaries: row text runs cells
+  // together ("…AttendanceLearning Eval…"); English forms still match case-sensitively.
+  const anyTerm = (...terms) => new RegExp(terms.flatMap(termForms).map(escape).join('|'))
+  // "学生: 名字" / "Student: 名字": the value after the leading label when that label is a
+  // wording of one of these terms, otherwise null. Several terms share English forms
+  // ("Course"), so callers name the terms they expect instead of guessing one.
+  function leadTerm(value, ...terms) {
+    const match = /^\s*([^：:]+?)\s*[：:]\s*([\s\S]*)$/.exec(String(value ?? ''))
+    return match && isTerm(match[1], ...terms) ? match[2].trim() : null
+  }
+  // "評語：" in any wording: a label followed by a colon.
+  const labelPattern = (...terms) => new RegExp(terms.flatMap(termForms).map(form => `${escape(form)}\\s*[：:]`).join('|'))
+  const locale = Object.freeze({ siteLocale, termForms, isTerm, canonLabel, leadTerm, canonStatus, canonWeekLabel, canonClassName, pattern: anyTerm, labelPattern })
   const text = Object.freeze({
     accessDenied: /沒有存取權限|無權限|Access denied/i,
-    nameHeader: /姓名/,
-    studentCoreColumn: /姓名|年級|課程|操作/,
+    nameHeader: anyTerm('姓名'),
+    studentCoreColumn: anyTerm('姓名', '年級', '課程', '操作'),
+    gradeHeader: anyTerm('年級'),
+    courseHeader: anyTerm('課程'),
+    signupHeader: anyTerm('報名時間'),
+    makeupHeader: /補課|补课|Makeup/,
     weekLabel: /上週|本週|下週/,
     currentWeek: /本週/,
     otherSession: /此週非本班學生/,
@@ -114,8 +203,8 @@
     calendarDay: /(\d{1,2})\/(\d{1,2})/,
     nextWeek: /下週/,
     courseExpired: /課程已在\s*[\d-]+\s*到期/,
-    remainingLessons: /剩餘堂數/,
-    plannedStart: /預計開課日期/,
+    remainingLessons: anyTerm('剩餘堂數'),
+    plannedStart: anyTerm('預計開課日期'),
   })
   // Structural facts a page needs before it may be enhanced. A missing probe means
   // the provider markup changed: the page stays original and the toolbar says so.
@@ -123,5 +212,5 @@
     '*': [selectors.content],
     reports: [selectors.reportsTable],
   })
-  globalThis.edulogSiteLexicon = Object.freeze({ routes, selectors, paths, sources, accounts, navigation, text, probes })
+  globalThis.edulogSiteLexicon = Object.freeze({ routes, selectors, paths, sources, accounts, navigation, text, probes, locale })
 })()

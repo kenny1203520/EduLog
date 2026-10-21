@@ -5,15 +5,16 @@ import {readFileSync, readdirSync} from 'node:fs'
 // UI wording in sites/ and content/ goes through edulogUi.tx() (or keyed t()). What remains as bare
 // Chinese literals is source-site vocabulary: lexicon patterns, header/label matching, status keys
 // and import evidence stored with records. A literal in tx(a ? '…' : '…') also counts here.
-// These counts only go down: wrap new UI text in tx(); raise a count only for real source data.
+// These counts only go down: wrap new UI text in tx(); raise a count only for real source data
+// (the lexicon's term table holds the site's zh-TW / zh-CN / English wording).
 const BARE_LITERALS = {
   'content/bootstrap.js': 2,
   'content/content.js': 0,
   'content/editor-prefill.js': 20,
   'sites/orange-apple/orange-apple-accounts.js': 7,
   'sites/orange-apple/orange-apple-attendance-export.js': 14,
-  'sites/orange-apple/orange-apple-integration.js': 127,
-  'sites/orange-apple/orange-apple-lexicon.js': 25,
+  'sites/orange-apple/orange-apple-integration.js': 145,
+  'sites/orange-apple/orange-apple-lexicon.js': 206,
   'sites/orange-apple/orange-apple-model.js': 7,
   'sites/orange-apple/orange-apple-navigation.js': 2,
   'sites/orange-apple/orange-apple-quick-attendance.js': 5,
@@ -21,7 +22,7 @@ const BARE_LITERALS = {
   'sites/orange-apple/orange-apple-roster.js': 8,
   'sites/orange-apple/orange-apple-session-cards.js': 38,
   'sites/orange-apple/orange-apple-todo.js': 5,
-  'sites/orange-apple/orange-apple-workflows.js': 86,
+  'sites/orange-apple/orange-apple-workflows.js': 104,
   'sites/orange-apple/orange-apple.js': 21,
 }
 const root = new URL('../', import.meta.url)

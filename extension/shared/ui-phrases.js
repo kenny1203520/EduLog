@@ -1833,5 +1833,14 @@ globalThis.edulogUi?.registerPhrases({
   ],
   "將 {count} 位設為不出席：{names}\n不出席的學生本堂無法啟用課程。": [
    "Mark {count} absent: {names}\nAbsent students cannot enable this lesson."
+  ],
+  "上週": [
+   "Last week"
+  ],
+  "本週": [
+   "This week"
+  ],
+  "下週": [
+   "Next week"
   ]
 })

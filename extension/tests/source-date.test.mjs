@@ -23,7 +23,7 @@ test('yearless dates require unique reliable evidence and never default to the c
 })
 function page(){
   const dom=new JSDOM(`<table id="reports"><tr><th>學生</th><th>課程</th><th>本週(10/04)</th></tr><tr><td>學生甲</td><td>課程甲 (2026-08-08 ~ 2026-11-29)</td><td><a href="/dt_admissions/301/reports/401/edit">記錄</a></td></tr></table>${readFileSync(new URL('fixtures/report-modal.html',import.meta.url),'utf8')}`,{url:'https://corp.orangeapple.co/courses/dt/11',runScripts:'outside-only'})
-  Object.defineProperty(dom.window,'crypto',{value:webcrypto});dom.window.TextEncoder=TextEncoder;dom.window.eval(script);dom.window.eval(readFileSync(new URL('../sites/orange-apple/orange-apple-integration.js',import.meta.url),'utf8'))
+  Object.defineProperty(dom.window,'crypto',{value:webcrypto});dom.window.TextEncoder=TextEncoder;dom.window.eval(script);dom.window.eval(readFileSync(new URL('../sites/orange-apple/orange-apple-lexicon.js',import.meta.url),'utf8'));dom.window.eval(readFileSync(new URL('../sites/orange-apple/orange-apple-integration.js',import.meta.url),'utf8'))
   const click=()=>dom.window.document.querySelector('a').dispatchEvent(new dom.window.MouseEvent('click',{bubbles:true,cancelable:true}))
   dom.window.document.querySelector('a').addEventListener('click',e=>e.preventDefault())
   return {dom,api:dom.window.edulogSourceIntegration,doc:dom.window.document,click}
@@ -36,7 +36,7 @@ function classPage({range='2026-08-08 ~ 2026-12-06',headers=['上週(10/10)','�
   }).join('')
   const header=`<tr><th rowspan="2">學生</th><th rowspan="2">課程</th><th colspan="${headers.length}">週次</th></tr><tr>${headers.map(value=>`<th>${value}</th>`).join('')}</tr>`
   const dom=new JSDOM(`<div id="page-body"><div class="content"><h2>匿名班級</h2><table id="reports"><thead>${header}</thead><tbody>${rows}</tbody></table></div></div><div class="modal show"><form action="/dt_admissions/300/reports/4000"><div class="modal-title">2026-10-10</div></form></div>`,{url:'https://corp.orangeapple.co/courses/dt/11',runScripts:'outside-only'})
-  Object.defineProperty(dom.window,'crypto',{value:webcrypto});dom.window.TextEncoder=TextEncoder;dom.window.eval(script);dom.window.eval(readFileSync(new URL('../sites/orange-apple/orange-apple-integration.js',import.meta.url),'utf8'))
+  Object.defineProperty(dom.window,'crypto',{value:webcrypto});dom.window.TextEncoder=TextEncoder;dom.window.eval(script);dom.window.eval(readFileSync(new URL('../sites/orange-apple/orange-apple-lexicon.js',import.meta.url),'utf8'));dom.window.eval(readFileSync(new URL('../sites/orange-apple/orange-apple-integration.js',import.meta.url),'utf8'))
   return {dom,api:dom.window.edulogSourceIntegration,doc:dom.window.document}
 }
 test('class scan resolves every report date from its logical week header and course range',async()=>{

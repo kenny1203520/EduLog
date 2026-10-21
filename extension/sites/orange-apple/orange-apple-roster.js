@@ -25,7 +25,7 @@
     if (!header) return []
     const headers = [...header.cells].map(cell => collapse(cell.textContent))
     const column = pattern => headers.findIndex(label => pattern.test(label))
-    const at = { name: column(words.nameHeader), grade: column(/年級/), course: column(/課程/), signup: column(/報名時間/), remaining: column(words.remainingLessons), makeup: column(/補課/) }
+    const at = { name: column(words.nameHeader), grade: column(words.gradeHeader), course: column(words.courseHeader), signup: column(words.signupHeader), remaining: column(words.remainingLessons), makeup: column(words.makeupHeader) }
     const doc = table.ownerDocument
     const enrolments = []
     for (const row of [...table.tBodies].flatMap(body => [...body.rows])) {
