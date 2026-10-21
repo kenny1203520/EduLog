@@ -1245,5 +1245,590 @@ globalThis.edulogUi?.registerPhrases({
   ],
   "教學備註使用原站儲存機制；關閉視窗不代表已儲存。": [
    "Teaching notes save through the site; closing doesn't save."
+  ],
+  "請先在原站開啟學生的「記錄」編輯視窗。": [
+   "Open the student's record editor on the site first."
+  ],
+  "表單或來源證據已改變，請重新核對。": [
+   "The form or source changed; check again."
+  ],
+  "請選擇有效的完整上課日期。": [
+   "Pick a valid full lesson date."
+  ],
+  "請先確認已核對矛盾的來源日期。": [
+   "Confirm you checked the conflicting source dates first."
+  ],
+  "報名識別碼格式不正確。": [
+   "Invalid enrollment ID."
+  ],
+  "來源表單已改變，歷史日期回應已忽略。": [
+   "The source form changed; the date lookup was ignored."
+  ],
+  "原站表單或內容已變更，請重新檢查欄位。": [
+   "The site form changed; check the fields again."
+  ],
+  "預填欄位格式不正確。": [
+   "Invalid prefill fields."
+  ],
+  "目標欄位不可預填。": [
+   "This field can't be prefilled."
+  ],
+  "內部紀錄尚未確認。": [
+   "Internal notes not confirmed."
+  ],
+  "原站已有內容，請明確確認覆寫。": [
+   "The site already has content; confirm the overwrite."
+  ],
+  "原站選項已變更，請人工選擇。": [
+   "Site options changed; pick one manually."
+  ],
+  "原站目標表單已變更。": [
+   "The site form changed."
+  ],
+  "原站內容已變更，請重新檢查欄位。": [
+   "Site content changed; check the fields again."
+  ],
+  "原生連動已改變「{field}」；已套用 {count} 個欄位，請重新核對，不會自動重試。": [
+   "The site changed \"{field}\"; {count} fields applied. Check again; no automatic retry."
+  ],
+  "原生欄位已變更，請檢查已套用內容，不會自動重試。": [
+   "Site fields changed; check what was applied. No automatic retry."
+  ],
+  "此頁無法辨識班級，請從班級工作區開始。": [
+   "Can't identify the class here; start from the class workspace."
+  ],
+  "編輯連結與來源報名／報告不一致。": [
+   "The edit link doesn't match the enrollment/report."
+  ],
+  "請提供原站完整且沒有查詢參數的報告編輯連結。": [
+   "Provide the full report edit link from the site, without query parameters."
+  ],
+  "編輯頁未提供唯一且符合目標的原生報告表單。": [
+   "The edit page doesn't have a single matching report form."
+  ],
+  "列表與編輯頁的上課日期矛盾，請核對原站後重讀。": [
+   "The list and edit page dates conflict; check the site and reread."
+  ],
+  "請提供有效完整上課日期。": [
+   "Provide a valid full lesson date."
+  ],
+  "確認日期與可靠來源日期不同，請先核對原站。": [
+   "The confirmed date differs from the source date; check the site first."
+  ],
+  "確認日期與來源月日不同。": [
+   "The confirmed date differs from the source month/day."
+  ],
+  "來源報名位置尚未驗證。": [
+   "Enrollment location not verified."
+  ],
+  "原站未提供可核對的完整課次日期，無法判斷上次教學。": [
+   "The site has no full lesson date to check, so the last lesson can't be found."
+  ],
+  "課次報告連結與來源報名不一致。": [
+   "The lesson report link doesn't match the enrollment."
+  ],
+  "目前報名中找不到所選課次的報告。": [
+   "No report for the selected lesson in this enrollment."
+  ],
+  "所選課次的原站報告沒有提供完整日期。": [
+   "The selected report has no full date."
+  ],
+  "來源頁暫時無法讀取或權限不足。": [
+   "Can't read the source page right now, or access is denied."
+  ],
+  "來源頁超過可處理大小。": [
+   "The source page is too large."
+  ],
+  "來源頁已導覽，工作已暫停。": [
+   "The source page navigated away; work paused."
+  ],
+  "來源分頁已變更，請重新選擇來源。": [
+   "The source tab changed; pick the source again."
+  ],
+  "原站目標：{student} · {date} · {course}": [
+   "Target: {student} · {date} · {course}"
+  ],
+  "學生待確認": [
+   "student TBC"
+  ],
+  "日期待確認": [
+   "date TBC"
+  ],
+  "課程待確認": [
+   "course TBC"
+  ],
+  "（範本）": [
+   " (template)"
+  ],
+  "EduLog 助手查詢超過 30 秒。請檢查連線後重新核對。": [
+   "The assistant took over 30 s. Check the connection and retry."
+  ],
+  "EduLog 預填功能暫時無法使用。": [
+   "EduLog prefill is unavailable right now."
+  ],
+  "擴充功能背景程序沒有回傳有效結果。請重新載入擴充功能並刷新此報告頁。": [
+   "The extension background returned no valid result. Reload the extension and this page."
+  ],
+  "EduLog 報告預覽與預填": [
+   "EduLog report preview & prefill"
+  ],
+  "EduLog 報告預覽": [
+   "EduLog report preview"
+  ],
+  "正在查詢已記住的學生與日期…": [
+   "Looking up the saved student and date…"
+  ],
+  "重新核對": [
+   "Recheck"
+  ],
+  "正在驗證擴充套件連線…": [
+   "Verifying the extension connection…"
+  ],
+  "開啟 EduLog 連線設定": [
+   "Open EduLog connection settings"
+  ],
+  "EduLog 報告助手": [
+   "EduLog report assistant"
+  ],
+  "收合助手": [
+   "Collapse"
+  ],
+  "展開 EduLog 助手": [
+   "Expand assistant"
+  ],
+  "1 · 補足目標資訊": [
+   "1 · Complete the target"
+  ],
+  "2 · 選擇 EduLog 報告": [
+   "2 · Pick an EduLog report"
+  ],
+  "3 · 核對與套用欄位": [
+   "3 · Check & apply fields"
+  ],
+  "報告編輯區": [
+   "Report editor"
+  ],
+  "EduLog 預填": [
+   "EduLog prefill"
+  ],
+  "原站表單": [
+   "Site form"
+  ],
+  "助手正在核對報告…": [
+   "Checking the report…"
+  ],
+  "課程": [
+   "Course"
+  ],
+  "班級": [
+   "Class"
+  ],
+  "報告未齊備": [
+   "Report incomplete"
+  ],
+  "報告已齊備": [
+   "Report complete"
+  ],
+  "1 · 目標已核對 · {date}": [
+   "1 · Target checked · {date}"
+  ],
+  "原站報名 #{id} · {date}": [
+   "Enrollment #{id} · {date}"
+  ],
+  "尚無有效 EduLog 報名對應，可先查看報告範本。": [
+   "No matching EduLog enrollment yet; you can browse report templates."
+  ],
+  "查看原站日期資料": [
+   "Site date details"
+  ],
+  "補充資訊：使用者確認（本次報告使用，不建立永久身份對應）": [
+   "Added by you (this report only; no permanent identity link)"
+  ],
+  "查看原站報告": [
+   "Open site report"
+  ],
+  "修改上課日期": [
+   "Change lesson date"
+  ],
+  "需要您確認：完整上課日期": [
+   "Please confirm: full lesson date"
+  ],
+  "日期影響精確配對與套用前核對；不會修改原站。": [
+   "The date drives matching and checks before applying; the site isn't changed."
+  ],
+  "這份原站報告的完整上課日期": [
+   "Full lesson date of this report"
+  ],
+  "我已核對矛盾的來源日期，確認使用此日期": [
+   "I checked the conflicting dates; use this date"
+  ],
+  "確認上課日期": [
+   "Confirm date"
+  ],
+  "請選擇完整上課日期。": [
+   "Pick the full lesson date."
+  ],
+  "稍後處理": [
+   "Later"
+  ],
+  "可繼續查看候選，套用前仍需確認完整日期。": [
+   "You can keep browsing; confirm the full date before applying."
+  ],
+  "修改已確認的上課日期": [
+   "Change the confirmed date"
+  ],
+  "修改當次學生／報名": [
+   "Change student/enrollment"
+  ],
+  "需要您確認：當次學生／報名": [
+   "Please confirm: student/enrollment"
+  ],
+  "搜尋既有 EduLog 學生": [
+   "Search EduLog students"
+  ],
+  "姓名不自動合併；選擇只用於本次報告。": [
+   "Names aren't merged automatically; your pick applies to this report only."
+  ],
+  "正在查詢學生…": [
+   "Searching students…"
+  ],
+  "本頁找到 {count} 位學生。": [
+   "{count} students on this page."
+  ],
+  "載入更多學生": [
+   "More students"
+  ],
+  "正在讀取 {name} 的報名…": [
+   "Reading {name}'s enrollments…"
+  ],
+  "選擇與原站表單對應的報名（本次確認）。": [
+   "Pick the enrollment matching the site form (this time only)."
+  ],
+  "沒有可讀取的報名；可搜尋其他學生或使用範本。": [
+   "No readable enrollments; search another student or use a template."
+  ],
+  "載入更多報名": [
+   "More enrollments"
+  ],
+  "查詢學生": [
+   "Search"
+  ],
+  "開啟工作台確認並記住對應": [
+   "Confirm & remember in workspace"
+  ],
+  "正在保存當次確認資訊…": [
+   "Saving your confirmation…"
+  ],
+  "找到 {count} 份。": [
+   "{count} found."
+  ],
+  "當天沒有相符報告。": [
+   "No matching report that day."
+  ],
+  "展開後載入候選。": [
+   "Expand to load candidates."
+  ],
+  "載入更多": [
+   "More"
+  ],
+  "班級未提供": [
+   "no class"
+  ],
+  "教材未提供": [
+   "no material"
+  ],
+  "報名 #{id}": [
+   "Enrollment #{id}"
+  ],
+  "目標日當天": [
+   "Same day"
+  ],
+  "目標日前 {days} 天": [
+   "{days} d before"
+  ],
+  "目標日後 {days} 天": [
+   "{days} d after"
+  ],
+  "正在查詢候選…": [
+   "Loading candidates…"
+  ],
+  "已載入 {count} 份，還有更多。": [
+   "{count} loaded, more available."
+  ],
+  "已載入 {count} 份。": [
+   "{count} loaded."
+  ],
+  "這一頁沒有其他候選；可載入下一頁。": [
+   "No other candidates on this page; load the next."
+  ],
+  "目前沒有其他可讀取的報告。": [
+   "No other readable reports."
+  ],
+  "查詢已因選擇變更而停止，請重新載入候選。": [
+   "The lookup stopped because the selection changed; reload candidates."
+  ],
+  "目標：{student} · {className} · {course} · 報名 {id} · {date}": [
+   "Target: {student} · {className} · {course} · Enr. {id} · {date}"
+  ],
+  "目前原站目標：{student} · {className} · {course} · 報名 {id} · {date}": [
+   "Site target: {student} · {className} · {course} · Enr. {id} · {date}"
+  ],
+  "學生 {id}": [
+   "Student {id}"
+  ],
+  "班級名稱未提供": [
+   "no class name"
+  ],
+  "課程名稱未提供": [
+   "no course name"
+  ],
+  "依距離目標日 {date} 排序；不同日期或報名的內容只作範本。": [
+   "Sorted by distance from {date}; other dates or enrollments are templates only."
+  ],
+  "日期尚未確認：暫以原站時區（台北）的今天排序。補足日期後不會自動改選報告。": [
+   "Date not confirmed: sorted by today in Taipei time. Adding the date won't change your pick."
+  ],
+  "當天相符": [
+   "Same day"
+  ],
+  "同學生、同課程的其他報告": [
+   "Same student & course"
+  ],
+  "同學生、其他課程": [
+   "Same student, other courses"
+  ],
+  "已保存的歷史紀錄（範本）": [
+   "Saved history (templates)"
+  ],
+  "目前連線未提供依目標日期排序的候選；仍可手動搜尋及選取報告。": [
+   "This connection doesn't sort by target date; you can still search and pick a report."
+  ],
+  "搜尋其他學生或日期的報告": [
+   "Search other students or dates"
+  ],
+  "學生、課程或日期關鍵字": [
+   "Student, course or date"
+  ],
+  "開始日期": [
+   "From"
+  ],
+  "結束日期": [
+   "To"
+  ],
+  "搜尋可讀取報告": [
+   "Search reports"
+  ],
+  "正在搜尋可讀取報告…": [
+   "Searching reports…"
+  ],
+  "本頁找到 {count} 份。其他學生或日期的報告只作範本。": [
+   "{count} on this page. Other students or dates are templates only."
+  ],
+  "欄位記憶暫時無法讀取：{message} 可先核對已驗證建議。": [
+   "Can't read field memory: {message} You can still check verified suggestions."
+  ],
+  "正在讀取所選報告內容…": [
+   "Reading the selected report…"
+  ],
+  "所選報告已無法讀取，請重新搜尋。": [
+   "Can't read the selected report; search again."
+  ],
+  "2 · 已選擇報告 · {date}": [
+   "2 · Report selected · {date}"
+  ],
+  "範本的學生或日期與原站表單不同。套用前需勾選確認；只會複製欄位，不改變身份對應。": [
+   "The template's student or date differs from the site form. Confirm before applying; only fields are copied, identity links stay."
+  ],
+  "學生與日期符合目前表單。": [
+   "Student and date match this form."
+  ],
+  "EduLog 更新時間：{time}": [
+   "EduLog updated: {time}"
+  ],
+  "查看 EduLog 報名與報告": [
+   "Open EduLog enrollment & report"
+  ],
+  "尚無可靠前端網址；請重新檢查連線。": [
+   "No reliable app URL; check the connection."
+  ],
+  "查看原站報告連結": [
+   "Open site report link"
+  ],
+  "套用{label}": [
+   "Apply {label}"
+  ],
+  "（內部紀錄，預設不套用）": [
+   " (internal; off by default)"
+  ],
+  "原站目前：\n{value}": [
+   "Site now:\n{value}"
+  ],
+  "空白": [
+   "blank"
+  ],
+  "未填寫": [
+   "empty"
+  ],
+  "已對應建議；請核對": [
+   "Suggestion mapped; check it"
+  ],
+  "請人工選擇來源欄位選項": [
+   "Pick the site option manually"
+  ],
+  "預填{label}": [
+   "Prefill {label}"
+  ],
+  "需要您確認教材：原站選項未能唯一對應，請核對來源原文及實際選項。": [
+   "Confirm the material: the site option didn't match uniquely; check the source text and options."
+  ],
+  "需要您確認選項：EduLog 值缺漏或無已驗證對應，請選擇實際原站選項。": [
+   "Confirm the option: the EduLog value is missing or unmapped; pick the site option."
+  ],
+  "原站欄位目前停用，請先在原站完成連動操作，再重新核對。": [
+   "This site field is disabled; finish the linked step on the site, then recheck."
+  ],
+  "內容一致，保留原站；不需覆寫。": [
+   "Same content; keeping the site value."
+  ],
+  "我確認覆寫目前原站內容": [
+   "Overwrite the current site content"
+  ],
+  "我已核對，確認使用其他學生或日期的報告作為範本": [
+   "I checked; use another student's or date's report as a template"
+  ],
+  "我另外確認允許複製內部紀錄": [
+   "Also allow copying internal notes"
+  ],
+  "套用已勾選欄位": [
+   "Apply checked fields"
+  ],
+  "請核對所選欄位；原站確認與送出仍由老師操作。": [
+   "Check the selected fields; you still confirm and submit on the site."
+  ],
+  "套用 {count} 個欄位": [
+   "Apply {count} fields"
+  ],
+  "（覆寫 {count}）": [
+   " ({count} overwrite)"
+  ],
+  "可預覽與編輯預填草稿；套用前請先在第 1 步確認完整上課日期。": [
+   "You can preview and edit the draft; confirm the full date in step 1 before applying."
+  ],
+  "請檢查學生、日期及每個欄位；原站表單不會自動送出。": [
+   "Check the student, date and each field; the site form isn't submitted automatically."
+  ],
+  "教材識別碼 {id}（請核對原站選項）": [
+   "Material ID {id} (check the site option)"
+  ],
+  "未填教材": [
+   "No material"
+  ],
+  "原站表單內容已改變，請重新核對後再預填。": [
+   "The site form changed; recheck before prefilling."
+  ],
+  "請先確認完整上課日期。": [
+   "Confirm the full lesson date first."
+  ],
+  "請先確認範本學生或日期與目前表單不同。": [
+   "Confirm that the template's student or date differs first."
+  ],
+  "內部紀錄需要另外確認。": [
+   "Internal notes need a separate confirmation."
+  ],
+  "「{label}」已有原站內容，請確認是否覆寫。": [
+   "\"{label}\" has site content; confirm the overwrite."
+  ],
+  "請人工選擇有效的「{label}」原站選項。": [
+   "Pick a valid site option for \"{label}\"."
+  ],
+  "請至少勾選一個要套用的欄位。": [
+   "Check at least one field."
+  ],
+  "正在核對版本並套用欄位…": [
+   "Checking version and applying…"
+  ],
+  "已套用 {count} 個欄位，待人工送出。請檢查原生表單內容。": [
+   "{count} fields applied; submit on the site after checking the form."
+  ],
+  "本機工作紀錄暫時未保存，請勿重複套用。": [
+   " The local log wasn't saved; don't apply again."
+  ],
+  "4 · 查看已套用欄位（待人工送出）": [
+   "4 · Applied fields (submit on site)"
+  ],
+  "已確認套用": [
+   "applied"
+  ],
+  "請在原站核對結果": [
+   "check on site"
+  ],
+  "切換至原站表單檢查": [
+   "Switch to site form"
+  ],
+  "已套用；請檢查原站": [
+   "Applied; check the site"
+  ],
+  "部分套用：請檢查原站並重新核對": [
+   "Partly applied: check the site and recheck"
+  ],
+  "{label} · 原站目前：{value}": [
+   "{label} · site now: {value}"
+  ],
+  "查看原站表單": [
+   "Open site form"
+  ],
+  "部分套用；請重新核對": [
+   "Partly applied; recheck"
+  ],
+  "正在驗證連線並查詢這位學生當天的報告…": [
+   "Verifying and looking up this student's report for the day…"
+  ],
+  "EduLog 助手未取得完整報告資料。請確認此頁網址與報告表單後重新核對。": [
+   "The assistant didn't get full report data. Check this page's URL and form, then recheck."
+  ],
+  "原站報告": [
+   "Site report"
+  ],
+  " · 使用者確認": [
+   " · confirmed by you"
+  ],
+  "請先連接 EduLog，配對完成後再重新核對。": [
+   "Connect EduLog first, then recheck after pairing."
+  ],
+  "此學生尚未同步到 EduLog。同步本班後即可預填。": [
+   "This student isn't in EduLog yet. Sync the class to prefill."
+  ],
+  "找到一份相符報告。": [
+   "Found 1 matching report."
+  ],
+  "已查詢同一日期報告：{count} 份。": [
+   "{count} reports on the same date."
+  ],
+  "所選報告已無法讀取；目前預填草稿仍保留。": [
+   "Can't read the selected report; your draft is kept."
+  ],
+  "EduLog 報告已更新；已保留預填草稿，請重新核對後再套用。": [
+   "The EduLog report changed; draft kept. Recheck before applying."
+  ],
+  "連接 EduLog 以啟用報告助手": [
+   "Connect EduLog to use the assistant"
+  ],
+  "課程／教材": [
+   "Course/material"
+  ],
+  "課程完成狀況": [
+   "Completion"
+  ],
+  "學習狀態": [
+   "Learning status"
+  ],
+  "課程與進度": [
+   "Course & progress"
+  ],
+  "評語與聯絡": [
+   "Comments & contact"
+  ],
+  "其他欄位": [
+   "Other fields"
   ]
 })

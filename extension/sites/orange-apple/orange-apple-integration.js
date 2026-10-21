@@ -1,5 +1,7 @@
 (() => {
   const ORIGIN = 'https://corp.orangeapple.co'
+  // UI wording goes through the shared phrasebook (zh-TW / zh-CN / en); data stays in params.
+  const tx = (text, params = {}) => globalThis.edulogUi?.tx(text, params) ?? String(text).replace(/\{(\w+)\}/g, (_, name) => String(params[name] ?? ''))
   const text = node => node?.textContent?.trim().replace(/\s+/g, ' ').slice(0, 256) || ''
   const path = value => { try { const u = new URL(value, ORIGIN); return u.origin === ORIGIN ? u.pathname : '' } catch { return '' } }
   const links = node => [...node.querySelectorAll('a[href]')].map(a => ({ path: path(a.getAttribute('href')), node: a }))
@@ -60,7 +62,7 @@
   }
   async function readForm(doc, targetForm = getForm(doc)) {
     const form = targetForm
-    if (!form) throw new Error('請先在原站開啟學生的「記錄」編輯視窗。')
+    if (!form) throw new Error(tx('請先在原站開啟學生的「記錄」編輯視窗。'))
     const action = path(form.getAttribute('action')), ids = action.match(/^\/dt_admissions\/(\d+)\/reports\/(\d+)$/)
     if (!forms.has(form)) forms.set(form, crypto.randomUUID())
     const values = fields.flatMap(([key, label, selector]) => {
@@ -84,14 +86,14 @@
   }
   async function supplementForm(doc,input) {
     const before=await readForm(doc)
-    if(before.formId!==input.formId || before.fingerprint!==input.fingerprint)throw new Error('表單或來源證據已改變，請重新核對。')
+    if(before.formId!==input.formId || before.fingerprint!==input.fingerprint)throw new Error(tx('表單或來源證據已改變，請重新核對。'))
     const context=contexts.get(before.action)||{values:[],ranges:[]}
     const evidence=[before.title,...context.values], evidenceKey=JSON.stringify({evidence,ranges:context.ranges,history:context.history||null})
     if(input.clear){answers.delete(before.action);return readForm(doc)}
     if(input.clearEnrollment){const saved=answers.get(before.action);if(saved){delete saved.enrollmentId;delete saved.binding;if(!saved.date)answers.delete(before.action)}return readForm(doc)}
-    if(input.date && (!dates.parse(input.date).date || dates.parse(input.date).date!==input.date))throw new Error('請選擇有效的完整上課日期。')
-    if(input.date && before.dateInfo.conflict && input.conflictAcknowledged!==true)throw new Error('請先確認已核對矛盾的來源日期。')
-    if(input.enrollmentId && !/^[a-f0-9-]{36}$/i.test(input.enrollmentId))throw new Error('報名識別碼格式不正確。')
+    if(input.date && (!dates.parse(input.date).date || dates.parse(input.date).date!==input.date))throw new Error(tx('請選擇有效的完整上課日期。'))
+    if(input.date && before.dateInfo.conflict && input.conflictAcknowledged!==true)throw new Error(tx('請先確認已核對矛盾的來源日期。'))
+    if(input.enrollmentId && !/^[a-f0-9-]{36}$/i.test(input.enrollmentId))throw new Error(tx('報名識別碼格式不正確。'))
     answers.set(before.action,{...answers.get(before.action),evidenceKey,...(input.date?{date:input.date}:{}),...(input.enrollmentId?{enrollmentId:input.enrollmentId,binding:input.binding||null}:{})})
     return readForm(doc)
   }
@@ -100,7 +102,7 @@
     if(before.date)return before
     if(!contexts.has(before.action))contexts.set(before.action,{values:[],ranges:[]})
     const records=extractHistory(await readPath(`/dt_admissions/${before.admissionId}`),before.admissionId)
-    if(getForm(doc)!==nativeForm || (await readForm(doc)).fingerprint!==before.fingerprint)throw new Error('來源表單已改變，歷史日期回應已忽略。')
+    if(getForm(doc)!==nativeForm || (await readForm(doc)).fingerprint!==before.fingerprint)throw new Error(tx('來源表單已改變，歷史日期回應已忽略。'))
     const matches=records.filter(r=>r.source_id===before.reportId)
     const context=contexts.get(before.action)
     if(matches.length){context.entryValues||=context.values;const historyDates=[...new Set(matches.map(r=>r.date))];context.values=[...context.entryValues,...historyDates];context.history=historyDates.join('|')}
@@ -108,29 +110,29 @@
   }
   async function applyForm(doc, input) {
     const before = await readForm(doc)
-    if (before.fingerprint !== input.fingerprint || before.formId !== input.formId || before.reportId !== input.reportId) throw new Error('原站表單或內容已變更，請重新檢查欄位。')
-    if (!Array.isArray(input.fields) || input.fields.length > fields.length || new Set(input.fields.map(f => f.key)).size !== input.fields.length) throw new Error('預填欄位格式不正確。')
+    if (before.fingerprint !== input.fingerprint || before.formId !== input.formId || before.reportId !== input.reportId) throw new Error(tx('原站表單或內容已變更，請重新檢查欄位。'))
+    if (!Array.isArray(input.fields) || input.fields.length > fields.length || new Set(input.fields.map(f => f.key)).size !== input.fields.length) throw new Error(tx('預填欄位格式不正確。'))
     const form = getForm(doc), operations = []
     for (const item of input.fields) {
       const spec = fields.find(f => f[0] === item.key), snapshot = before.fields.find(f => f.key === item.key)
-      if (!spec || !snapshot || snapshot.disabled || typeof item.value !== 'string' || item.value.length > 10000) throw new Error('目標欄位不可預填。')
-      if (snapshot.internal && item.includeInternal !== true) throw new Error('內部紀錄尚未確認。')
-      if (snapshot.value && snapshot.value !== item.value && item.overwrite !== true) throw new Error('原站已有內容，請明確確認覆寫。')
-      if (snapshot.type !== 'text' && !snapshot.options.some(o => o.value === item.value && !o.disabled)) throw new Error('原站選項已變更，請人工選擇。')
+      if (!spec || !snapshot || snapshot.disabled || typeof item.value !== 'string' || item.value.length > 10000) throw new Error(tx('目標欄位不可預填。'))
+      if (snapshot.internal && item.includeInternal !== true) throw new Error(tx('內部紀錄尚未確認。'))
+      if (snapshot.value && snapshot.value !== item.value && item.overwrite !== true) throw new Error(tx('原站已有內容，請明確確認覆寫。'))
+      if (snapshot.type !== 'text' && !snapshot.options.some(o => o.value === item.value && !o.disabled)) throw new Error(tx('原站選項已變更，請人工選擇。'))
       operations.push({ item, nodes: [...form.querySelectorAll(spec[2])], type: snapshot.type })
     }
-    if (path(form.getAttribute('action')) !== before.action || getForm(doc) !== form) throw new Error('原站目標表單已變更。')
+    if (path(form.getAttribute('action')) !== before.action || getForm(doc) !== form) throw new Error(tx('原站目標表單已變更。'))
     for (const field of before.fields) {
       const selector = fields.find(f => f[0] === field.key)[2], nodes = [...form.querySelectorAll(selector)]
       const current = field.type === 'radio' ? nodes.find(n => n.checked)?.value || '' : nodes[0]?.value
-      if (current !== field.value) throw new Error('原站內容已變更，請重新檢查欄位。')
+      if (current !== field.value) throw new Error(tx('原站內容已變更，請重新檢查欄位。'))
     }
     // Validate every field before modifying any native node. Never submit/click
     // confirmation controls. Native change events retain original dependencies.
     const appliedFields=[]
     operations.sort((a,b)=>fields.findIndex(f=>f[0]===a.item.key)-fields.findIndex(f=>f[0]===b.item.key))
     for (const { item, nodes, type } of operations) {
-      if (getForm(doc) !== form || nodes.some(n => !n.isConnected || n.disabled) || type==='select'&&![...nodes[0].options].some(o=>o.value===item.value&&!o.disabled)) {const error=new Error(`原生連動已改變「${before.fields.find(f=>f.key===item.key)?.label}」；已套用 ${appliedFields.length} 個欄位，請重新核對，不會自動重試。`);error.code='SOURCE_PARTIAL_APPLY';error.appliedFields=appliedFields;throw error}
+      if (getForm(doc) !== form || nodes.some(n => !n.isConnected || n.disabled) || type==='select'&&![...nodes[0].options].some(o=>o.value===item.value&&!o.disabled)) {const error=new Error(tx('原生連動已改變「{field}」；已套用 {count} 個欄位，請重新核對，不會自動重試。',{field:before.fields.find(f=>f.key===item.key)?.label,count:appliedFields.length}));error.code='SOURCE_PARTIAL_APPLY';error.appliedFields=appliedFields;throw error}
       if (type === 'radio') { for (const n of nodes) n.checked = n.value === item.value }
       else nodes[0].value = item.value
       const node = type === 'radio' ? nodes.find(n => n.checked) : nodes[0]
@@ -139,7 +141,7 @@
       appliedFields.push(item.key)
     }
     const after = await readForm(doc)
-    if (after.formId !== before.formId || operations.some(({ item }) => after.fields.find(f => f.key === item.key)?.value !== item.value)) {const error=new Error('原生欄位已變更，請檢查已套用內容，不會自動重試。');error.code='SOURCE_PARTIAL_APPLY';error.appliedFields=appliedFields;throw error}
+    if (after.formId !== before.formId || operations.some(({ item }) => after.fields.find(f => f.key === item.key)?.value !== item.value)) {const error=new Error(tx('原生欄位已變更，請檢查已套用內容，不會自動重試。'));error.code='SOURCE_PARTIAL_APPLY';error.appliedFields=appliedFields;throw error}
     return { status: 'pending_confirmation', applied: operations.length, target: after }
   }
 
@@ -231,7 +233,7 @@
   }
   function extractClass(doc, sourcePath) {
     const classId = path(sourcePath).match(/^\/courses\/dt\/(\d+)(?:\/lesson[-_]reports)?$/)?.[1]
-    if (!classId || !doc.querySelector('#page-body > .content')) throw new Error('此頁無法辨識班級，請從班級工作區開始。')
+    if (!classId || !doc.querySelector('#page-body > .content')) throw new Error(tx('此頁無法辨識班級，請從班級工作區開始。'))
     const records = [], issues = [], students = new Map(), admissions = new Map(), reportIds = new Set()
     const title = text(doc.querySelector('#page-body > .content h2, #page-body > .content h1')) || `班級 ${classId}`
     for (const row of doc.querySelectorAll('#reports tbody tr, #students-table tbody tr')) {
@@ -367,20 +369,20 @@
   }
   async function readReport(record, suppliedUrl, confirmedDate) {
     const editPath=path(suppliedUrl||record.data?.external_link),match=editPath.match(/^\/dt_admissions\/(\d+)\/reports\/(\d+)\/edit$/)
-    if(!match||match[1]!==record.enrollment_source_id||record.source_id&&match[2]!==record.source_id)throw new Error('編輯連結與來源報名／報告不一致。')
-    if(suppliedUrl){const url=new URL(suppliedUrl,ORIGIN);if(url.origin!==ORIGIN||url.search||url.hash||url.username||url.password)throw new Error('請提供原站完整且沒有查詢參數的報告編輯連結。')}
+    if(!match||match[1]!==record.enrollment_source_id||record.source_id&&match[2]!==record.source_id)throw new Error(tx('編輯連結與來源報名／報告不一致。'))
+    if(suppliedUrl){const url=new URL(suppliedUrl,ORIGIN);if(url.origin!==ORIGIN||url.search||url.hash||url.username||url.password)throw new Error(tx('請提供原站完整且沒有查詢參數的報告編輯連結。'))}
     const doc=await readPath(editPath),action=editPath.replace(/\/edit$/,'')
     const native=[...doc.querySelectorAll('form')].filter(f=>path(f.getAttribute('action'))===action)
-    if(native.length!==1)throw new Error('編輯頁未提供唯一且符合目標的原生報告表單。')
+    if(native.length!==1)throw new Error(tx('編輯頁未提供唯一且符合目標的原生報告表單。'))
     const saved=await readForm(doc,native[0])
     const sourceReportClassId=reportSessionClass(doc)
     const ownDates=[...doc.querySelectorAll('[data-date],input[type=date]')].filter(n=>!n.closest('form')||n.closest('form')===native[0]).map(n=>n.getAttribute('data-date')||n.value)
     const storedDateEvidence=record.dateEvidence||{}
     const dateInfo=dates.resolve([record.date||'',record.dateRaw||'',...record.historyDateValues||[],storedDateEvidence.explicit||'',...storedDateEvidence.headers||[],storedDateEvidence.cellText||'',saved.title,...ownDates],storedDateEvidence.courseRange?.length===2?[storedDateEvidence.courseRange]:[])
-    if(record.dateInfo?.conflict||dateInfo.conflict)throw new Error('列表與編輯頁的上課日期矛盾，請核對原站後重讀。')
-    if(confirmedDate&&(!dates.parse(confirmedDate).date||dates.parse(confirmedDate).date!==confirmedDate))throw new Error('請提供有效完整上課日期。')
-    if(confirmedDate&&dateInfo.date&&confirmedDate!==dateInfo.date)throw new Error('確認日期與可靠來源日期不同，請先核對原站。')
-    if(confirmedDate&&record.dateRaw){const checked=dates.resolve([record.dateRaw,confirmedDate],[]);if(checked.conflict)throw new Error('確認日期與來源月日不同。')}
+    if(record.dateInfo?.conflict||dateInfo.conflict)throw new Error(tx('列表與編輯頁的上課日期矛盾，請核對原站後重讀。'))
+    if(confirmedDate&&(!dates.parse(confirmedDate).date||dates.parse(confirmedDate).date!==confirmedDate))throw new Error(tx('請提供有效完整上課日期。'))
+    if(confirmedDate&&dateInfo.date&&confirmedDate!==dateInfo.date)throw new Error(tx('確認日期與可靠來源日期不同，請先核對原站。'))
+    if(confirmedDate&&record.dateRaw){const checked=dates.resolve([record.dateRaw,confirmedDate],[]);if(checked.conflict)throw new Error(tx('確認日期與來源月日不同。'))}
     const date=confirmedDate||dateInfo.date||record.date||null
     const data={...record.data,external_link:ORIGIN+editPath},needs=[],sourceFieldConflicts=[]
     let sourceLearningStatus=record.sourceLearningStatus||null,sourceLearningStatusRaw=record.sourceLearningStatusRaw||''
@@ -416,7 +418,7 @@
       sourceEvidence:mergeEvidence(record.sourceEvidence||[],[{sourcePath:editPath,table:'已儲存報告欄位',row:1,capturedAt:new Date().toISOString(),fields:raw}])}
   }
   async function readHistory(sourcePath,input={}) {
-    if(!/^\/dt_admissions\/\d+$/.test(sourcePath))throw new Error('來源路徑尚未驗證。')
+    if(!/^\/dt_admissions\/\d+$/.test(sourcePath))throw new Error(tx('來源路徑尚未驗證。'))
     const currentAdmission=sourcePath.split('/').pop(),currentDoc=await readPath(sourcePath)
     let records=extractHistory(currentDoc,currentAdmission)
     const currentStudent=admissionStudent(currentDoc)
@@ -449,8 +451,8 @@
     return records
   }
   async function readPreviousTeaching(sourcePath,beforeDate) {
-    if(!/^\/dt_admissions\/\d+$/.test(sourcePath))throw Object.assign(new Error('來源報名位置尚未驗證。'),{code:'SOURCE_PATH_UNAVAILABLE'})
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(beforeDate||'')||!dates.parse(beforeDate).date)throw Object.assign(new Error('原站未提供可核對的完整課次日期，無法判斷上次教學。'),{code:'SESSION_DATE_UNAVAILABLE'})
+    if(!/^\/dt_admissions\/\d+$/.test(sourcePath))throw Object.assign(new Error(tx('來源報名位置尚未驗證。')),{code:'SOURCE_PATH_UNAVAILABLE'})
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(beforeDate||'')||!dates.parse(beforeDate).date)throw Object.assign(new Error(tx('原站未提供可核對的完整課次日期，無法判斷上次教學。')),{code:'SESSION_DATE_UNAVAILABLE'})
     const admissionId=sourcePath.split('/').pop(),listed=await readHistory(sourcePath,{listOnly:true})
     const groups=new Map()
     for(const record of listed){
@@ -479,21 +481,21 @@
     return {status:'none',readAt:new Date().toISOString()}
   }
   async function resolveSessionDate(sourcePath, suppliedUrl) {
-    if(!/^\/dt_admissions\/\d+$/.test(sourcePath))throw Object.assign(new Error('來源報名位置尚未驗證。'),{code:'SOURCE_PATH_UNAVAILABLE'})
+    if(!/^\/dt_admissions\/\d+$/.test(sourcePath))throw Object.assign(new Error(tx('來源報名位置尚未驗證。')),{code:'SOURCE_PATH_UNAVAILABLE'})
     const url=new URL(suppliedUrl,ORIGIN),match=url.pathname.match(/^\/dt_admissions\/(\d+)\/reports\/(\d+)\/edit\/?$/)
-    if(url.origin!==ORIGIN||url.search||url.hash||url.username||url.password||!match||match[1]!==sourcePath.split('/').pop())throw Object.assign(new Error('課次報告連結與來源報名不一致。'),{code:'SOURCE_REPORT_MISMATCH'})
+    if(url.origin!==ORIGIN||url.search||url.hash||url.username||url.password||!match||match[1]!==sourcePath.split('/').pop())throw Object.assign(new Error(tx('課次報告連結與來源報名不一致。')),{code:'SOURCE_REPORT_MISMATCH'})
     const doc=await readPath(sourcePath),record=extractHistory(doc,sourcePath.split('/').pop()).find(item=>item.source_id===match[2]&&item.enrollment_source_id===match[1])
-    if(!record)throw Object.assign(new Error('目前報名中找不到所選課次的報告。'),{code:'SOURCE_REPORT_NOT_FOUND'})
+    if(!record)throw Object.assign(new Error(tx('目前報名中找不到所選課次的報告。')),{code:'SOURCE_REPORT_NOT_FOUND'})
     const full=await readReport(record,url.href)
-    if(!full.date)throw Object.assign(new Error('所選課次的原站報告沒有提供完整日期。'),{code:'SESSION_DATE_UNAVAILABLE'})
+    if(!full.date)throw Object.assign(new Error(tx('所選課次的原站報告沒有提供完整日期。')),{code:'SESSION_DATE_UNAVAILABLE'})
     return {date:full.date,reportId:full.source_id,enrollmentId:full.enrollment_source_id}
   }
   async function readPath(sourcePath) {
-    if (!/^\/(?:courses\/dt\/\d+(?:\/lesson[-_]reports)?|dt_admissions\/\d+|dt_admissions\/\d+\/reports\/\d+\/edit)$/.test(sourcePath)) throw new Error('來源路徑尚未驗證。')
+    if (!/^\/(?:courses\/dt\/\d+(?:\/lesson[-_]reports)?|dt_admissions\/\d+|dt_admissions\/\d+\/reports\/\d+\/edit)$/.test(sourcePath)) throw new Error(tx('來源路徑尚未驗證。'))
     const response = await fetch(`${ORIGIN}${sourcePath}`, { credentials: 'same-origin', redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(15000), headers: { Accept: 'text/html' } })
-    if (!response.ok || !response.headers.get('content-type')?.includes('text/html')) throw new Error('來源頁暫時無法讀取或權限不足。')
+    if (!response.ok || !response.headers.get('content-type')?.includes('text/html')) throw new Error(tx('來源頁暫時無法讀取或權限不足。'))
     const html = await response.text()
-    if (html.length > 5_000_000) throw new Error('來源頁超過可處理大小。')
+    if (html.length > 5_000_000) throw new Error(tx('來源頁超過可處理大小。'))
     return new DOMParser().parseFromString(html, 'text/html')
   }
   async function collect(doc, input) {
@@ -509,7 +511,7 @@
       snapshot.admissionPaths = [...new Set([...snapshot.admissionPaths, ...richer.admissionPaths])]
     }
     if(input.history)for(const sourcePath of snapshot.admissionPaths){
-      if(doc.location.pathname!==initialPath)throw new Error('來源頁已導覽，工作已暫停。')
+      if(doc.location.pathname!==initialPath)throw new Error(tx('來源頁已導覽，工作已暫停。'))
       try{for(const record of await readHistory(sourcePath,input)){
         if(record.kind==='attendance')record.sourceClassId=snapshot.classId
         const index=record.source_id?snapshot.records.findIndex(r=>r.kind===record.kind&&r.source_id===record.source_id):-1
@@ -528,7 +530,7 @@
   if (globalThis.edulogRuntime && typeof document !== 'undefined') globalThis.edulogRuntime.listen((message, sender, respond) => {
     if (sender.id !== chrome.runtime.id || !['integration-context', 'integration-collect', 'integration-history', 'integration-history-report', 'integration-form', 'integration-supplement', 'integration-resolve-date', 'integration-apply', 'integration-apply-inline'].includes(message?.type)) return
     const run = async () => {
-      if (message.expectedPath && message.expectedPath !== location.pathname) throw new Error('來源分頁已變更，請重新選擇來源。')
+      if (message.expectedPath && message.expectedPath !== location.pathname) throw new Error(tx('來源分頁已變更，請重新選擇來源。'))
       if (message.type === 'integration-context') return globalThis.edulogSourceIntegration.context(document)
       if (message.type === 'integration-collect') return collect(document, { history: message.history === true })
       if (message.type === 'integration-history') return globalThis.edulogSourceIntegration.readHistory(message.historyPath,{...message.input,listOnly:true})
