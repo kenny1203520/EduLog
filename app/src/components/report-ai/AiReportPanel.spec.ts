@@ -176,4 +176,26 @@ describe('AiReportPanel', () => {
         expect(wrapper.find('#ai-tab-generate').attributes('aria-selected')).toBe('true')
         expect(wrapper.text()).toContain('先前的版本')
     })
+
+    it('does not close on Escape from an input method or inside a text field', async () => {
+        service.bootstrap.mockResolvedValue(bootstrap())
+        const wrapper = mount(AiReportPanel, { props: { show: true, reportId: 'r1' }, global: { plugins: [i18n] }, attachTo: document.body })
+        await flushPromises()
+        const focus = document.body.querySelector<HTMLTextAreaElement>('#ai-settings-body textarea')!
+        focus.focus()
+
+        // 注音 / 倉頡: Esc drops the candidate list while composing.
+        focus.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', isComposing: true, bubbles: true }))
+        expect(wrapper.emitted('close')).toBeUndefined()
+
+        // Inside a field the first Esc only leaves the field…
+        focus.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+        expect(wrapper.emitted('close')).toBeUndefined()
+        expect(document.activeElement).not.toBe(focus)
+
+        // …and the next one closes the panel.
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+        expect(wrapper.emitted('close')).toHaveLength(1)
+        wrapper.unmount()
+    })
 })

@@ -126,8 +126,22 @@ function openFromHistory(entry: GenerationHistoryEntry) {
     tab.value = 'generate'
 }
 
+/**
+ * Escape closes the panel, except:
+ * - while an input method is composing (注音 / 倉頡 use Esc to drop the
+ *   candidate list; keyCode 229 covers browsers that do not set isComposing);
+ * - when something already handled it (the 「更多」 menu);
+ * - inside a text field or select, where the first Esc only leaves the field.
+ */
 function handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape' && props.show && !confirmReplace.value) emit('close')
+    if (event.key !== 'Escape' || !props.show || confirmReplace.value) return
+    if (event.isComposing || event.keyCode === 229 || event.defaultPrevented) return
+    const target = event.target as HTMLElement | null
+    if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) {
+        target.blur()
+        return
+    }
+    emit('close')
 }
 onMounted(() => window.addEventListener('keydown', handleKeydown))
 onBeforeUnmount(() => {
