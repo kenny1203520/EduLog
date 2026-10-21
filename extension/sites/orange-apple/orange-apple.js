@@ -2,6 +2,8 @@
 (() => {
   const lexicon = globalThis.edulogSiteLexicon, model = globalThis.edulogSiteModel
   const words = lexicon.text
+  // UI wording goes through the shared phrasebook (zh-TW / zh-CN / en); data stays in params.
+  const tx = (text, params = {}) => globalThis.edulogUi?.tx(text, params) ?? String(text).replace(/\{(\w+)\}/g, (_, name) => String(params[name] ?? ''))
   const matchPage = model.matchPage
   function createScope(doc) {
     const changes = new Map(), added = [], listeners = [], moves = [], texts = new Map()
@@ -73,7 +75,7 @@
       const field = element('label')
       field.append(element('span', label))
       const input = element('input')
-      input.type = 'search'; input.placeholder = '搜尋目前頁面的學生'
+      input.type = 'search'; input.placeholder = tx('搜尋目前頁面的學生')
       field.append(input)
       const count = element('span')
       count.setAttribute('role', 'status'); count.setAttribute('aria-live', 'polite')
@@ -93,13 +95,13 @@
       if (unique.length) {
         const shortcuts = element('section')
         shortcuts.className = 'edulog-class-shortcuts'
-        shortcuts.setAttribute('aria-label', '我的班級')
-        shortcuts.append(element('h2', '我的班級'))
+        shortcuts.setAttribute('aria-label', tx('我的班級'))
+        shortcuts.append(element('h2', tx('我的班級')))
         const grid = element('div')
         for (const original of unique) {
           const link = element('a')
           link.href = original.href
-          link.append(element('strong', original.textContent.trim()), element('span', '開啟班級工作區 →'))
+          link.append(element('strong', original.textContent.trim()), element('span', tx('開啟班級工作區 →')))
           grid.append(link)
         }
         shortcuts.append(grid); content.prepend(shortcuts); added.push(shortcuts)
@@ -109,7 +111,7 @@
     const students = content.querySelector(lexicon.selectors.studentsTable)
     if (students) {
       view.expandedStudents ||= new WeakSet()
-      const { input, count } = controls(students, '目前名單篩選')
+      const { input, count } = controls(students, tx('目前名單篩選'))
       input.dataset.edulogSearch = 'students'
       input.value = view.studentQuery || ''
       const headerRow = [...students.rows].find(r => [...r.cells].some(c => words.nameHeader.test(c.textContent))) || students.tHead?.rows[0]
@@ -137,16 +139,16 @@
           const nameCell = row.cells[nameIndex]
           mark(nameCell, 'data-edulog-name', '')
           if (nameCell && !nameCell.querySelector('[data-edulog-expand]')) {
-            const button = element('button', '更多資料')
+            const button = element('button', tx('更多資料'))
             button.type = 'button'; button.dataset.edulogExpand = ''
             const wasExpanded = view.expandedStudents.has(row)
             button.setAttribute('aria-expanded', String(wasExpanded))
-            button.textContent = wasExpanded ? '收合資料' : '更多資料'
+            button.textContent = tx(wasExpanded ? '收合資料' : '更多資料')
             mark(row, 'data-edulog-expanded', wasExpanded ? '' : null)
             listen(button, 'click', () => {
               const expanded = button.getAttribute('aria-expanded') !== 'true'
               button.setAttribute('aria-expanded', String(expanded))
-              button.textContent = expanded ? '收合資料' : '更多資料'
+              button.textContent = tx(expanded ? '收合資料' : '更多資料')
               if (expanded) view.expandedStudents.add(row)
               else view.expandedStudents.delete(row)
               mark(row, 'data-edulog-expanded', expanded ? '' : null)
@@ -155,7 +157,7 @@
           }
         }
         rosterView?.render(searched)
-        const text = `顯示 ${visible} / ${rows.length} 位學生`
+        const text = tx('顯示 {visible} / {total} 位學生', { visible, total: rows.length })
         if (count.textContent !== text) count.textContent = text
         view.studentQuery = input.value
       }
@@ -167,7 +169,7 @@
     const reports = content.querySelector(lexicon.selectors.reportsTable)
     if (reports) {
       const reportScrollRegion=reports.closest('[data-edulog-scroll="reports"]')||reports.parentElement
-      const { box, input, count } = controls(reports, '報告學生搜尋')
+      const { box, input, count } = controls(reports, tx('報告學生搜尋'))
       count.remove() // the filter chips carry the counts
       const cardsApi = globalThis.edulogSiteSessionCards
       const roster = cardsApi ? cardsApi.readRoster(doc) : new Map()
@@ -178,10 +180,10 @@
       input.value = view.reportQuery || ''
       const weekButtons = element('div')
       weekButtons.className = 'edulog-week-tools'
-      weekButtons.setAttribute('role', 'group'); weekButtons.setAttribute('aria-label', '課次與顯示方式')
+      weekButtons.setAttribute('role', 'group'); weekButtons.setAttribute('aria-label', tx('課次與顯示方式'))
       const weeks = model.readWeekColumns(reports.querySelectorAll('tr:first-child th'))
       const selected = model.pickWeek(weeks, view.week)
-      const singleButton=element('button','單堂清單'),compareButton=element('button','三週比較')
+      const singleButton=element('button',tx('單堂清單')),compareButton=element('button',tx('三週比較'))
       singleButton.type=compareButton.type='button';singleButton.dataset.reportMode='single';compareButton.dataset.reportMode='compare'
       listen(singleButton,'click',()=>selectMode('single'));listen(compareButton,'click',()=>selectMode('compare'))
       weekButtons.append(singleButton,compareButton)
@@ -275,24 +277,24 @@
         if(typeof view.updateClassHistoryAvailability==='function')view.updateClassHistoryAvailability()
         view.reportQuery = input.value
       }
-      const historyTools=element('section');historyTools.className='edulog-class-history-tools';historyTools.setAttribute('aria-label','上次教學摘要')
-      const availability=element('p');availability.setAttribute('role','status');availability.setAttribute('aria-live','polite');const availabilityValue=doc.createTextNode(' 0 '),availabilityWeek=element('span');availability.append(element('span','可讀取'),availabilityValue,element('span','位本堂學生的上次教學摘要 · 讀取課次：'),availabilityWeek)
-      const loadAll=element('button','載入此課次全部摘要');loadAll.type='button'
-      const stopAll=element('button','停止載入');stopAll.type='button';stopAll.hidden=true
+      const historyTools=element('section');historyTools.className='edulog-class-history-tools';historyTools.setAttribute('aria-label',tx('上次教學摘要'))
+      const availability=element('p');availability.setAttribute('role','status');availability.setAttribute('aria-live','polite');const availabilityValue=doc.createTextNode(' 0 '),availabilityWeek=element('span');availability.append(element('span',tx('可讀取')),availabilityValue,element('span',tx('位本堂學生的上次教學摘要 · 讀取課次：')),availabilityWeek)
+      const loadAll=element('button',tx('載入此課次全部摘要'));loadAll.type='button'
+      const stopAll=element('button',tx('停止載入'));stopAll.type='button';stopAll.hidden=true
       const progress=element('p');progress.hidden=true;progress.setAttribute('role','status');progress.setAttribute('aria-live','polite')
-      const progressStates=Object.fromEntries(['正在讀取','讀取進度','讀取完成；成功','已停止讀取；已完成的摘要會保留。','讀取失敗'].map(key=>[key,element('span',key)]));for(const item of Object.values(progressStates))item.hidden=true
-      const progressDone=doc.createTextNode(' 0 / 0 '),progressTotal=element('span','位已讀取 · 失敗需重試'),progressFailed=doc.createTextNode(' 0')
+      const progressStates=Object.fromEntries(['正在讀取','讀取進度','讀取完成；成功','已停止讀取；已完成的摘要會保留。','讀取失敗'].map(key=>[key,element('span',tx(key))]));for(const item of Object.values(progressStates))item.hidden=true
+      const progressDone=doc.createTextNode(' 0 / 0 '),progressTotal=element('span',tx('位已讀取 · 失敗需重試')),progressFailed=doc.createTextNode(' 0')
       progress.append(progressStates['正在讀取'],progressDone,progressTotal,progressStates['讀取進度'],progressStates['讀取完成；成功'],progressStates['已停止讀取；已完成的摘要會保留。'],progressFailed)
       progress.append(progressStates['讀取失敗'])
       historyTools.append(availability,loadAll,stopAll,progress)
-      const moreTools=element('details');moreTools.className='edulog-more-tools';moreTools.append(element('summary','更多'),historyTools);box.append(moreTools)
+      const moreTools=element('details');moreTools.className='edulog-more-tools';moreTools.append(element('summary',tx('更多')),historyTools);box.append(moreTools)
       view.classHistoryAvailability=availability
       view.classHistoryAvailabilityValue=availabilityValue
       view.classHistoryAvailabilityWeek=availabilityWeek
       let historyRun=0
       listen(loadAll,'click',async()=>{
         progress.hidden=false
-        if(typeof view.loadClassHistory!=='function'){progress.textContent='目前版本無法載入整班摘要，請重新載入頁面後重試。';return}
+        if(typeof view.loadClassHistory!=='function'){progress.textContent=tx('目前版本無法載入整班摘要，請重新載入頁面後重試。');return}
         const run=++historyRun;loadAll.disabled=true;stopAll.hidden=false
         const total=Number(view.classHistoryEligibleCount)||0
         const showProgress=(label,value)=>{for(const [key,node] of Object.entries(progressStates))node.hidden=key!==label;progressDone.data=` ${value.done} / ${value.total} `;progressFailed.data=` ${value.failed}`}

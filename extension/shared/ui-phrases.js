@@ -336,5 +336,167 @@ globalThis.edulogUi?.registerPhrases({
   ],
   "更新於 {time}": [
    "Updated {time}"
+  ],
+  "搜尋目前頁面的學生": [
+   "Search students on this page"
+  ],
+  "我的班級": [
+   "My classes"
+  ],
+  "開啟班級工作區 →": [
+   "Open class workspace →"
+  ],
+  "目前名單篩選": [
+   "Roster filter"
+  ],
+  "更多資料": [
+   "More info"
+  ],
+  "收合資料": [
+   "Less info"
+  ],
+  "顯示 {visible} / {total} 位學生": [
+   "Showing {visible} / {total} students"
+  ],
+  "報告學生搜尋": [
+   "Search report students"
+  ],
+  "課次與顯示方式": [
+   "Session and view"
+  ],
+  "單堂清單": [
+   "Single session"
+  ],
+  "三週比較": [
+   "Three-week view"
+  ],
+  "上次教學摘要": [
+   "Last lesson summaries"
+  ],
+  "可讀取": [
+   "Available:"
+  ],
+  "位本堂學生的上次教學摘要 · 讀取課次：": [
+   "students' last lesson summaries · session:"
+  ],
+  "載入此課次全部摘要": [
+   "Load all summaries"
+  ],
+  "停止載入": [
+   "Stop"
+  ],
+  "正在讀取": [
+   "Reading"
+  ],
+  "讀取進度": [
+   "Progress"
+  ],
+  "讀取完成；成功": [
+   "Done; succeeded"
+  ],
+  "已停止讀取；已完成的摘要會保留。": [
+   "Stopped; finished summaries are kept."
+  ],
+  "位已讀取 · 失敗需重試": [
+   "read · failed, retry"
+  ],
+  "目前版本無法載入整班摘要，請重新載入頁面後重試。": [
+   "This version can't load class summaries; reload the page and retry."
+  ],
+  "不出席": [
+   "Absent"
+  ],
+  "完整完成": [
+   "All done"
+  ],
+  "尚未完成 · 已填章節": [
+   "Not done · chapters in"
+  ],
+  "尚未完成 · 待補章節": [
+   "Not done · add chapters"
+  ],
+  "跟得上": [
+   "On track"
+  ],
+  "未選": [
+   "Not chosen"
+  ],
+  "已填寫": [
+   "Filled"
+  ],
+  "出席狀況": [
+   "Attendance"
+  ],
+  "不出席原因": [
+   "Absence reason"
+  ],
+  "章節進度": [
+   "Chapter progress"
+  ],
+  "確認學生姓名與上課資訊": [
+   "Confirm student and lesson details"
+  ],
+  "本堂狀態": [
+   "Session status"
+  ],
+  "不出席：只需填寫不出席原因與聯絡欄，其他項目不適用。": [
+   "Absent: only the reason and contact note are needed; other items are N/A."
+  ],
+  "清除評分": [
+   "Clear rating"
+  ],
+  "學習表現片語": [
+   "Performance phrases"
+  ],
+  "片語庫": [
+   "Phrase library"
+  ],
+  "教學部使用": [
+   "Teaching staff only"
+  ],
+  "尚未完成（仍可送出）：": [
+   "Still open (you can still submit):"
+  ],
+  "必要項目都已填寫。": [
+   "All required items are filled."
+  ],
+  "同步本班": [
+   "Sync class"
+  ],
+  "預填本報告": [
+   "Prefill report"
+  ],
+  "開啟工作台": [
+   "Open workspace"
+  ],
+  "教學資料匯入": [
+   "Import data"
+  ],
+  "報告預填": [
+   "Prefill"
+  ],
+  "可在整合工作台操作；未驗證資料需人工處理": [
+   "Available in the workspace; unverified data needs manual review"
+  ],
+  "伺服器尚未支援": [
+   "Not supported by the server yet"
+  ],
+  "EduLog 清晰主題": [
+   "EduLog light theme"
+  ],
+  "套用清晰主題": [
+   "Use light theme"
+  ],
+  "使用原站主題": [
+   "Use site theme"
+  ],
+  "跟隨原站": [
+   "Follow site"
+  ],
+  "原站目前的語言尚未支援；請切回繁體中文以使用 EduLog 功能。": [
+   "The site's current language isn't supported yet; switch it to Traditional Chinese to use EduLog."
+  ],
+  "此頁暫用原站畫面：原站版面可能已更新，EduLog 暫時無法辨識。": [
+   "Showing the site's own page: its layout may have changed and EduLog can't read it yet."
   ]
 })

@@ -142,8 +142,10 @@ button,select{font:inherit;color:inherit}
 .lbl{font-size:var(--edulog-font-caption);font-weight:600;color:var(--edulog-text-secondary)}
 @media(max-width:767px){.btn,.btn-sm,.linkrow,.switch,.prefs-body select{min-height:var(--edulog-touch-target)}.btn-icon{width:var(--edulog-touch-target)}.prefs-body select{font-size:var(--edulog-font-name)}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}`
+  // UI wording goes through the shared phrasebook (zh-TW / zh-CN / en); data stays in params.
+  const tx = (text, params = {}) => globalThis.edulogUi?.tx(text, params) ?? String(text).replace(/\{(\w+)\}/g, (_, name) => String(params[name] ?? ''))
   globalThis.edulogIntegrationUi = Object.freeze({
-    theme: { name: 'EduLog 清晰主題', apply: '套用清晰主題', original: '使用原站主題' },
+    theme: { get name() { return tx('EduLog 清晰主題') }, get apply() { return tx('套用清晰主題') }, get original() { return tx('使用原站主題') } },
     styles,
     icon,
     label,

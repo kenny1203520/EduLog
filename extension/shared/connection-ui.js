@@ -12,6 +12,8 @@
     unavailable: ['連線異常', '暫時無法驗證', '目前連線資料已保留，請確認伺服器可連線後重試。', 'danger'],
     'context-invalidated': ['需要重新開啟', '擴充套件已更新', '請先儲存正在編輯的內容，再重新整理分頁。', 'warn'],
   }
+  // UI wording goes through the shared phrasebook (zh-TW / zh-CN / en); data stays in params.
+  const tx = (text, params = {}) => globalThis.edulogUi?.tx(text, params) ?? String(text).replace(/\{(\w+)\}/g, (_, name) => String(params[name] ?? ''))
   // What the active tab is, so the popup can offer one action for it. Patterns come from
   // the site lexicon; tabs on other hosts (no URL without host permission) are "other".
   function pageContext(href, lexicon = globalThis.edulogSiteLexicon) {
@@ -54,16 +56,16 @@
     tabHeading,
     // The single primary action for a connected popup, by page context.
     primaryAction(context, capabilities = {}) {
-      if (context.kind === 'class') return { flow: 'import', label: '同步本班', icon: 'refresh', ready: capabilities.teaching_data_import === true }
-      if (context.kind === 'report') return { flow: 'prefill', label: '預填本報告', icon: 'sparkles', ready: capabilities.report_prefill === true }
-      return { flow: 'import', label: '開啟工作台', icon: 'dashboard', ready: true }
+      if (context.kind === 'class') return { flow: 'import', label: tx('同步本班'), icon: 'refresh', ready: capabilities.teaching_data_import === true }
+      if (context.kind === 'report') return { flow: 'prefill', label: tx('預填本報告'), icon: 'sparkles', ready: capabilities.report_prefill === true }
+      return { flow: 'import', label: tx('開啟工作台'), icon: 'dashboard', ready: true }
     },
     features(capabilities = {}) {
       // Server capability alone cannot enable a feature without a form adapter.
       return [
-        { label: '教學資料匯入', serverEnabled: capabilities.teaching_data_import === true, available: capabilities.teaching_data_import === true },
-        { label: '報告預填', serverEnabled: capabilities.report_prefill === true, available: capabilities.report_prefill === true },
-      ].map(feature => ({ ...feature, detail: feature.available ? '可在整合工作台操作；未驗證資料需人工處理' : '伺服器尚未支援' }))
+        { label: tx('教學資料匯入'), serverEnabled: capabilities.teaching_data_import === true, available: capabilities.teaching_data_import === true },
+        { label: tx('報告預填'), serverEnabled: capabilities.report_prefill === true, available: capabilities.report_prefill === true },
+      ].map(feature => ({ ...feature, detail: tx(feature.available ? '可在整合工作台操作；未驗證資料需人工處理' : '伺服器尚未支援') }))
     },
   })
 })()

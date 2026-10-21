@@ -17,6 +17,8 @@
     staff: '#dt_admission_lesson_report_typing_error',
     confirm: '#nothing',
   }
+  // UI wording goes through the shared phrasebook (zh-TW / zh-CN / en); data stays in params.
+  const tx = (text, params = {}) => globalThis.edulogUi?.tx(text, params) ?? String(text).replace(/\{(\w+)\}/g, (_, name) => String(params[name] ?? ''))
   const ICONS = { check: ['M7 12.5l3.2 3.2L17 9'], cross: ['M8 8l8 8', 'M16 8l-8 8'], dash: ['M7 12h10'], triangle: ['M12 4l9 16H3z', 'M12 10v4'] }
   function icon(doc, name) {
     const ns = 'http://www.w3.org/2000/svg', svg = doc.createElementNS(ns, 'svg')
@@ -84,12 +86,12 @@
     const dataText = (tag, value, className) => { const node = element(tag); node.textContent = value; if (className) node.className = className; return node }
 
     // 1. Live four-status row at the top of the form.
-    const strip = scope.add(element('ul')); strip.className = 'edulog-card-status edulog-editor-status'; strip.setAttribute('aria-label', '本堂狀態'); strip.setAttribute('aria-live', 'polite')
+    const strip = scope.add(element('ul')); strip.className = 'edulog-card-status edulog-editor-status'; strip.setAttribute('aria-label', tx('本堂狀態')); strip.setAttribute('aria-live', 'polite')
     form.prepend(strip)
 
     // 2. Absent: only the reason and the parent contact field apply.
     const notApplicable = [sections.get('課程與專案進度'), sections.get('課堂評量'), sections.get('內部紀錄'), field('feedback')?.closest('.form-group')].filter(Boolean)
-    const absentNote = scope.add(dataText('p', '不出席：只需填寫不出席原因與聯絡欄，其他項目不適用。', 'edulog-editor-note'))
+    const absentNote = scope.add(dataText('p', tx('不出席：只需填寫不出席原因與聯絡欄，其他項目不適用。'), 'edulog-editor-note'))
     absentNote.hidden = true
     sections.get('出席狀況')?.append(absentNote)
 
@@ -97,7 +99,7 @@
     for (const column of form.querySelectorAll('[data-edulog-rating-column]')) {
       const radios = [...column.querySelectorAll('input[type=radio]')]
       if (!radios.length) continue
-      const clear = scope.add(element('button', '清除評分')); clear.type = 'button'; clear.className = 'edulog-rating-clear'
+      const clear = scope.add(element('button', tx('清除評分'))); clear.type = 'button'; clear.className = 'edulog-rating-clear'
       listen(clear, 'click', () => { for (const radio of radios) if (radio.checked) { radio.checked = false; fire(radio, 'input', 'change') } })
       column.append(clear)
     }
@@ -105,10 +107,10 @@
     // 4. Phrase library beside 學習表現: click a sentence to insert it at the cursor.
     const feedback = field('feedback'), phrases = readPhrases(modal)
     if (feedback && phrases.length) {
-      const library = scope.add(element('section')); library.className = 'edulog-phrases'; library.setAttribute('aria-label', '學習表現片語')
+      const library = scope.add(element('section')); library.className = 'edulog-phrases'; library.setAttribute('aria-label', tx('學習表現片語'))
       const tabs = element('div'); tabs.className = 'edulog-phrase-tabs'; tabs.setAttribute('role', 'tablist')
       const panel = element('div'); panel.className = 'edulog-phrase-panel'; panel.setAttribute('role', 'tabpanel')
-      library.append(dataText('h4', '片語庫'), tabs, panel)
+      library.append(dataText('h4', tx('片語庫')), tabs, panel)
       let active = 0
       const insert = phrase => {
         const text = fillLesson(phrase, field('stage')?.value ?? '')
@@ -154,7 +156,7 @@
     const staff = field('staff')?.closest('.mb-2')
     if (staff) {
       const details = scope.add(element('details')); details.className = 'edulog-staff-only'
-      details.append(dataText('summary', '教學部使用'))
+      details.append(dataText('summary', tx('教學部使用')))
       ;(sections.get('內部紀錄') || staff.parentElement).append(details)
       move(staff, details)
     }
@@ -169,7 +171,7 @@
       strip.replaceChildren(...[['attendance', '出席'], ['completion', '完成狀況'], ['internal', '內部紀錄'], ['performance', '學習表現']].map(([key, label]) => {
         const [tone, iconName, word] = key !== 'attendance' && state.attendance === 'absent' ? ['neutral', 'dash', '不適用'] : CELLS[key][state[key]]
         const item = element('li'); item.dataset.tone = tone
-        item.append(icon(doc, iconName), dataText('span', label, 'edulog-card-status-label'), dataText('span', word, 'edulog-card-status-value'))
+        item.append(icon(doc, iconName), dataText('span', tx(label), 'edulog-card-status-label'), dataText('span', tx(word), 'edulog-card-status-value'))
         return item
       }))
       const absent = state.attendance === 'absent'
@@ -178,15 +180,15 @@
       const missing = missingItems(state)
       checklist.replaceChildren()
       if (missing.length) {
-        checklist.append(dataText('p', '尚未完成（仍可送出）：', 'edulog-submit-check-title'))
+        checklist.append(dataText('p', tx('尚未完成（仍可送出）：'), 'edulog-submit-check-title'))
         const list = element('ul')
         for (const [key, label] of missing) {
-          const item = element('li'), jump = element('button', label); jump.type = 'button'
+          const item = element('li'), jump = element('button', tx(label)); jump.type = 'button'
           listen(jump, 'click', () => { const target = field(key); target?.scrollIntoView?.({ block: 'center' }); target?.focus() })
           item.append(jump); list.append(item)
         }
         checklist.append(list)
-      } else checklist.append(dataText('p', '必要項目都已填寫。', 'edulog-submit-check-done'))
+      } else checklist.append(dataText('p', tx('必要項目都已填寫。'), 'edulog-submit-check-done'))
     }
     listen(form, 'input', refresh)
     listen(form, 'change', refresh)
