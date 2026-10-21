@@ -2,7 +2,7 @@ import { apiDataClient } from '@/services/api/ApiDataClient'
 import { Enrollment } from '@/models/Enrollment'
 import { DateUtils } from '@/utils/DateUtils'
 import { OccurrenceService } from '../occurrence/OccurrenceService'
-import { EnrollmentTransferQueryService, type TransferMigrationRow } from './EnrollmentTransferQueryService'
+import { EnrollmentTransferQueryService } from './EnrollmentTransferQueryService'
 import { EnrollmentTransferToolService } from './EnrollmentTransferToolService'
 import { SessionService } from '../session/SessionService'
 import {
@@ -31,6 +31,13 @@ export interface RetainedClassReport {
 
 export interface ClassTransferResult {
     enrollment: Enrollment
+    transferId: string | null
+    effectiveDate: string
+    movedReports: number
+    createdReports: number
+    removedPlaceholders: number
+    /** Reports that could not be placed because the new class has no free lesson left. */
+    missingCount: number
     retainedReports: RetainedClassReport[]
 }
 
@@ -40,48 +47,6 @@ export class EnrollmentTransferService {
         return Array.isArray(occurrence) ? occurrence[0] : occurrence
     }
 
-    private static isBlankText(value: unknown): boolean {
-        return value === null || value === undefined || (typeof value === 'string' && value.trim().length === 0)
-    }
-
-    private static isBlankPlaceholderReport(report: TransferMigrationRow): boolean {
-        return this.isBlankText(report.content) &&
-            this.isBlankText(report.progress_letter) &&
-            this.isBlankText(report.absence_reason) &&
-            this.isBlankText(report.contact_notes) &&
-            this.isBlankText(report.class_notes) &&
-            this.isBlankText(report.external_link) &&
-            (report.lesson_id === null || report.lesson_id === undefined) &&
-            report.is_completed === false &&
-            report.attendance_status === 'pending' &&
-            (report.class_participation === null || report.class_participation === undefined) &&
-            (report.classroom_behavior === null || report.classroom_behavior === undefined)
-    }
-
-    private static async deleteReportVersions(reportId: string): Promise<void> {
-        const { error } = await apiDataClient
-            .from('report_versions')
-            .delete()
-            .eq('occurrence_report_id', reportId)
-
-        if (error) {
-            throw new Error(`Failed to delete report versions: ${error.message}`)
-        }
-    }
-
-    private static async deleteReport(reportId: string): Promise<void> {
-        await this.deleteReportVersions(reportId)
-
-        const { error } = await apiDataClient
-            .from('occurrence_reports')
-            .delete()
-            .eq('id', reportId)
-
-        if (error) {
-            throw new Error(`Failed to delete source placeholder report: ${error.message}`)
-        }
-    }
-
     private static async assertTargetDateMatchesSession(targetSessionId: string, targetDate: string): Promise<void> {
         const isScheduled = await EnrollmentTransferQueryService.isSessionScheduledOn(targetSessionId, targetDate)
         if (!isScheduled) {
@@ -89,116 +54,39 @@ export class EnrollmentTransferService {
         }
     }
 
+    /**
+     * Moves an enrollment to another class from an effective date (inclusive).
+     * The API rewrites the class history, keeps reports with content where they
+     * are, moves blank placeholders, keeps the report count and logs the
+     * transfer; there is no client-side fallback.
+     */
     static async transferClass(
         enrollmentId: string,
         newSessionId: string,
-        originalLastDate: string,
-        transferDate: string
+        transferDate: string,
+        note?: string | null
     ): Promise<ClassTransferResult> {
-        if (getApiV1Mode() === 'v1') {
-            const response = await apiV1Client.post<any>(`/enrollments/${encodeURIComponent(enrollmentId)}/transfers/class`, {
-                target_class_session_id: newSessionId,
-                original_last_date: originalLastDate,
-                transfer_date: transferDate,
-            })
-            const retained = Array.isArray(response.meta?.retained_reports) ? response.meta.retained_reports as any[] : []
-            return {
-                enrollment: new Enrollment(response.data),
-                retainedReports: retained.map(row => ({
-                    reportId: String(row.report_id),
-                    occurrenceId: String(row.occurrence_id),
-                    occurrenceDate: String(row.occurrence_date)
-                }))
-            }
-        }
-        void originalLastDate
-
-        const enrollment = await EnrollmentTransferQueryService.getEnrollmentSessionInfo(enrollmentId)
-        const oldSessionId = enrollment.class_session_id
-
-        if (!oldSessionId) {
-            throw new Error('Enrollment has no current session to transfer from')
-        }
-
-        if (oldSessionId === newSessionId) {
-            throw new Error('TARGET_SESSION_SAME_AS_CURRENT')
-        }
-
-        const targetSession = await SessionService.getCompatibleClassSession(newSessionId, enrollment.course_id)
-
-        const futureReports = await EnrollmentTransferQueryService.getReportsToMigrate(
-            enrollmentId,
-            oldSessionId,
-            transferDate
-        )
-        const reportsToMigrate = futureReports.filter((report: any) => this.isBlankPlaceholderReport(report))
-        const lessonCount = await EnrollmentTransferQueryService.getLessonCount(enrollment.course_id, 12)
-        const occurrenceCount = Math.max(lessonCount, reportsToMigrate.length)
-        const start = DateUtils.parseLocalDate(transferDate) || new Date(transferDate)
-        const endDate = await SessionService.getGenerationEndDate(newSessionId, transferDate, occurrenceCount)
-
-        await OccurrenceService.generateOccurrences(newSessionId, start, endDate).catch((err: any) => {
-            console.error('Failed to generate occurrences for the new session during class transfer:', err)
+        const response = await apiV1Client.post<any>(`/enrollments/${encodeURIComponent(enrollmentId)}/transfers/class`, {
+            target_class_session_id: newSessionId,
+            transfer_date: transferDate,
+            note: note?.trim() || null,
         })
-
-        const newOccurrences = await EnrollmentTransferQueryService.getTargetOccurrences(newSessionId, transferDate)
-
-        const sortedReports = [...reportsToMigrate].sort((a, b) => {
-            const dateA = new Date(this.getOccurrenceInfo(a)?.occurrence_date).getTime()
-            const dateB = new Date(this.getOccurrenceInfo(b)?.occurrence_date).getTime()
-            return dateA - dateB
-        })
-
-        const maxPairIndex = Math.min(sortedReports.length, newOccurrences.length)
-
-        for (let i = 0; i < maxPairIndex; i++) {
-            const report = sortedReports[i]
-            const newOcc = newOccurrences[i]
-            if (!report || !newOcc) continue
-
-            const existingTargetReport = await EnrollmentTransferQueryService.getExistingReportForOccurrence(
-                enrollmentId,
-                newOcc.id
-            )
-
-            if (existingTargetReport) {
-                await this.deleteReport(report.id)
-                continue
-            }
-
-            const { error: updateReportError } = await apiDataClient
-                .from('occurrence_reports')
-                .update({
-                    class_occurrence_id: newOcc.id,
-                    version: (report.version || 1) + 1
-                })
-                .eq('id', report.id)
-
-            if (updateReportError) {
-                throw new Error(`Failed to move placeholder report: ${updateReportError.message}`)
-            }
+        const meta = response.meta ?? {}
+        const retained = Array.isArray(meta.retained_reports) ? meta.retained_reports as any[] : []
+        return {
+            enrollment: new Enrollment(response.data),
+            transferId: meta.transfer_id ? String(meta.transfer_id) : null,
+            effectiveDate: String(meta.transfer_date ?? transferDate),
+            movedReports: Number(meta.moved_reports ?? 0),
+            createdReports: Number(meta.created_reports ?? 0),
+            removedPlaceholders: Number(meta.removed_placeholders ?? 0),
+            missingCount: Number(meta.missing_count ?? 0),
+            retainedReports: retained.map(row => ({
+                reportId: String(row.report_id),
+                occurrenceId: String(row.occurrence_id),
+                occurrenceDate: String(row.occurrence_date)
+            }))
         }
-
-        const { data: updated, error: updateError } = await apiDataClient
-            .from('enrollments')
-            .update({
-                class_session_id: newSessionId,
-                classroom_id: targetSession.classroom_id || null
-            })
-            .eq('id', enrollmentId)
-            .select(`
-                *,
-                courses (subject, stage, display_name),
-                classrooms (name),
-                class_sessions (id, name, day_of_week, start_time, end_time, time_zone, session_type, schedule_mode, class_session_schedule_rules (*))
-            `)
-            .single()
-
-        if (updateError) throw new Error(`Failed to update enrollment: ${updateError.message}`)
-
-        await EnrollmentTransferToolService.syncSessionPair(oldSessionId, newSessionId)
-
-        return { enrollment: new Enrollment(updated), retainedReports: [] }
     }
 
     private static async commitSingleLessonTransfer(

@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useToast } from "vue-toastification";
+import { useFeedback } from "@/composables/useFeedback";
 import { EnrollmentService } from "@/services/enrollment/EnrollmentService";
 import { useStudentStore } from "@/stores/useStudentStore";
 import { usePreferencesStore } from "@/stores/usePreferencesStore";
@@ -14,6 +15,7 @@ import ConfirmModal from "@/components/common/ConfirmModal.vue";
 import TimeZoneSelect from "@/components/common/TimeZoneSelect.vue";
 import { DateUtils } from "@/utils/DateUtils";
 import KodingCodeCheckModal from "@/components/KodingCodeCheckModal.vue";
+import ClassTimeline from "@/components/enrollment/ClassTimeline.vue";
 
 const props = defineProps<{
     studentId: string;
@@ -22,6 +24,7 @@ const props = defineProps<{
 
 const { t } = useI18n();
 const toast = useToast();
+const { reportError } = useFeedback();
 const studentStore = useStudentStore();
 const preferences = usePreferencesStore();
 
@@ -104,13 +107,7 @@ async function saveEnrollment(options: { confirmedStartDate?: boolean } = {}) {
         toast.success(t("common.save_success"));
     } catch (e: any) {
         console.error(e);
-        toast.error(
-            e.message ||
-            t(
-                "student.errors.update_enrollment_failed",
-                "Failed to update enrollment",
-            ),
-        );
+        reportError(e, "student.errors.update_enrollment_failed");
     } finally {
         isModifying.value = false;
     }
@@ -130,13 +127,7 @@ async function handleRemoveEnrollment() {
         toast.success(t("common.deleted"));
     } catch (e: any) {
         console.error(e);
-        toast.error(
-            e.message ||
-            t(
-                "student.errors.delete_enrollment_failed",
-                "Failed to remove enrollment",
-            ),
-        );
+        reportError(e, "student.errors.delete_enrollment_failed");
     } finally {
         isModifying.value = false;
         showDeleteConfirm.value = false;
@@ -178,7 +169,11 @@ const kodingCheckTarget = computed(() => {
     };
 });
 
+// Bumped after a transfer so each timeline reloads its history.
+const timelineRevision = ref(0);
+
 async function refreshData() {
+    timelineRevision.value++;
     await studentStore.loadStudent(props.studentId);
 }
 </script>
@@ -326,6 +321,8 @@ async function refreshData() {
                                     {{ $t("student.activate_trial_btn") }}
                                 </button>
                         </div>
+
+                        <ClassTimeline :key="`${e.id}-${timelineRevision}`" :enrollment-id="e.id" :time-zone="e.timeZone" />
                     </div>
                 </div>
 

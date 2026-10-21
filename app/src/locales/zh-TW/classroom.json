@@ -392,7 +392,8 @@
         "transferred_out": "（已調課到 {date} {session} {time}）",
         "transferred_in": "調入自 {date} {time} 班",
         "open_target": "前往",
-        "cancel_confirm_message": "{student} 的報告會從 {target} 移回這一堂課。"
+        "cancel_confirm_message": "{student} 的報告會從 {target} 移回這一堂課。",
+        "class_transferred_in": "今日轉入本班"
     },
     "calendar": {
         "legend": "月曆圖例",
@@ -402,6 +403,9 @@
         "completion": "報告完成度",
         "completion_complete": "報告全部完成",
         "completion_partial": "報告部分完成",
-        "completion_none": "報告尚未完成"
+        "completion_none": "報告尚未完成",
+        "joined": "調課或轉入的學生",
+        "joined_makeup": "{count} 位調課進來",
+        "joined_transfer": "{count} 位轉班生效"
     }
 }

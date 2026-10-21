@@ -20,7 +20,9 @@ import { SessionEligibilityPolicy } from '@/models/SessionEligibilityPolicy'
 import TransferReportConflictModal from '@/components/TransferReportConflictModal.vue'
 import type { SingleLessonTransferConflict, SingleLessonTransferResult } from '@/services/enrollment/SingleLessonTransferConflictService'
 import type { TransferReportFieldSelections } from '@/services/report/ReportFieldConflictService'
-import type { RetainedClassReport } from '@/services/enrollment/EnrollmentTransferService'
+import type { ClassTransferResult } from '@/services/enrollment/EnrollmentTransferService'
+
+const NOTE_MAX_LENGTH = 200
 
 const props = defineProps<{
     isOpen: boolean
@@ -49,7 +51,8 @@ const transferForm = ref({
     effective_date: DateUtils.todayString(preferences.timeZone),
     selected_report_id: '',
     original_date: DateUtils.todayString(preferences.timeZone),
-    target_date: DateUtils.todayString(preferences.timeZone)
+    target_date: DateUtils.todayString(preferences.timeZone),
+    note: ''
 })
 
 const classrooms = ref<any[]>([])
@@ -238,16 +241,16 @@ async function fetchReports() {
         }
     } catch (e) {
         console.error(e)
-        toast.error(t('student.transfer_modal.load_reports_failed'))
+        reportError(e, 'student.transfer_modal.load_reports_failed')
     } finally {
         isLoadingReports.value = false
     }
 }
 
-const retainedReports = ref<RetainedClassReport[] | null>(null)
+const classSummary = ref<ClassTransferResult | null>(null)
 
 function closeModal() {
-    retainedReports.value = null
+    classSummary.value = null
     emit('close')
 }
 
@@ -255,7 +258,7 @@ watch(() => props.isOpen, (val) => {
     if (val) {
         selectedClassroomId.value = ''
         transferConflict.value = null
-        retainedReports.value = null
+        classSummary.value = null
         fetchClassrooms()
         fetchSessions()
         fetchReports()
@@ -266,7 +269,8 @@ watch(() => props.isOpen, (val) => {
             effective_date: DateUtils.todayString(preferences.timeZone),
             selected_report_id: '',
             original_date: DateUtils.todayString(preferences.timeZone),
-            target_date: DateUtils.todayString(preferences.timeZone)
+            target_date: DateUtils.todayString(preferences.timeZone),
+            note: ''
         }
         fetchCurrentEnrollment()
     }
@@ -295,12 +299,12 @@ watch(() => transferForm.value.mode, (mode) => {
 
 async function submitTransfer() {
     if (!props.fromEnrollmentId || !transferForm.value.to_session_id) {
-        toast.error(t('student.management.required_fields', 'Missing required fields'))
+        errorKey('student.management.required_fields')
         return
     }
 
     if (transferForm.value.mode === 'class' && !transferForm.value.effective_date) {
-        toast.error(t('student.management.required_fields', 'Missing required fields'))
+        errorKey('student.management.required_fields')
         return
     }
 
@@ -318,12 +322,12 @@ async function submitTransfer() {
             )
         )
     ) {
-        toast.error(t('student.management.required_fields', 'Missing required fields'))
+        errorKey('student.management.required_fields')
         return
     }
 
     if (isFull.value) {
-        toast.error(t('student.errors.session_full', 'Selected session is full on the effective date'))
+        errorKey('student.errors.session_full')
         return
     }
 
@@ -348,22 +352,17 @@ async function submitTransfer() {
                 )
             }
         } else {
-            // Compatibility parameter: transfer service keeps the argument but uses transferDate for the new rule.
-            const originalLastDate = DateUtils.addDaysToDateString(transferForm.value.effective_date, -1)
-
             const classResult = await EnrollmentService.transferClass(
                 props.fromEnrollmentId,
                 transferForm.value.to_session_id,
-                originalLastDate,
-                transferForm.value.effective_date
+                transferForm.value.effective_date,
+                transferForm.value.note
             )
-            if (classResult.retainedReports.length) {
-                // Keep the dialog open so the retained reports can be reviewed.
-                toast.success(t('common.success'))
-                emit('success')
-                retainedReports.value = classResult.retainedReports
-                return
-            }
+            // Keep the dialog open on the summary so the moves can be reviewed.
+            toast.success(t('common.success'))
+            emit('success')
+            classSummary.value = classResult
+            return
         }
 
         if (singleResult?.status === 'conflict') {
@@ -466,12 +465,42 @@ async function resolveTransferConflict(selections: TransferReportFieldSelections
                 </button>
             </div>
 
-            <!-- Result: reports with content that stayed in the old class -->
-            <div v-if="retainedReports" class="flex-1 min-h-0 p-5 sm:p-8 overflow-y-auto space-y-4" role="status">
-                <h3 class="text-lg font-black text-gray-900">{{ $t('student.transfer_modal.retained_title') }}</h3>
-                <p class="text-sm font-medium text-gray-600 leading-relaxed">{{ $t('student.transfer_modal.retained_body', { count: retainedReports.length }) }}</p>
-                <ul class="space-y-2">
-                    <li v-for="report in retainedReports" :key="report.reportId"
+            <!-- Result: what the class transfer did to the reports -->
+            <div v-if="classSummary" class="flex-1 min-h-0 p-5 sm:p-8 overflow-y-auto space-y-4" role="status">
+                <h3 class="text-lg font-black text-gray-900">{{ $t('student.transfer_modal.summary_title') }}</h3>
+                <p class="text-sm font-medium text-gray-600 leading-relaxed">
+                    {{ $t('student.transfer_modal.summary_effective', { date: DateUtils.displayDateWithWeekday(classSummary.effectiveDate, preferences.locale) }) }}
+                </p>
+                <dl class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div class="rounded-2xl border border-gray-100 bg-gray-50 px-3 py-3">
+                        <dt class="text-xs font-bold text-gray-500">{{ $t('student.transfer_modal.summary_moved') }}</dt>
+                        <dd class="text-xl font-black text-gray-900 tabular-nums">{{ classSummary.movedReports }}</dd>
+                    </div>
+                    <div class="rounded-2xl border border-gray-100 bg-gray-50 px-3 py-3">
+                        <dt class="text-xs font-bold text-gray-500">{{ $t('student.transfer_modal.summary_created') }}</dt>
+                        <dd class="text-xl font-black text-gray-900 tabular-nums">{{ classSummary.createdReports }}</dd>
+                    </div>
+                    <div class="rounded-2xl border border-gray-100 bg-gray-50 px-3 py-3">
+                        <dt class="text-xs font-bold text-gray-500">{{ $t('student.transfer_modal.summary_retained') }}</dt>
+                        <dd class="text-xl font-black text-gray-900 tabular-nums">{{ classSummary.retainedReports.length }}</dd>
+                    </div>
+                    <div class="rounded-2xl border border-gray-100 bg-gray-50 px-3 py-3">
+                        <dt class="text-xs font-bold text-gray-500">{{ $t('student.transfer_modal.summary_removed') }}</dt>
+                        <dd class="text-xl font-black text-gray-900 tabular-nums">{{ classSummary.removedPlaceholders }}</dd>
+                    </div>
+                </dl>
+                <p v-if="classSummary.missingCount > 0"
+                    class="flex items-start gap-2 text-sm font-bold text-red-700 bg-red-50 border border-red-100 rounded-xl px-4 py-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 shrink-0" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+                    </svg>
+                    <span>{{ $t('student.transfer_modal.summary_missing', { count: classSummary.missingCount }) }}</span>
+                </p>
+                <template v-if="classSummary.retainedReports.length">
+                    <p class="text-sm font-medium text-gray-600 leading-relaxed">{{ $t('student.transfer_modal.retained_body', { count: classSummary.retainedReports.length }) }}</p>
+                </template>
+                <ul v-if="classSummary.retainedReports.length" class="space-y-2">
+                    <li v-for="report in classSummary.retainedReports" :key="report.reportId"
                         class="flex items-center justify-between gap-3 rounded-2xl border border-amber-100 bg-amber-50/60 px-4 py-3">
                         <span class="font-bold text-gray-800">{{ DateUtils.displayDateWithWeekday(report.occurrenceDate, preferences.locale) }}</span>
                         <router-link v-if="fromEnrollmentId" :to="{ name: 'lesson-reports', params: { enrollmentId: fromEnrollmentId } }"
@@ -627,6 +656,19 @@ async function resolveTransferConflict(selections: TransferReportFieldSelections
                         <BaseDatePicker v-else v-model="transferForm.effective_date"
                             theme="amber" :placeholder="$t('student.transfer_modal.effective_date')" />
                     </div>
+
+                    <div v-if="transferForm.mode === 'class'" class="space-y-2">
+                        <label for="transfer-note" class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1">
+                            {{ $t('student.transfer_modal.note_label') }}
+                        </label>
+                        <textarea id="transfer-note" v-model="transferForm.note" rows="2" :maxlength="NOTE_MAX_LENGTH"
+                            :placeholder="$t('student.transfer_modal.note_placeholder')"
+                            aria-describedby="transfer-note-count"
+                            class="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-base text-gray-900 placeholder:text-gray-400 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-200"></textarea>
+                        <p id="transfer-note-count" class="text-right text-xs font-bold text-gray-500 tabular-nums">
+                            {{ transferForm.note.length }} / {{ NOTE_MAX_LENGTH }}
+                        </p>
+                    </div>
                 </div>
 
                 <div class="bg-amber-50 rounded-2xl p-4 border border-amber-100">
@@ -639,7 +681,7 @@ async function resolveTransferConflict(selections: TransferReportFieldSelections
             </div>
 
             <!-- Footer -->
-            <div v-if="retainedReports" class="p-5 sm:p-8 border-t border-gray-50 shrink-0 bg-gray-50/50 flex">
+            <div v-if="classSummary" class="p-5 sm:p-8 border-t border-gray-50 shrink-0 bg-gray-50/50 flex">
                 <button @click="closeModal"
                     class="flex-1 px-4 sm:px-8 py-4 bg-amber-600 text-white rounded-2xl hover:bg-amber-700 transition-colors text-sm sm:text-base font-black cursor-pointer uppercase tracking-widest">
                     {{ $t('student.transfer_modal.retained_done') }}

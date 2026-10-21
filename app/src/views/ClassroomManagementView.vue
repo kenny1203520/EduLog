@@ -601,7 +601,7 @@ async function saveClassroom() {
         closeRoomModal()
         toast.success(t('classroom.room_save_success') || 'Room saved successfully')
     } catch (e: any) {
-        toast.error(e.message || String(e))
+        reportError(e)
     } finally {
         isSavingRoom.value = false
     }
@@ -761,7 +761,7 @@ async function saveSession() {
         toast.success(t('classroom.session_save_success') || 'Session saved successfully')
         if (reconciliation.preserved > 0) toast.info(t('classroom.schedule_preserved_notice', { count: reconciliation.preserved }))
     } catch (e: any) {
-        toast.error(e.message || String(e))
+        reportError(e)
     } finally {
         isSavingSession.value = false
     }

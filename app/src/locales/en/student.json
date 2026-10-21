@@ -84,7 +84,10 @@
         "senior_high": "Senior High",
         "junior_high": "Junior High",
         "elementary": "Elementary",
-        "other": "Other"
+        "other": "Other",
+        "status_required": "Choose a status.",
+        "start_date_required": "A start date is required for the Enrolled status.",
+        "dates_required": "Enter both the start date and the end date."
     },
     "management": {
         "title": "Student Management",
@@ -207,19 +210,27 @@
         "classroom_filter": "Classroom Filter",
         "effective_date": "Effective Date",
         "target_date": "Make-up Date",
-        "note": "The same enrollment will be kept. Existing class reports stay in their original session; only future blank placeholder reports move to the target session.",
+        "note": "The same enrollment is kept. From the effective date (inclusive) the student belongs only to the target class. Reports with content stay where they are; blank reports move to the target class in date order, and the total number of reports stays the same.",
         "single_note": "The same report will be moved to the target session date. No new enrollment will be created.",
         "load_reports_failed": "Failed to load existing reports",
         "target_date_not_class_day": "The target date is not a teaching day for that session.",
         "target_report_exists": "This enrollment already has a report on the target date.",
         "same_session_error": "Target session cannot be the current session.",
-        "retained_title": "Class changed; some reports stayed in the old class",
         "retained_body": "{count} report(s) on or after the effective date already have content and stayed on the old class lessons. Check whether they need attention.",
         "retained_open": "View reports",
         "retained_done": "Done",
         "original_report_not_found": "Original class report was not found.",
         "original_report_ambiguous": "Multiple reports were found on that date. Select a specific report instead.",
-        "original_date_not_class_day": "The original date is not a teaching day for the current session."
+        "original_date_not_class_day": "The original date is not a teaching day for the current session.",
+        "note_label": "Transfer note (optional)",
+        "note_placeholder": "For example: the parent asked to move to Saturdays",
+        "summary_title": "Class changed",
+        "summary_effective": "Effective from {date}. This is what happened to the reports:",
+        "summary_moved": "Moved to the new class",
+        "summary_created": "Created",
+        "summary_retained": "Kept in the old class",
+        "summary_removed": "Blank reports removed",
+        "summary_missing": "The target class does not have enough lessons: {count} report(s) could not be placed. Extend the class schedule or add lessons, then adjust the enrollment."
     },
     "transfer_conflict": {
         "title": "Report conflict",
@@ -341,11 +352,35 @@
         "platform_required": "Platform is required",
         "credential_value_required": "Enter at least one of username, password, or link",
         "session_full": "Selected session is full in the chosen period",
-        "session_course_mismatch": "The selected class session cannot teach this course"
+        "session_course_mismatch": "The selected class session cannot teach this course",
+        "activate_trial_failed": "Could not convert to a regular enrollment",
+        "enroll_failed": "Could not add the enrollment"
     },
     "start_date_impact": {
         "title": "Some reports stay before the new start date",
         "message": "The reports on {dates} have content (including attendance) or come from a transfer or make-up lesson. They stay on their dates and are not deleted or moved; the blank reports are rearranged from the new start date. Save anyway?",
         "confirm": "Save anyway"
+    },
+    "class_timeline": {
+        "title": "Class timeline",
+        "empty": "No class history yet.",
+        "load_failed": "Could not load the class timeline",
+        "unknown_class": "Unknown class",
+        "ongoing": "now",
+        "reports": "Reports",
+        "legend": "Legend",
+        "transfer_marker": "Transfer effective date",
+        "blank_report": "Not written yet",
+        "select_hint": "Select a report on the timeline to see which class it was written in.",
+        "open_reports": "Open reports",
+        "transfer_log": "Transfer log",
+        "to": "to",
+        "migrated": "Migrated, details unknown",
+        "change_summary": "Moved {moved}, kept {retained}, created {created}, removed {deleted}",
+        "recorded_at": "Recorded {time}",
+        "placement_regular": "Own class",
+        "placement_makeup_in": "Make-up",
+        "placement_retained_after_transfer": "Kept after transfer",
+        "placement_outside": "Outside class"
     }
 }

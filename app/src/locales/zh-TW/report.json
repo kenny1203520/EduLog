@@ -365,5 +365,6 @@
     },
     "refresh_all": "重新整理全部",
     "refresh_all_confirm": "確定要重新整理全部嗎？這將重新整理目前列表並重新載入編輯器內容，未儲存的變更將會遺失。",
-    "refresh_success": "重新整理成功"
+    "refresh_success": "重新整理成功",
+    "create_error": "無法建立報告"
 }

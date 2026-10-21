@@ -259,6 +259,9 @@
                                     class="text-xs font-mono bg-gray-100 px-2 py-0.5 rounded text-gray-600">
                                     {{ displayReport.progressDisplay }}
                                 </span>
+                                <PlacementBadge v-if="displayReport.id && reportPlacements.get(displayReport.id)"
+                                    :placement="reportPlacements.get(displayReport.id)!.placement"
+                                    :class-name="reportPlacements.get(displayReport.id)!.class_session_name" />
                             </div>
                             <div class="text-xs text-gray-400 font-mono">{{ $t('common.version') }}: {{ displayReport.version }}</div>
                         </div>
@@ -552,12 +555,15 @@ import { SuspensionService } from '@/services/suspension/SuspensionService'
 import { Suspension } from '@/models/Suspension'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import { useToast } from 'vue-toastification'
+import { useFeedback } from '@/composables/useFeedback'
 import { DateUtils } from '@/utils/DateUtils'
 import { isAttendanceReportStatus } from '@/utils/reportListFilter'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { safeExternalHref } from '@/utils/safeExternalHref'
 import { sourceIdentityFromRow } from '@/utils/sourceReportLink'
 import SourceReportLink from '@/components/reports/SourceReportLink.vue'
+import PlacementBadge from '@/components/enrollment/PlacementBadge.vue'
+import type { ClassTimelineReport } from '@/models/ClassTimeline'
 
 type ReportEditorExpose = {
     saveNow: (options?: { reason?: 'manual' | 'switch' }) => Promise<boolean>
@@ -569,6 +575,7 @@ const router = useRouter()
 const { t, locale } = useI18n()
 const authStore = useAuthStore()
 const toast = useToast()
+const { errorKey, reportError } = useFeedback()
 const preferences = usePreferencesStore()
 
 const loading = ref(true)
@@ -677,8 +684,7 @@ async function handleConfirmCreate() {
         showCreateConfirm.value = false
     } catch (e) {
         console.error('Failed to create report', e)
-        const publicMessageKey = (e as any)?.i18nKey || 'report.create_error'
-        toast.error(t(publicMessageKey) || t('report.create_error') || 'Failed to create report')
+        reportError(e, 'report.create_error')
     } finally {
         isCreatingReport.value = false
     }
@@ -707,7 +713,7 @@ async function repairMissingTransferredReport() {
             return
         }
         console.error('Failed to repair transferred report:', error)
-        toast.error(t('report.repair_error') || 'Failed to regenerate report')
+        errorKey('report.repair_error')
     } finally {
         isCreatingReport.value = false
     }
@@ -1013,12 +1019,26 @@ function getStatusColor(status: string) {
     }
 }
 
+// Which class each report was written in (own class, make-up, kept after a transfer).
+const reportPlacements = ref<Map<string, ClassTimelineReport>>(new Map())
+
+async function loadReportPlacements(enrollmentId: string) {
+    try {
+        const timeline = await EnrollmentService.getClassTimeline(enrollmentId)
+        reportPlacements.value = new Map(timeline.reports.map(report => [report.id, report]))
+    } catch (error) {
+        // The placement labels are informational; the list works without them.
+        console.error('Failed to load report placements', error)
+    }
+}
+
 async function switchToListView() {
     viewMode.value = 'list'
     const enrollmentId = route.params.enrollmentId as string
     if (!enrollmentId) return
 
     listLoading.value = true
+    void loadReportPlacements(enrollmentId)
     try {
         // Refresh markers
         allReports.value = await OccurrenceReportService.getReportsWithDetails(enrollmentId)
@@ -1458,7 +1478,7 @@ async function resolveConflict(resolvedContent: OccurrenceReportDTO) {
         toast.success(t('report.save_success'))
     } catch (error) {
         console.error('Failed to resolve conflict:', error)
-        toast.error(t('report.resolve_conflict_error') || 'Failed to resolve conflict')
+        reportError(error, 'report.resolve_conflict_error')
     } finally {
         reportLoading.value = false
     }
