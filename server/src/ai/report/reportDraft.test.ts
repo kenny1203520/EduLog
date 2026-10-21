@@ -124,6 +124,22 @@ describe('object-shaped sections (regression: "partial.sections?.map is not a fu
   })
 })
 
+describe('structured answers that miss the schema (regression: "No object generated: could not parse the response")', () => {
+  it('reads the raw answer the lenient way instead of failing', async () => {
+    const map = new PlaceholderMap()
+    map.assign('student', 'known:s1', '王小明')
+    const text = '```json\n{"sections":{"today":"[學生A]完成迴圈。","home":"在家練習"},"teachingSuggestions":"多鼓勵"}\n```'
+    const result = await streamReportDraft({ model: streamingModel(text), prompt, map })
+    expect(result.restored.sections.map((section) => [section.key, section.body])).toEqual([['today', '王小明完成迴圈。'], ['home', '在家練習']])
+    expect(result.restored.teachingSuggestions).toEqual(['多鼓勵'])
+  })
+
+  it('reports an unusable answer as invalid output', async () => {
+    await expect(streamReportDraft({ model: streamingModel('抱歉，我無法產生報告。'), prompt, map: new PlaceholderMap() }))
+      .rejects.toBeInstanceOf(InvalidDraftOutputError)
+  })
+})
+
 describe('parseJsonTextDraft', () => {
   it('drops unknown section keys, fills missing titles and defaults suggestions', () => {
     expect(parseJsonTextDraft('{"sections":[{"key":"home","body":"在家練習"},{"key":"secret","body":"x"}]}')).toEqual({

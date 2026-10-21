@@ -238,6 +238,38 @@ describe('ReportGenerationService', () => {
     expect(repository.charges).toHaveLength(1)
   })
 
+  it('retries with JSON in the prompt when the structured answer cannot be read', async () => {
+    const repository = new FakeRepository()
+    const formats: string[] = []
+    const unreadable = new MockLanguageModelV4({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'text-start', id: 't' },
+          { type: 'text-delta', id: 't', delta: '抱歉，我無法產生報告。' },
+          { type: 'text-end', id: 't' },
+          { type: 'finish', usage: { inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined }, outputTokens: { total: 5, text: 5, reasoning: undefined } }, finishReason: { unified: 'stop', raw: 'stop' } },
+        ]),
+      }),
+    })
+    const answer = jsonModel(output)
+    const model = new MockLanguageModelV4({
+      doStream: async (options) => {
+        formats.push(options.responseFormat?.type ?? 'text')
+        return (options.responseFormat?.type === 'json' ? unreadable : answer).doStream(options)
+      },
+    })
+    const { svc } = service(repository, model)
+
+    const outcome = await svc.run(await svc.prepare(request))
+
+    expect(formats).toEqual(['json', 'text'])
+    expect(outcome.draft.sections[0].body).toBe('王小明完成迴圈，林雅婷很肯定。')
+    expect([repository.generations[0].status, repository.generations[0].options.output_mode]).toEqual(['succeeded', 'json_text'])
+    expect(repository.unsupported).toEqual(['m1'])
+    expect(repository.charges).toHaveLength(1)
+  })
+
   it('goes straight to JSON in the prompt for models known not to support structured output', async () => {
     const repository = new FakeRepository()
     repository.model = siteModel({ supportsStructuredOutput: false })
