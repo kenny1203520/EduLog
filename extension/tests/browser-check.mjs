@@ -179,6 +179,12 @@ for (const [browserName, launchOptions] of executables) {
         }
       }
       if (name === 'real-class') {
+        // One navigation only: with the EduLog navigation mounted, the provider navbar never shows.
+        // The drawer is where both used to appear on narrow screens, so check with it open.
+        const navFacts = await page.evaluate(() => { document.documentElement.setAttribute('data-edulog-nav-open', ''); const shown = el => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden'
+          const facts = { provider: [...document.querySelectorAll('#nav-teacher, #page-body > .sidebar [data-edulog-replaced]')].some(shown), edulog: [...document.querySelectorAll('.edulog-nav')].some(shown) }
+          document.documentElement.removeAttribute('data-edulog-nav-open'); return facts })
+        assert.deepEqual(navFacts, { provider: false, edulog: true }, `${browserName} ${name} ${width}: one navigation (EduLog), never the provider navbar too`)
         // Names, actions and captions share one type scale in 課堂記錄 and 班級名單.
         const sizes = await page.evaluate(() => { const size = selector => { const node = document.querySelector(selector); return node ? getComputedStyle(node).fontSize : null }
           return { session: [size('.edulog-session-cards .edulog-card-main strong'), size('.edulog-session-cards .edulog-todo-meta')], roster: [size('.edulog-roster-cards .edulog-card-main strong'), size('.edulog-roster-cards .edulog-todo-meta')] } })
@@ -245,6 +251,12 @@ for (const [browserName, launchOptions] of executables) {
         await page.locator('#lesson_report_feedback').fill('保留的報告草稿')
         assert.ok(await page.locator('#lesson_report_feedback').evaluate(el => el.getBoundingClientRect().height >= 110), 'report textarea retains usable height')
         assert.equal(await page.locator('#lesson_report_comment').isVisible(), true, 'native internal comment remains accessible')
+        // 內部紀錄 fields (textarea and select) get the themed field style inside the dialog.
+        for (const selector of ['#lesson_report_comment', '#admission_lesson_report_learning_status']) {
+          const field = page.locator(selector); if (!await field.count()) continue
+          const style = await field.evaluate(el => { const c = getComputedStyle(el); return { border: c.borderTopWidth + ' ' + c.borderTopStyle, padding: parseFloat(c.paddingLeft), radius: parseFloat(c.borderTopLeftRadius) } })
+          assert.ok(style.border === '1px solid' && style.padding >= 8 && style.radius >= 6, `${browserName} ${width}: ${selector} uses the themed field style ${JSON.stringify(style)}`)
+        }
         assert.equal(await page.locator('[data-edulog-submit-region]').evaluate(el=>getComputedStyle(el).position), 'static')
         assert.equal(await page.locator('.edulog-rating-control').evaluate(el => el.parentElement.classList.contains('col-md-6')), true)
         assert.equal(await page.locator('#dt_admission_lesson_report_completion_status').evaluate(el => el.parentElement.querySelector('[data-edulog-field-caption]')?.textContent), '完成狀況')

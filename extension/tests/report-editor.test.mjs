@@ -95,3 +95,17 @@ test('restore returns the exact original editor', () => {
   assert.equal(s.doc.body.outerHTML, s.original)
   s.dom.window.close()
 })
+
+test('尚未完成 with both chapters counts as filled; without chapters it asks for them', () => {
+  const s = editor()
+  s.set('#lesson_report_attendance_status', 'attended')
+  s.set('#dt_admission_lesson_report_completion_status', 'not_all_done')
+  assert.match(statusRow(s.doc), /warn:尚未完成 · 待補章節/)
+  assert.match(missing(s.doc), /章節進度/)
+  s.set('#dt_admission_lesson_report_start_from', '1'); s.set('#dt_admission_lesson_report_end_to', '3')
+  assert.match(statusRow(s.doc), /ok:尚未完成 · 已填章節/)
+  assert.doesNotMatch(missing(s.doc), /章節進度/)
+  assert.equal(s.w.edulogSiteReportEditor.completionState('not_all_done', '1', '3'), 'partial')
+  assert.equal(s.w.edulogSiteReportEditor.completionState('all_done', '', ''), 'chapters')
+  s.dom.window.close()
+})

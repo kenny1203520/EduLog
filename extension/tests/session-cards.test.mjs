@@ -223,3 +223,43 @@ test('the lesson report page lists every student: no folded 狀態正常 row', (
   for (const item of calm) assert.equal(item.parentElement, s.doc.querySelector('.edulog-session-cards > .edulog-card-list'))
   s.dom.window.close()
 })
+
+// 完成狀況's yellow icon is resolved by reading the saved report (same-origin GET, cached).
+function classPageReading(report) {
+  const dom = new JSDOM(read('fixtures/real-class.html'), { url: 'https://corp.orangeapple.co/courses/dt/101', runScripts: 'outside-only', pretendToBeVisual: true })
+  const w = dom.window, requests = []
+  w.fetch = async url => {
+    requests.push(String(url))
+    if (!report) return { ok: false, status: 500, text: async () => '' }
+    const option = report.status ? `<option value="${report.status}" selected></option>` : '<option value="" selected></option>'
+    return { ok: true, status: 200, text: async () => `<form><select id="dt_admission_lesson_report_completion_status">${option}</select><input id="dt_admission_lesson_report_start_from" value="${report.from || ''}"><input id="dt_admission_lesson_report_end_to" value="${report.to || ''}"></form>` }
+  }
+  for (const file of ['lexicon', 'model', 'report-editor', 'session-cards', 'workflows']) w.eval(read(`../sites/orange-apple/orange-apple-${file}.js`))
+  w.eval(read('../sites/orange-apple/orange-apple.js'))
+  w.edulogSiteAdapter.enhancePage(w.document, {})
+  return { dom, w, doc: w.document, requests }
+}
+const completionOf = (doc, name) => statusOf(doc, name).split(' ')[1]
+for (const [title, report, expected] of [
+  ['尚未完成 with both chapters counts as filled', { status: 'not_all_done', from: '1', to: '3' }, 'ok:已填'],
+  ['完整完成 without chapters asks for the chapters', { status: 'all_done' }, 'warn:章節未填'],
+  ['尚未完成 without chapters asks for the chapters', { status: 'not_all_done', from: '2' }, 'warn:待補章節'],
+  ['a failed read falls back to 待確認', null, 'warn:待確認'],
+]) test(`yellow 完成狀況: ${title}`, async () => {
+  const s = classPageReading(report)
+  chip(s.doc, 'all').click()
+  assert.match(completionOf(s.doc, '學生乙'), /^(warn:待確認|neutral:核對中)$/, 'unresolved until the report is read')
+  await new Promise(resolve => setTimeout(resolve, 60))
+  assert.equal(completionOf(s.doc, '學生乙'), expected)
+  assert.ok(s.requests.length >= 1 && s.requests.every(url => /\/dt_admissions\/\d+\/reports\/\d+\/edit$/.test(new URL(url).pathname)), 'only report edit pages are read')
+  const before = s.requests.length
+  chip(s.doc, 'all').click(); await new Promise(resolve => setTimeout(resolve, 30))
+  assert.equal(s.requests.length, before, 'each report is read once per page')
+  s.dom.window.close()
+})
+test('provider placeholders L0 and "L? ?" are not shown as lesson progress', () => {
+  const s = classPage()
+  const known = s.w.edulogSiteSessionCards.knownLesson
+  assert.equal(known('L0'), false); assert.equal(known('L? ?'), false); assert.equal(known(''), false); assert.equal(known('L12'), true)
+  s.dom.window.close()
+})

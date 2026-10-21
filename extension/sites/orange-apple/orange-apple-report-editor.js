@@ -25,19 +25,26 @@
     return svg
   }
 
+  // 完成狀況 counts as filled once a status is chosen and both chapters are given; the class page
+  // resolves its ambiguous yellow icon with the same rule after reading the saved report.
+  function completionState(status, from, to) {
+    const chapters = Boolean(from && to)
+    if (status === 'all_done') return chapters ? 'done' : 'chapters'
+    if (status === 'not_all_done') return chapters ? 'partial' : 'unfinished'
+    return 'empty'
+  }
   // The same four states as the session icons, read from the form as it is being filled.
   function readState(form) {
     const value = key => form.querySelector(FIELDS[key])?.value || ''
     const attendance = value('attendance') === 'attended' ? 'present' : value('attendance') === 'absent' ? 'absent' : 'unmarked'
-    const chapters = Boolean(value('from') && value('to'))
-    const completion = value('completion') === 'all_done' ? (chapters ? 'done' : 'chapters') : value('completion') === 'not_all_done' ? 'unfinished' : 'empty'
+    const completion = completionState(value('completion'), value('from'), value('to'))
     const internal = value('internal') === 'on_track' ? 'ok' : value('internal') ? 'behind' : 'empty'
     const performance = collapse(value('feedback')) ? 'done' : 'empty'
     return { attendance, completion, internal, performance, reason: value('reason'), confirmed: Boolean(form.querySelector(FIELDS.confirm)?.checked) }
   }
   const CELLS = {
     attendance: { present: ['ok', 'check', '出席'], absent: ['danger', 'cross', '不出席'], unmarked: ['warn', 'dash', '未點名'] },
-    completion: { done: ['ok', 'check', '完整完成'], chapters: ['warn', 'triangle', '章節未填'], unfinished: ['warn', 'triangle', '尚未完成'], empty: ['warn', 'dash', '未填'] },
+    completion: { done: ['ok', 'check', '完整完成'], partial: ['ok', 'check', '尚未完成 · 已填章節'], chapters: ['warn', 'triangle', '章節未填'], unfinished: ['warn', 'triangle', '尚未完成 · 待補章節'], empty: ['warn', 'dash', '未填'] },
     internal: { ok: ['ok', 'check', '跟得上'], behind: ['danger', 'cross', '跟不上'], empty: ['warn', 'dash', '未選'] },
     performance: { done: ['ok', 'check', '已填寫'], empty: ['warn', 'dash', '未填'] },
   }
@@ -46,7 +53,7 @@
     if (state.attendance === 'absent') return state.reason ? [] : [['reason', '不出席原因']]
     const items = []
     if (state.completion === 'empty') items.push(['completion', '完成狀況'])
-    if (state.completion === 'chapters') items.push(['from', '章節進度'])
+    if (state.completion === 'chapters' || state.completion === 'unfinished') items.push(['from', '章節進度'])
     if (state.performance === 'empty') items.push(['feedback', '學習表現'])
     if (state.internal === 'empty') items.push(['internal', '內部紀錄'])
     if (state.performance === 'done' && !state.confirmed) items.push(['confirm', '確認學生姓名與上課資訊'])
@@ -186,5 +193,5 @@
     refresh()
     return { refresh }
   }
-  globalThis.edulogSiteReportEditor = Object.freeze({ readState, missingItems, readPhrases, fillLesson, enhance })
+  globalThis.edulogSiteReportEditor = Object.freeze({ completionState, readState, missingItems, readPhrases, fillLesson, enhance })
 })()

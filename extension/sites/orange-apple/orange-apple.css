@@ -61,8 +61,9 @@ html[data-edulog-ui="on"] .content :is(input,select,textarea) { font-size:var(--
  html[data-edulog-ui="on"][data-edulog-nav-open] #page-body > .sidebar { display:block !important; }
  html[data-edulog-ui="on"] #page-body > .content { width:100%; margin-left:0; padding:calc(var(--edulog-toolbar-height,64px) + 20px) 16px 28px; }
  html[data-edulog-ui="on"][data-edulog-nav-open] #page-body > .content { padding-top:20px; }
- html[data-edulog-ui="on"] #nav-teacher { display:block !important; }
- html[data-edulog-ui="on"] #nav-teacher .navbar-collapse { display:block !important; }
+ /* The provider mobile navbar only stays when the EduLog navigation is not mounted. */
+ html[data-edulog-ui="on"] #page-body > .sidebar:not(:has(.edulog-nav)) #nav-teacher { display:block !important; }
+ html[data-edulog-ui="on"] #page-body > .sidebar:not(:has(.edulog-nav)) #nav-teacher .navbar-collapse { display:block !important; }
  html[data-edulog-ui="on"] [data-edulog-week-cell]:not([data-edulog-week-selected]) { display:none; }
 }
 @media (max-width:600px) {
@@ -174,7 +175,9 @@ html[data-edulog-ui="on"] #lesson-report-modal .report-body form { width:100%; m
 html[data-edulog-ui="on"] #lesson-report-modal .report-body .text-center { text-align:left!important; }
 html[data-edulog-ui="on"] #lesson-report-modal .edulog-form-section { padding:16px 0; border-bottom:1px solid var(--edulog-border); }
 html[data-edulog-ui="on"] #lesson-report-modal .edulog-form-section h3 { font-size:var(--edulog-text-base); margin:0 0 14px; }
-html[data-edulog-ui="on"] #lesson-report-modal :is(input:not([type=hidden]):not([type=radio]):not([type=checkbox]),select,textarea) { min-height:var(--edulog-field-min-height,44px); font-size:var(--edulog-text-md); border-radius:8px; max-width:100%; }
+/* Report dialogs sit outside #page-body > .content, so their fields (including 內部紀錄 select and textarea) need the field style here. */
+html[data-edulog-ui="on"] :is(#lesson-report-modal,#remote_modal) :is(input:not([type=hidden]):not([type=radio]):not([type=checkbox]),select,textarea) { box-sizing:border-box; min-height:var(--edulog-field-min-height,44px); max-width:100%; padding:9px 12px; border:1px solid var(--edulog-border-input); border-radius:8px; color:var(--edulog-text); background-color:var(--edulog-surface); font-size:var(--edulog-text-md); line-height:var(--edulog-leading); }
+html[data-edulog-ui="on"] :is(#lesson-report-modal,#remote_modal) :is(input,select,textarea):focus-visible { border-color:var(--edulog-primary-bright); outline:3px solid var(--edulog-focus-ring); outline-offset:2px; }
 html[data-edulog-ui="on"] #lesson-report-modal textarea { --edulog-field-min-height:110px; width:100%; }
 html[data-edulog-ui="on"] #lesson-report-modal :is(.col-md-4,.col-md-6) { padding:0 8px; }
 html[data-edulog-ui="on"] #lesson-report-modal .edulog-rating-control { display:flex; align-items:center; gap:12px; margin:8px 0 16px; }
@@ -767,3 +770,5 @@ html[data-edulog-ui="on"] .edulog-session-cards .edulog-card-detail:not(:empty) 
 html[data-edulog-ui="on"] .edulog-popover-menu.edulog-popover-menu.edulog-popover-menu[popover] { position:fixed; inset:auto; margin:4px 0; top:anchor(bottom); right:anchor(right); left:auto; bottom:auto; max-height:min(60vh, 420px); overflow:auto; position-try-fallbacks:flip-block; }
 html[data-edulog-ui="on"] .edulog-popover-menu.edulog-popover-menu.edulog-popover-menu[popover][data-align="start"] { left:anchor(left); right:auto; }
 html[data-edulog-ui="on"] .edulog-popover-menu[popover]:not(:popover-open) { display:none; }
+/* With the EduLog navigation mounted, the provider navbar and class switcher stay hidden at every width (one navigation, never two). */
+html[data-edulog-ui="on"] #page-body > .sidebar:has(.edulog-nav) :is(#nav-teacher,[data-edulog-replaced]) { display:none !important; }

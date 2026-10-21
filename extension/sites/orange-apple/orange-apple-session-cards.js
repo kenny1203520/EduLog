@@ -34,12 +34,46 @@
     return roster
   }
   const linkMatching = (row, test) => [...row.querySelectorAll('a[href]')].find(a => test(a.getAttribute('href') || '', a))
+  // 完成狀況's yellow icon means 章節未填 or 尚未完成 (with or without chapters); only the saved report
+  // tells them apart. Each is read once per page with a same-origin GET of its edit page, a few at a time.
+  const completionReads = new Map()
+  const COMPLETION_READ_LIMIT = 4
+  const completionFallback = (status, from, to) => status === 'all_done' ? (from && to ? 'done' : 'chapters') : status === 'not_all_done' ? (from && to ? 'partial' : 'unfinished') : 'empty'
+  async function readCompletion(doc, href) {
+    const response = await fetch(new URL(href, doc.location.href), { credentials: 'same-origin', headers: { Accept: 'text/html' } })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const page = new DOMParser().parseFromString(await response.text(), 'text/html')
+    const value = selector => page.querySelector(selector)?.value || ''
+    if (!page.querySelector('#dt_admission_lesson_report_completion_status')) throw new Error('report form not found')
+    const state = (globalThis.edulogSiteReportEditor?.completionState || completionFallback)(value('#dt_admission_lesson_report_completion_status'), value('#dt_admission_lesson_report_start_from'), value('#dt_admission_lesson_report_end_to'))
+    return state === 'done' || state === 'partial' ? 'done' : state
+  }
+  function resolveCompletions(doc, students, changed) {
+    if (typeof fetch !== 'function' || typeof DOMParser !== 'function') return
+    const queue = [...new Set(students.filter(s => s.completionRaw === 'check' && s.recordHref).map(s => s.recordHref))].filter(href => !completionReads.has(href))
+    if (!queue.length) return
+    for (const href of queue) completionReads.set(href, { mark: null })
+    let active = 0, settled = false
+    const next = () => {
+      while (active < COMPLETION_READ_LIMIT && queue.length) {
+        const href = queue.shift(); active++
+        readCompletion(doc, href).then(mark => { completionReads.set(href, { mark }) }, () => { completionReads.set(href, { mark: 'check' }) })
+          .finally(() => { active--; if (!queue.length && !active && !settled) { settled = true; changed?.() } else next() })
+      }
+    }
+    next()
+  }
+  // The provider writes L0 or "L? ?" when the lesson is unknown; those are not shown.
+  const knownLesson = value => Boolean(value) && !String(value).includes('?') &&!/^L0$/i.test(String(value).trim())
   function readStudent(row, week, roster, upcoming) {
     const nameCell = row.cells[0], courseCell = row.cells[1], cell = row.cells[week.index]
     const name = collapse(nameCell?.querySelector(':scope > span')?.textContent) || row.getAttribute('data-edulog-student-name') || model.sessionText(nameCell)
     const admission = row.querySelector(selectors.admissionId)?.getAttribute('data-admission-id') || null
     // Read as an active session so the marks are the provider's, whatever the week.
     const state = model.readSessionCell(cell)
+    const recordHref = cell?.querySelector(selectors.recordLink)?.getAttribute('href') || null, completionRaw = state.completionMark
+    const read = completionRaw === 'check' && recordHref ? completionReads.get(recordHref) : null
+    if (read) state.completionMark = read.mark || 'checking'
     const courseText = collapse(courseCell?.textContent)
     const expired = words.courseExpired.exec(courseText)?.[0] || null
     const remaining = admission ? roster.get(admission)?.remaining : undefined
@@ -52,7 +86,7 @@
     const closed = !other && !recordLink
     const absent = state.attendanceMark === 'absent'
     const unmarked = !other && !closed && state.attendanceMark === 'unmarked'
-    const open = [state.completionMark, state.internalMark, state.performanceMark].some(mark => mark === 'empty' || mark === 'check')
+    const open = [state.completionMark, state.internalMark, state.performanceMark].some(mark => ['empty', 'check', 'checking', 'chapters', 'unfinished'].includes(mark))
     const incomplete = !other && !closed && !absent && open
     const issues = []
     if (!other) {
@@ -69,7 +103,7 @@
     const enable = cell?.querySelector(selectors.enableLesson)
     const enableReady = Boolean(enable && !enable.disabled && !enable.classList.contains('disabled') && !enable.classList.contains('invisible'))
     return {
-      row, name, admission, state, issues, group, paused, other, upcoming, closed, absent, unmarked, incomplete, due,
+      row, name, admission, state, completionRaw, recordHref, issues, group, paused, other, upcoming, closed, absent, unmarked, incomplete, due,
       complete: !other && !closed && !unmarked && !incomplete && !absent,
       course: collapse(courseCell?.querySelector('span')?.textContent),
       stage: collapse(courseCell?.querySelector(selectors.lastStage)?.textContent),
@@ -246,7 +280,7 @@
   // Status words per mark. Tone is the due tone; next week turns warn into neutral.
   const CELL = {
     attendance: { present: ['ok', '已點名'], absent: ['danger', '缺席'], unmarked: ['warn', '未點名'] },
-    completion: { done: ['ok', '已填'], check: ['warn', '待確認'], empty: ['warn', '未填'] },
+    completion: { done: ['ok', '已填'], check: ['warn', '待確認'], checking: ['neutral', '核對中'], chapters: ['warn', '章節未填'], unfinished: ['warn', '待補章節'], empty: ['warn', '未填'] },
     internal: { ok: ['ok', '已填'], behind: ['danger', '跟不上'], empty: ['warn', '未填'] },
     performance: { done: ['ok', '已填'], empty: ['warn', '未填'] },
   }
@@ -340,7 +374,7 @@
         tags.append(alert)
       }
       if (tags.childNodes.length) title.append(tags)
-      const progress = [student.course, student.state.scheduledLesson && `本堂 ${student.state.scheduledLesson}`, sessionLabel, student.stage && `最後上課 ${student.stage}`].filter(Boolean).join(' · ')
+      const progress = [student.course, knownLesson(student.state.scheduledLesson) && `本堂 ${student.state.scheduledLesson}`, sessionLabel, knownLesson(student.stage) && `最後上課 ${student.stage}`].filter(Boolean).join(' · ')
       main.append(title, dataText('span', progress, 'edulog-todo-meta'))
       if (student.state.enabledLesson && student.state.enabledLesson !== '已啟用') main.append(dataText('span', `已啟用 ${student.state.enabledLesson}`, 'edulog-todo-meta'))
       const strip = statusStrip(student)
@@ -370,6 +404,7 @@
       render({ session, visible, chip, counts, hidden }) {
         section.hidden = hidden
         if (hidden) return
+        resolveCompletions(doc, session.students, onChange)
         section.dataset.week = session.upcoming ? 'future' : 'due'
         const shown = sortStudents(session.students.filter(student => visible.has(student.row)))
         const open = new Set([...cards.values()].filter(card => card.face.querySelector('.edulog-card-more')?.open).map(card => card.li))
@@ -403,5 +438,5 @@
       },
     }
   }
-  globalThis.edulogSiteSessionCards = Object.freeze({ CHIPS, PRIMARY_CHIPS, MORE_CHIPS, defaultChip, readRoster, readSession, matchesChip, countChips, sortStudents, statusValues, createChips, mountCards, createDensityToggle, calmGroup })
+  globalThis.edulogSiteSessionCards = Object.freeze({ knownLesson, CHIPS, PRIMARY_CHIPS, MORE_CHIPS, defaultChip, readRoster, readSession, matchesChip, countChips, sortStudents, statusValues, createChips, mountCards, createDensityToggle, calmGroup })
 })()
