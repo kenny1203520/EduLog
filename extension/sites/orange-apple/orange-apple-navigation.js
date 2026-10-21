@@ -25,6 +25,8 @@
   }
   // Monday first, Sunday last, then by start time.
   const weekOrder = weekday => weekday === 0 ? 7 : weekday
+  // UI wording goes through the shared phrasebook (zh-TW / zh-CN / en); data stays in params.
+  const tx = (text, params = {}) => globalThis.edulogUi?.tx(text, params) ?? String(text).replace(/\{(\w+)\}/g, (_, name) => String(params[name] ?? ''))
   function readClasses(sidebar, doc) {
     const here = pathOf(doc.location.pathname)
     const today = globalThis.edulogSiteModel?.siteParts().weekday ?? new Date().getDay()
@@ -50,13 +52,13 @@
     const here = pathOf(doc.location.pathname)
     const classes = readClasses(sidebar, doc)
     const nav = scope.add(element('nav'))
-    nav.className = 'edulog-nav'; nav.setAttribute('aria-label', '主要導覽'); nav.id = 'edulog-nav'
+    nav.className = 'edulog-nav'; nav.setAttribute('aria-label', tx('主要導覽')); nav.id = 'edulog-nav'
     const dataText = (tag, value, className) => { const node = element(tag); node.textContent = value; if (className) node.className = className; return node }
     const section = label => { const box = element('section'); box.className = 'edulog-nav-section'; box.append(dataText('h2', label, 'edulog-nav-heading')); const list = element('ul'); box.append(list); nav.append(box); return list }
     const link = (href, label, current) => { const item = element('li'), anchor = element('a'); anchor.href = href; anchor.textContent = label; if (current) anchor.setAttribute('aria-current', 'page'); item.append(anchor); return { item, anchor } }
     const proxy = (label, target) => { const button = element('button', label); button.type = 'button'; listen(button, 'click', () => { if (target?.isConnected) target.click() }); return button }
 
-    const close = element('button', '關閉導覽'); close.type = 'button'; close.className = 'edulog-nav-close'
+    const close = element('button', tx('關閉導覽')); close.type = 'button'; close.className = 'edulog-nav-close'
     listen(close, 'click', () => setOpen(false))
     nav.append(close)
 
@@ -64,11 +66,11 @@
     const showCount = (marks, path) => {
       marks.querySelector('.edulog-nav-count')?.remove()
       const value = pending.get(path)
-      if (value) { const count = dataText('span', String(value), 'edulog-nav-count'); count.setAttribute('aria-label', `${value} 位待處理`); marks.append(count) }
+      if (value) { const count = dataText('span', String(value), 'edulog-nav-count'); count.setAttribute('aria-label', tx('{count} 位待處理', { count: value })); marks.append(count) }
       marks.hidden = !marks.childNodes.length
     }
     if (classes.length) {
-      const list = section('我的班級')
+      const list = section(tx('我的班級'))
       // Many classes: one group per weekday, today's group first.
       const grouped = classes.length > GROUP_BY_WEEKDAY
       const order = grouped ? [...classes].sort((a, b) => Number(b.today) - Number(a.today)) : classes
@@ -77,7 +79,7 @@
         if (grouped && item.weekday !== groupDay) {
           groupDay = item.weekday
           const group = element('li'); group.className = 'edulog-nav-day'
-          group.append(dataText('h3', item.weekday === 7 ? '其他' : `${config.weekdays[item.weekday]}${item.today ? '（今天）' : ''}`, 'edulog-nav-day-heading'))
+          group.append(dataText('h3', item.weekday === 7 ? tx('其他') : `${tx(config.weekdays[item.weekday])}${item.today ? tx('（今天）') : ''}`, 'edulog-nav-day-heading'))
           groupList = element('ul'); group.append(groupList); list.append(group)
         }
         const entry = element('li'), anchor = element('a')
@@ -87,7 +89,7 @@
         text.append(dataText('strong', item.primary)); if (item.secondary) text.append(dataText('span', item.secondary, 'edulog-nav-class-place'))
         anchor.append(text)
         const marks = element('span'); marks.className = 'edulog-nav-marks'
-        if (item.today && !grouped) marks.append(dataText('span', '今天', 'edulog-nav-today'))
+        if (item.today && !grouped) marks.append(dataText('span', tx('今天'), 'edulog-nav-today'))
         anchor.append(marks); showCount(marks, item.path); counts.set(item.path, marks)
         entry.append(anchor); groupList.append(entry)
       }
@@ -102,7 +104,7 @@
       if (!path || seenLinks.has(path)) continue
       seenLinks.add(path); workLinks.push({ href, label: collapse(native.textContent), current: path === here })
     }
-    if (workLinks.length) { const work = section('工作'); for (const entry of workLinks) work.append(link(entry.href, entry.label, entry.current).item) }
+    if (workLinks.length) { const work = section(tx('工作')); for (const entry of workLinks) work.append(link(entry.href, entry.label, entry.current).item) }
     // Module groups (師資模組, 人資模組) only appear when the provider gave them entries.
     for (const group of sidebar.querySelectorAll(config.moduleGroups)) {
       const entries = [...group.querySelectorAll(':scope .collapse a[href]')].filter(a => !(a.getAttribute('href') || '').startsWith('#'))
@@ -117,15 +119,15 @@
 
     const footer = element('div'); footer.className = 'edulog-nav-footer'
     const profile = sidebar.querySelector(config.profile)
-    if (profile) { const anchor = element('a', '個人資料'); anchor.href = profile.getAttribute('href'); if (pathOf(anchor.getAttribute('href')) === here) anchor.setAttribute('aria-current', 'page'); footer.append(anchor) }
+    if (profile) { const anchor = element('a', tx('個人資料')); anchor.href = profile.getAttribute('href'); if (pathOf(anchor.getAttribute('href')) === here) anchor.setAttribute('aria-current', 'page'); footer.append(anchor) }
     const locales = [...sidebar.querySelectorAll(config.locales)]
     if (locales.length) {
-      const group = element('div'); group.className = 'edulog-nav-locales'; group.setAttribute('role', 'group'); group.setAttribute('aria-label', '原站語言')
+      const group = element('div'); group.className = 'edulog-nav-locales'; group.setAttribute('role', 'group'); group.setAttribute('aria-label', tx('原站語言'))
       for (const locale of locales) { const button = proxy(collapse(locale.textContent), locale); if (locale.classList.contains('btn-primary')) button.setAttribute('aria-pressed', 'true'); group.append(button) }
       footer.append(group)
     }
     const logout = sidebar.querySelector(config.logout)
-    if (logout) { const button = proxy('登出', logout); button.className = 'edulog-nav-logout'; footer.append(button) }
+    if (logout) { const button = proxy(tx('登出'), logout); button.className = 'edulog-nav-logout'; footer.append(button) }
     nav.append(footer)
 
     for (const native of sidebar.querySelectorAll(`:scope > ${config.classSwitcher}, :scope > ${config.nav}`)) mark(native, 'data-edulog-replaced', '')

@@ -6,6 +6,8 @@
   if (!lexicon || !model || !cardsApi) return
   const { selectors } = lexicon
   const collapse = value => String(value || '').trim().replace(/\s+/g, ' ')
+  // UI wording goes through the shared phrasebook (zh-TW / zh-CN / en); data stays in params.
+  const tx = (text, params = {}) => globalThis.edulogUi?.tx(text, params) ?? String(text).replace(/\{(\w+)\}/g, (_, name) => String(params[name] ?? ''))
   const MARKS = { present: ['ok', '出席'], absent: ['danger', '缺席'], unmarked: ['warn', '未點名'] }
 
   // ---- Reading ---------------------------------------------------------------
@@ -36,7 +38,7 @@
       const student = reportCell ? studentFor(reportCell) : null
       return {
         box, id, index, student, weekIndex: reportCell ? reportCell.cellIndex : null,
-        name: student?.name || header.name || `第 ${index + 1} 位`,
+        name: student?.name || header.name || tx('第 {number} 位', { number: index + 1 }),
         course: student?.course || header.course,
         lesson: student?.state.scheduledLesson || '',
         mark: student?.state.attendanceMark || null,
@@ -58,12 +60,12 @@
     const button = (label, className) => { const node = element('button', label); node.type = 'button'; if (className) node.className = className; return node }
 
     const section = scope.add(element('section'))
-    section.className = 'edulog-quick-attendance'; section.setAttribute('aria-label', '本週快速點名')
+    section.className = 'edulog-quick-attendance'; section.setAttribute('aria-label', tx('本週快速點名'))
     const head = element('div'); head.className = 'edulog-qa-head'
-    const title = element('h3', '本週快速點名')
+    const title = element('h3', tx('本週快速點名'))
     const counts = element('p'); counts.className = 'edulog-qa-counts'
-    const tools = element('div'); tools.className = 'edulog-qa-tools'; tools.setAttribute('role', 'group'); tools.setAttribute('aria-label', '選取學生')
-    const all = button('全選'), invert = button('反選'), clear = button('清除')
+    const tools = element('div'); tools.className = 'edulog-qa-tools'; tools.setAttribute('role', 'group'); tools.setAttribute('aria-label', tx('選取學生'))
+    const all = button(tx('全選')), invert = button(tx('反選')), clear = button(tx('清除'))
     tools.append(all, invert, clear)
     head.append(title, counts, tools)
 
@@ -74,7 +76,7 @@
       const tile = element('label'); tile.className = 'edulog-qa-tile'
       const box = element('input'); box.type = 'checkbox'
       const main = element('span'); main.className = 'edulog-qa-main'
-      const meta = [(globalThis.edulogSiteSessionCards?.knownLesson?.(entry.lesson) ?? entry.lesson) && `本堂 ${entry.lesson}`, entry.course].filter(Boolean).join(' · ')
+      const meta = [(globalThis.edulogSiteSessionCards?.knownLesson?.(entry.lesson) ?? entry.lesson) && tx('本堂 {lesson}', { lesson: entry.lesson }), entry.course].filter(Boolean).join(' · ')
       main.append(text('strong', entry.name))
       // Long course names are clamped to two lines so every tile is the same height.
       if (meta) { const line = text('span', meta, 'edulog-qa-meta'); line.title = meta; main.append(line) }
@@ -88,18 +90,18 @@
 
     const bar = element('div'); bar.className = 'edulog-qa-bar'
     const selected = element('span'); selected.className = 'edulog-qa-selected'; selected.setAttribute('role', 'status'); selected.setAttribute('aria-live', 'polite')
-    const present = button('設定為出席', 'edulog-qa-present'), absent = button('設定為不出席', 'edulog-qa-absent')
+    const present = button(tx('設定為出席'), 'edulog-qa-present'), absent = button(tx('設定為不出席'), 'edulog-qa-absent')
     bar.append(selected, present, absent)
 
     const tally = { present: 0, absent: 0, unmarked: 0 }
     for (const entry of entries) if (tally[entry.mark] !== undefined) tally[entry.mark]++
-    counts.textContent = `應出 ${entries.length} · 出席 ${tally.present} · 缺席 ${tally.absent} · 未點名 ${tally.unmarked}`
+    counts.textContent = tx('應出 {expected} · 出席 {present} · 缺席 {absent} · 未點名 {unmarked}', { expected: entries.length, ...tally })
     // Once every student has a mark the block folds into one line; it stays editable when reopened.
     const done = entries.every(entry => entry.mark === 'present' || entry.mark === 'absent')
     if (done) {
       const details = element('details'); details.className = 'edulog-qa-done'
       const summary = element('summary')
-      summary.append(badge('ok', '完成'), text('span', `已點名 ${entries.length}/${entries.length}：出席 ${tally.present}、缺席 ${tally.absent}`))
+      summary.append(badge('ok', tx('完成')), text('span', tx('已點名 {count}/{count}：出席 {present}、缺席 {absent}', { count: entries.length, ...tally })))
       details.open = Boolean(view.quickAttendanceOpen)
       details.append(summary, head, grid, bar)
       listen(details, 'toggle', () => { view.quickAttendanceOpen = details.open })
@@ -117,7 +119,7 @@
     function update() {
       const chosen = entries.filter(entry => entry.box.checked)
       for (const [entry, { tile, box }] of tiles) { box.checked = entry.box.checked; tile.dataset.selected = String(entry.box.checked) }
-      selected.textContent = chosen.length ? `已選 ${chosen.length} 位` : '勾選學生後設定出席狀態'
+      selected.textContent = chosen.length ? tx('已選 {count} 位', { count: chosen.length }) : tx('勾選學生後設定出席狀態')
       bar.dataset.active = String(chosen.length > 0)
       if (!busy) present.disabled = absent.disabled = !chosen.length
     }
@@ -132,10 +134,10 @@
       if (type === '1' && !win.confirm(`將 ${chosen.length} 位設為不出席：${chosen.map(entry => entry.name).join('、')}\n不出席的學生本堂無法啟用課程。`)) return
       busy = true
       present.disabled = absent.disabled = true
-      trigger.textContent = '送出中…'
+      trigger.textContent = tx('送出中…')
       // The provider re-renders this turbo-frame after saving, which rebuilds the tiles.
       // If nothing comes back, let the teacher try again.
-      win.setTimeout(() => { if (!section.isConnected) return; busy = false; trigger.textContent = type === '1' ? '設定為不出席' : '設定為出席'; update() }, 15000)
+      win.setTimeout(() => { if (!section.isConnected) return; busy = false; trigger.textContent = tx(type === '1' ? '設定為不出席' : '設定為出席'); update() }, 15000)
       nativeButton.click()
     }
     listen(present, 'click', () => submit('0', present))

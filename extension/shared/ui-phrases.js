@@ -498,5 +498,227 @@ globalThis.edulogUi?.registerPhrases({
   ],
   "此頁暫用原站畫面：原站版面可能已更新，EduLog 暫時無法辨識。": [
    "Showing the site's own page: its layout may have changed and EduLog can't read it yet."
+  ],
+  "剩餘少": [
+   "Few left"
+  ],
+  "尚未開課": [
+   "Not started"
+  ],
+  "特殊狀態": [
+   "Special"
+  ],
+  "本週試聽": [
+   "Trial this week"
+  ],
+  "已試聽": [
+   "Trial done"
+  ],
+  "調課": [
+   "Transfer"
+  ],
+  "進度較慢": [
+   "Behind schedule"
+  ],
+  "未定": [
+   "TBD"
+  ],
+  "尚未開課 · 預計 {date}": [
+   "Not started · planned {date}"
+  ],
+  "同名 {count} 筆報名": [
+   "{count} enrollments, same name"
+  ],
+  "名單篩選": [
+   "Roster filter"
+  ],
+  "全選名單": [
+   "Select all"
+  ],
+  "班級名單": [
+   "Class roster"
+  ],
+  "其他 {count} 位沒有特別狀態": [
+   "{count} others with no special status"
+  ],
+  "預計 {date} 開課": [
+   "Starts {date}"
+  ],
+  "剩餘 {remaining} / {total} 堂": [
+   "{remaining} / {total} left"
+  ],
+  "補課 {used} / {allowed}": [
+   "Make-up {used} / {allowed}"
+  ],
+  "選取 {name}": [
+   "Select {name}"
+  ],
+  "選取": [
+   "Select"
+  ],
+  "筆電借用": [
+   "Laptop loan"
+  ],
+  "學習平台帳號": [
+   "Learning platform accounts"
+  ],
+  "複製": [
+   "Copy"
+  ],
+  "複製{label}": [
+   "Copy {label}"
+  ],
+  "已複製": [
+   "Copied"
+  ],
+  "無法複製": [
+   "Can't copy"
+  ],
+  "編輯": [
+   "Edit"
+  ],
+  "顯示密碼": [
+   "Show password"
+  ],
+  "隱藏密碼": [
+   "Hide password"
+  ],
+  "請輸入 AnyDesk ID 或帳號": [
+   "Enter an AnyDesk ID or account"
+  ],
+  "請輸入 Email，例如 name@example.com": [
+   "Enter an email, e.g. name@example.com"
+  ],
+  "編輯{name}帳號": [
+   "Edit {name} account"
+  ],
+  "帳號": [
+   "Account"
+  ],
+  "網址": [
+   "URL"
+  ],
+  "開啟": [
+   "Open"
+  ],
+  "顯示": [
+   "Show"
+  ],
+  "隱藏": [
+   "Hide"
+  ],
+  "顯示{name}密碼": [
+   "Show {name} password"
+  ],
+  "密碼": [
+   "Password"
+  ],
+  "尚未設定任何平台帳號。": [
+   "No platform accounts yet."
+  ],
+  "新增平台帳號": [
+   "Add platform account"
+  ],
+  "選擇要新增的平台": [
+   "Choose a platform to add"
+  ],
+  "新增": [
+   "Add"
+  ],
+  "第 {number} 位": [
+   "Student {number}"
+  ],
+  "本週快速點名": [
+   "Quick attendance"
+  ],
+  "選取學生": [
+   "Select students"
+  ],
+  "全選": [
+   "All"
+  ],
+  "反選": [
+   "Invert"
+  ],
+  "清除": [
+   "Clear"
+  ],
+  "設定為出席": [
+   "Mark present"
+  ],
+  "設定為不出席": [
+   "Mark absent"
+  ],
+  "應出 {expected} · 出席 {present} · 缺席 {absent} · 未點名 {unmarked}": [
+   "Expected {expected} · present {present} · absent {absent} · unmarked {unmarked}"
+  ],
+  "已點名 {count}/{count}：出席 {present}、缺席 {absent}": [
+   "Marked {count}/{count}: present {present}, absent {absent}"
+  ],
+  "已選 {count} 位": [
+   "{count} selected"
+  ],
+  "勾選學生後設定出席狀態": [
+   "Select students, then set attendance"
+  ],
+  "送出中…": [
+   "Sending…"
+  ],
+  "出席摘要，請手動複製": [
+   "Attendance summary; copy it manually"
+  ],
+  "複製出席": [
+   "Copy attendance"
+  ],
+  "已複製出席摘要": [
+   "Attendance summary copied"
+  ],
+  "無法自動複製，請手動複製下方文字": [
+   "Couldn't copy; copy the text below"
+  ],
+  "主要導覽": [
+   "Main navigation"
+  ],
+  "關閉導覽": [
+   "Close menu"
+  ],
+  "{count} 位待處理": [
+   "{count} to do"
+  ],
+  "（今天）": [
+   " (today)"
+  ],
+  "工作": [
+   "Work"
+  ],
+  "個人資料": [
+   "Profile"
+  ],
+  "原站語言": [
+   "Site language"
+  ],
+  "登出": [
+   "Log out"
+  ],
+  "週日": [
+   "Sun"
+  ],
+  "週一": [
+   "Mon"
+  ],
+  "週二": [
+   "Tue"
+  ],
+  "週三": [
+   "Wed"
+  ],
+  "週四": [
+   "Thu"
+  ],
+  "週五": [
+   "Fri"
+  ],
+  "週六": [
+   "Sat"
   ]
 })

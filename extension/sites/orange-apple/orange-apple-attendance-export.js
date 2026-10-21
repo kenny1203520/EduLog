@@ -4,6 +4,8 @@
   const lexicon = globalThis.edulogSiteLexicon, model = globalThis.edulogSiteModel
   if (!lexicon || !model) return
   const collapse = value => String(value || '').trim().replace(/\s+/g, ' ')
+  // UI wording goes through the shared phrasebook (zh-TW / zh-CN / en); data stays in params.
+  const tx = (text, params = {}) => globalThis.edulogUi?.tx(text, params) ?? String(text).replace(/\{(\w+)\}/g, (_, name) => String(params[name] ?? ''))
   const STATUS = { present: '出席', absent: '缺席', unmarked: '未點名' }
 
   // One entry per week: every report row's state in that week's column.
@@ -41,12 +43,12 @@
     return crumb || collapse(globalThis.edulogSiteNavigation?.currentClass(doc)?.full)
   }
 
-  function mountButton({ doc, scope, getWeeks, label = '複製出席' }) {
+  function mountButton({ doc, scope, getWeeks, label = tx('複製出席') }) {
     const { element, listen } = scope
     const box = element('div'); box.className = 'edulog-copy-attendance'
     const button = element('button', label); button.type = 'button'
     const status = element('span'); status.className = 'edulog-visually-hidden'; status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite')
-    const fallback = element('textarea'); fallback.readOnly = true; fallback.hidden = true; fallback.rows = 5; fallback.setAttribute('aria-label', '出席摘要，請手動複製')
+    const fallback = element('textarea'); fallback.readOnly = true; fallback.hidden = true; fallback.rows = 5; fallback.setAttribute('aria-label', tx('出席摘要，請手動複製'))
     box.append(button, status, fallback)
     let reset = 0
     listen(button, 'click', async () => {
@@ -59,14 +61,14 @@
         if (!win.navigator.clipboard?.writeText) throw new Error('clipboard unavailable')
         await win.navigator.clipboard.writeText(text)
         fallback.hidden = true
-        button.textContent = '已複製'
-        status.textContent = '已複製出席摘要'
+        button.textContent = tx('已複製')
+        status.textContent = tx('已複製出席摘要')
         reset = win.setTimeout(() => { button.textContent = label; status.textContent = '' }, 2000)
       } catch {
         // No clipboard access (permissions, insecure frame): show the text, selected, to copy by hand.
         fallback.value = text; fallback.hidden = false
         fallback.focus(); fallback.select()
-        status.textContent = '無法自動複製，請手動複製下方文字'
+        status.textContent = tx('無法自動複製，請手動複製下方文字')
       }
     })
     return box
