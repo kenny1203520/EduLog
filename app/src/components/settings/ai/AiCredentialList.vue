@@ -111,8 +111,15 @@ function replaceCredential(updated: AiCredentialDTO) {
     credentials.value = credentials.value.map((item) => item.id === updated.id ? { ...updated, models: item.models } : item)
 }
 
+/** Model chosen for each credential's test; the first model until the teacher picks another. */
+const testModelId = ref<Record<string, string>>({})
+
+function testModel(credential: AiCredentialDTO) {
+    return credential.models.find((model) => model.id === testModelId.value[credential.id]) ?? credential.models[0]
+}
+
 async function test(credential: AiCredentialDTO) {
-    const model = credential.models[0]
+    const model = testModel(credential)
     if (!model) return
     await run(`test:${credential.id}`, async () => {
         const result = site
@@ -223,7 +230,13 @@ const statusClass: Record<AiCredentialDTO['status'], string> = {
                         </template>
                     </AiNotice>
                 </div>
-                <div class="flex flex-wrap gap-2">
+                <div class="flex flex-wrap items-center gap-2">
+                    <select v-if="credential.models.length > 1" :value="testModel(credential)?.id" :aria-label="t('ai.settings.test_model')"
+                        :data-testid="`test-model-${credential.id}`" :disabled="busy !== null"
+                        class="min-h-11 max-w-[14rem] cursor-pointer truncate rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50"
+                        @change="testModelId = { ...testModelId, [credential.id]: ($event.target as HTMLSelectElement).value }">
+                        <option v-for="model in credential.models" :key="model.id" :value="model.id">{{ model.display_name }}</option>
+                    </select>
                     <button type="button" class="min-h-11 rounded-xl border border-gray-200 px-3 text-sm font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                         :disabled="!credential.models.length || busy !== null" :title="credential.models.length ? '' : t('ai.settings.test_needs_model')" @click="test(credential)">
                         {{ busy === `test:${credential.id}` ? t('ai.settings.testing') : t('ai.settings.test') }}

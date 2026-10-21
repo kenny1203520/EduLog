@@ -296,7 +296,8 @@
       "rate_limited": "This model is rate limited right now (common for free models). The key is probably fine; try later or test another model.",
       "data_policy": "Your OpenRouter privacy settings do not allow this free model. Allow the free models' data policy under OpenRouter → Settings → Privacy, or use a paid model. The key itself works.",
       "open_privacy": "Open OpenRouter privacy settings"
-    }
+    },
+    "test_model": "Model to test"
   },
   "history": {
     "tabs_label": "AI assistant tabs",
