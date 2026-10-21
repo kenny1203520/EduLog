@@ -3,7 +3,7 @@ import { createRequire } from 'node:module'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { repoRoot } from './release.mjs'
-import { browserTargets } from '../../extension/tests/browser-runtime.mjs'
+import { browserTargets } from '../../extension/tests/browser/browser-runtime.mjs'
 
 const require = createRequire(import.meta.url), playwright = require.resolve('@playwright/test')
 const suites = [
@@ -19,10 +19,10 @@ for (const [name, options] of browserTargets()) {
     const output = join(repoRoot, 'extension/tests/artifacts/ci', name, suite)
     mkdirSync(output, { recursive: true })
     console.log('Running synthetic suite: ' + name + '/' + suite)
-    const result = spawnSync(process.execPath, [join(repoRoot, 'extension/tests', suite + '.mjs'), playwright, output], { cwd: repoRoot, env, stdio: 'inherit' })
+    const result = spawnSync(process.execPath, [join(repoRoot, 'extension/tests/browser', suite + '.mjs'), playwright, output], { cwd: repoRoot, env, stdio: 'inherit' })
     if (result.status !== 0) failed.push(name + '/' + suite)
   }
-  const reconciliation = spawnSync(process.execPath, [join(repoRoot, 'extension/tests/mapping-memory-browser-check.mjs'), playwright, '--reconciliation'], { cwd: repoRoot, env, stdio: 'inherit' })
+  const reconciliation = spawnSync(process.execPath, [join(repoRoot, 'extension/tests/browser/mapping-memory-browser-check.mjs'), playwright, '--reconciliation'], { cwd: repoRoot, env, stdio: 'inherit' })
   if (reconciliation.status !== 0) failed.push(name + '/mapping reconciliation')
 }
 if (failed.length) { console.error('Failed synthetic suites: ' + failed.join(', ')); process.exitCode = 1 }

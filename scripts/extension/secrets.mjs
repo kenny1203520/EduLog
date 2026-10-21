@@ -23,7 +23,7 @@ export function secretFindings(files) {
       expression.lastIndex = 0
       for (const match of text.matchAll(expression)) {
         // This exact pre-existing negative URL fixture is synthetic. No file/rule-wide exclusions.
-        if (path === 'extension/tests/mapping-presentation.test.mjs' && rule === 'credential-url' && match[0] === ['https://', 'user:', 'secret@'].join('')) continue
+        if (path === 'extension/tests/unit/mapping-presentation.test.mjs' && rule === 'credential-url' && match[0] === ['https://', 'user:', 'secret@'].join('')) continue
         findings.push({ path, rule, line: text.slice(0, match.index).split('\n').length })
       }
     }

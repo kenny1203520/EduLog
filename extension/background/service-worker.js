@@ -1,6 +1,6 @@
-import '../sites/orange-apple/orange-apple-lexicon.js'
-import '../sites/orange-apple/orange-apple-model.js'
-import '../sites/orange-apple/orange-apple.js'
+import '../sites/orange-apple/core/lexicon.js'
+import '../sites/orange-apple/core/model.js'
+import '../sites/orange-apple/core/adapter.js'
 import './installation.js'
 import { installWorkspaceBroker } from './workspace-broker.js'
 
