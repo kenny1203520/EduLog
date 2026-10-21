@@ -67,8 +67,8 @@ test('unfilled student cells split br-separated names and courses while ignoring
   const parse = html => new s.w.DOMParser().parseFromString(html, 'text/html')
   const items = s.w.edulogSiteTodo.extractUnfilled(parse(fixture), false)
   assert.deepEqual(JSON.parse(JSON.stringify(items.map(item => [item.student, item.course, item.studentPath, item.action]))), [
-    ['林子謙', '菁英_AI人工智慧班 2.0', null, '/dt_admissions/174634/reports/264635/edit'],
-    ['林子謙', '', null, '/dt_admissions/174634/reports/264635/edit'],
+    ['林子謙', '菁英_AI人工智慧班 2.0', null, '/dt_admissions/164634/reports/264234/edit'],
+    ['林子謙', '', null, '/dt_admissions/174634/reports/264234/edit'],
   ])
 
   const { view } = s.enhance()
@@ -76,7 +76,7 @@ test('unfilled student cells split br-separated names and courses while ignoring
   const first = section(s.doc, 'reports').querySelector('.edulog-todo-group-item')
   assert.equal(first.querySelector('.edulog-todo-name').textContent, '林子謙')
   assert.equal(first.querySelector('.edulog-todo-fill').getAttribute('aria-label'), '林子謙 去填寫')
-  assert.equal(first.querySelector('.edulog-todo-fill').getAttribute('href'), '/dt_admissions/269041/reports/6713932/edit')
+  assert.equal(first.querySelector('.edulog-todo-fill').getAttribute('href'), '/dt_admissions/164634/reports/264234/edit')
   s.dom.window.close()
 })
 
