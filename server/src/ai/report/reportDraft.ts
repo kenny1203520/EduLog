@@ -66,11 +66,42 @@ export const JSON_TEXT_RULE = [
   'key 只能是 today、performance、home；沒有內容的段落可以省略。',
 ].join('\n')
 
-/** Lenient shape for json_text output: unknown keys dropped, missing titles filled in. */
-const LooseDraftSchema = z.object({
-  sections: z.array(z.object({ key: z.string(), title: z.string().optional(), body: z.string() })).default([]),
-  teachingSuggestions: z.array(z.string()).default([]),
-})
+type LooseSection = { key?: string, title?: string, body?: string }
+
+const text = (value: unknown): string | undefined => {
+  if (typeof value === 'string') return value
+  if (Array.isArray(value) && value.every((item) => typeof item === 'string')) return value.join('\n')
+  return undefined
+}
+
+function looseSection(value: unknown, key?: string): LooseSection | undefined {
+  const plain = text(value)
+  if (plain !== undefined) return { key, body: plain }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const record = value as Record<string, unknown>
+  return { key: text(record.key) ?? key, title: text(record.title), body: text(record.body) ?? text(record.content) ?? text(record.text) }
+}
+
+/**
+ * Bring model output into the draft's shape, whatever the model actually
+ * returned. Models without structured output (and partial JSON mid-stream)
+ * sometimes give `sections` as an object keyed by section ({"today": "…"}),
+ * a string, or suggestions as a single string; anything unusable is dropped.
+ */
+export function coerceDraftShape(value: unknown): { sections: Array<LooseSection | undefined>, teachingSuggestions: Array<string | undefined> } {
+  const record = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+  const rawSections = record.sections
+  const sections = Array.isArray(rawSections)
+    ? rawSections.map((section) => looseSection(section))
+    : rawSections && typeof rawSections === 'object'
+      ? Object.entries(rawSections as Record<string, unknown>).map(([key, section]) => looseSection(section, key))
+      : []
+  const rawSuggestions = record.teachingSuggestions
+  const teachingSuggestions = Array.isArray(rawSuggestions)
+    ? rawSuggestions.map((item) => (typeof item === 'string' ? item : undefined))
+    : typeof rawSuggestions === 'string' ? [rawSuggestions] : []
+  return { sections, teachingSuggestions }
+}
 
 /** Text around the JSON (code fences, a sentence before it) is ignored. */
 function jsonCandidate(text: string): string {
@@ -89,13 +120,14 @@ export function parseJsonTextDraft(text: string): ReportDraft {
   } catch {
     throw new InvalidDraftOutputError('The model did not return valid JSON')
   }
-  const parsed = LooseDraftSchema.safeParse(value)
-  if (!parsed.success) throw new InvalidDraftOutputError('The model returned JSON in an unexpected shape')
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new InvalidDraftOutputError('The model returned JSON in an unexpected shape')
+  const draft = coerceDraftShape(value)
   return {
-    sections: parsed.data.sections
-      .filter((section): section is typeof section & { key: ReportSectionKey } => (REPORT_SECTION_KEYS as readonly string[]).includes(section.key))
+    sections: draft.sections
+      .filter((section): section is { key: ReportSectionKey, title?: string, body: string } =>
+        Boolean(section?.key && (REPORT_SECTION_KEYS as readonly string[]).includes(section.key) && typeof section.body === 'string'))
       .map((section) => ({ key: section.key, title: section.title?.trim() || SECTION_TITLES[section.key], body: section.body })),
-    teachingSuggestions: parsed.data.teachingSuggestions,
+    teachingSuggestions: draft.teachingSuggestions.filter((item): item is string => typeof item === 'string'),
   }
 }
 
@@ -126,7 +158,7 @@ export async function streamReportDraft(options: StreamReportDraftOptions): Prom
   let output: ReportDraft
   try {
     for await (const partial of result.partialOutputStream) {
-      onPartial?.(restorePartial(partial as DeepPartialDraft, sectionMap, map))
+      onPartial?.(restorePartial(partial, sectionMap, map))
     }
     output = await result.output
   } catch (error) {
@@ -155,7 +187,7 @@ async function streamJsonTextDraft(options: StreamReportDraftOptions, sectionMap
       text += chunk
       if (!onPartial) continue
       const partial = await parsePartialJson(jsonCandidate(text))
-      if (partial.value && typeof partial.value === 'object') onPartial(restorePartial(partial.value as DeepPartialDraft, sectionMap, map))
+      if (partial.value && typeof partial.value === 'object') onPartial(restorePartial(partial.value, sectionMap, map))
     }
   } catch (error) {
     throw streamError ?? error
@@ -193,13 +225,14 @@ export function normalizeDraft(draft: ReportDraft): ReportDraft {
   }
 }
 
-function restorePartial(partial: DeepPartialDraft, sectionMap: PlaceholderMap, map: PlaceholderMap): DeepPartialDraft {
+function restorePartial(raw: unknown, sectionMap: PlaceholderMap, map: PlaceholderMap): DeepPartialDraft {
+  const partial = coerceDraftShape(raw)
   return {
-    sections: partial.sections?.map((section) => section && {
+    sections: partial.sections.map((section) => section && {
       key: section.key,
       title: section.title === undefined ? undefined : sectionMap.restoreStreaming(section.title),
       body: section.body === undefined ? undefined : sectionMap.restoreStreaming(section.body),
     }),
-    teachingSuggestions: partial.teachingSuggestions?.map((text) => text === undefined ? undefined : map.restoreStreaming(text)),
+    teachingSuggestions: partial.teachingSuggestions.map((item) => item === undefined ? undefined : map.restoreStreaming(item)),
   }
 }
