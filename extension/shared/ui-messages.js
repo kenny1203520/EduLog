@@ -84,9 +84,13 @@ const originals=new WeakMap()
 Object.assign(en,{'請選擇目標學生':'Choose an EduLog student','此變更的影響範圍':'Scope of this change','請選擇影響範圍':'Choose the scope','只更新此報名':'Update this enrollment only','更新共用學生對應':'Update the shared student match','此學生 ID 已有其他共用對應。請選擇只更新此報名，或更新共用學生對應。':'This source student ID already has a different shared match. Choose whether to update this enrollment only or the shared match.','尚未完成此學生與報名的記憶查詢；請重新檢查後再確認。':'The student and enrollment match has not been fully checked. Recheck before confirming.','伺服器記憶或目標版本已更新。已重新核對最新狀態，選擇尚未保存；請檢查後再次確認。':'A saved match or target changed. The latest state was rechecked, but your selection wasn\'t saved. Review it and confirm again.','版本衝突後局部重查失敗；目前選擇已保留，請重試「重新檢查對應記憶」。':'The focused recheck failed after a version conflict. Your selection is preserved; retry “Recheck saved matches”.','已重新核對；目前選擇尚未保存。請檢查最新記憶後再次確認。':'Rechecked. Your selection isn\'t saved yet. Review the latest match and confirm again.','共用學生對應已更新；此報名尚未重新核對，請檢查後確認。':'The shared student match changed. This enrollment still needs review and confirmation.'})
 function translate(value){
   const locale=globalThis.edulogUi.locale
-  if(locale!=='en')return value
+  if(locale==='zh-TW')return value
+  if(locale==='zh-CN')return en[value]||patternFor(value)?globalThis.edulogUi.toSimplified(value):value
   if(en[value])return en[value]
-  const patterns=[
+  const match=patternFor(value)
+  return match?value.replace(match[0],match[1]):value
+}
+const legacyPatterns=[
     [/^顯示 (\d+) 筆工作；封存 (\d+) 筆。狀態依實際檢查點與交易結果計算。$/,'Showing $1 work items; $2 archived. Status follows saved checkpoints and transaction results.'],
     [/^來源資料 (\d+) 列 · 歷史待讀取 (\d+) 份$/,'Source records: $1 rows · history reports pending: $2'],
     [/^批次 (\d+)\/(\d+) · 已寫入 (\d+) · 略過 (\d+) · 失敗 (\d+)$/,'Batches: $1/$2 · written: $3 · skipped: $4 · failed: $5'],
@@ -118,10 +122,8 @@ function translate(value){
     [/^等待時間 ([\d.]+) 秒。$/,'Waited $1 seconds.'],
     [/^已等待 (\d+) 秒；仍在等待回應。可取消這次唯讀查詢後重試。$/,'Waiting for $1 seconds. You can cancel this read-only lookup and retry.'],
     [/^已等待 (\d+) 秒。可取消此唯讀查詢。$/,'Waiting for $1 seconds. You can cancel this read-only lookup.']
-  ]
-  for(const [pattern,replacement] of patterns)if(pattern.test(value))return value.replace(pattern,replacement)
-  return value
-}
+]
+function patternFor(value){return legacyPatterns.find(([pattern])=>pattern.test(value))}
 
 function visit(root){
   if(!root)return

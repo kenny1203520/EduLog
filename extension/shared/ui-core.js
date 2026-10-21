@@ -251,12 +251,34 @@
     'flow.prefillStep2':['選擇報告並逐欄預覽；非空內容需確認覆寫。','Choose a report and preview each field. Confirm overwrites of existing values.'],
     'flow.prefillStep3':['預填後由老師檢查與人工送出。','After prefilling, the teacher reviews and submits the source form.'],
   }
-  let locale = /^en(?:-|$)/i.test(globalThis.navigator?.language || '') ? 'en' : 'zh-TW'
+  // Locales: zh-TW (source wording), zh-CN (converted from zh-TW unless an entry gives its own) and en.
+  // The preference is 'auto' (follow the teaching site's language) or a fixed locale.
+  const LOCALES = ['zh-TW', 'zh-CN', 'en']
+  const HANS = new Map("並并併并來来係系個个側侧備备傳传傷伤僅仅儘尽儲储內内兩两冪幂別别刪删則则動动務务匯汇區区參参員员問问啟启喪丧單单嗎吗國国圍围圖图執执報报塊块學学實实寫写寬宽將将專专尋寻對对導导屬属師师帳帐帶带庫库強强後后徑径從从態态慶庆憑凭憶忆應应捲卷掛挂採采換换擇择擊击擋挡據据擴扩擷撷敗败數数斷断於于時时暫暂曆历會会條条業业標标樣样樹树機机檢检欄栏權权歷历歸归決决沒没況况測测準准滿满瀏浏為为無无狀状獨独現现產产畢毕畫画異异當当發发確确碼码禮礼種种稱称筆笔節节範范篩筛簡简籤签紀纪約约紋纹納纳級级細细終终組组結结絕绝絡络統统綁绑維维網网緊紧緒绪線线編编縮缩總总繼继續续義义習习聯联聽听腳脚與与舊旧薦荐藍蓝蘋苹處处號号螢萤衝冲補补裝装裡里製制複复規规視视覽览計计訊讯記记設设許许診诊註注評评詢询試试話话該该詳详認认語语誤误說说誰谁課课調调請请證证識识議议護护讀读變变費费資资較较載载輪轮輯辑輸输轉转辦办這这連连週周進进運运過过適适選选還还邊边鈕钮銷销錄录錯错鍵键鐘钟長长閉闭開开間间關关陣阵隊队階阶際际隨随隱隐離离難难電电響响頁页頂顶項项順顺須须預预頭头題题類类顯显風风餘余驗验驟骤體体麥麦點点齊齐".match(/../gu).map(pair => [...pair]))
+  const PHRASES = {"帳號":"账号","帳戶":"账户","伺服器":"服务器","連線":"连接","預設":"默认","設定":"设置","檔案":"文件","螢幕":"屏幕","程式":"程序","支援":"支持","訊息":"消息","瀏覽器":"浏览器","介面":"界面","網路":"网络","視窗":"窗口","儲存":"保存","資料夾":"文件夹","登出":"退出登录"}
+  function toSimplified(value) {
+    let out = String(value)
+    for (const [from, to] of Object.entries(PHRASES)) out = out.split(from).join(to)
+    return [...out].map(ch => HANS.get(ch) || ch).join('')
+  }
+  const browserLocale = () => { const lang = globalThis.navigator?.language || ''; return /^en(?:-|$)/i.test(lang) ? 'en' : /^zh-(?:CN|SG|Hans)/i.test(lang) ? 'zh-CN' : 'zh-TW' }
+  let preference = 'auto', sourceLocale = null
+  let locale = browserLocale()
   const bindings = new Map(), listeners = new Set()
-  const normalize = value => value === 'en' ? 'en' : 'zh-TW'
+  const normalize = value => LOCALES.includes(value) ? value : 'zh-TW'
+  const normalizePreference = value => value === 'auto' || LOCALES.includes(value) ? value : 'auto'
+  const effective = () => preference === 'auto' ? (sourceLocale || browserLocale()) : preference
+  const format = (template, params) => String(template).replace(/\{(\w+)\}/g, (_, name) => typeof params[name]==='number' ? new Intl.NumberFormat(locale).format(params[name]) : String(params[name] ?? ''))
   function t(key, params = {}) {
     const entry = catalog[key]
-    return String(entry ? entry[locale === 'en' ? 1 : 0] : key).replace(/\{(\w+)\}/g, (_, name) => typeof params[name]==='number' ? new Intl.NumberFormat(locale).format(params[name]) : String(params[name] ?? ''))
+    const template = !entry ? key : locale === 'en' ? entry[1] : locale === 'zh-CN' ? (entry[2] ?? toSimplified(entry[0])) : entry[0]
+    return format(template, params)
+  }
+  // Inline UI text keyed by its zh-TW wording; data passed in params is never converted.
+  const phrasebook = {}
+  function tx(source, params = {}) {
+    const template = locale === 'en' ? (phrasebook[source]?.[0] ?? source) : locale === 'zh-CN' ? (phrasebook[source]?.[1] ?? toSimplified(source)) : source
+    return format(template, params)
   }
   function text(el, key, params = {}, attr) {
     if (!el) return el
@@ -266,7 +288,12 @@
   function update(el, binding) { const value = t(binding.key, typeof binding.params === 'function' ? binding.params() : binding.params); if (binding.attr) el.setAttribute(binding.attr, value); else el.textContent = value }
   function bind(root) { for (const el of root.querySelectorAll('[data-i18n]')) text(el, el.dataset.i18n, {}, el.dataset.i18nAttr) }
   function setLocale(value) {
-    const next = normalize(value), changed = next !== locale; locale = next
+    if (value === 'auto' || LOCALES.includes(value)) preference = normalizePreference(value)
+    apply()
+  }
+  function setSourceLocale(value) { sourceLocale = LOCALES.includes(value) ? value : null; apply() }
+  function apply() {
+    const next = normalize(effective()), changed = next !== locale; locale = next
     // Capture geometry before translated labels change wrapping. Keep the actual
     // controls, focus and selection; restore scroll after compatibility observers.
     const positions=[],collect=root=>{for(const el of root?.querySelectorAll?.('*')||[]){if(el.scrollTop||el.scrollLeft)positions.push([el,el.scrollTop,el.scrollLeft]);if(el.shadowRoot)collect(el.shadowRoot)}}
@@ -279,17 +306,25 @@
   async function saveLocale(value) {
     setLocale(value)
     // The worker validates both the sender and the bounded language value.
-    const result = await globalThis.edulogRuntime?.send({ type: 'set-ui-preferences', language: normalize(value) })
+    const result = await globalThis.edulogRuntime?.send({ type: 'set-ui-preferences', language: normalizePreference(value) })
     if (result?.error) throw new Error('PREFERENCES_UNAVAILABLE')
   }
   function languageSelect(doc = document) {
     const select = doc.createElement('select'); text(select, 'ui.language', {}, 'aria-label')
-    for (const [value, label] of [['zh-TW', '繁體中文'], ['en', 'English']]) { const option = doc.createElement('option'); option.value = value; option.textContent = label; select.append(option) }
-    select.value = locale; select.addEventListener('change', () => void saveLocale(select.value).catch(() => {})); subscribe(value => { select.value = value }); return select
+    const auto = doc.createElement('option'); auto.value = 'auto'; select.append(auto)
+    const autoLabel = () => { auto.textContent = `${tx('跟隨原站')}（${({ 'zh-TW': '繁體中文', 'zh-CN': '简体中文', en: 'English' })[locale]}）` }
+    for (const [value, label] of [['zh-TW', '繁體中文'], ['zh-CN', '简体中文'], ['en', 'English']]) { const option = doc.createElement('option'); option.value = value; option.textContent = label; select.append(option) }
+    autoLabel(); select.value = preference; select.addEventListener('change', () => void saveLocale(select.value).catch(() => {})); subscribe(() => { autoLabel(); select.value = preference }); return select
   }
   function subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener) }
   const styles = `:host{--ui-primary:var(--edulog-primary-bright);--ui-text:var(--edulog-text-strong);--ui-muted:var(--edulog-text-muted);--ui-border:var(--edulog-border-strong);--ui-surface:var(--edulog-surface);font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ui-text)}button,input,select,textarea{font:inherit;min-height:44px}small,.hint,.muted,.note{font-size:14px}button,input,select,textarea,a,summary{scroll-margin:80px 0}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid var(--edulog-focus-ring);outline-offset:3px}[hidden]{display:none!important}`
-  globalThis.edulogUi = Object.freeze({ t, text, bind, setLocale, saveLocale, subscribe, languageSelect, styles, get locale() { return locale }, register(entries) { Object.assign(catalog, entries) } })
-  globalThis.chrome?.storage?.onChanged?.addListener((changes, area) => { if (area === 'local' && changes.edulogWorkspaceLocale?.newValue) setLocale(changes.edulogWorkspaceLocale.newValue) })
-  if (globalThis.chrome?.storage?.local?.get) void globalThis.chrome.storage.local.get('edulogWorkspaceLocale').then(data => { if (data.edulogWorkspaceLocale) setLocale(data.edulogWorkspaceLocale) }).catch(() => {})
+  globalThis.edulogUi = Object.freeze({ t, tx, text, bind, setLocale, setSourceLocale, saveLocale, subscribe, languageSelect, toSimplified, styles, get locale() { return locale }, get preference() { return preference }, get sourceLocale() { return sourceLocale }, register(entries) { Object.assign(catalog, entries) }, registerPhrases(entries) { Object.assign(phrasebook, entries) } })
+  // The teaching site's language is recorded by the content script; every surface follows it when set to auto.
+  globalThis.chrome?.storage?.onChanged?.addListener((changes, area) => {
+    if (area !== 'local') return
+    if (changes.edulogSourceLocale) { sourceLocale = LOCALES.includes(changes.edulogSourceLocale.newValue) ? changes.edulogSourceLocale.newValue : null }
+    if (changes.edulogWorkspaceLocale?.newValue) preference = normalizePreference(changes.edulogWorkspaceLocale.newValue)
+    if (changes.edulogSourceLocale || changes.edulogWorkspaceLocale) apply()
+  })
+  if (globalThis.chrome?.storage?.local?.get) void globalThis.chrome.storage.local.get(['edulogWorkspaceLocale', 'edulogSourceLocale']).then(data => { sourceLocale = LOCALES.includes(data.edulogSourceLocale) ? data.edulogSourceLocale : null; preference = normalizePreference(data.edulogWorkspaceLocale || 'auto'); apply() }).catch(() => {})
 })()

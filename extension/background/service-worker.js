@@ -173,7 +173,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const key = 'edulogUiPreferences'
       const stored = (await chrome.storage.local.get(key))[key] || {}
       if (message.type === 'set-ui-preferences') {
-        if (message.language !== undefined && !['zh-TW','en'].includes(message.language)) return { error: 'INVALID_LANGUAGE' }
+        if (message.language !== undefined && !['auto','zh-TW','zh-CN','en'].includes(message.language)) return { error: 'INVALID_LANGUAGE' }
         if (message.language !== undefined) await chrome.storage.local.set({ edulogWorkspaceLocale: message.language })
         const id = globalThis.edulogSiteAdapter.id, current = stored[id] || {}
         // Per page kind: only 'original' is stored; 'enhanced' is the default.

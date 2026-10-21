@@ -4,6 +4,9 @@
   if (!adapter?.matchesHost(location.hostname)) return
   globalThis.edulogPageController = true
   const boot = globalThis.edulogUiBoot
+  const tx = (text, params) => globalThis.edulogUi?.tx(text, params) ?? text
+  // Rebuild the enhanced page in the new language; the toolbar re-renders with it.
+  globalThis.edulogUi?.subscribe(() => { if (initialized && shown) sync(true) })
   let enabled = false, enhancement, host, toolbarLifecycle, suspended = false, timer, resizeObserver, heightState
   let initialized = false, revision = 0, navigation = 0, needsPreference = false
   let preferenceVisit = null
@@ -14,6 +17,21 @@
   const pageOriginal = page => Boolean(page && pageModes[page.kind] === 'original')
   let view = {}, lastPath = location.pathname
   const pageViews = new Map()
+  // The teaching site's own language, read from the active choice in its locale switcher.
+  // Pages are read with zh-TW vocabulary; other languages keep the native page until supported.
+  const SOURCE_READY = new Set(['zh-TW'])
+  function siteLocale() {
+    const active = document.querySelector('.locale-selector a.btn-primary[href*="locale="]')
+    let value = document.documentElement.lang || ''
+    try { if (active) value = new URL(active.getAttribute('href'), location.href).searchParams.get('locale') || value } catch { /* keep the document language */ }
+    return /^en/i.test(value) ? 'en' : /^zh-(?:CN|Hans)/i.test(value) ? 'zh-CN' : /^zh/i.test(value) ? 'zh-TW' : null
+  }
+  let sourceLocale = null
+  function recordSiteLocale() {
+    const detected = siteLocale(); if (!detected || detected === sourceLocale) return
+    sourceLocale = detected; globalThis.edulogUi?.setSourceLocale(detected)
+    try { void globalThis.chrome?.storage?.local?.set({ edulogSourceLocale: detected })?.catch?.(() => {}) } catch { /* storage unavailable after the context is invalidated */ }
+  }
   const scrollState = () => [...document.querySelectorAll('[data-edulog-scroll]')].map((element, index) => ({ key: element.dataset.edulogScroll, index, left: element.scrollLeft, top: element.scrollTop }))
   function rememberPosition() {
     const active = document.activeElement
@@ -337,13 +355,14 @@
     const page = adapter.matchPage(location.pathname)
     if (!page || !document.querySelector(adapter.lexicon?.selectors.content || '#page-body > .content')) { shown = false; boot?.mode(false); teardown(); return }
     if (healthNotice) { healthNotice = false; showNotice('') }
-    const health = wanted ? adapter.checkPage?.(document, page.kind) : null
+    const unsupportedLocale = wanted && sourceLocale && !SOURCE_READY.has(sourceLocale)
+    const health = !wanted ? null : unsupportedLocale ? { ok: false, reason: 'locale' } : adapter.checkPage?.(document, page.kind)
     if (health?.reason === 'denied') { shown = false; boot?.mode(false); teardown(); return }
     shown = wanted && health?.ok !== false
     if (wanted && !shown) {
       // Provider markup no longer matches the lexicon: keep the native page usable.
       healthNotice = true
-      showNotice('此頁暫用原站畫面：原站版面可能已更新，EduLog 暫時無法辨識。')
+      showNotice(health?.reason === 'locale' ? tx('原站目前的語言尚未支援；請切回繁體中文以使用 EduLog 功能。') : tx('此頁暫用原站畫面：原站版面可能已更新，EduLog 暫時無法辨識。'))
       if (host?.isConnected) teardown()
     }
     if (shown) enhancement = adapter.enhancePage(document, view, Boolean(boot))
@@ -503,6 +522,7 @@
     needsPreference = prefs?.reason === 'unknown'
     if (request === revision) { enabled = prefs?.enabled !== false; pageModes = prefs?.pages || {} }
     if (!enabled && !bridge.invalidated && ['timeout', 'unavailable'].includes(prefs?.reason)) showNotice('未能及時讀取主題偏好，已保留原站。可在當頁套用清晰主題。')
+    recordSiteLocale()
     initialized = true
     try { sync() } finally { boot?.release() }
     return boot?.confirmed
