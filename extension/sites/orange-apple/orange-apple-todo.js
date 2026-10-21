@@ -7,6 +7,8 @@
   const ORIGIN = 'https://corp.orangeapple.co'
   const FRESH_MS = 5 * 60 * 1000
   const MAX_CLASSES = 20, READERS = 3, PREVIEW = 5
+  // UI wording goes through the shared phrasebook (zh-TW / zh-CN / en); data stays in params.
+  const tx = (text, params = {}) => globalThis.edulogUi?.tx(text, params) ?? String(text).replace(/\{(\w+)\}/g, (_, name) => String(params[name] ?? ''))
   const collapse = value => String(value || '').trim().replace(/\s+/g, ' ')
   const plain = cell => model.sessionText(cell)
   const cache = globalThis.edulogTodoCache || (globalThis.edulogTodoCache = new Map())
@@ -14,14 +16,14 @@
   // ---- Reading ---------------------------------------------------------------
   const readable = path => [sources.unfilledCurrent, sources.unfilledMonth, sources.calendar, sources.hours].includes(path) || /^\/courses\/dt\/\d+\/lesson_reports$/.test(path)
   async function readDoc(path) {
-    if (!readable(path)) throw new Error('來源路徑尚未驗證。')
+    if (!readable(path)) throw new Error(tx('來源路徑尚未驗證。'))
     const timeout = typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(15000) : undefined
     const response = await globalThis.fetch(`${ORIGIN}${path}`, { credentials: 'same-origin', redirect: 'error', cache: 'no-store', signal: timeout, headers: { Accept: 'text/html' } })
-    if (!response.ok || !response.headers.get('content-type')?.includes('text/html')) throw new Error('原站頁面暫時無法讀取或權限不足。')
+    if (!response.ok || !response.headers.get('content-type')?.includes('text/html')) throw new Error(tx('原站頁面暫時無法讀取或權限不足。'))
     const html = await response.text()
-    if (html.length > 5_000_000) throw new Error('原站頁面超過可處理大小。')
+    if (html.length > 5_000_000) throw new Error(tx('原站頁面超過可處理大小。'))
     const doc = new DOMParser().parseFromString(html, 'text/html')
-    if (!doc.querySelector(selectors.content)) throw new Error('原站頁面版面已變更，暫時無法辨識。')
+    if (!doc.querySelector(selectors.content)) throw new Error(tx('原站頁面版面已變更，暫時無法辨識。'))
     return doc
   }
   // Cached per path for a few minutes; concurrent callers share one request.
@@ -41,7 +43,7 @@
       const head = item.tHead?.rows[0] || item.rows[0]
       return headerIndex(head, words.unfilledStudent) >= 0 && headerIndex(head, words.unfilledRecord) >= 0
     })
-    if (!table) throw new Error('未填寫列表版面已變更，暫時無法辨識。')
+    if (!table) throw new Error(tx('未填寫列表版面已變更，暫時無法辨識。'))
     const head = table.tHead?.rows[0] || table.rows[0]
     const columns = { student: headerIndex(head, words.unfilledStudent), slot: headerIndex(head, words.unfilledSlot), record: headerIndex(head, words.unfilledRecord) }
     return [...table.tBodies].flatMap(body => [...body.rows]).filter(row => row.cells.length > columns.record).map(row => {
@@ -114,7 +116,7 @@
   }
   function extractAttendance(doc) {
     const table = doc.querySelector(selectors.reportsTable)
-    if (!table) throw new Error('課次報告版面已變更，暫時無法辨識。')
+    if (!table) throw new Error(tx('課次報告版面已變更，暫時無法辨識。'))
     const week = model.pickWeek(model.readWeekColumns(table.querySelectorAll('tr:first-child th')))
     if (!week) return { week: null, items: [] }
     const items = []
@@ -123,7 +125,7 @@
       const state = model.readSessionCell(row.cells[week.index])
       if (state.otherSession) continue
       const status = state.attendanceMark === 'absent' || (state.attendance && words.absent.test(state.attendance)) ? 'absent' : state.attendancePending ? 'pending' : null
-      if (status) items.push({ student: studentName(row.cells[0]), status, label: status === 'absent' ? '缺席' : state.attendanceMark === 'unmarked' ? '尚未點名' : '待確認出席' })
+      if (status) items.push({ student: studentName(row.cells[0]), status, label: tx(status === 'absent' ? '缺席' : state.attendanceMark === 'unmarked' ? '尚未點名' : '待確認出席') })
     }
     // Same 待處理 count as the lesson report cards, so the navigation shows one number everywhere.
     const cards = globalThis.edulogSiteSessionCards
@@ -168,7 +170,7 @@
         }
       }
       await Promise.all(Array.from({ length: READERS }, worker))
-      if (failed && failed === targets.length) throw new Error('各班課次報告暫時無法讀取。')
+      if (failed && failed === targets.length) throw new Error(tx('各班課次報告暫時無法讀取。'))
       return { classes: targets.map(item => results.find(result => result.path === item.path)).filter(Boolean), failed, skipped: Math.max(0, classes.length - targets.length) }
     },
   }
@@ -207,9 +209,9 @@
     const root = scope.add(element('section'))
     root.className = 'edulog-todo'; root.setAttribute('aria-labelledby', 'edulog-todo-title')
     const head = element('div'); head.className = 'edulog-todo-head'
-    const title = element('h2', '本週待辦'); title.id = 'edulog-todo-title'
+    const title = element('h2', tx('本週待辦')); title.id = 'edulog-todo-title'
     const updated = element('p'); updated.className = 'edulog-todo-updated'; updated.setAttribute('role', 'status'); updated.setAttribute('aria-live', 'polite')
-    const refresh = element('button', '重新整理'); refresh.type = 'button'; refresh.className = 'edulog-todo-refresh'
+    const refresh = element('button', tx('重新整理')); refresh.type = 'button'; refresh.className = 'edulog-todo-refresh'
     head.append(title, updated, refresh)
     const grid = element('div'); grid.className = 'edulog-todo-grid'
     root.append(head, grid)
@@ -221,29 +223,29 @@
       const titleRow = element('h3'); const label = element('span', heading); const count = element('span'); count.className = 'edulog-todo-count'
       titleRow.append(label, count)
       const body = element('div'); body.className = 'edulog-todo-body'; body.setAttribute('aria-live', 'polite')
-      const source = element('a', '在原站查看'); source.className = 'edulog-todo-source'; source.href = sourcePath
+      const source = element('a', tx('在原站查看')); source.className = 'edulog-todo-source'; source.href = sourcePath
       section.append(titleRow, body, source); grid.append(section)
       return { section, body, count }
     }
     const cards = {
-      reports: card('reports', '待填報告', sources.unfilledCurrent),
-      schedule: card('schedule', '本週課表', sources.calendar),
-      attendance: card('attendance', '本週點名與出席', classes[0] ? sources.classReports(classId(classes[0].path)) : '/'),
-      hours: card('hours', '本月時數', sources.hours),
+      reports: card('reports', tx('待填報告'), sources.unfilledCurrent),
+      schedule: card('schedule', tx('本週課表'), sources.calendar),
+      attendance: card('attendance', tx('本週點名與出席'), classes[0] ? sources.classReports(classId(classes[0].path)) : '/'),
+      hours: card('hours', tx('本月時數'), sources.hours),
     }
     const badge = (tone, iconName, label) => { const node = element('span'); node.className = 'edulog-badge'; node.dataset.tone = tone; node.append(icon(doc, iconName), element('span', label)); return node }
     const dataText = (tag, value, className) => { const node = element(tag); node.textContent = value; if (className) node.className = className; return node }
-    const empty = (target, message) => { const node = element('p'); node.className = 'edulog-todo-empty'; node.append(badge('ok', 'check', '完成'), element('span', message)); target.body.replaceChildren(node); target.count.textContent = '' }
+    const empty = (target, message) => { const node = element('p'); node.className = 'edulog-todo-empty'; node.append(badge('ok', 'check', tx('完成')), element('span', message)); target.body.replaceChildren(node); target.count.textContent = '' }
     function loading(target) {
       const skeleton = element('div'); skeleton.className = 'edulog-skeleton'; skeleton.setAttribute('aria-hidden', 'true')
       for (let index = 0; index < 3; index++) skeleton.append(element('span'))
-      const status = element('p', '正在讀取原站資料…'); status.className = 'edulog-visually-hidden'
+      const status = element('p', tx('正在讀取原站資料…')); status.className = 'edulog-visually-hidden'
       target.body.replaceChildren(skeleton, status); target.section.setAttribute('aria-busy', 'true')
     }
     function failure(target, key, error) {
       const box = element('div'); box.className = 'edulog-todo-error'
-      const message = element('p'); message.append(badge('danger', 'alert', '讀取失敗'), dataText('span', error?.message || '原站頁面暫時無法讀取。'))
-      const retry = element('button', '重試'); retry.type = 'button'
+      const message = element('p'); message.append(badge('danger', 'alert', tx('讀取失敗')), dataText('span', error?.message || tx('原站頁面暫時無法讀取。')))
+      const retry = element('button', tx('重試')); retry.type = 'button'
       listen(retry, 'click', () => run(key, true))
       box.append(message, retry); target.body.replaceChildren(box); target.count.textContent = ''
     }
@@ -258,7 +260,7 @@
         const main = element('div'); main.className = 'edulog-todo-main'
         main.append(dataText('strong', group.title), dataText('span', [group.place, group.summary].filter(Boolean).join(' · '), 'edulog-todo-meta'))
         head.append(main)
-        if (group.today) head.append(badge('info', 'calendar', '今天'))
+        if (group.today) head.append(badge('info', 'calendar', tx('今天')))
         if (group.href) { const go = element('a', group.action); go.className = 'edulog-todo-action'; go.href = group.href; go.setAttribute('aria-label', `${group.title} ${group.action}`); head.append(go) }
         const rows = element('ul'); rows.className = 'edulog-todo-group-items'
         for (const [index, item] of group.items.entries()) {
@@ -269,10 +271,10 @@
         li.append(head, rows)
         const rest = group.items.length - PREVIEW
         if (rest > 0) {
-          const more = element('button'); more.type = 'button'; more.className = 'edulog-todo-more'; more.textContent = `顯示其餘 ${rest} 位`; more.setAttribute('aria-expanded', 'false')
+          const more = element('button'); more.type = 'button'; more.className = 'edulog-todo-more'; more.textContent = tx('顯示其餘 {count} 位', { count: rest }); more.setAttribute('aria-expanded', 'false')
           listen(more, 'click', () => {
             const open = more.getAttribute('aria-expanded') !== 'true'
-            more.setAttribute('aria-expanded', String(open)); more.textContent = open ? '收合' : `顯示其餘 ${rest} 位`
+            more.setAttribute('aria-expanded', String(open)); more.textContent = open ? tx('收合') : tx('顯示其餘 {count} 位', { count: rest })
             for (const [index, row] of [...rows.children].entries()) if (index >= PREVIEW) row.hidden = !open
           })
           li.append(more)
@@ -281,10 +283,10 @@
       }
       return wrap
     }
-    const classLabel = (path, fallback) => { const item = classByPath.get(path); return { title: item?.primary || fallback || '其他', place: item?.secondary || '', today: Boolean(item?.today), weekday: item?.weekday ?? 7, start: item?.start || '' } }
+    const classLabel = (path, fallback) => { const item = classByPath.get(path); return { title: item?.primary || fallback || tx('其他'), place: item?.secondary || '', today: Boolean(item?.today), weekday: item?.weekday ?? 7, start: item?.start || '' } }
     const renderers = {
       reports(target, items) {
-        if (!items.length) return empty(target, '本週報告都填完了')
+        if (!items.length) return empty(target, tx('本週報告都填完了'))
         target.count.textContent = String(items.length)
         // Grouped by the class in each fill link; overdue groups first.
         const groups = new Map()
@@ -297,18 +299,18 @@
         const rows = groupList([...groups.values()].map(group => {
           const label = classLabel(group.path, group.fallback), overdue = group.items.filter(item => item.overdue).length
           return {
-            ...label, overdue, href: group.path ? sources.classReports(classId(group.path)) : null, action: '前往課堂記錄',
-            summary: [overdue && `逾期 ${overdue}`, group.items.length - overdue && `待補填 ${group.items.length - overdue}`].filter(Boolean).join(' · '),
+            ...label, overdue, href: group.path ? sources.classReports(classId(group.path)) : null, action: tx('前往課堂記錄'),
+            summary: [overdue && tx('逾期 {count}', { count: overdue }), group.items.length - overdue && tx('待補填 {count}', { count: group.items.length - overdue })].filter(Boolean).join(' · '),
             items: group.items.map(item => {
-              const marks = [item.overdue ? badge('danger', 'alert', '逾期未填') : badge('warn', 'clock', '待補填')]
-              if (item.action) { const go = element('a', '去填寫'); go.className = 'edulog-todo-fill'; go.href = item.action; go.setAttribute('aria-label', `${item.student} 去填寫`); marks.push(go) }
+              const marks = [item.overdue ? badge('danger', 'alert', tx('逾期未填')) : badge('warn', 'clock', tx('待補填'))]
+              if (item.action) { const go = element('a', tx('去填寫')); go.className = 'edulog-todo-fill'; go.href = item.action; go.setAttribute('aria-label', tx('{name} 去填寫', { name: item.student })); marks.push(go) }
               return { name: item.student, marks }
             }),
           }
         }).sort((a, b) => Number(Boolean(b.overdue)) - Number(Boolean(a.overdue)) || Number(b.today) - Number(a.today)))
         const note = element('p'); note.className = 'edulog-todo-note'
-        note.append(element('span', '已配對 EduLog 時，開啟課堂紀錄會出現 EduLog 預填。'))
-        const open = element('button', '設定 EduLog 配對'); open.type = 'button'; open.className = 'edulog-todo-link-button'
+        note.append(element('span', tx('已配對 EduLog 時，開啟課堂紀錄會出現 EduLog 預填。')))
+        const open = element('button', tx('設定 EduLog 配對')); open.type = 'button'; open.className = 'edulog-todo-link-button'
         listen(open, 'click', () => doc.getElementById('edulog-extension-root')?.shadowRoot?.querySelector('.integration')?.click())
         note.append(open)
         target.body.replaceChildren(rows, note)
@@ -316,7 +318,7 @@
       schedule(target, days) {
         const today = model.siteParts(), todayKey = `${today.month + 1}/${today.day}`
         const withEntries = days.filter(day => day.entries.length)
-        if (!withEntries.length) { target.count.textContent = ''; const node = element('p', classes.length ? '本週行事曆沒有你的班級課程。' : '本週行事曆沒有排定課程。'); node.className = 'edulog-todo-empty'; return target.body.replaceChildren(node) }
+        if (!withEntries.length) { target.count.textContent = ''; const node = element('p', tx(classes.length ? '本週行事曆沒有你的班級課程。' : '本週行事曆沒有排定課程。')); node.className = 'edulog-todo-empty'; return target.body.replaceChildren(node) }
         target.count.textContent = String(withEntries.reduce((sum, day) => sum + day.entries.length, 0))
         const rows = list()
         for (const day of withEntries) {
@@ -327,8 +329,8 @@
             const classTitle = classes.find(item => item.path === entry.classPath)?.title || entry.detail
             main.append(dataText('strong', `${day.label} ${entry.time}`.trim()), dataText('span', [classTitle, entry.room].filter(Boolean).join(' · '), 'edulog-todo-meta'))
             li.append(main)
-            if (isToday) li.append(badge('info', 'calendar', '今天'))
-            const go = element('a', '開啟班級'); go.className = 'edulog-todo-action'; go.href = entry.classPath; li.append(go)
+            if (isToday) li.append(badge('info', 'calendar', tx('今天')))
+            const go = element('a', tx('開啟班級')); go.className = 'edulog-todo-action'; go.href = entry.classPath; li.append(go)
             rows.append(li)
           }
         }
@@ -336,9 +338,9 @@
       },
       attendance(target, result) {
         const notes = []
-        if (result.failed) notes.push(`${result.failed} 個班級暫時無法讀取。`)
-        if (result.skipped) notes.push(`只檢查了 ${result.classes.length + result.failed} / ${result.classes.length + result.failed + result.skipped} 個班。`)
-        if (!classes.length) { target.count.textContent = ''; const node = element('p', '側邊欄沒有找到你的班級。'); node.className = 'edulog-todo-empty'; return target.body.replaceChildren(node) }
+        if (result.failed) notes.push(tx('{count} 個班級暫時無法讀取。', { count: result.failed }))
+        if (result.skipped) notes.push(tx('只檢查了 {checked} / {total} 個班。', { checked: result.classes.length + result.failed, total: result.classes.length + result.failed + result.skipped }))
+        if (!classes.length) { target.count.textContent = ''; const node = element('p', tx('側邊欄沒有找到你的班級。')); node.className = 'edulog-todo-empty'; return target.body.replaceChildren(node) }
         // A session counts only once it has started; later classes this week are not "unmarked" yet.
         const now = new Date(), shared = globalThis.edulogClassPending || (globalThis.edulogClassPending = new Map())
         let waiting = 0
@@ -351,15 +353,15 @@
           if (!item.items.length) continue
           const absent = item.items.filter(entry => entry.status === 'absent'), pending = item.items.filter(entry => entry.status !== 'absent')
           groups.push({
-            ...label, href: sources.classReports(classId(item.path)), action: '前往課次',
-            summary: [pending.length && `待點名 ${pending.length}`, absent.length && `缺席 ${absent.length}`].filter(Boolean).join(' · '),
+            ...label, href: sources.classReports(classId(item.path)), action: tx('前往課次'),
+            summary: [pending.length && tx('待點名 {count}', { count: pending.length }), absent.length && tx('缺席 {count}', { count: absent.length })].filter(Boolean).join(' · '),
             items: [...absent, ...pending].map(entry => ({ name: entry.student, marks: [entry.status === 'absent' ? badge('danger', 'alert', entry.label) : badge('warn', 'clock', entry.label)] })),
           })
         }
         globalThis.edulogSiteNavigation?.announcePending(doc)
-        if (waiting) notes.push(`${waiting} 個班本週還沒上課，開始上課後才會列入。`)
+        if (waiting) notes.push(tx('{count} 個班本週還沒上課，開始上課後才會列入。', { count: waiting }))
         const total = groups.reduce((sum, group) => sum + group.items.length, 0)
-        if (!total) empty(target, '已上課的班級都點完名，也沒有缺席')
+        if (!total) empty(target, tx('已上課的班級都點完名，也沒有缺席'))
         else {
           target.count.textContent = String(total)
           groups.sort((a, b) => Number(b.today) - Number(a.today) || weekOrder(a.weekday) - weekOrder(b.weekday) || a.start.localeCompare(b.start))
@@ -370,7 +372,7 @@
       hours(target, summary) {
         target.count.textContent = ''
         const line = element('p'); line.className = 'edulog-todo-summary'
-        line.append(dataText('strong', summary.period || '本月'), dataText('span', ` ${summary.records} 筆鐘點紀錄${summary.total !== null ? `，合計 ${summary.total}` : ''}`))
+        line.append(dataText('strong', summary.period || tx('本月')), dataText('span', ' ' + (summary.total !== null ? tx('{count} 筆鐘點紀錄，合計 {total}', { count: summary.records, total: summary.total }) : tx('{count} 筆鐘點紀錄', { count: summary.records }))))
         target.body.replaceChildren(line)
       },
     }
@@ -379,7 +381,7 @@
       const times = [...loadedAt.values()]
       if (!times.length) { updated.textContent = ''; return }
       const oldest = new Date(Math.min(...times))
-      updated.textContent = `更新於 ${String(oldest.getHours()).padStart(2, '0')}:${String(oldest.getMinutes()).padStart(2, '0')}`
+      updated.textContent = tx('更新於 {time}', { time: `${String(oldest.getHours()).padStart(2, '0')}:${String(oldest.getMinutes()).padStart(2, '0')}` })
     }
     const runs = new Map()
     function run(key, force = false) {

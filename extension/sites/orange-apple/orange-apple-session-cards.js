@@ -12,6 +12,8 @@
   if (!lexicon || !model) return
   const { text: words, selectors } = lexicon
   const LOW_REMAINING = 2
+  // UI wording goes through the shared phrasebook (zh-TW / zh-CN / en); data stays in params.
+  const tx = (text, params = {}) => globalThis.edulogUi?.tx(text, params) ?? String(text).replace(/\{(\w+)\}/g, (_, name) => String(params[name] ?? ''))
   const collapse = value => String(value || '').trim().replace(/\s+/g, ' ')
   // Persistent chips first; the rest sit under 更多.
   const PRIMARY_CHIPS = [['pending', '待處理'], ['unmarked', '未點名'], ['incomplete', '資料未齊'], ['all', '全部']]
@@ -91,10 +93,10 @@
     const issues = []
     if (!other) {
       // 需關注 (red) is about the student; amber is something the teacher still has to fill in.
-      if (absent) issues.push({ tone: 'danger', icon: 'alert', label: '缺席' })
-      if (state.behind) issues.push({ tone: 'danger', icon: 'alert', label: '跟不上進度' })
-      if (expired) issues.push({ tone: 'danger', icon: 'alert', label: '課程已到期' })
-      else if (remaining !== undefined && remaining <= LOW_REMAINING) issues.push({ tone: 'warn', icon: 'clock', label: `剩餘 ${remaining} 堂` })
+      if (absent) issues.push({ tone: 'danger', icon: 'alert', label: tx('缺席') })
+      if (state.behind) issues.push({ tone: 'danger', icon: 'alert', label: tx('跟不上進度') })
+      if (expired) issues.push({ tone: 'danger', icon: 'alert', label: tx('課程已到期') })
+      else if (remaining !== undefined && remaining <= LOW_REMAINING) issues.push({ tone: 'warn', icon: 'clock', label: tx('剩餘 {count} 堂', { count: remaining }) })
     }
     const due = !upcoming && (unmarked || incomplete)
     const group = other ? 'other' : issues.some(issue => issue.tone === 'danger') ? 'danger' : due || issues.length ? 'warn' : paused ? 'paused' : 'ok'
@@ -223,19 +225,19 @@
   // name on the disclosure so the active filter is always visible.
   function createChips({ doc, scope, onSelect }) {
     const { element, listen } = scope
-    const group = element('div'); group.className = 'edulog-filter-chips'; group.setAttribute('role', 'group'); group.setAttribute('aria-label', '學生篩選')
+    const group = element('div'); group.className = 'edulog-filter-chips'; group.setAttribute('role', 'group'); group.setAttribute('aria-label', tx('學生篩選'))
     const buttons = new Map()
     const chipButton = (chip, label) => {
       const button = element('button'); button.type = 'button'; button.dataset.chip = chip
-      const text = element('span', label), count = element('span'); count.className = 'edulog-chip-count'
+      const text = element('span', tx(label)), count = element('span'); count.className = 'edulog-chip-count'
       button.append(text, count); buttons.set(chip, { button, count })
       listen(button, 'click', () => { more.open = false; onSelect(chip) })
       return button
     }
     for (const [chip, label] of PRIMARY_CHIPS) group.append(chipButton(chip, label))
     const more = element('details'); more.className = 'edulog-chip-more'
-    const summary = element('summary'); const summaryText = element('span', '更多'); summary.append(summaryText, icon(doc, 'chevron-down'))
-    const menu = element('div'); menu.className = 'edulog-chip-menu'; menu.setAttribute('role', 'group'); menu.setAttribute('aria-label', '更多篩選')
+    const summary = element('summary'); const summaryText = element('span', tx('更多')); summary.append(summaryText, icon(doc, 'chevron-down'))
+    const menu = element('div'); menu.className = 'edulog-chip-menu'; menu.setAttribute('role', 'group'); menu.setAttribute('aria-label', tx('更多篩選'))
     for (const [chip, label] of MORE_CHIPS) menu.append(chipButton(chip, label))
     more.append(summary, menu); group.append(more); floatMenu(scope, doc, more, summary, menu, 'start')
     listen(doc, 'click', event => { if (more.open && !more.contains(event.target)) more.open = false })
@@ -248,7 +250,7 @@
           button.dataset.empty = String(!counts[chip])
         }
         const chosen = MORE_CHIPS.find(([chip]) => chip === active)
-        summaryText.textContent = chosen ? chosen[1] : '更多'
+        summaryText.textContent = tx(chosen ? chosen[1] : '更多')
         summary.dataset.active = String(Boolean(chosen))
       },
     }
@@ -256,7 +258,7 @@
   // 精簡列 (from 1024px): one line per student. Remembered per list in extension storage.
   function createDensityToggle({ scope, key, target, view }) {
     const { element, listen } = scope
-    const button = element('button', '精簡列'); button.type = 'button'; button.className = 'edulog-density-toggle'
+    const button = element('button', tx('精簡列')); button.type = 'button'; button.className = 'edulog-density-toggle'
     const apply = compact => { button.setAttribute('aria-pressed', String(compact)); if (compact) target.dataset.edulogDensity = 'compact'; else delete target.dataset.edulogDensity; view.density = { ...view.density, [key]: compact } }
     apply(Boolean(view.density?.[key]))
     listen(button, 'click', () => {
@@ -292,17 +294,17 @@
         : key !== 'attendance' && student.absent ? ['neutral', '不適用']
         : CELL[key][mark] || ['neutral', '—']
       if (student.upcoming && tone === 'warn') tone = 'neutral'
-      return { key, label, tone, word }
+      return { key, label: tx(label), tone, word: tx(word) }
     })
   }
 
   function mountCards({ doc, scope, anchor, onChange, revealAttendance }) {
     const { element, listen } = scope
     const section = scope.add(element('section'))
-    section.className = 'edulog-session-cards'; section.setAttribute('aria-label', '本堂學生')
+    section.className = 'edulog-session-cards'; section.setAttribute('aria-label', tx('本堂學生'))
     const status = element('p'); status.className = 'edulog-cards-status'; status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite')
     const head = element('div'); head.className = 'edulog-rows-head'; head.setAttribute('aria-hidden', 'true')
-    head.append(element('span', '學生'), element('span', '出席 · 完成狀況 · 內部紀錄 · 學習表現'), element('span', '操作'))
+    head.append(element('span', tx('學生')), element('span', tx('出席 · 完成狀況 · 內部紀錄 · 學習表現')), element('span', tx('操作')))
     const list = element('ul'); list.className = 'edulog-card-list edulog-row-list'
     section.append(status, head, list)
     anchor.before(section)
@@ -332,7 +334,7 @@
     // Four small indicators: dot + label + value. Shown for every student of this session.
     function statusStrip(student) {
       if (student.other) return null
-      const strip = element('ul'); strip.className = 'edulog-card-status'; strip.setAttribute('aria-label', `${student.name} 本堂狀態`)
+      const strip = element('ul'); strip.className = 'edulog-card-status'; strip.setAttribute('aria-label', tx('{name} 本堂狀態', { name: student.name }))
       const values = statusValues(student)
       for (const { key, label, tone, word } of values) {
         const item = element('li'); item.dataset.tone = tone; item.dataset.status = key
@@ -342,7 +344,7 @@
         // 未點名 leads to the student's quick-attendance tile when that block is on the page.
         if (key === 'attendance' && student.unmarked && revealAttendance?.target(student.row)) {
           const jump = element('button'); jump.type = 'button'; jump.className = 'edulog-status-jump'
-          jump.setAttribute('aria-label', `${student.name} 尚未點名，前往快速點名`)
+          jump.setAttribute('aria-label', tx('{name} 尚未點名，前往快速點名', { name: student.name }))
           jump.append(...parts); item.append(jump)
           listen(jump, 'click', () => revealAttendance.reveal(student.row))
         } else item.append(...parts)
@@ -354,47 +356,47 @@
     function primaryAction(student) {
       if (!student.recordLink || student.other) return null
       const label = student.unmarked ? '點名與紀錄' : student.incomplete ? '填寫紀錄' : '查看紀錄'
-      return { label, primary: label !== '查看紀錄' }
+      return { label: tx(label), primary: label !== '查看紀錄' }
     }
     function fillFace(face, student, sessionLabel) {
       const main = element('div'); main.className = 'edulog-card-main'
       const title = element('strong'); title.append(dataText('span', student.name, 'edulog-row-name'))
-      if (student.noteHasContent) { const mark = icon(doc, 'note'); mark.setAttribute('aria-hidden', 'false'); mark.setAttribute('role', 'img'); mark.setAttribute('aria-label', '有教學備註'); title.append(mark) }
+      if (student.noteHasContent) { const mark = icon(doc, 'note'); mark.setAttribute('aria-hidden', 'false'); mark.setAttribute('role', 'img'); mark.setAttribute('aria-label', tx('有教學備註')); title.append(mark) }
       // Tags next to the name: context the four statuses do not carry.
       const tags = element('span'); tags.className = 'edulog-card-badges'
       for (const issue of student.issues) tags.append(tag(issue.tone, issue.label))
-      if (student.other) tags.append(tag('neutral', '非本堂'))
+      if (student.other) tags.append(tag('neutral', tx('非本堂')))
       else if (student.paused) tags.append(tag('neutral', student.state.courseStatus))
-      if (student.closed) tags.append(tag('neutral', '原站未開放'))
+      if (student.closed) tags.append(tag('neutral', tx('原站未開放')))
       if (noteIsNew(student)) {
         const alert = element('button'); alert.type = 'button'; alert.className = 'edulog-badge edulog-note-alert'; alert.dataset.tone = 'info'
-        alert.append(icon(doc, 'note'), dataText('span', '新教學備註'))
-        alert.setAttribute('aria-label', `${student.name} 有新的教學備註，開啟查看`)
+        alert.append(icon(doc, 'note'), dataText('span', tx('新教學備註')))
+        alert.setAttribute('aria-label', tx('{name} 有新的教學備註，開啟查看', { name: student.name }))
         listen(alert, 'click', () => { if (student.note?.isConnected) student.note.click(); markNoteSeen(student); onChange?.() })
         tags.append(alert)
       }
       if (tags.childNodes.length) title.append(tags)
-      const progress = [student.course, knownLesson(student.state.scheduledLesson) && `本堂 ${student.state.scheduledLesson}`, sessionLabel, knownLesson(student.stage) && `最後上課 ${student.stage}`].filter(Boolean).join(' · ')
+      const progress = [student.course, knownLesson(student.state.scheduledLesson) && tx('本堂 {lesson}', { lesson: student.state.scheduledLesson }), sessionLabel, knownLesson(student.stage) && tx('最後上課 {lesson}', { lesson: student.stage })].filter(Boolean).join(' · ')
       main.append(title, dataText('span', progress, 'edulog-todo-meta'))
-      if (student.state.enabledLesson && student.state.enabledLesson !== '已啟用') main.append(dataText('span', `已啟用 ${student.state.enabledLesson}`, 'edulog-todo-meta'))
+      if (student.state.enabledLesson && student.state.enabledLesson !== '已啟用') main.append(dataText('span', tx('已啟用 {lesson}', { lesson: student.state.enabledLesson }), 'edulog-todo-meta'))
       const strip = statusStrip(student)
       const actions = element('div'); actions.className = 'edulog-card-actions'
       const label = `${student.name} ${sessionLabel}`
       const action = primaryAction(student)
       if (action) actions.append(proxy(action.label, student.recordLink, action.primary ? 'edulog-card-primary' : 'edulog-card-secondary', `${label} ${action.label}`))
-      else if (student.closed) { const none = dataText('span', '—', 'edulog-card-none'); none.setAttribute('aria-label', `${student.name} 原站未開放填寫`); none.setAttribute('role', 'img'); actions.append(none) }
-      if (student.enable) actions.append(proxy(collapse(student.enable.textContent) || '啟用課程', student.enable, 'edulog-card-secondary', `${label} ${collapse(student.enable.textContent) || '啟用課程'}`))
-      else if (student.enableBlocked) actions.append(dataText('span', '啟用需先點名', 'edulog-card-hint'))
+      else if (student.closed) { const none = dataText('span', '—', 'edulog-card-none'); none.setAttribute('aria-label', tx('{name} 原站未開放填寫', { name: student.name })); none.setAttribute('role', 'img'); actions.append(none) }
+      if (student.enable) actions.append(proxy(collapse(student.enable.textContent) || tx('啟用課程'), student.enable, 'edulog-card-secondary', `${label} ${collapse(student.enable.textContent) || tx('啟用課程')}`))
+      else if (student.enableBlocked) actions.append(dataText('span', tx('啟用需先點名'), 'edulog-card-hint'))
       const more = element('details'); more.className = 'edulog-card-more'
-      const summary = element('summary', '更多'); summary.setAttribute('aria-label', `${student.name} 更多操作`)
+      const summary = element('summary', tx('更多')); summary.setAttribute('aria-label', tx('{name} 更多操作', { name: student.name }))
       const menu = element('div'); menu.className = 'edulog-card-menu'
-      if (student.profile) { const link = element('a', '完整紀錄'); link.href = student.profile.getAttribute('href'); menu.append(link) }
-      if (student.lastTeaching) menu.append(proxy('上次教學', student.lastTeaching))
-      if (student.note) { const open = proxy('教學備註', student.note); if (noteIsNew(student)) listen(open, 'click', () => { markNoteSeen(student); onChange?.() }); menu.append(open) }
-      if (student.review) menu.append(proxy('學生總評', student.review))
-      if (student.account) menu.append(proxy('學習帳號設定', student.account))
-      if (student.project) { const link = element('a', '專案檢查'); link.href = student.project.getAttribute('href'); link.target = '_blank'; link.rel = 'noopener noreferrer'; menu.append(link) }
-      if (student.stats) menu.append(dataText('p', `出席 ${student.stats.attended} · 缺 ${student.stats.absent} · 未記 ${student.stats.unrecorded}`, 'edulog-card-stats'))
+      if (student.profile) { const link = element('a', tx('完整紀錄')); link.href = student.profile.getAttribute('href'); menu.append(link) }
+      if (student.lastTeaching) menu.append(proxy(tx('上次教學'), student.lastTeaching))
+      if (student.note) { const open = proxy(tx('教學備註'), student.note); if (noteIsNew(student)) listen(open, 'click', () => { markNoteSeen(student); onChange?.() }); menu.append(open) }
+      if (student.review) menu.append(proxy(tx('學生總評'), student.review))
+      if (student.account) menu.append(proxy(tx('學習帳號設定'), student.account))
+      if (student.project) { const link = element('a', tx('專案檢查')); link.href = student.project.getAttribute('href'); link.target = '_blank'; link.rel = 'noopener noreferrer'; menu.append(link) }
+      if (student.stats) menu.append(dataText('p', tx('出席 {attended} · 缺 {absent} · 未記 {unrecorded}', student.stats), 'edulog-card-stats'))
       more.append(summary, menu)
       if (menu.childNodes.length) { actions.append(more); floatMenu(scope, doc, more, summary, menu) }
       face.replaceChildren(...[main, strip, actions].filter(Boolean))
@@ -426,10 +428,10 @@
         void syncNotes(session.students, onChange)
         const notes = []
         let tone = null
-        if (session.notStarted) { tone = 'info'; notes.push('本堂還沒開始；現在就可以先點名、填寫紀錄，送出前仍可修改。') }
-        else if (session.upcoming) { tone = 'info'; notes.push('下週課次：可以先填寫紀錄、查看誰請假；未填項目以灰色顯示，尚未到期。') }
-        else if (!counts.pending && counts.all) { tone = 'ok'; notes.push(counts.attention ? `本堂沒有待補填的事項；${counts.attention} 位學生需關注。` : '本堂學生都已點名，資料也已填齊。') }
-        if (!items.length) notes.push(chip === 'other' && !counts.other ? '此課次沒有非本堂學生。' : '沒有符合篩選的學生。')
+        if (session.notStarted) { tone = 'info'; notes.push(tx('本堂還沒開始；現在就可以先點名、填寫紀錄，送出前仍可修改。')) }
+        else if (session.upcoming) { tone = 'info'; notes.push(tx('下週課次：可以先填寫紀錄、查看誰請假；未填項目以灰色顯示，尚未到期。')) }
+        else if (!counts.pending && counts.all) { tone = 'ok'; notes.push(counts.attention ? tx('本堂沒有待補填的事項；{count} 位學生需關注。', { count: counts.attention }) : tx('本堂學生都已點名，資料也已填齊。')) }
+        if (!items.length) notes.push(tx(chip === 'other' && !counts.other ? '此課次沒有非本堂學生。' : '沒有符合篩選的學生。'))
         status.replaceChildren()
         status.dataset.tone = tone || 'neutral'
         if (tone) status.append(icon(doc, tone === 'ok' ? 'check' : 'info'))

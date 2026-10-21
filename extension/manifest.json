@@ -49,6 +49,7 @@
       "js": [
         "shared/ui-core.js",
         "shared/ui-messages.js",
+        "shared/ui-phrases.js",
         "shared/source-date.js",
         "shared/field-mappings.js",
         "shared/field-mapping-ui.js",
