@@ -32,6 +32,29 @@ describe('occurrence report provisioning contract', () => {
   })
 })
 
+describe('class transfer contract', () => {
+  it('generates the target lessons before the transfer and forwards the note', () => {
+    const source = readFileSync(new URL('./domainRouter.ts', import.meta.url), 'utf8')
+    const handler = source.slice(source.indexOf('async function transferClass'), source.indexOf('async function enrollmentClassTimeline'))
+    expect(handler).toContain('note: z.string().trim().max(200)')
+    expect(handler).not.toContain('original_last_date')
+    expect(handler.indexOf('await ensurePlannedLessons(')).toBeGreaterThan(0)
+    expect(handler.indexOf('await ensurePlannedLessons(')).toBeLessThan(handler.indexOf("rpc('transfer_enrollment_class'"))
+    expect(handler).toContain('p_note: input.note || null')
+    expect(handler).toContain('missing_count: summary.missing_count ?? 0')
+  })
+
+  it('exposes the class timeline and roster flags read models behind read permissions', () => {
+    const source = readFileSync(new URL('./domainRouter.ts', import.meta.url), 'utf8')
+    expect(source).toContain("router.get('/enrollments/:id/class-timeline', wrap(enrollmentClassTimeline))")
+    expect(source).toContain("router.get('/class-sessions/:id/roster-flags', wrap(classSessionRosterFlags))")
+    expect(source).toContain("permission(req, 'teaching.enrollments.read', enrollment.data.class_session_id)")
+    expect(source).toContain("permission(req, 'teaching.class_sessions.read', sessionId)")
+    expect(source).toContain("rpc('get_enrollment_class_timeline'")
+    expect(source).toContain("rpc('get_class_session_roster_flags'")
+  })
+})
+
 function reportProvisionRequest(provisionableIds: string[], persistedReports: Array<Record<string, unknown>>, allowList = true) {
   const rpcCalls: string[] = []
   const database = {

@@ -4,7 +4,7 @@ import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { setAuditContext } from '../../http/context.js'
 import { requireAuthorizationDecision, requireAuthorizationRpcDecision } from '../../auth/authorization.js'
-import { matchScheduleRule, plannedLessonDates, type ScheduleRule } from '../../domain/occurrenceSchedule.js'
+import { fillPlannedLessons } from './lessonProvisioning.js'
 
 const fields = 'id,student_id,course_id,classroom_id,class_session_id,status,start_date,lesson_number,external_link,time_zone,koding_admission_id,user_id,created_at,updated_at,courses(subject,stage,display_name),classrooms(name,address),class_sessions(id,name,day_of_week,start_time,end_time,capacity,time_zone,session_type,schedule_mode,class_session_schedule_rules(id,schedule_kind,day_of_week,day_of_month,occurrence_date,start_time,end_time)),students(name)'
 const mutable = ['student_id', 'course_id', 'classroom_id', 'class_session_id', 'status', 'start_date', 'lesson_number', 'external_link', 'time_zone', 'koding_admission_id'] as const
@@ -123,37 +123,6 @@ export function todayIn(timeZone: string, now = new Date()) {
 }
 
 /**
- * Inserts lessons the schedule rules call for but that were never generated,
- * so a new enrollment can get its full report count. Insert-only: existing
- * lessons, including cancelled ones, are left untouched. A caller without
- * occurrence-create permission simply keeps the lessons that already exist.
- */
-async function ensurePlannedLessons(req: Request, sessionId: string, fromDate: string, count: number) {
-  if (count <= 0) return
-  const session = await req.db!.from('class_sessions').select('id,user_id,start_date,end_date,time_zone,class_session_schedule_rules(schedule_kind,day_of_week,day_of_month,occurrence_date,start_time,end_time)').eq('id', sessionId).maybeSingle()
-  const sessionRow = session.data
-  if (session.error || !sessionRow) return
-  const rules = (sessionRow.class_session_schedule_rules ?? []) as ScheduleRule[]
-  const dates = plannedLessonDates(rules, sessionRow, fromDate, count)
-  if (!dates.length) return
-  const existing = await req.db!.from('class_occurrences').select('occurrence_date').eq('class_session_id', sessionId).in('occurrence_date', dates)
-  if (existing.error) return
-  const existingDates = new Set((existing.data ?? []).map((row) => row.occurrence_date))
-  const missing = dates.filter((date) => !existingDates.has(date))
-  if (!missing.length) return
-  const assignments = await req.db!.from('class_session_teachers').select('teacher_id,effective_from,effective_to').eq('class_session_id', sessionId)
-  if (assignments.error) return
-  const rows = missing.map((date) => {
-    const rule = matchScheduleRule(rules, date)!
-    const active = (assignments.data ?? []).filter((assignment) => assignment.effective_from <= date && (!assignment.effective_to || assignment.effective_to >= date)).map((assignment) => assignment.teacher_id)
-    const teacherIds = [...new Set(active.length ? active : [sessionRow.user_id].filter(Boolean))]
-    return { class_session_id: sessionId, occurrence_date: date, status: 'scheduled', original_start_time: rule.start_time, original_end_time: rule.end_time, time_zone: sessionRow.time_zone || 'Asia/Taipei', is_conducted: true, teacher_ids: teacherIds, teacher_attendance: Object.fromEntries(teacherIds.map((id) => [id, true])) }
-  })
-  const inserted = await req.db!.from('class_occurrences').upsert(rows, { onConflict: 'class_session_id,occurrence_date', ignoreDuplicates: true })
-  if (inserted.error) req.log.warn({ event: 'enrollment_lesson_generation_skipped', database_error_code: inserted.error.code ?? 'UNKNOWN' }, 'enrollment_lesson_generation_skipped')
-}
-
-/**
  * Places this enrollment's blank placeholder reports on its first eligible
  * lessons from the start date (see sync_enrollment_reports). Reports with
  * content are never moved or deleted.
@@ -171,9 +140,15 @@ async function syncEnrollmentReports(req: Request, enrollment: { id: string; cla
   const planned = plan.data as ReportSyncResult
   // Always fill in scheduled lessons from the start date: lessons are usually
   // generated from today onward, so a back-dated start would otherwise skip
-  // the lessons between it and today. Headroom covers cancelled lessons and
-  // lessons transferred away.
-  if (planned.target_count > 0) await ensurePlannedLessons(req, enrollment.class_session_id, planned.start_date, planned.target_count + planned.missing_count + 4)
+  // the lessons between it and today. Keep generating while cancelled lessons,
+  // closures or lessons transferred away leave the count short.
+  if (planned.target_count > 0) {
+    await fillPlannedLessons(req, enrollment.class_session_id, planned.start_date, planned.target_count, async () => {
+      const check = await call(true)
+      if (check.error) throw mapDatabaseError(check.error)
+      return (check.data as ReportSyncResult).missing_count
+    })
+  }
   const result = await call(false)
   if (result.error) {
     req.log.warn({ event: 'enrollment_report_provisioning_failed', database_error_code: result.error.code ?? 'UNKNOWN' }, 'enrollment_report_provisioning_failed')

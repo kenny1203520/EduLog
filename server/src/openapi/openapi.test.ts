@@ -330,6 +330,8 @@ describe('generated API contract', () => {
       ['/api/enrollments/{id}/progress', 'get', 'enrollment_progress_get'],
       ['/api/enrollments/{id}/progress/recalculate', 'post', 'enrollment_progress_recalculate'],
       ['/api/enrollments/{id}/transfers/class', 'post', 'enrollment_transfer_class'],
+      ['/api/enrollments/{id}/class-timeline', 'get', 'enrollment_class_timeline'],
+      ['/api/class-sessions/{id}/roster-flags', 'get', 'class_session_roster_flags'],
       ['/api/teachers/bulk-delete', 'post', 'teachers_bulk_delete'],
       ['/api/copy-templates/{templateType}/{scopeType}/{scopeEntityId}', 'put', 'copy_template_put_scoped'],
     ]

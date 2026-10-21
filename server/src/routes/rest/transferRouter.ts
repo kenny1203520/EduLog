@@ -71,6 +71,8 @@ const transferReasons: Array<[reason: string, status: number, code: string, mess
   ['TARGET_SESSION_SAME_AS_CURRENT', 422, 'TRANSFER_INVALID', 'The transfer violates a business rule'],
   ['ENROLLMENT_HAS_NO_CLASS', 422, 'TRANSFER_INVALID', 'The transfer violates a business rule'],
   ['INVALID_TRANSFER_DATE', 422, 'TRANSFER_INVALID', 'The transfer violates a business rule'],
+  ['TRANSFER_NOTE_TOO_LONG', 422, 'TRANSFER_INVALID', 'The transfer violates a business rule'],
+  ['INVALID_DATE_RANGE', 422, 'INVALID_DATE_RANGE', 'The date range is invalid'],
   ['PERMISSION_DENIED', 403, 'PERMISSION_DENIED', 'You do not have permission to perform this transfer'],
 ]
 

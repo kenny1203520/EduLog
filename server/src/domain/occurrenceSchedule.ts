@@ -23,9 +23,25 @@ export function matchScheduleRule(rules: ScheduleRule[], date: string): Schedule
       : candidate.day_of_week === day)
 }
 
+export type ClosureHoliday = {
+  start_date: string
+  end_date: string
+  classroom_ids: string[] | null
+  class_session_ids: string[] | null
+}
+
+/** Whether a closure applies to a class (an unscoped closure applies everywhere). */
+export function closureApplies(holiday: ClosureHoliday, sessionId: string, classroomId: string | null) {
+  const classrooms = holiday.classroom_ids ?? []
+  const sessions = holiday.class_session_ids ?? []
+  return (!classrooms.length && !sessions.length) || sessions.includes(sessionId) || (!!classroomId && classrooms.includes(classroomId))
+}
+
 /**
- * The first `count` scheduled lesson dates on or after `fromDate`, within the
- * session's own start/end dates, scanning at most `maxDays` days.
+ * The scheduled lesson dates on or after `fromDate` up to the `count`-th open
+ * one, within the session's own start/end dates, scanning at most `maxDays`
+ * days. Closed dates (`isClosed`) are returned too, so the lesson exists on the
+ * calendar, but they do not count toward `count`.
  */
 export function plannedLessonDates(
   rules: ScheduleRule[],
@@ -33,12 +49,16 @@ export function plannedLessonDates(
   fromDate: string,
   count: number,
   maxDays = 3660,
+  isClosed: (date: string) => boolean = () => false,
 ): string[] {
   const dates: string[] = []
+  let open = 0
   let date = session.start_date && session.start_date > fromDate ? session.start_date : fromDate
-  for (let scanned = 0; dates.length < count && scanned <= maxDays; scanned++, date = nextDate(date)) {
+  for (let scanned = 0; open < count && scanned <= maxDays; scanned++, date = nextDate(date)) {
     if (session.end_date && date > session.end_date) break
-    if (matchScheduleRule(rules, date)) dates.push(date)
+    if (!matchScheduleRule(rules, date)) continue
+    dates.push(date)
+    if (!isClosed(date)) open++
   }
   return dates
 }
