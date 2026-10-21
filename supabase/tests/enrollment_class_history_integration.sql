@@ -18,6 +18,7 @@ DECLARE
   a_1010 uuid := '7d000000-0000-4000-8000-0000000000a4';
   b_1003 uuid := '7d000000-0000-4000-8000-0000000000b2';
   b_1010 uuid := '7d000000-0000-4000-8000-0000000000b3';
+  b_1017 uuid := '7d000000-0000-4000-8000-0000000000b4';
   report_0926 uuid := '7d000000-0000-4000-8000-000000000011';
   report_1003 uuid := '7d000000-0000-4000-8000-000000000012';
   report_1010 uuid := '7d000000-0000-4000-8000-000000000013';
@@ -41,9 +42,10 @@ BEGIN
   INSERT INTO public.class_occurrences(id, class_session_id, occurrence_date, status, is_conducted)
   VALUES (a_0926, session_a, DATE '2026-09-26', 'scheduled', true),
          (a_1003, session_a, DATE '2026-10-03', 'scheduled', true),
-         (a_1010, session_a, DATE '2026-10-10', 'scheduled', false),
+         (a_1010, session_a, DATE '2026-10-10', 'scheduled', true),
          (b_1003, session_b, DATE '2026-10-03', 'scheduled', true),
-         (b_1010, session_b, DATE '2026-10-10', 'scheduled', false);
+         (b_1010, session_b, DATE '2026-10-10', 'scheduled', true),
+         (b_1017, session_b, DATE '2026-10-17', 'scheduled', true);
   INSERT INTO public.occurrence_reports(id, enrollment_id, class_occurrence_id, content)
   VALUES (report_0926, v_enrollment_id, a_0926, 'September lesson'),
          (report_1003, v_enrollment_id, a_1003, 'Written before the transfer'),
@@ -65,8 +67,12 @@ BEGIN
   IF (SELECT class_occurrence_id FROM public.occurrence_reports WHERE id = report_1003) <> a_1003 THEN
     RAISE EXCEPTION 'contentful report moved out of the old class';
   END IF;
-  IF (SELECT class_occurrence_id FROM public.occurrence_reports WHERE id = report_1010) <> b_1003 THEN
-    RAISE EXCEPTION 'blank placeholder did not move to the first free new-class lesson';
+  -- 10/03 already holds the retained report, so the placeholder skips B's 10/03.
+  IF (SELECT class_occurrence_id FROM public.occurrence_reports WHERE id = report_1010) IS DISTINCT FROM b_1010 THEN
+    RAISE EXCEPTION 'blank placeholder did not move to the first free new-class date';
+  END IF;
+  IF (SELECT count(*) FROM public.occurrence_reports WHERE enrollment_id = v_enrollment_id) <> 3 THEN
+    RAISE EXCEPTION 'class transfer changed the report count';
   END IF;
 
   -- Rosters follow the history.
@@ -81,14 +87,14 @@ BEGIN
   END IF;
 
   -- A past lesson of the old class is still a valid single-lesson transfer source.
-  PERFORM public.transfer_single_lesson(v_enrollment_id, a_0926, b_1010, report_0926);
-  IF (SELECT class_occurrence_id FROM public.occurrence_reports WHERE id = report_0926) <> b_1010 THEN
+  PERFORM public.transfer_single_lesson(v_enrollment_id, a_0926, b_1017, report_0926);
+  IF (SELECT class_occurrence_id FROM public.occurrence_reports WHERE id = report_0926) IS DISTINCT FROM b_1017 THEN
     RAISE EXCEPTION 'single-lesson transfer from the previous class failed';
   END IF;
 
-  -- A direct class change (legacy path) switches from today.
+  -- A direct class change (legacy path) switches from today in the class time zone.
   UPDATE public.enrollments SET class_session_id = session_a WHERE id = v_enrollment_id;
-  IF NOT EXISTS (SELECT 1 FROM public.enrollment_class_history WHERE enrollment_id = v_enrollment_id AND class_session_id = session_a AND effective_to IS NULL AND effective_from = GREATEST(CURRENT_DATE, DATE '2026-09-01')) THEN
+  IF NOT EXISTS (SELECT 1 FROM public.enrollment_class_history WHERE enrollment_id = v_enrollment_id AND class_session_id = session_a AND effective_to IS NULL AND effective_from = GREATEST(private.local_today(session_a, v_enrollment_id), DATE '2026-09-01')) THEN
     RAISE EXCEPTION 'direct class update did not open a segment from today';
   END IF;
 END;
