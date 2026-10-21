@@ -27,6 +27,7 @@
   const weekOrder = weekday => weekday === 0 ? 7 : weekday
   // UI wording goes through the shared phrasebook (zh-TW / zh-CN / en); data stays in params.
   const tx = (text, params = {}) => globalThis.edulogUi?.tx(text, params) ?? String(text).replace(/\{(\w+)\}/g, (_, name) => String(params[name] ?? ''))
+  const menuLabel = (path, native) => config.labels[path] ? tx(config.labels[path]) : collapse(native.textContent)
   function readClasses(sidebar, doc) {
     const here = pathOf(doc.location.pathname)
     const today = globalThis.edulogSiteModel?.siteParts().weekday ?? new Date().getDay()
@@ -102,16 +103,16 @@
       if (href.startsWith('#') || native.closest('.collapse:not(.navbar-collapse)')) continue
       const path = pathOf(href)
       if (!path || seenLinks.has(path)) continue
-      seenLinks.add(path); workLinks.push({ href, label: collapse(native.textContent), current: path === here })
+      seenLinks.add(path); workLinks.push({ href, label: menuLabel(path, native), current: path === here })
     }
     if (workLinks.length) { const work = section(tx('工作')); for (const entry of workLinks) work.append(link(entry.href, entry.label, entry.current).item) }
     // Module groups (師資模組, 人資模組) only appear when the provider gave them entries.
     for (const group of sidebar.querySelectorAll(config.moduleGroups)) {
       const entries = [...group.querySelectorAll(':scope .collapse a[href]')].filter(a => !(a.getAttribute('href') || '').startsWith('#'))
       if (!entries.length) continue
-      const title = collapse(group.querySelector(':scope > a')?.textContent) || '其他'
-      const list = section(title)
-      for (const entry of entries) list.append(link(entry.getAttribute('href'), collapse(entry.textContent), pathOf(entry.getAttribute('href')) === here).item)
+      const title = collapse(group.querySelector(':scope > a')?.textContent)
+      const list = section(!title ? tx('其他') : config.groupLabels.includes(title) ? tx(title) : title)
+      for (const entry of entries) list.append(link(entry.getAttribute('href'), menuLabel(pathOf(entry.getAttribute('href')), entry), pathOf(entry.getAttribute('href')) === here).item)
     }
     // The provider's server-backed student search moves into the navigation bar.
     const search = sidebar.querySelector(config.search)

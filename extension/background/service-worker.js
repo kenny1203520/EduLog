@@ -168,6 +168,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     })().then(sendResponse, () => sendResponse({ error: 'PREFERENCES_UNAVAILABLE' }))
     return true
   }
+  // Whether pay amounts (本月鐘點) are shown; hidden unless the teacher chose to show them.
+  if (isTeachingPage(sender.url) && ['get-amount-visible', 'set-amount-visible'].includes(message?.type)) {
+    void (async () => {
+      const key = 'edulogAmountVisible'
+      if (message.type === 'set-amount-visible') {
+        if (typeof message.visible !== 'boolean') return { error: 'INVALID_PREFERENCE' }
+        await chrome.storage.local.set({ [key]: message.visible })
+      }
+      return { visible: (await chrome.storage.local.get(key))[key] === true }
+    })().then(sendResponse, () => sendResponse({ error: 'PREFERENCES_UNAVAILABLE' }))
+    return true
+  }
   if ((fromPopup || isTeachingPage(sender.url)) && ['get-ui-preferences', 'set-ui-preferences'].includes(message?.type)) {
     void (async () => {
       const key = 'edulogUiPreferences'

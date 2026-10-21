@@ -101,18 +101,53 @@
     }
     return days
   }
-  function extractHours(doc) {
+  // 「我的鐘點」: one row per class slot ("…201教室（菁英） - 週六 第 1 時段 (10:00 ~ 12:00)", its
+  // dates, an NT$ amount), bonus rows dated by month, and other tables (營隊) with day lists.
+  // Each table is followed by the provider's total line; only its NT$ figure is read, never the
+  // teacher name printed next to it.
+  const minutes = time => { const [h, m] = time.split(':').map(Number); return h * 60 + m }
+  function extractHours(doc, now = new Date()) {
     const content = doc.querySelector(selectors.content)
-    const period = ['year', 'month'].map(name => collapse(content.querySelector(`select[name=${name}]`)?.selectedOptions?.[0]?.textContent)).filter(Boolean).join(' ')
-    let records = 0, total = 0, numeric = true
-    for (const row of content.querySelectorAll('table tr')) {
-      const cells = [...row.cells].filter(cell => cell.tagName === 'TD')
-      if (!cells.some(cell => words.isoDate.test(cell.textContent))) continue
-      records++
-      const value = Number(collapse(cells.at(-1)?.textContent).replace(/[^\d.]/g, ''))
-      if (Number.isFinite(value) && /\d/.test(cells.at(-1)?.textContent || '')) total += value; else numeric = false
+    const picked = name => content.querySelector(`select[name=${name}]`)?.selectedOptions?.[0]
+    const period = ['year', 'month'].map(name => collapse(picked(name)?.textContent)).filter(Boolean).join(' ')
+    const year = Number(/\d{4}/.exec(picked('year')?.value || picked('year')?.textContent || '')?.[0]), month = Number(/\d{1,2}/.exec(picked('month')?.value || picked('month')?.textContent || '')?.[0])
+    const today = model.siteParts(now)
+    const isCurrent = !year || !month ? null : year === today.year && month === today.month + 1
+    // Text between tables, in document order: segment i + 1 follows table i.
+    const copy = content.cloneNode(true), tables = [...copy.querySelectorAll('table')]
+    tables.forEach((table, index) => table.replaceWith(copy.ownerDocument.createTextNode(`\u0000${index}\u0000`)))
+    const after = copy.textContent.split(/\u0000\d+\u0000/).slice(1)
+    const lessons = [], events = [], other = []
+    let unreadable = 0, sum = 0, providerTotal = 0, allTotals = true
+    for (const [index, table] of [...content.querySelectorAll('table')].entries()) {
+      const rows = [...table.rows]
+      const section = collapse(rows[0]?.cells[0]?.textContent)
+      for (const row of rows.slice(1)) {
+        const cells = [...row.cells]
+        if (cells.length < 3) continue
+        const label = collapse(cells[0].textContent), dateText = collapse(cells[1].textContent), amountText = collapse(cells.at(-1).textContent)
+        const dates = dateText.match(words.hourDate) || []
+        const amount = /\d/.test(amountText) ? Number(amountText.replace(/NT\$|,|\s/g, '')) : NaN
+        if (!label || !Number.isFinite(amount)) { unreadable++; continue }
+        sum += amount
+        const schedule = model.classSchedule(label)
+        if (schedule && dates.length) lessons.push({ section, label, schedule, dates, amount, hours: dates.length * Math.max(0, minutes(schedule.end) - minutes(schedule.start)) / 60 })
+        else if (dates.length) events.push({ section, label, dates, amount })
+        else if (words.hourMonth.test(dateText) || !dateText) other.push({ section, label, amount })
+        else unreadable++
+      }
+      const total = words.hourTotal.exec(after[index] || '')?.[1]
+      if (total) providerTotal += Number(total.replace(/,/g, '')); else allTotals = false
     }
-    return { period, records, total: numeric && records ? Math.round(total * 100) / 100 : null }
+    const tableCount = content.querySelectorAll('table').length
+    const round = value => Math.round(value * 100) / 100
+    return {
+      period, isCurrent,
+      total: tableCount && allTotals ? providerTotal : round(sum), estimated: Boolean(tableCount) && !allTotals,
+      sessions: lessons.reduce((count, item) => count + item.dates.length, 0), hours: round(lessons.reduce((count, item) => count + item.hours, 0)),
+      lessons: lessons.map(({ schedule, ...item }) => ({ ...item, weekday: schedule.weekdayLabel, start: schedule.start, end: schedule.end, room: schedule.room })),
+      events, other, unreadable,
+    }
   }
   function extractAttendance(doc) {
     const table = doc.querySelector(selectors.reportsTable)
@@ -202,7 +237,7 @@
     }
     return svg
   }
-  function mount({ doc, content, scope }) {
+  function mount({ doc, content, scope, view = {} }) {
     const { element, listen } = scope
     const classes = describeClasses(teacherClasses(doc))
     const classByPath = new Map(classes.map(item => [item.path, item]))
@@ -231,7 +266,7 @@
       reports: card('reports', tx('待填報告'), sources.unfilledCurrent),
       schedule: card('schedule', tx('本週課表'), sources.calendar),
       attendance: card('attendance', tx('本週點名與出席'), classes[0] ? sources.classReports(classId(classes[0].path)) : '/'),
-      hours: card('hours', tx('本月時數'), sources.hours),
+      hours: card('hours', tx('本月鐘點'), sources.hours),
     }
     const badge = (tone, iconName, label) => { const node = element('span'); node.className = 'edulog-badge'; node.dataset.tone = tone; node.append(icon(doc, iconName), element('span', label)); return node }
     const dataText = (tag, value, className) => { const node = element(tag); node.textContent = value; if (className) node.className = className; return node }
@@ -369,11 +404,40 @@
         }
         for (const message of notes) { const node = dataText('p', message, 'edulog-todo-note'); target.body.append(node) }
       },
+      // Pay figures stay masked until the teacher shows them (remembered); counts are always shown.
       hours(target, summary) {
         target.count.textContent = ''
-        const line = element('p'); line.className = 'edulog-todo-summary'
-        line.append(dataText('strong', summary.period || tx('本月')), dataText('span', ' ' + (summary.total !== null ? tx('{count} 筆鐘點紀錄，合計 {total}', { count: summary.records, total: summary.total }) : tx('{count} 筆鐘點紀錄', { count: summary.records }))))
-        target.body.replaceChildren(line)
+        const money = value => `NT$ ${Number(value).toLocaleString('en-US')}`
+        const amounts = []
+        const amount = value => { const node = dataText('span', '', 'edulog-hours-amount'); node.dataset.value = money(value); amounts.push(node); return node }
+        const head = element('p'); head.className = 'edulog-todo-summary'
+        head.append(dataText('strong', summary.period || tx('本月')))
+        if (summary.isCurrent === false) head.append(badge('warn', 'calendar', tx('不是本月')))
+        const items = [...summary.lessons, ...summary.events, ...summary.other]
+        if (!items.length && !summary.unreadable) { head.append(element('span', tx('這個月還沒有鐘點紀錄'))); return target.body.replaceChildren(head) }
+        const totalRow = element('div'); totalRow.className = 'edulog-hours-total'
+        const total = amount(summary.total); total.classList.add('edulog-hours-figure')
+        const toggle = element('button'); toggle.type = 'button'; toggle.className = 'edulog-hours-toggle'
+        totalRow.append(total, toggle)
+        const facts = dataText('p', [tx('共 {count} 堂', { count: summary.sessions }), summary.hours && tx('約 {hours} 小時', { hours: summary.hours })].filter(Boolean).join(' · '), 'edulog-todo-meta')
+        const rows = list()
+        const row = (title, meta, value) => { const li = element('li'); li.className = 'edulog-todo-item'; const main = element('div'); main.className = 'edulog-todo-main'; main.append(dataText('strong', title)); if (meta) main.append(dataText('span', meta, 'edulog-todo-meta')); li.append(main, amount(value)); rows.append(li) }
+        for (const item of summary.lessons) row(`${tx(item.weekday)} ${item.start.replace(/^0/, '')}–${item.end.replace(/^0/, '')}`, [item.room, tx('{count} 堂', { count: item.dates.length })].join(' · '), item.amount)
+        for (const item of summary.events) row(item.label, [item.section, tx('{count} 天', { count: item.dates.length })].filter(Boolean).join(' · '), item.amount)
+        for (const item of summary.other) row(item.label, tx('不計入堂數'), item.amount)
+        const notes = []
+        if (summary.estimated) notes.push(tx('原站沒有提供合計，金額為逐列加總。'))
+        if (summary.unreadable) notes.push(tx('{count} 筆無法判讀，請到原站查看。', { count: summary.unreadable }))
+        const show = visible => {
+          view.amountVisible = visible
+          toggle.textContent = visible ? tx('隱藏金額') : tx('顯示金額'); toggle.setAttribute('aria-pressed', String(visible))
+          for (const node of amounts) node.textContent = visible ? node.dataset.value : 'NT$ ••••'
+        }
+        listen(toggle, 'click', () => { const visible = !view.amountVisible; show(visible); void globalThis.edulogRuntime?.send({ type: 'set-amount-visible', visible })?.catch(() => {}) })
+        const known = typeof view.amountVisible === 'boolean'
+        show(view.amountVisible === true)
+        if (!known) void globalThis.edulogRuntime?.send({ type: 'get-amount-visible' })?.then(result => { if (typeof result?.visible === 'boolean' && toggle.isConnected) show(result.visible) }).catch(() => {})
+        target.body.replaceChildren(head, totalRow, facts, rows, ...notes.map(message => dataText('p', message, 'edulog-todo-note')))
       },
     }
     const loadedAt = new Map()

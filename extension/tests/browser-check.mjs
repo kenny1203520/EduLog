@@ -117,7 +117,7 @@ for (const [browserName, launchOptions] of executables) {
       if (name === 'calendar') fixture = fixture.replace('<form method="get">','<div class="row"><div class="col-sm-2"><a class="btn" href="/calendar?date=2026-09-21">前一週</a></div><div class="col-sm-8"><form method="get"><div class="row"><div class="col-sm-7">').replace('<input type="submit"','</div><div class="col-sm-3"><input type="submit"').replace('</form>','</div></div></form></div><div class="col-sm-2"><a class="btn" href="/calendar?date=2026-10-05">下一週</a></div></div>')
       fixture = fixture.replace('</head>', `<style>${nativeCss}</style><style>${css}</style></head>`)
       // The overview to-do view reads provider pages; answer them with local samples.
-      const sourcePages = { '/admissions/unfilled_report': 'unfilled-current', '/admissions/month_unfilled_report': 'unfilled', '/calendar': 'calendar', '/my/hour': 'hours', '/courses/dt/101/lesson_reports': 'reports', '/courses/dt/102/lesson_reports': 'reports' }
+      const sourcePages = { '/admissions/unfilled_report': 'unfilled-current', '/admissions/month_unfilled_report': 'unfilled', '/calendar': 'calendar', '/my/hour': 'hours-pay', '/courses/dt/101/lesson_reports': 'reports', '/courses/dt/102/lesson_reports': 'reports' }
       await page.route('**/*', route => {
         if (route.request().isNavigationRequest()) return route.fulfill({ contentType: 'text/html', body: fixture })
         const source = sourcePages[new URL(route.request().url()).pathname]

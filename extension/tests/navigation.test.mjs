@@ -122,3 +122,17 @@ test('more than six classes are grouped by weekday with today first, and counts 
   assert.equal(s.doc.querySelector('.edulog-nav'), null)
   s.dom.window.close()
 })
+
+test('known menu links and module titles follow EduLog language, not the provider wording', async () => {
+  const dom = new JSDOM(read('fixtures/real-sidebar.html').replace('<a class="nav-link" href="/">總覽</a>', '<a class="nav-link" href="/">總覽</a>').replace('<ul class="btn-toggle-nav list-unstyled"></ul>', '<ul class="btn-toggle-nav list-unstyled"><li><a href="/dt_admissions">剩餘課堂</a></li><li><a href="/x/unknown">原站自訂項目</a></li></ul>'), { url: 'https://corp.orangeapple.co/courses/dt/101', runScripts: 'outside-only', pretendToBeVisual: true })
+  const w = dom.window
+  for (const file of ['shared/ui-core.js', 'shared/ui-phrases.js']) w.eval(read(`../${file}`))
+  await new Promise(resolve => setTimeout(resolve, 0))
+  w.edulogUi.setLocale('en')
+  for (const file of ['lexicon', 'model', 'navigation', 'workflows']) w.eval(read(`../sites/orange-apple/orange-apple-${file}.js`))
+  w.eval(read('../sites/orange-apple/orange-apple.js'))
+  w.edulogSiteAdapter.enhancePage(w.document, {})
+  const labels = [...w.document.querySelectorAll('.edulog-nav-section')].map(section => [section.querySelector('h2').textContent, [...section.querySelectorAll(':scope > ul > li > a')].map(a => a.textContent)])
+  assert.deepEqual(JSON.parse(JSON.stringify(labels.filter(([heading]) => heading !== 'My classes'))), [['Work', ['Overview', 'Course calendar', 'Monthly unfilled list']], ['Teaching', ['Remaining lessons', '原站自訂項目']]])
+  dom.window.close()
+})

@@ -425,6 +425,12 @@ html[data-edulog-ui="on"] .edulog-todo-source { display:inline-flex; align-items
 html[data-edulog-ui="on"] .edulog-todo-note { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:12px 0 0; font-size:var(--edulog-text-sm); color:var(--edulog-text-muted); }
 html[data-edulog-ui="on"] .edulog-todo-note .edulog-todo-link-button { min-height:44px; padding:8px 12px; }
 html[data-edulog-ui="on"] .edulog-todo-empty, html[data-edulog-ui="on"] .edulog-todo-summary { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:0; color:var(--edulog-text-secondary); }
+/* 本月鐘點: total with a show/hide control; amounts align to the right of each item */
+html[data-edulog-ui="on"] .edulog-hours-total { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; margin:12px 0 4px; }
+html[data-edulog-ui="on"] .edulog-hours-total .edulog-hours-figure { margin-left:0; font-size:var(--edulog-text-xl); font-weight:700; line-height:1.2; color:var(--edulog-text); font-variant-numeric:tabular-nums; }
+html[data-edulog-ui="on"] .edulog-todo-card .edulog-hours-toggle { min-height:44px; padding:8px 12px; }
+html[data-edulog-ui="on"] .edulog-hours-amount { margin-left:auto; font-variant-numeric:tabular-nums; color:var(--edulog-text-secondary); white-space:nowrap; }
+html[data-edulog-ui="on"] .edulog-todo-card[data-edulog-todo="hours"] .edulog-todo-list { margin-top:12px; }
 html[data-edulog-ui="on"] .edulog-todo-error { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; }
 html[data-edulog-ui="on"] .edulog-todo-error p { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:0; color:var(--edulog-text-secondary); }
 html[data-edulog-ui="on"] .edulog-badge { display:inline-flex; align-items:center; gap:4px; padding:2px 10px 2px 8px; border:1px solid transparent; border-radius:999px; font-size:var(--edulog-text-xs); line-height:1.6; white-space:nowrap; }

@@ -1938,5 +1938,83 @@ globalThis.edulogUi?.registerPhrases({
   ],
   "原站沒有接受這次變更（{status}）。": [
    "The site rejected the change ({status})."
+  ],
+  "總覽": [
+   "Overview"
+  ],
+  "教師總覽": [
+   "Teacher overview"
+  ],
+  "我的鐘點": [
+   "My pay"
+  ],
+  "編輯個人資料": [
+   "Edit profile"
+  ],
+  "班級列表": [
+   "Classes"
+  ],
+  "未填寫紀錄": [
+   "Unfilled records"
+  ],
+  "補填課堂紀錄": [
+   "Lesson records to fill"
+  ],
+  "課堂紀錄編輯": [
+   "Edit lesson record"
+  ],
+  "學生學習紀錄": [
+   "Student history"
+  ],
+  "課次報告": [
+   "Lesson reports"
+  ],
+  "月未填寫列表": [
+   "Monthly unfilled list"
+  ],
+  "雙師班": [
+   "Dual-teacher classes"
+  ],
+  "師資模組": [
+   "Teaching"
+  ],
+  "人資模組": [
+   "HR"
+  ],
+  "本月鐘點": [
+   "Pay this month"
+  ],
+  "不是本月": [
+   "Not this month"
+  ],
+  "這個月還沒有鐘點紀錄": [
+   "No pay records this month yet"
+  ],
+  "共 {count} 堂": [
+   "{count} sessions"
+  ],
+  "約 {hours} 小時": [
+   "about {hours} h"
+  ],
+  "{count} 堂": [
+   "{count} sessions"
+  ],
+  "{count} 天": [
+   "{count} days"
+  ],
+  "不計入堂數": [
+   "Not counted as sessions"
+  ],
+  "原站沒有提供合計，金額為逐列加總。": [
+   "The site gave no total; this is the sum of the rows."
+  ],
+  "{count} 筆無法判讀，請到原站查看。": [
+   "{count} rows couldn't be read; check them on the site."
+  ],
+  "隱藏金額": [
+   "Hide amounts"
+  ],
+  "顯示金額": [
+   "Show amounts"
   ]
 })

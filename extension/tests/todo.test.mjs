@@ -12,7 +12,7 @@ function pages(overrides = {}) {
     '/admissions/unfilled_report': read('fixtures/unfilled-current.html'),
     '/admissions/month_unfilled_report': withRows(read('fixtures/unfilled.html'), overdueRow),
     '/calendar': read('fixtures/calendar.html'),
-    '/my/hour': read('fixtures/hours.html'),
+    '/my/hour': read('fixtures/hours-pay.html'),
     '/courses/dt/101/lesson_reports': absentReports,
     '/courses/dt/102/lesson_reports': read('fixtures/reports.html'),
     ...overrides,
@@ -49,7 +49,9 @@ test('readers extract unfilled, calendar, hours and attendance facts from provid
   const days = todo.extractCalendar(parse(read('fixtures/calendar.html')), ['/courses/dt/101'])
   assert.equal(JSON.stringify(days.map(day => [day.label, day.entries.map(entry => [entry.time, entry.room, entry.classPath])])), JSON.stringify([['10/04 (Sun.)', [['10:00', '測試教室', '/courses/dt/101']]], ['10/05 (Mon.)', []]]))
   assert.equal(todo.extractCalendar(parse(read('fixtures/calendar.html')), ['/courses/dt/999'])[0].entries.length, 0)
-  assert.equal(JSON.stringify(todo.extractHours(parse(read('fixtures/hours.html')))), JSON.stringify({ period: '2026年 9月', records: 1, total: null }))
+  // A cell that is not an amount is reported, never summed.
+  const odd = JSON.parse(JSON.stringify(todo.extractHours(parse(read('fixtures/hours.html')))))
+  assert.equal(JSON.stringify([odd.period, odd.unreadable, odd.sessions, odd.estimated]), JSON.stringify(['2026年 9月', 1, 0, true]))
   const attendance = todo.extractAttendance(parse(absentReports))
   assert.equal(attendance.week, '本週 (10/04)')
   assert.equal(JSON.stringify(attendance.items), JSON.stringify([{ student: '測試學生 A', status: 'pending', label: '待確認出席' }, { student: '測試學生 B', status: 'absent', label: '缺席' }]))
@@ -103,7 +105,10 @@ test('overview leads with the weekly to-do and renders every section exceptions-
   assert.equal(texts(s.doc, 'attendance', '.edulog-todo-name').join('|'), '測試學生 B|測試學生 A')
   assert.equal(texts(s.doc, 'attendance', '.edulog-badge').join('|'), '缺席|待確認出席')
   assert.equal(section(s.doc, 'attendance').querySelectorAll('.edulog-todo-action').length, 1, 'one link per class, not per student')
-  assert.match(section(s.doc, 'hours').textContent, /2026年 9月 1 筆鐘點紀錄/)
+  const hours = section(s.doc, 'hours')
+  assert.equal(hours.querySelector('h3 span').textContent, '本月鐘點')
+  assert.equal(hours.querySelector('.edulog-hours-figure').textContent, 'NT$ ••••', 'pay is masked by default')
+  assert.equal(hours.querySelector('.edulog-todo-meta').textContent, '共 7 堂 · 約 14 小時')
   assert.match(s.doc.querySelector('.edulog-todo-updated').textContent, /^更新於 \d\d:\d\d$/)
   assert.equal(root.querySelectorAll('table').length, 0)
   assert.ok(root.querySelectorAll('svg[aria-hidden="true"]').length >= 5)
@@ -223,4 +228,56 @@ test('many classes: grouped by class, only started sessions count, today first, 
   assert.equal(s.w.edulogClassPending.get('/courses/dt/402'), 0)
   assert.equal(s.doc.querySelector('.edulog-nav a[href="/courses/dt/401"] .edulog-nav-count').textContent, '7')
   s.dom.window.close()
+})
+
+test('the pay sheet: provider totals, sessions and hours per slot, bonus and camp kept apart', () => {
+  const { w, dom } = overview()
+  const parse = html => new w.DOMParser().parseFromString(html, 'text/html')
+  const july = new Date('2026-07-20T12:00:00+08:00')
+  const pay = JSON.parse(JSON.stringify(w.edulogSiteTodo.extractHours(parse(read('fixtures/hours-pay.html')), july)))
+  assert.equal(JSON.stringify([pay.period, pay.isCurrent, pay.total, pay.estimated, pay.sessions, pay.hours, pay.unreadable]), JSON.stringify(['2026年 7月', true, 15620, false, 7, 14, 0]))
+  assert.deepEqual(pay.lessons.map(item => [item.weekday, item.start, item.end, item.room, item.dates.length, item.amount]), [['週六', '10:00', '12:00', '201教室（菁英）', 2, 2600], ['週六', '13:30', '15:30', '202教室（菁英高）', 2, 1120], ['週日', '10:00', '12:00', '201教室（菁英）', 3, 3900]])
+  assert.deepEqual(pay.events.map(item => [item.section, item.dates.length, item.amount]), [['營隊（實體）項目', 4, 7200]])
+  assert.deepEqual(pay.other.map(item => [item.label, item.amount]), [['責任獎金', 800]])
+  assert.equal(JSON.stringify(pay).includes('測試教師'), false, 'the teacher name next to the total is never read')
+  // Another month is labelled; a month with no table is empty, not an error.
+  assert.equal(w.edulogSiteTodo.extractHours(parse(read('fixtures/hours-pay.html')), new Date('2026-10-22T12:00:00+08:00')).isCurrent, false)
+  const blank = w.edulogSiteTodo.extractHours(parse(read('fixtures/hours-pay.html').replace(/<table[\s\S]*<\/table>/, '')))
+  assert.equal(JSON.stringify([blank.total, blank.sessions, blank.lessons.length]), JSON.stringify([0, 0, 0]))
+  dom.window.close()
+})
+
+test('pay amounts show only after the teacher asks, and the choice is saved', async () => {
+  const s = overview()
+  const sent = []
+  s.w.edulogRuntime = { send: async message => { sent.push(message); return message.type === 'get-amount-visible' ? { visible: false } : { visible: message.visible } } }
+  const { view } = s.enhance()
+  await view.todo.ready
+  const hours = section(s.doc, 'hours'), toggle = hours.querySelector('.edulog-hours-toggle')
+  assert.ok([...hours.querySelectorAll('.edulog-hours-amount')].every(node => node.textContent === 'NT$ ••••'))
+  assert.equal(toggle.getAttribute('aria-pressed'), 'false')
+  toggle.click()
+  assert.equal(hours.querySelector('.edulog-hours-figure').textContent, 'NT$ 15,620')
+  assert.deepEqual([...hours.querySelectorAll('.edulog-todo-item .edulog-hours-amount')].map(node => node.textContent), ['NT$ 2,600', 'NT$ 1,120', 'NT$ 3,900', 'NT$ 7,200', 'NT$ 800'])
+  assert.equal(JSON.stringify(sent.at(-1)), JSON.stringify({ type: 'set-amount-visible', visible: true }))
+  assert.equal(view.amountVisible, true)
+  s.dom.window.close()
+})
+
+// The provider translates the current unfilled list; its headers come in three wordings.
+const localizedUnfilled = (student, slot, current, record) => read('fixtures/unfilled-current.html').replace('<th>學生</th><th>學習紀錄節次</th><th>目前節次</th><th>課堂紀錄</th>', `<th>${student}</th><th>${slot}</th><th>${current}</th><th>${record}</th>`)
+test('unfilled lists read the same with the site in zh-CN or English', async () => {
+  const s = overview()
+  const parse = html => new s.w.DOMParser().parseFromString(html, 'text/html')
+  const shape = html => JSON.stringify(s.w.edulogSiteTodo.extractUnfilled(parse(html), false))
+  const reference = shape(read('fixtures/unfilled-current.html'))
+  assert.equal(shape(localizedUnfilled('学生', '学习记录节次', '目前节次', '课堂记录')), reference)
+  assert.equal(shape(localizedUnfilled('Student', 'Record Stage', 'Current Stage', 'Lesson Report')), reference)
+  s.dom.window.close()
+  // The whole overview card works after a site language switch.
+  const en = overview(pages({ '/admissions/unfilled_report': localizedUnfilled('Student', 'Record Stage', 'Current Stage', 'Lesson Report') }))
+  const { view } = en.enhance()
+  await view.todo.ready
+  assert.equal(texts(en.doc, 'reports', '.edulog-todo-name').join('|'), '學生丙|學生甲|學生乙')
+  en.dom.window.close()
 })

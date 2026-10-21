@@ -154,8 +154,8 @@
       label(part('.menu'), 'ui.navigation', {}, 'aria-label')
       // On class pages the title carries the short class name from the navigation bar.
       const currentClass = globalThis.edulogSiteNavigation?.currentClass(document)
-      part('.title').textContent = currentClass ? currentClass.primary : page.title
-      part('.tb-sub').textContent = currentClass ? page.title : ''
+      part('.title').textContent = currentClass ? currentClass.primary : tx(page.title)
+      part('.tb-sub').textContent = currentClass ? tx(page.title) : ''
     } else label(part('.integration'), 'shell.fab', { state: '…' }, 'aria-label')
     const switchControl = (name, key, helpKey, checked) => {
       const control = document.createElement('button')

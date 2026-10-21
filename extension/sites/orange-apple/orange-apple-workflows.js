@@ -811,11 +811,12 @@
     if (page.kind === 'overview') {
       for (const table of content.querySelectorAll('table')) { mark(table, 'data-edulog-overview-table', ''); scrollTable(scope, table, 'overview') }
       const value = new URL(doc.location.href).searchParams.get('today')
-      const current = new Date(); const today = `${current.getFullYear()}-${String(current.getMonth()+1).padStart(2,'0')}-${String(current.getDate()).padStart(2,'0')}`
+      const parts = model.siteParts(); const today = `${parts.year}-${String(parts.month + 1).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`
       const context = region(scope, '', 'edulog-page-context')
       context.append(element('strong', tx('課表基準日期：{date}', { date: value || today })), element('p', tx('「我的班級」是固定班級入口；下方課表依原站選定日期顯示。')))
       const todayLink = element('a', tx('回到今天')); todayLink.href = `/?today=${today}`; context.append(todayLink); content.prepend(context)
-      const opener = [...content.querySelectorAll('a[href]')].find(a => /課程表.*點擊檢視/.test(text(a)))
+      // The schedule opener is the card heading link to /?today=… (its wording is not translated).
+      const opener = content.querySelector('.card-header h4 a[href*="today="]') || [...content.querySelectorAll('a[href]')].find(a => /課程表.*點擊檢視/.test(text(a)))
       if (opener) {
         mark(opener, 'aria-label', tx('載入選定日期課表'))
         const state = scope.add(element('p', tx('課表尚未展開，請按「課程表」載入。'))); state.className = 'edulog-empty'; state.setAttribute('role', 'status'); opener.parentElement.after(state)

@@ -14,7 +14,7 @@ const BARE_LITERALS = {
   'sites/orange-apple/orange-apple-accounts.js': 7,
   'sites/orange-apple/orange-apple-attendance-export.js': 14,
   'sites/orange-apple/orange-apple-integration.js': 145,
-  'sites/orange-apple/orange-apple-lexicon.js': 214,
+  'sites/orange-apple/orange-apple-lexicon.js': 230,
   'sites/orange-apple/orange-apple-model.js': 7,
   'sites/orange-apple/orange-apple-navigation.js': 2,
   'sites/orange-apple/orange-apple-quick-attendance.js': 5,
@@ -59,4 +59,13 @@ test('every tx() wording in content scripts has an English phrase', () => {
     }
   }
   assert.deepEqual(missing, [])
+})
+
+test('route titles and menu labels shown by the toolbar and navigation have English phrases', () => {
+  const book = JSON.parse(readFileSync(new URL('shared/ui-phrases.js', root), 'utf8').match(/registerPhrases\((\{[\s\S]*\})\)/)[1])
+  const lexicon = readFileSync(new URL('sites/orange-apple/orange-apple-lexicon.js', root), 'utf8')
+  const titles = [...lexicon.matchAll(/title: '([^']+)'/g)].map(match => match[1])
+  const labels = [...lexicon.match(/labels: Object\.freeze\(\{([^}]*)\}/)[1].matchAll(/: '([^']+)'/g)].map(match => match[1])
+  const groups = [...lexicon.match(/groupLabels: Object\.freeze\(\[([^\]]*)\]/)[1].matchAll(/'([^']+)'/g)].map(match => match[1])
+  assert.deepEqual([...titles, ...labels, ...groups].filter(key => !book[key]), [])
 })

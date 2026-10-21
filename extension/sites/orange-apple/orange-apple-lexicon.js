@@ -86,6 +86,10 @@
     // "樹林_非凡文理_201教室（菁英） - 週六 第 1 時段 (10:00 ~ 12:00)"
     className: /^(.*?)\s*-\s*(週[一二三四五六日])\s*第\s*\d+\s*時段\s*\(\s*(\d{1,2}:\d{2})\s*~\s*(\d{1,2}:\d{2})\s*\)\s*$/,
     weekdays: Object.freeze(['週日', '週一', '週二', '週三', '週四', '週五', '週六']),
+    // Menu links EduLog names itself (translated at display), so they follow EduLog's language
+    // instead of whatever the provider translated. Other links keep the provider's text.
+    labels: Object.freeze({ '/': '總覽', '/calendar': '課程行事曆', '/admissions/month_unfilled_report': '月未填寫列表', '/admissions/unfilled_report': '補填課堂紀錄', '/courses/dt': '雙師班', '/my/hour': '我的鐘點', '/dt_admissions': '剩餘課堂' }),
+    groupLabels: Object.freeze(['師資模組', '人資模組']),
   })
   // Same-origin pages the overview to-do view may read. Read-only, never submitted.
   const sources = Object.freeze({
@@ -127,7 +131,9 @@
     // Report editor
     ['不出席原因', 'Absence Reason'], ['專案進度', '专案进度', 'Project Progress'], ['學習課程', '学习课程', 'Learning Course'], ['完成狀況', '完成状况', 'Completion Status'], ['章節進度', '章节进度', 'Section Progress'],
     ['課程參與', '课程参与', 'Course Participation'], ['課堂秩序', 'Class Order'], ['學習表現', '学习表现', 'Learning Performance'], ['跟不上進度 (太難)', '跟不上进度（太难）', 'Unable to keep up (too difficult)'],
-    ['跟不上進度 (分心)', '跟不上进度（分心）', 'Unable to keep up (distracted)'], ['課堂紀錄', '课堂记录', 'Lesson Record'],
+    ['跟不上進度 (分心)', '跟不上进度（分心）', 'Unable to keep up (distracted)'], ['課堂紀錄', '课堂记录', 'Lesson Record', 'Lesson Report'],
+    // Unfilled lists (/admissions/unfilled_report; the month list stays zh-TW in every locale)
+    ['學習紀錄節次', '学习记录节次', 'Record Stage'], ['目前節次', '目前节次', 'Current Stage'],
   ]
   const fold = value => String(value ?? '').trim().replace(/\s+/g, ' ').replace(/\s*[：:]$/, '').toLowerCase()
   const forms = new Map(), canonical = new Map()
@@ -177,6 +183,9 @@
   // A pattern matching any wording of these terms. No word boundaries: row text runs cells
   // together ("…AttendanceLearning Eval…"); English forms still match case-sensitively.
   const anyTerm = (...terms) => new RegExp(terms.flatMap(termForms).map(escape).join('|'))
+  // A whole header cell that is exactly one wording of these terms. (?![\s\S]) ends the match
+  // instead of a dollar sign, which the startup harness would read as a replace() pattern.
+  const exactTerm = (...terms) => new RegExp(`^(?:${terms.flatMap(termForms).map(escape).join('|')})(?![\\s\\S])`)
   // "学生: 名字" / "Student: 名字": the value after the leading label when that label is a
   // wording of one of these terms, otherwise null. Several terms share English forms
   // ("Course"), so callers name the terms they expect instead of guessing one.
@@ -209,9 +218,14 @@
     enabledLesson: /已啟用\s*(L\d+)/i,
     enabled: /已啟用/,
     absent: /缺席|未出席/,
-    unfilledStudent: /^學生$/,
-    unfilledRecord: /課堂紀錄/,
-    unfilledSlot: /學習紀錄節次/,
+    unfilledStudent: exactTerm('學生'),
+    unfilledRecord: exactTerm('課堂紀錄'),
+    unfilledSlot: exactTerm('學習紀錄節次'),
+    // 「我的鐘點」 is a pay sheet: dates are 2026/10/17 (or a month, 2026/10 for 責任獎金), the
+    // last column is an NT$ amount, and each table is followed by the provider's own total.
+    hourDate: /\d{4}\/\d{1,2}\/\d{1,2}/g,
+    hourMonth: /\d{4}\/\d{1,2}(?![\d/])/,
+    hourTotal: /NT\$\s*([\d,]+(?:\.\d+)?)/,
     isoDate: /\d{4}-\d{2}-\d{2}/,
     calendarDay: /(\d{1,2})\/(\d{1,2})/,
     nextWeek: /下週/,
