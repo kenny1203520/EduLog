@@ -320,8 +320,10 @@ export class ReportGenerationService {
         try {
           result = await call()
         } catch (error) {
-          // The model rejected JSON schema output before writing anything: ask for JSON in the prompt instead.
-          if (mode === 'structured' && !streamed && !signal.aborted && classifyProviderFailure(providerErrorDetail(error)) === 'MODEL_UNSUPPORTED') {
+          // The model rejected JSON schema output before writing anything, or its
+          // answer could not be read as a draft: ask for JSON in the prompt instead.
+          const rejected = !streamed && classifyProviderFailure(providerErrorDetail(error)) === 'MODEL_UNSUPPORTED'
+          if (mode === 'structured' && !signal.aborted && (rejected || error instanceof InvalidDraftOutputError)) {
             mode = 'json_text'
             await this.deps.repository.markStructuredOutputUnsupported(resolved.modelRowId).catch(() => {})
             result = await call()

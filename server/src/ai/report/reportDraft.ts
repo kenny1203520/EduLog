@@ -1,4 +1,4 @@
-import { Output, parsePartialJson, streamText, type LanguageModel, type LanguageModelUsage } from 'ai'
+import { NoObjectGeneratedError, Output, parsePartialJson, streamText, type LanguageModel, type LanguageModelUsage } from 'ai'
 import { z } from 'zod'
 import type { PlaceholderMap } from '../deidentify/placeholders.js'
 import type { BuiltPrompt } from './reportPrompt.js'
@@ -51,8 +51,8 @@ export type OutputMode = 'structured' | 'json_text'
 
 /** The model's text in json_text mode was not a usable draft. */
 export class InvalidDraftOutputError extends Error {
-  constructor(message: string) {
-    super(message)
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options)
     this.name = 'InvalidDraftOutputError'
   }
 }
@@ -162,11 +162,33 @@ export async function streamReportDraft(options: StreamReportDraftOptions): Prom
     }
     output = await result.output
   } catch (error) {
-    throw streamError ?? error
+    const failure = streamError ?? error
+    // The model answered, but not in the schema's exact shape (common through
+    // OpenRouter): read its text the lenient way before giving up.
+    if (NoObjectGeneratedError.isInstance(failure)) {
+      const salvaged = salvageDraft(failure.text)
+      if (!salvaged) throw new InvalidDraftOutputError('The model answer did not match the draft shape', { cause: failure })
+      const usage = failure.usage ?? await Promise.resolve(result.usage).catch(() => undefined)
+      return { sanitized: salvaged, ...restoreDraft(salvaged, sectionMap, map), usage: usage ?? EMPTY_USAGE }
+    }
+    throw failure
   }
 
   const sanitized = normalizeDraft(output)
   return { sanitized, ...restoreDraft(sanitized, sectionMap, map), usage: await result.usage }
+}
+
+const EMPTY_USAGE = { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined } as unknown as LanguageModelUsage
+
+/** A usable draft from raw model text, or null when it has no report section. */
+function salvageDraft(text: string | undefined): ReportDraft | null {
+  if (!text?.trim()) return null
+  try {
+    const draft = normalizeDraft(parseJsonTextDraft(text))
+    return draft.sections.length > 0 ? draft : null
+  } catch {
+    return null
+  }
 }
 
 /** json_text mode: plain text streaming, parsed as (partial) JSON along the way. */
