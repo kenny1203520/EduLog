@@ -63,7 +63,10 @@
     if (!document.body || !html.hasAttribute('data-edulog-pending') || hint) return
     hint = document.createElement('div')
     hint.dataset.edulogOwned = ''; hint.id = 'edulog-loading-status'
-    hint.setAttribute('role', 'status'); hint.textContent = '正在準備介面…'
+    hint.setAttribute('role', 'status')
+    // Runs before the language catalog loads, so it follows the page's own language attribute.
+    const lang = html.lang || ''
+    hint.textContent = /^en/i.test(lang) ? 'Preparing…' : /^zh-(?:CN|Hans)/i.test(lang) ? '正在准备界面…' : '正在準備介面…'
     document.body.append(hint)
   }
   globalThis.edulogUiBoot = Object.freeze({

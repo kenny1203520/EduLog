@@ -19,7 +19,10 @@ if (process.argv[4]) {
     .filter(n => n && existsSync(join(dir, n))).map(n => readFileSync(join(dir, n), 'utf8')).join('\n')
 }
 // en-US copy is longer: the toolbar, floating button and both panels must still fit 360px.
+// The fixtures are a zh-TW site, which "follow the site" would keep in zh-TW, so English is
+// chosen explicitly, as a teacher would in the language menu.
 async function englishShell(page, browserName, name, width) {
+  await page.evaluate(() => globalThis.edulogUi.setLocale('en'))
   const root = page.locator('#edulog-extension-root')
   await root.evaluate(el => new Promise(resolve => { const wait = () => el.shadowRoot.querySelector('.bar .conn')?.dataset.tone === 'ok' ? resolve() : setTimeout(wait, 10); wait() }))
   const facts = () => root.evaluate(el => { const r = node => { const box = el.shadowRoot.querySelector(node)?.getBoundingClientRect(); return box && { left: box.left, right: box.right, top: box.top, bottom: box.bottom, height: box.height } }; const bar = el.shadowRoot.querySelector('.bar'); return { bar: r('.bar'), barOverflow: bar ? bar.scrollWidth > bar.clientWidth + 1 : false, primary: el.shadowRoot.querySelector('.bar .primary')?.textContent, panel: r('.panel'), panelOverflow: [...el.shadowRoot.querySelectorAll('.panel *')].some(n => n.getClientRects().length && n.scrollWidth > n.clientWidth + 1 && getComputedStyle(n).overflowX === 'visible' && n.clientWidth > 0) } })

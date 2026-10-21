@@ -47,3 +47,27 @@ test('import stepper has three translated steps',async()=>{
   w.edulogUi.setLocale('zh-TW');assert.deepEqual(['work.import1','work.import2','work.import3'].map(key=>w.edulogUi.t(key)),['讀取','確認','完成']);assert.equal(w.edulogUi.t('work.import4'),'work.import4')
   w.edulogUi.setLocale('en');assert.deepEqual(['work.import1','work.import2','work.import3'].map(key=>w.edulogUi.t(key)),['Read','Confirm','Done']);assert.equal(w.edulogUi.t('work.applyBatches'),'Confirm and sync');dom.window.close()
 })
+test('auto language follows the teaching site; a fixed choice does not',async()=>{
+  const dom=new JSDOM('<body><p id="label"></p></body>',{runScripts:'outside-only'}),w=dom.window,listeners=[]
+  w.chrome={storage:{local:{get:async()=>({edulogWorkspaceLocale:'auto',edulogSourceLocale:'zh-TW'})},onChanged:{addListener:fn=>listeners.push(fn)}}}
+  for(const file of ['shared/ui-core.js','shared/ui-phrases.js'])w.eval(readFileSync(new URL('../'+file,import.meta.url),'utf8'))
+  await new Promise(r=>setTimeout(r,0))
+  const label=w.document.getElementById('label');w.edulogUi.text(label,'ui.language')
+  assert.equal(w.edulogUi.preference,'auto');assert.equal(w.edulogUi.locale,'zh-TW');assert.equal(label.textContent,'介面語言')
+  w.edulogUi.setSourceLocale('zh-CN');assert.equal(w.edulogUi.locale,'zh-CN');assert.equal(label.textContent,'界面语言')
+  w.edulogUi.setSourceLocale('en');assert.equal(label.textContent,'Language')
+  w.edulogUi.setLocale('zh-TW');w.edulogUi.setSourceLocale('zh-CN');assert.equal(w.edulogUi.locale,'zh-TW');assert.equal(label.textContent,'介面語言')
+  dom.window.close()
+})
+test('inline phrases translate wording but never the data passed in',async()=>{
+  const dom=new JSDOM('<body></body>',{runScripts:'outside-only'}),w=dom.window
+  for(const file of ['shared/ui-core.js','shared/ui-phrases.js'])w.eval(readFileSync(new URL('../'+file,import.meta.url),'utf8'))
+  await new Promise(r=>setTimeout(r,0))
+  const ui=w.edulogUi,params={name:'林國華'}
+  ui.setLocale('zh-TW');assert.equal(ui.tx('顯示 {name} 的聯絡電話',params),'顯示 林國華 的聯絡電話')
+  ui.setLocale('zh-CN');assert.equal(ui.tx('顯示 {name} 的聯絡電話',params),'显示 林國華 的联络电话')
+  ui.setLocale('en');assert.equal(ui.tx('顯示 {name} 的聯絡電話',params),"Show 林國華's phone")
+  // Wording without a phrase falls back to the zh-TW source instead of a blank.
+  assert.equal(ui.tx('沒有英文的句子'),'沒有英文的句子')
+  dom.window.close()
+})

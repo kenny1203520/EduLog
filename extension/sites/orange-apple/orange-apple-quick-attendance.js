@@ -131,7 +131,7 @@
       const chosen = entries.filter(entry => entry.box.checked)
       const nativeButton = form.querySelector(`${selectors.quickAttendanceSubmit}[value="${type}"]`)
       if (!chosen.length || !nativeButton || busy) return
-      if (type === '1' && !win.confirm(`將 ${chosen.length} 位設為不出席：${chosen.map(entry => entry.name).join('、')}\n不出席的學生本堂無法啟用課程。`)) return
+      if (type === '1' && !win.confirm(tx('將 {count} 位設為不出席：{names}\n不出席的學生本堂無法啟用課程。', { count: chosen.length, names: chosen.map(entry => entry.name).join(tx('、')) }))) return
       busy = true
       present.disabled = absent.disabled = true
       trigger.textContent = tx('送出中…')
