@@ -82,7 +82,7 @@
       if (meta) { const line = text('span', meta, 'edulog-qa-meta'); line.title = meta; main.append(line) }
       const [tone, word] = MARKS[entry.mark] || ['neutral', '—']
       tile.dataset.mark = entry.mark || 'unknown'
-      tile.append(box, main, badge(tone, word))
+      tile.append(box, main, badge(tone, tx(word)))
       li.append(tile); grid.append(li)
       tiles.set(entry, { tile, box })
       listen(box, 'change', () => { entry.box.checked = box.checked; update() })

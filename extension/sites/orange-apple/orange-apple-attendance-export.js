@@ -28,8 +28,8 @@
       const names = status => week.students.filter(student => student.status === status).map(student => student.name)
       const expected = week.students.filter(student => Object.values(STATUS).includes(student.status)).length
       // Next week has not happened yet: nobody is "未點名", so only the head count is useful.
-      const lines = [week.upcoming ? `${week.date} 尚未上課｜應出 ${expected}` : `${week.date} 應出 ${expected}｜出席 ${names('出席').length}｜缺席 ${names('缺席').length}｜未點名 ${names('未點名').length}`]
-      for (const status of week.upcoming ? ['暫停', '非本班'] : ['缺席', '未點名', '暫停', '非本班']) if (names(status).length) lines.push(`${status}：${names(status).join('、')}`)
+      const lines = [week.upcoming ? tx('{date} 尚未上課｜應出 {expected}', { date: week.date, expected }) : tx('{date} 應出 {expected}｜出席 {present}｜缺席 {absent}｜未點名 {unmarked}', { date: week.date, expected, present: names('出席').length, absent: names('缺席').length, unmarked: names('未點名').length })]
+      for (const status of week.upcoming ? ['暫停', '非本班'] : ['缺席', '未點名', '暫停', '非本班']) if (names(status).length) lines.push(tx('{status}：{names}', { status: tx(status), names: names(status).join(tx('、')) }))
       return lines.join('\n')
     })
     return (title ? `${title}\n` : '') + sections.join('\n\n')

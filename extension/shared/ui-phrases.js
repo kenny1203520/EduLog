@@ -720,5 +720,53 @@ globalThis.edulogUi?.registerPhrases({
   ],
   "週六": [
    "Sat"
+  ],
+  "{date} 尚未上課｜應出 {expected}": [
+   "{date} not started | expected {expected}"
+  ],
+  "{date} 應出 {expected}｜出席 {present}｜缺席 {absent}｜未點名 {unmarked}": [
+   "{date} expected {expected} | present {present} | absent {absent} | unmarked {unmarked}"
+  ],
+  "{status}：{names}": [
+   "{status}: {names}"
+  ],
+  "、": [
+   ", "
+  ],
+  "暫停": [
+   "Paused"
+  ],
+  "非本班": [
+   "Not in class"
+  ],
+  "偏好設定暫時無法儲存。": [
+   "Can't save preferences right now."
+  ],
+  "{message} 主題切換僅作用於當頁，偏好未儲存。": [
+   "{message} The theme change applies to this page only; not saved."
+  ],
+  "{message} 本頁切換僅作用於當頁，偏好未儲存。": [
+   "{message} This page change applies here only; not saved."
+  ],
+  "請求編號：{id}": [
+   "Request ID: {id}"
+  ],
+  "通訊已停止；清晰主題與原站操作仍可使用。": [
+   "Connection to the extension stopped; the theme and site still work."
+  ],
+  "無法開啟整合工作台。": [
+   "Can't open the workspace."
+  ],
+  "請點選瀏覽器工具列的 EduLog 圖示，設定伺服器並完成配對。": [
+   "Click the EduLog icon in the browser toolbar to set the server and pair."
+  ],
+  "本頁清晰主題暫時無法套用，已使用原站主題。可重新套用或重新整理。": [
+   "Couldn't apply the theme here; showing the site theme. Reapply or reload."
+  ],
+  "擴充套件已更新，請先儲存正在編輯的內容，再重新整理分頁。": [
+   "The extension was updated; save your work, then reload the tab."
+  ],
+  "未能及時讀取主題偏好，已保留原站。可在當頁套用清晰主題。": [
+   "Couldn't read the theme preference in time; kept the site look. You can apply the theme here."
   ]
 })

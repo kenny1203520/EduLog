@@ -192,9 +192,9 @@
       boot?.remember(enabled)
       try {
         const result = await message({ type: 'set-ui-preferences', enabled })
-        if (result?.error) throw new Error('偏好設定暫時無法儲存。')
+        if (result?.error) throw new Error(tx('偏好設定暫時無法儲存。'))
         boot?.store({ enabled, pages: pageModes })
-      } catch (error) { showNotice(`${error.message} 主題切換僅作用於當頁，偏好未儲存。`) }
+      } catch (error) { showNotice(tx('{message} 主題切換僅作用於當頁，偏好未儲存。', { message: error.message })) }
     })
     pageMode.addEventListener('click', async () => {
       const mode = pageOriginal(page) ? 'enhanced' : 'original'
@@ -204,9 +204,9 @@
       sync()
       try {
         const result = await message({ type: 'set-ui-preferences', page: page.kind, pageMode: mode })
-        if (result?.error) throw new Error('偏好設定暫時無法儲存。')
+        if (result?.error) throw new Error(tx('偏好設定暫時無法儲存。'))
         boot?.store({ enabled, pages: pageModes })
-      } catch (error) { showNotice(`${error.message} 本頁切換僅作用於當頁，偏好未儲存。`) }
+      } catch (error) { showNotice(tx('{message} 本頁切換僅作用於當頁，偏好未儲存。', { message: error.message })) }
     })
     part('.menu')?.addEventListener('click', event => {
       const open = document.documentElement.toggleAttribute('data-edulog-nav-open')
@@ -248,7 +248,7 @@
         put('.status-meta', ['not-connected', 'expired', 'revoked', 'pairing-expired'].includes(result?.status) ? 'shell.connectHint' : `${state.key}.detail`)
       }
       part('.diagnostics').hidden = !result?.diagnostic
-      part('.diagnostic-text').textContent = result?.diagnostic ? [result.diagnostic.code, result.diagnostic.message, result.diagnostic.requestId ? `請求編號：${result.diagnostic.requestId}` : ''].filter(Boolean).join(' — ') : ''
+      part('.diagnostic-text').textContent = result?.diagnostic ? [result.diagnostic.code, result.diagnostic.message, result.diagnostic.requestId ? tx('請求編號：{id}', { id: result.diagnostic.requestId }) : ''].filter(Boolean).join(' — ') : ''
       retry.hidden = !['unavailable', 'forbidden'].includes(result?.status)
       part('.settings').hidden = !connected
       part('.settings').disabled = !result?.settingsUrl
@@ -262,7 +262,7 @@
         if (isCurrent()) applyStatus(result)
       } catch (error) {
         if (!isCurrent()) return
-        putText('.status-text', bridge.invalidated ? '通訊已停止；清晰主題與原站操作仍可使用。' : error.message)
+        putText('.status-text', bridge.invalidated ? tx('通訊已停止；清晰主題與原站操作仍可使用。') : error.message)
         retry.hidden = bridge.invalidated
       } finally { if (isCurrent()) retry.disabled = false }
     }
@@ -271,7 +271,7 @@
       button.disabled = true
       try {
         const result = await message({ type: 'open-integration-workspace', flow })
-        if (!result?.opened) throw new Error(result?.error?.message || globalThis.edulogUi?.t('shell.openFailed') || '無法開啟整合工作台。')
+        if (!result?.opened) throw new Error(result?.error?.message || globalThis.edulogUi?.t('shell.openFailed') || tx('無法開啟整合工作台。'))
       } catch (error) { if (isCurrent()) putText('.status-meta', error.message) }
       finally { if (isCurrent()) button.disabled = false }
     }
@@ -305,7 +305,7 @@
     integration.addEventListener('click', () => { if (panel.hidden) openPanel(); else closePanel() })
     part('.settings').addEventListener('click', async () => {
       const result = await message({ type: 'open-edulog-settings' }).catch(error => { if (isCurrent()) showNotice(error.message); return null })
-      if (isCurrent() && !result?.opened) putText('.status-meta', '請點選瀏覽器工具列的 EduLog 圖示，設定伺服器並完成配對。')
+      if (isCurrent() && !result?.opened) putText('.status-meta', tx('請點選瀏覽器工具列的 EduLog 圖示，設定伺服器並完成配對。'))
     })
     root.addEventListener('keydown', event => {
       if (event.key === 'Escape' && !panel.hidden) closePanel(true)
@@ -404,7 +404,7 @@
       teardown()
       boot?.mode(false)
       boot?.release()
-      showNotice('本頁清晰主題暫時無法套用，已使用原站主題。可重新套用或重新整理。')
+      showNotice(tx('本頁清晰主題暫時無法套用，已使用原站主題。可重新套用或重新整理。'))
       const page = adapter.matchPage(location.pathname)
       if (page && document.body) toolbar(page)
       if (active?.isConnected && active !== document.body) {
@@ -510,7 +510,7 @@
   bridge.onInvalidated(() => {
     boot?.release()
     if (suspended) { navigation++; suspended = false; schedule() }
-    showNotice('擴充套件已更新，請先儲存正在編輯的內容，再重新整理分頁。')
+    showNotice(tx('擴充套件已更新，請先儲存正在編輯的內容，再重新整理分頁。'))
   })
   bridge.listen(data => {
     if (data?.type === 'ui-preferences-changed') { revision++; failedPath = null; showNotice(''); enabled = data.enabled !== false; pageModes = data.pages || {}; boot?.remember(enabled); boot?.store({ enabled, pages: pageModes }); sync() }
@@ -521,7 +521,7 @@
   void initial.then(prefs => {
     needsPreference = prefs?.reason === 'unknown'
     if (request === revision) { enabled = prefs?.enabled !== false; pageModes = prefs?.pages || {} }
-    if (!enabled && !bridge.invalidated && ['timeout', 'unavailable'].includes(prefs?.reason)) showNotice('未能及時讀取主題偏好，已保留原站。可在當頁套用清晰主題。')
+    if (!enabled && !bridge.invalidated && ['timeout', 'unavailable'].includes(prefs?.reason)) showNotice(tx('未能及時讀取主題偏好，已保留原站。可在當頁套用清晰主題。'))
     recordSiteLocale()
     initialized = true
     try { sync() } finally { boot?.release() }
