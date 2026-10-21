@@ -141,7 +141,7 @@ function onPreviewToggle(event: Event) {
                         <p v-if="hasDraft" class="mt-1 text-sm text-gray-600">{{ $t('ai.panel.tone_draft_hint') }}</p>
                         <div class="mt-1 flex flex-wrap gap-2">
                             <label v-for="option in TONES" :key="option"
-                                class="inline-flex min-h-[44px] cursor-pointer items-center rounded-full border px-4 text-sm font-medium transition-colors duration-200 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-500"
+                                class="relative inline-flex min-h-[44px] cursor-pointer items-center rounded-full border px-4 text-sm font-medium transition-colors duration-200 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-500"
                                 :class="tone === option ? 'border-emerald-600 bg-emerald-50 text-emerald-900' : 'border-gray-300 text-gray-700 hover:bg-gray-50'">
                                 <input v-model="tone" type="radio" name="ai-tone" :value="option" class="sr-only" />
                                 {{ $t(`ai.tone.${option}`) }}
@@ -152,7 +152,7 @@ function onPreviewToggle(event: Event) {
                         <legend class="text-sm font-semibold text-gray-800">{{ $t('ai.panel.length') }}</legend>
                         <div class="mt-1 flex flex-wrap gap-2">
                             <label v-for="option in LENGTHS" :key="option"
-                                class="inline-flex min-h-[44px] cursor-pointer items-center rounded-full border px-4 text-sm font-medium transition-colors duration-200 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-500"
+                                class="relative inline-flex min-h-[44px] cursor-pointer items-center rounded-full border px-4 text-sm font-medium transition-colors duration-200 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-500"
                                 :class="length === option ? 'border-emerald-600 bg-emerald-50 text-emerald-900' : 'border-gray-300 text-gray-700 hover:bg-gray-50'">
                                 <input v-model="length" type="radio" name="ai-length" :value="option" class="sr-only" />
                                 {{ $t(`ai.length.${option}`) }}

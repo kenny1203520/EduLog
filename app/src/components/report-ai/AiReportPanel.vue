@@ -153,7 +153,9 @@ onBeforeUnmount(() => {
 
 <template>
     <Teleport to="body">
-        <div v-if="show" class="fixed inset-0 z-[120] overflow-hidden pointer-events-none">
+        <!-- overflow-clip, not overflow-hidden: a hidden overlay is still a scroll
+             container, and focusing a field could scroll the whole drawer out of view. -->
+        <div v-if="show" class="fixed inset-0 z-[120] overflow-clip pointer-events-none">
             <div class="absolute inset-0 bg-black/40 backdrop-blur-sm pointer-events-auto cursor-pointer"
                 @click="emit('close')"></div>
 

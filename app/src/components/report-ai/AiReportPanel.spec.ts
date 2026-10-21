@@ -198,4 +198,24 @@ describe('AiReportPanel', () => {
         expect(wrapper.emitted('close')).toHaveLength(1)
         wrapper.unmount()
     })
+
+    // Regression: clicking 長度「短」 focused a visually hidden radio outside the
+    // drawer's scroll area; the browser scrolled the overflow-hidden overlay to
+    // reveal it and the whole drawer slid out of view (looked like it closed).
+    it('keeps the drawer from being scrolled away when a style option takes focus', async () => {
+        service.bootstrap.mockResolvedValue(bootstrap())
+        const wrapper = mount(AiReportPanel, { props: { show: true, reportId: 'r1' }, global: { plugins: [i18n] }, attachTo: document.body })
+        await flushPromises()
+        document.body.querySelector<HTMLButtonElement>('[data-testid="ai-style-toggle"]')!.click()
+        await flushPromises()
+
+        const overlay = document.body.querySelector('[role="dialog"]')!.parentElement!
+        expect(overlay.classList).toContain('overflow-clip')
+        expect(overlay.classList).not.toContain('overflow-hidden')
+        for (const input of document.body.querySelectorAll<HTMLInputElement>('input[name="ai-tone"], input[name="ai-length"]')) {
+            expect(input.classList).toContain('sr-only')
+            expect(input.closest('label')!.classList).toContain('relative')
+        }
+        wrapper.unmount()
+    })
 })
