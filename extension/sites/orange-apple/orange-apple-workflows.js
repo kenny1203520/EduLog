@@ -1,18 +1,20 @@
 // Sample-backed enhancements for this provider. No network or credential access.
 (() => {
   const model = globalThis.edulogSiteModel, words = globalThis.edulogSiteLexicon.text
+  // UI wording goes through the shared phrasebook (zh-TW / zh-CN / en); data stays in params.
+  const tx = (text, params = {}) => globalThis.edulogUi?.tx(text, params) ?? String(text).replace(/\{(\w+)\}/g, (_, name) => String(params[name] ?? ''))
   const text = node => node?.textContent.trim().replace(/\s+/g, ' ') || ''
   const classLink = a => { try { return a.origin === a.ownerDocument.location.origin && /^\/courses\/dt\/\d+\/?$/.test(a.pathname) } catch { return false } }
   function region(scope, title, className = 'edulog-section') {
     const section = scope.add(scope.element('section'))
     section.className = className
-    if (title) section.append(scope.element('h3', title))
+    if (title) section.append(scope.element('h3', tx(title)))
     return section
   }
   function facts(scope, values) {
     const list = scope.element('dl'); list.className = 'edulog-facts'
     for (const [label, value] of values) if (value) {
-      const item = scope.element('div'); item.append(scope.element('dt', label), scope.element('dd', value)); list.append(item)
+      const item = scope.element('div'); item.append(scope.element('dt', tx(label)), scope.element('dd', value)); list.append(item)
     }
     return list
   }
@@ -55,14 +57,14 @@
   function filterTable({ doc, scope, view }, table, key, title, dateColumn = null) {
     const { element, listen, mark } = scope
     const tools = region(scope, title, 'edulog-table-tools')
-    const label = element('label', '本頁搜尋'), search = element('input')
+    const label = element('label', tx('本頁搜尋')), search = element('input')
     search.type = 'search'; search.dataset.edulogSearch = key; search.value = view[key] || ''; label.append(search)
     const count = element('span'); count.setAttribute('role', 'status')
     tools.append(label, count); table.before(tools)
     let rows = []
     let date
     if (dateColumn !== null) {
-      const dates = element('label', '紀錄日期'); date = element('input'); date.type = 'date'
+      const dates = element('label', tx('紀錄日期')); date = element('input'); date.type = 'date'
       date.dataset.edulogSearch = `${key}Date`; date.value = view[`${key}Date`] || ''; dates.append(date); tools.append(dates)
     }
     const scroll = scrollTable(scope, table, key)
@@ -75,9 +77,9 @@
         mark(row, 'data-edulog-filtered', match ? null : '')
         if (match && !row.hidden) visible++
       }
-      count.textContent = `顯示 ${visible} / ${rows.filter(r => !r.hidden).length} 筆`
+      count.textContent = tx('顯示 {visible} / {total} 筆', { visible, total: rows.filter(r => !r.hidden).length })
       empty.hidden = visible > 0
-      empty.textContent = rows.length ? '目前篩選條件沒有符合的紀錄。' : '目前這份清單沒有紀錄。'
+      empty.textContent = rows.length ? tx('目前篩選條件沒有符合的紀錄。') : tx('目前這份清單沒有紀錄。')
       mark(table, 'data-edulog-empty-table', rows.length ? null : '')
       mark(scroll, 'data-edulog-empty-table', rows.length ? null : '')
     }
@@ -139,7 +141,7 @@
     const items = readUnfilledRows(table)
     const anchor = table.closest('[data-edulog-scroll]') || table
     const section = scope.add(element('section')); section.className = 'edulog-unfilled-list'
-    section.setAttribute('aria-label', monthly ? '整月未填課堂紀錄' : '待補填課堂紀錄')
+    section.setAttribute('aria-label', monthly ? tx('整月未填課堂紀錄') : tx('待補填課堂紀錄'))
     anchor.before(section)
     if (items.length) mark(anchor, 'data-edulog-cards', 'on')
     const summary = element('p'); summary.className = 'edulog-unfilled-summary'; summary.setAttribute('role', 'status')
@@ -147,29 +149,29 @@
     section.append(summary, body)
     const shownPhones = view.unfilledPhones || (view.unfilledPhones = new Set())
     const closed = view.unfilledClosed || (view.unfilledClosed = new Set())
-    const tag = (tone, label, iconName, title) => { const node = element('span'); node.className = 'edulog-badge'; node.dataset.tone = tone; if (iconName) node.append(lucide(doc, iconName)); node.append(element('span', label)); if (title) node.title = title; return node }
+    const tag = (tone, label, iconName, title) => { const node = element('span'); node.className = 'edulog-badge'; node.dataset.tone = tone; if (iconName) node.append(lucide(doc, iconName)); node.append(element('span', tx(label))); if (title) node.title = title; return node }
     function rowFor(item) {
       const li = element('li'); li.className = 'edulog-unfilled-row'; li.dataset.bar = item.overdue ? 'danger' : 'warn'
       const main = element('div'); main.className = 'edulog-unfilled-main'
-      const title = element('strong'); title.append(element('span', item.name || '未命名學生'))
-      if (item.mismatch) title.append(tag('notice', '節次不一致', 'alert', `學習紀錄節次：${item.slot}；目前節次：${item.current}`))
-      main.append(title, element('span', [item.course, item.slot && `學習紀錄 ${item.slot}`, item.mismatch && `目前 ${item.current}`].filter(Boolean).join(' · ')))
+      const title = element('strong'); title.append(element('span', item.name || tx('未命名學生')))
+      if (item.mismatch) title.append(tag('notice', '節次不一致', 'alert', tx('學習紀錄節次：{slot}；目前節次：{current}', { slot: item.slot, current: item.current })))
+      main.append(title, element('span', [item.course, item.slot && tx('學習紀錄 {slot}', { slot: item.slot }), item.mismatch && tx('目前 {current}', { current: item.current })].filter(Boolean).join(' · ')))
       const facts = element('div'); facts.className = 'edulog-unfilled-facts'
       facts.append(item.overdue ? tag('danger', '請儘速填寫', 'clock') : tag('warn', '待補填'))
       if (item.phone) {
         const key = `${item.name}|${item.phone}`
         if (shownPhones.has(key)) { const call = element('a'); call.className = 'edulog-phone'; call.href = `tel:${item.phone.replace(/[^\d+]/g, '')}`; call.append(lucide(doc, 'phone'), element('span', item.phone)); facts.append(call) }
         else {
-          const reveal = element('button'); reveal.type = 'button'; reveal.className = 'edulog-phone'; reveal.append(lucide(doc, 'phone'), element('span', '顯示電話'))
-          reveal.setAttribute('aria-label', `顯示 ${item.name} 的聯絡電話`)
+          const reveal = element('button'); reveal.type = 'button'; reveal.className = 'edulog-phone'; reveal.append(lucide(doc, 'phone'), element('span', tx('顯示電話')))
+          reveal.setAttribute('aria-label', tx('顯示 {name} 的聯絡電話', { name: item.name }))
           listen(reveal, 'click', () => { shownPhones.add(key); render(); section.querySelector(`a.edulog-phone[href="tel:${item.phone.replace(/[^\d+]/g, '')}"]`)?.focus() })
           facts.append(reveal)
         }
       }
       const actions = element('div'); actions.className = 'edulog-unfilled-actions'
       if (item.action) {
-        const fill = element('button', '填寫'); fill.type = 'button'; fill.className = 'edulog-unfilled-fill'; fill.dataset.edulogUnfilledFill = ''
-        fill.setAttribute('aria-label', `填寫 ${item.name} 的課堂紀錄`)
+        const fill = element('button', tx('填寫')); fill.type = 'button'; fill.className = 'edulog-unfilled-fill'; fill.dataset.edulogUnfilledFill = ''
+        fill.setAttribute('aria-label', tx('填寫 {name} 的課堂紀錄', { name: item.name }))
         listen(fill, 'click', () => { if (item.action.isConnected) item.action.click() })
         actions.append(fill)
       } else actions.append(element('span', '—'))
@@ -181,16 +183,16 @@
       const overdue = shown.filter(item => item.overdue)
       const groups = new Map()
       for (const item of shown.filter(entry => !entry.overdue)) {
-        const key = item.slot || '未標示節次'
+        const key = item.slot || tx('未標示節次')
         if (!groups.has(key)) groups.set(key, [])
         groups.get(key).push(item)
       }
-      const ordered = [...(overdue.length ? [['overdue', '逾期未填', overdue]] : []), ...[...groups].map(([slot, list]) => [`slot:${slot}`, slot, list])]
-      summary.textContent = items.length ? `${shown.length} 份未填${overdue.length ? ` · ${overdue.length} 份請儘速填寫` : ''}` : ''
+      const ordered = [...(overdue.length ? [['overdue', tx('逾期未填'), overdue]] : []), ...[...groups].map(([slot, list]) => [`slot:${slot}`, slot, list])]
+      summary.textContent = items.length ? tx('{count} 份未填', { count: shown.length }) + (overdue.length ? tx(' · {count} 份請儘速填寫', { count: overdue.length }) : '') : ''
       summary.hidden = !items.length
       if (!items.length || !shown.length) {
         const empty = element('div'); empty.className = 'edulog-unfilled-empty'
-        empty.append(lucide(doc, 'inbox'), element('strong', items.length ? '沒有符合搜尋的學生' : '目前清單沒有紀錄'), element('span', items.length ? '清除搜尋即可看到全部未填紀錄。' : monthly ? '原站這個月份沒有列出未填的課堂紀錄。' : '原站目前沒有列出需要補填的課堂紀錄。'))
+        empty.append(lucide(doc, 'inbox'), element('strong', items.length ? tx('沒有符合搜尋的學生') : tx('目前清單沒有紀錄')), element('span', items.length ? tx('清除搜尋即可看到全部未填紀錄。') : monthly ? tx('原站這個月份沒有列出未填的課堂紀錄。') : tx('原站目前沒有列出需要補填的課堂紀錄。')))
         body.replaceChildren(empty)
         return
       }
@@ -202,7 +204,7 @@
         head.append(lucide(doc, 'chevron-down'), key === 'overdue' ? lucide(doc, 'clock') : dot, element('span', label))
         const courses = [...new Set(list.map(item => item.course).filter(Boolean))]
         if (key !== 'overdue' && courses.length) { const sub = element('span', courses.join('、')); sub.className = 'edulog-unfilled-sub'; head.append(sub) }
-        const count = element('span', `${list.length} 份`); count.className = 'edulog-unfilled-count'; head.append(count)
+        const count = element('span', tx('{count} 份', { count: list.length })); count.className = 'edulog-unfilled-count'; head.append(count)
         const rows = element('ul'); rows.hidden = !open
         rows.append(...list.map(rowFor))
         listen(head, 'click', () => { if (closed.has(key)) closed.delete(key); else closed.add(key); render() })
@@ -226,7 +228,7 @@
         for (const [name, label] of [['year','年份'],['month','月份']]) {
           const input = form.querySelector(`select[name=${name}]`)
           if (!input || input.form !== form || !form.contains(input)) throw new Error('Hours filter changed while applying the theme')
-          mark(input, 'aria-label', label)
+          mark(input, 'aria-label', tx(label))
           // Native inputs can be nested in Bootstrap columns or already labelled.
           // Insert beside the actual input, without replacing it or nesting labels.
           if (!input.labels?.length && !input.closest('label')) {
@@ -237,12 +239,12 @@
         const summary = region(scope, '', 'edulog-page-context')
         const year = form.querySelector('[name=year]').selectedOptions[0]?.textContent || ''
         const month = form.querySelector('[name=month]').selectedOptions[0]?.textContent || ''
-        summary.append(element('strong', `查詢月份：${year} ${month}`), element('p', '鐘點與項目依原站明細呈現。'))
+        summary.append(element('strong', tx('查詢月份：{year} {month}', { year, month })), element('p', tx('鐘點與項目依原站明細呈現。')))
         form.after(summary)
         const tables = [...content.querySelectorAll('table')]
         for (const table of tables) { mark(table, 'data-edulog-hours-table', ''); scrollTable(scope, table, 'hours') }
         if (!tables.some(t => [...t.rows].some(r => r.querySelector('td')))) {
-          const empty = scope.add(element('p', '此月份沒有鐘點紀錄')); empty.className = 'edulog-empty'; summary.after(empty)
+          const empty = scope.add(element('p', tx('此月份沒有鐘點紀錄'))); empty.className = 'edulog-empty'; summary.after(empty)
         }
       }
     }
@@ -276,7 +278,7 @@
           if (!groups.has(name)) {
             const group = name === '修改密碼' ? scope.add(element('details')) : region(scope, name)
             if (name === '修改密碼') {
-              group.className = 'edulog-section'; group.append(element('summary', name), element('p', '不修改密碼請留空。修改後原站會強制登出。'))
+              group.className = 'edulog-section'; group.append(element('summary', tx(name)), element('p', tx('不修改密碼請留空。修改後原站會強制登出。')))
               group.open = view.profilePasswordOpen === true || doc.activeElement?.type === 'password' || Boolean(inputs.querySelector('input[type=password][aria-invalid=true],.employee_password .error,.employee_password_confirmation .error'))
               listen(group,'toggle',()=>{view.profilePasswordOpen=group.open})
               // Reveal native validation failures before the browser focuses the field.
@@ -289,21 +291,21 @@
           mark(field, 'data-edulog-profile-input', ''); move(field, groups.get(name))
         }
         for (const name of ['聯絡資訊','緊急聯絡人','技能與照片','修改密碼']) if (groups.has(name)) inputs.append(groups.get(name))
-        const submit = form.querySelector('input[type=submit]'); if (submit) mark(submit, 'value', '儲存個人資料')
+        const submit = form.querySelector('input[type=submit]'); if (submit) mark(submit, 'value', tx('儲存個人資料'))
       }
     }
     for (const card of content.querySelectorAll('.card')) mark(card, 'data-edulog-card', '')
     // Clarify the global, server-backed search without replacing its handlers.
     const globalSearch = doc.querySelector('#nav-teacher input[name=q]')
-    if (globalSearch) { mark(globalSearch, 'aria-label', '本站學生搜尋'); mark(globalSearch, 'placeholder', '本站學生搜尋') }
+    if (globalSearch) { mark(globalSearch, 'aria-label', tx('本站學生搜尋')); mark(globalSearch, 'placeholder', tx('本站學生搜尋')) }
     for (const a of doc.querySelectorAll('.sidebar a[href]')) {
       const href = a.getAttribute('href')
       if (href && !href.startsWith('#') && a.origin === doc.location.origin && a.pathname === doc.location.pathname) mark(a, 'aria-current', 'page')
     }
     if (page.kind === 'class') {
       const heading = content.querySelector('h2'), overview = content.querySelector('[role=tab][href="#overview"]')
-      if (heading && text(heading) === '節次資訊') scope.text(heading, '班級工作區')
-      if (overview) scope.text(overview, '班級名單')
+      if (heading && text(heading) === '節次資訊') scope.text(heading, tx('班級工作區'))
+      if (overview) scope.text(overview, tx('班級名單'))
       const original = content.querySelector('#overview table:not(#students-table)')
       if (original && original.rows.length > 1) {
         const labels = [...original.rows[0].cells].map(text)
@@ -311,7 +313,7 @@
         const summary = region(scope, '班級資訊', 'edulog-class-summary')
         const items = labels.flatMap((label,i) => /上課.*報名.*上限/.test(label) && /^\d+\s*\/\s*\d+\s*\/\s*\d+$/.test(values[i]) ? values[i].split('/').map((value,j)=>[['上課人數','報名人數','人數上限'][j],value.trim()]) : [[label,values[i]]])
         summary.append(facts(scope, items))
-        const details = element('details'), caption = element('summary', '其他班級資訊')
+        const details = element('details'), caption = element('summary', tx('其他班級資訊'))
         details.append(caption); summary.append(details)
         original.before(summary); move(original, details)
         details.open = view.classDetails === true
@@ -319,7 +321,7 @@
       }
       for (const card of content.querySelectorAll('.card.teacher')) mark(card, 'data-edulog-teacher', '')
       const nativeSearch = content.querySelector('#student_id-selectized')
-      if (nativeSearch) { mark(nativeSearch, 'aria-label', '原站學生查詢'); mark(nativeSearch, 'placeholder', '查詢原站學生') }
+      if (nativeSearch) { mark(nativeSearch, 'aria-label', tx('原站學生查詢')); mark(nativeSearch, 'placeholder', tx('查詢原站學生')) }
     }
     const students = content.querySelector('#students-table')
     if (students) scrollTable(scope, students, 'students')
@@ -328,15 +330,15 @@
       mark(reports, 'data-edulog-dense-table', '')
       const scroll = scrollTable(scope, reports, 'reports')
       mark(scroll, 'data-edulog-report-region', '')
-      mark(scroll,'role','region');mark(scroll,'aria-label','課堂紀錄表，可依螢幕寬度捲動');mark(scroll,'tabindex','0')
+      mark(scroll,'role','region');mark(scroll,'aria-label',tx('課堂紀錄表，可依螢幕寬度捲動'));mark(scroll,'tabindex','0')
       // Source wrappers must not create nested vertical scroll areas.
       for (let parent = scroll.parentElement; parent && parent !== content; parent = parent.parentElement) mark(parent, 'data-edulog-scroll-parent', '')
       const legend = region(scope, '', 'edulog-report-legend')
-      legend.append(element('p', '課程啟用與課堂記錄是不同狀態；請依原站記錄內容確認報告是否已填寫。'))
+      legend.append(element('p', tx('課程啟用與課堂記錄是不同狀態；請依原站記錄內容確認報告是否已填寫。')))
       const statisticsHeader = [...(reports.rows[0]?.cells || [])].find(cell => /出席統計/.test(text(cell)))
       const sourceHint = statisticsHeader?.querySelector('[data-bs-title],[title],[data-bs-original-title],[data-original-title]')
       const attendanceHint = sourceHint?.getAttribute('data-bs-title') || sourceHint?.getAttribute('title') || sourceHint?.getAttribute('data-bs-original-title') || sourceHint?.getAttribute('data-original-title')
-      if (attendanceHint) legend.append(element('p', `出席統計：${attendanceHint}`))
+      if (attendanceHint) legend.append(element('p', tx('出席統計：{hint}', { hint: attendanceHint })))
       scroll.before(legend)
       for (const alert of reports.closest('.tab-pane')?.querySelectorAll('.alert') || []) mark(alert, 'data-edulog-report-alert', '')
       const enhanceReportRow = row => {
@@ -349,7 +351,7 @@
           if (!view.reportDetails.has(row)) view.reportDetails.set(row,new Map())
           const states = view.reportDetails.get(row)
           const details = []
-          for (const [index,title] of [[2,'出席統計與專案']]) {
+          for (const [index,title] of [[2,tx('出席統計與專案')]]) {
             const cell = row.cells[index]; if (!cell || cell.querySelector(':scope > .edulog-report-details')) continue
             mark(cell, 'data-edulog-report-meta', '')
             const disclosure = scope.add(element('details')); disclosure.className = 'edulog-report-details'
@@ -362,7 +364,7 @@
           const studentActions = [...row.cells[0].querySelectorAll('a[href]')].filter(a => !/comments/.test(a.pathname) && !a.closest('.edulog-student-actions'))
           if (studentActions.length) {
             const disclosure = scope.add(element('details')); disclosure.className = 'edulog-report-details edulog-student-actions'
-            disclosure.append(element('summary','學生操作'))
+            disclosure.append(element('summary',tx('學生操作')))
             const body = element('div'); disclosure.append(body); row.cells[0].append(disclosure)
             for (const action of studentActions) move(action, body)
             details.push({disclosure,key:0})
@@ -380,14 +382,14 @@
           if (/\/reports\/\d+\/edit$/.test(a.pathname)) {
             const column = [...row.cells].indexOf(a.closest('td'))
             const week = text(reports.rows[0]?.cells[column])
-            mark(a, 'aria-label', `${student} ${week} 填寫課堂記錄`)
+            mark(a, 'aria-label', tx('{student} {week} 填寫課堂記錄', { student, week }))
             mark(a, 'data-edulog-record-action', '')
-            scope.text(a, '課堂記錄')
+            scope.text(a, tx('課堂記錄'))
           } else if (/\/students\/\d+\/accounts$/.test(a.pathname)) {
-            scope.text(a, '學習帳號設定'); mark(a, 'aria-label', `${student} 學習帳號設定`)
+            scope.text(a, tx('學習帳號設定')); mark(a, 'aria-label', tx('{student} 學習帳號設定', { student }))
           } else if (/\/students\/\d+\/teachers_comment$/.test(a.pathname)) {
-            scope.text(a, '學生總評'); mark(a, 'aria-label', `${student} 學生總評`)
-          } else if (!text(a)) mark(a, 'aria-label', /comments/.test(a.pathname) ? `${student} 教學備註` : `${student} 原站操作`)
+            scope.text(a, tx('學生總評')); mark(a, 'aria-label', tx('{student} 學生總評', { student }))
+          } else if (!text(a)) mark(a, 'aria-label', /comments/.test(a.pathname) ? tx('{student} 教學備註', { student }) : tx('{student} 原站操作', { student }))
         }
         const statistics = row.cells[2]?.querySelector('[title],[data-bs-original-title],[data-original-title]')
         // Use the source's explanation only; do not assign meaning to bare ratios.
@@ -416,10 +418,10 @@
       const enrollmentId=path=>String(path||'').match(/^\/dt_admissions\/(\d+)\/?$/)?.[1]||null
       const makeHistoryPanel = row => {
         if (!row.cells[0] || row.querySelector('.edulog-last-teaching-toggle')) return
-        const button=element('button','查看上次教學')
+        const button=element('button',tx('查看上次教學'))
         scope.add(button);button.type='button';button.className='edulog-last-teaching-toggle';button.setAttribute('aria-expanded','false')
         const live=element('div');live.className='edulog-last-teaching-content';live.setAttribute('role','status');live.setAttribute('aria-live','polite')
-        const reload=element('button','重新整理上次教學');reload.type='button';reload.hidden=true
+        const reload=element('button',tx('重新整理上次教學'));reload.type='button';reload.hidden=true
         const disclosure=element('div');disclosure.className='edulog-last-teaching-panel';disclosure.hidden=true;disclosure.append(live,reload)
         const detailsRow=scope.add(element('tr'));detailsRow.className='edulog-last-teaching-row';detailsRow.hidden=true;detailsRow.dataset.edulogLastTeachingRow=''
         const detailsCell=element('td');detailsCell.colSpan=Math.max(1,reports.rows[0]?.cells.length||row.cells.length);detailsCell.append(disclosure);detailsRow.append(detailsCell);row.after(detailsRow)
@@ -427,12 +429,12 @@
         const statusSummaries=new Map()
         const session=(week=selectedWeek())=>{const cell=week&&row.cells[week.index];return week?{...week,cell,link:reportLinkFor(row,week),date:reportDate(week.label,week.cell),admission:admissionFor(row,week)}:null}
         const statusFor=target=>{
-          const state=model.readSessionCell(target?.cell,{upcoming:words.nextWeek.test(target?.label||'')}),raw=state.raw,course=state.courseStatus||'原站未提供明確狀態'
+          const state=model.readSessionCell(target?.cell,{upcoming:words.nextWeek.test(target?.label||'')}),raw=state.raw,course=state.courseStatus||tx('原站未提供明確狀態')
           const attendanceLink=target?.cell?.querySelector('a[href*="attendance_status"]')
-          const attendance=state.attendance||(attendanceLink?'原站提供設定入口，結果待確認':'原站未提供明確出席結果')
-          const report=state.report||(target?.link?'可開啟課堂紀錄':'原站未提供課堂紀錄入口')
-          const scheduled=state.scheduledLesson||'原站未提供'
-          const enabled=state.enabledLesson||'原站未提供'
+          const attendance=state.attendance||(attendanceLink?tx('原站提供設定入口，結果待確認'):tx('原站未提供明確出席結果'))
+          const report=state.report||(target?.link?tx('可開啟課堂紀錄'):tx('原站未提供課堂紀錄入口'))
+          const scheduled=state.scheduledLesson||tx('原站未提供')
+          const enabled=state.enabledLesson||tx('原站未提供')
           const otherSession=state.otherSession
           return {raw,course,attendance,report,scheduled,enabled,otherSession,rank:otherSession?'other':target?.link?'current':'unknown'}
         }
@@ -440,7 +442,7 @@
           let summary=statusSummaries.get(week.index)
           if(summary)return summary
           summary=scope.add(element('div'));summary.className='edulog-session-status';summary.dataset.edulogWeekSummary=String(week.index);mark(summary,'data-edulog-owned','')
-          const comparison=element('p');comparison.className='edulog-session-comparison';const details=element('details');details.className='edulog-session-extra';details.append(element('summary','課程狀態與詳細資訊'));const body=element('div');details.append(body);summary.append(comparison,details)
+          const comparison=element('p');comparison.className='edulog-session-comparison';const details=element('details');details.className='edulog-session-extra';details.append(element('summary',tx('課程狀態與詳細資訊')));const body=element('div');details.append(body);summary.append(comparison,details)
           statusSummaries.set(week.index,{summary,comparison,details,body})
           return statusSummaries.get(week.index)
         }
@@ -452,11 +454,11 @@
             mark(target.cell,'data-edulog-week-status','')
             mark(target.cell,'data-edulog-week-selected',week.index===Number(view.week)?'':null)
             comparison.replaceChildren()
-            const field=(label,value)=>{const item=element('span');item.append(element('strong',label),doc.createTextNode(' '),element('span',value));return item}
+            const field=(label,value)=>{const item=element('span');item.append(element('strong',tx(label)),doc.createTextNode(' '),element('span',value));return item}
             const lesson=field('本堂排定進度',status.scheduled),enabled=field('已啟用教材',status.enabled),attendance=field('出席狀態',status.attendance),report=field('課堂紀錄',status.report)
             comparison.append(lesson,enabled,attendance,report)
             body.replaceChildren()
-            for(const [label,value] of [['課程狀態',status.course],['課堂日期',target.date||'來源未提供完整日期']]){const item=element('p');item.append(element('strong',`${label}：`),doc.createTextNode(value));body.append(item)}
+            for(const [label,value] of [['課程狀態',status.course],['課堂日期',target.date||tx('來源未提供完整日期')]]){const item=element('p');item.append(element('strong',tx('{label}：',{label:tx(label)})),doc.createTextNode(value));body.append(item)}
             mark(summary,'data-edulog-session-rank',status.rank)
             target.cell.append(summary)
           }
@@ -467,38 +469,38 @@
         placeActions()
         historyRowUpdaters.set(row,placeActions)
         let sequence=0,expanded=false
-        const appendField=(parent,label,value)=>{if(value===undefined||value===null||value==='')return;const item=element('p');const strong=element('strong',`${label}：`);item.append(strong,doc.createTextNode(String(value)));parent.append(item)}
+        const appendField=(parent,label,value)=>{if(value===undefined||value===null||value==='')return;const item=element('p');const strong=element('strong',tx('{label}：',{label:tx(label)}));item.append(strong,doc.createTextNode(String(value)));parent.append(item)}
         const render=result=>{
           live.replaceChildren()
-          if(result.status==='none'){live.append(element('p','未找到所選課次日期之前、且含實際教學內容的紀錄。'));return}
-          if(result.status==='ambiguous')live.append(element('p','同一天有多份教學紀錄，無法可靠排序；請逐份查看。'))
+          if(result.status==='none'){live.append(element('p',tx('未找到所選課次日期之前、且含實際教學內容的紀錄。')));return}
+          if(result.status==='ambiguous')live.append(element('p',tx('同一天有多份教學紀錄，無法可靠排序；請逐份查看。')))
           const reportsToShow=result.status==='found'?[result.report]:result.reports||[]
           for(const report of reportsToShow){
             const article=element('section');article.className='edulog-last-teaching-result'
-            const title=element('h4',`${report.date||'日期未提供'}${report.lesson?` · ${report.lesson}`:''}`);article.append(title)
-            appendField(article,'完成狀況',report.completed===true?'已完成':report.completed===false?'未完成':'未提供')
+            const title=element('h4',`${report.date||tx('日期未提供')}${report.lesson?` · ${report.lesson}`:''}`);article.append(title)
+            appendField(article,'完成狀況',report.completed===true?tx('已完成'):report.completed===false?tx('未完成'):tx('未提供'))
             appendField(article,'章節進度',report.progress)
             const noteLines=String(report.internalNotes||'').split(/\r?\n/)
             if(noteLines.length<=3)appendField(article,'內部紀錄',report.internalNotes)
-            else{appendField(article,'內部紀錄',noteLines.slice(0,3).join('\n'));const fullNotes=element('details');fullNotes.append(element('summary','展開完整內部紀錄'));const pre=element('pre');pre.textContent=report.internalNotes;fullNotes.append(pre);article.append(fullNotes)}
-            const more=element('details');more.append(element('summary','評語、評分與聯絡欄'))
+            else{appendField(article,'內部紀錄',noteLines.slice(0,3).join('\n'));const fullNotes=element('details');fullNotes.append(element('summary',tx('展開完整內部紀錄')));const pre=element('pre');pre.textContent=report.internalNotes;fullNotes.append(pre);article.append(fullNotes)}
+            const more=element('details');more.append(element('summary',tx('評語、評分與聯絡欄')))
             const body=element('div');appendField(body,'學習表現',report.content);appendField(body,'課程參與評分',report.participation);appendField(body,'課堂秩序評分',report.behavior);appendField(body,'聯絡欄',report.contactNotes)
             if(body.children.length){more.append(body);article.append(more)}
-            if(report.externalLink){try{const url=new URL(report.externalLink,doc.location.href);if(url.origin===doc.location.origin){const link=element('a','查看原站紀錄');link.href=url.href;link.target='_blank';link.rel='noopener';article.append(link)}}catch{}}
+            if(report.externalLink){try{const url=new URL(report.externalLink,doc.location.href);if(url.origin===doc.location.origin){const link=element('a',tx('查看原站紀錄'));link.href=url.href;link.target='_blank';link.rel='noopener';article.append(link)}}catch{}}
             live.append(article)
           }
-          const time=element('p');time.className='edulog-last-teaching-read-at';time.append(element('strong','讀取時間：'),doc.createTextNode(new Date(result.readAt||Date.now()).toLocaleString(doc.documentElement.lang||'zh-TW')));live.append(time)
+          const time=element('p');time.className='edulog-last-teaching-read-at';time.append(element('strong',tx('讀取時間：')),doc.createTextNode(new Date(result.readAt||Date.now()).toLocaleString(doc.documentElement.lang||'zh-TW')));live.append(time)
         }
         const load=async(force=false,{isActive=()=>true}={})=>{
           const target=session(),id=++sequence
-          reload.hidden=false;reload.disabled=true;live.replaceChildren(element('p','正在讀取此學生的相關報名與教學紀錄…'))
-          if(!target?.admission||!target.link){live.replaceChildren(element('p','無法從本堂原站連結可靠識別報名與報告，請使用原站紀錄或從學生名單開啟報名。'));reload.disabled=false;return false}
+          reload.hidden=false;reload.disabled=true;live.replaceChildren(element('p',tx('正在讀取此學生的相關報名與教學紀錄…')))
+          if(!target?.admission||!target.link){live.replaceChildren(element('p',tx('無法從本堂原站連結可靠識別報名與報告，請使用原站紀錄或從學生名單開啟報名。')));reload.disabled=false;return false}
           try{
             const integration=globalThis.edulogSourceIntegration
-            if(typeof integration?.readPreviousTeaching!=='function')throw new Error('目前擴充功能版本不支援按需讀取，請重新載入擴充功能後重試。')
+            if(typeof integration?.readPreviousTeaching!=='function')throw new Error(tx('目前擴充功能版本不支援按需讀取，請重新載入擴充功能後重試。'))
             let date=target.date
-            if(!date){if(typeof integration.resolveSessionDate!=='function')throw new Error('來源沒有完整日期，且目前版本無法從報告編輯頁補讀日期。');date=(await integration.resolveSessionDate(target.admission,target.link.href)).date}
-            const idNumber=enrollmentId(target.admission);if(!idNumber)throw new Error('報名識別資料無效，請從原站報名頁重新開啟。')
+            if(!date){if(typeof integration.resolveSessionDate!=='function')throw new Error(tx('來源沒有完整日期，且目前版本無法從報告編輯頁補讀日期。'));date=(await integration.resolveSessionDate(target.admission,target.link.href)).date}
+            const idNumber=enrollmentId(target.admission);if(!idNumber)throw new Error(tx('報名識別資料無效，請從原站報名頁重新開啟。'))
             const key=`${idNumber}|${date}`,revision=historyRevisions.get(idNumber)||0
             if(!force&&historyCache.has(key)){if(id===sequence&&row.isConnected&&isActive()){render(historyCache.get(key));reload.disabled=false;return true}}
             let request=historyRequests.get(key)
@@ -508,13 +510,13 @@
             if((historyRevisions.get(idNumber)||0)!==revision)return false
             historyCache.set(key,result)
             render(result);return true
-          }catch(error){if(id===sequence&&row.isConnected&&isActive()){const failure=element('p');failure.append(element('strong','讀取失敗：'),doc.createTextNode(error?.message||'未知錯誤'),doc.createTextNode(' '),element('span','請重新整理此學生的摘要。'));live.replaceChildren(failure)}return false}
+          }catch(error){if(id===sequence&&row.isConnected&&isActive()){const failure=element('p');failure.append(element('strong',tx('讀取失敗：')),doc.createTextNode(error?.message||tx('未知錯誤')),doc.createTextNode(' '),element('span',tx('請重新整理此學生的摘要。')));live.replaceChildren(failure)}return false}
           finally{if(id===sequence)reload.disabled=false}
         }
         historyRowLoaders.set(row,load)
         listen(button,'click',()=>{expanded=!expanded;if(!expanded)sequence++;button.setAttribute('aria-expanded',String(expanded));disclosure.hidden=!expanded;detailsRow.hidden=!expanded;live.hidden=false;if(expanded)void load()})
         listen(reload,'click',()=>void load(true))
-        const onWeekChange=()=>{sequence++;view.cancelClassHistory?.();placeActions();if(expanded){live.hidden=false;live.replaceChildren(element('p','目前課次已變更；請按「重新整理上次教學」讀取對應摘要。'));reload.hidden=false;reload.disabled=false}}
+        const onWeekChange=()=>{sequence++;view.cancelClassHistory?.();placeActions();if(expanded){live.hidden=false;live.replaceChildren(element('p',tx('目前課次已變更；請按「重新整理上次教學」讀取對應摘要。')));reload.hidden=false;reload.disabled=false}}
         listen(doc,'edulog:week-change',onWeekChange)
         listen(doc,'turbo:submit-end',event=>{
           const form=event.target?.matches?.('form')?event.target:null
@@ -529,7 +531,7 @@
           for(const key of historyRequests.keys())if(key.startsWith(prefix))historyRequests.delete(key)
           for(const [candidate,update] of historyRowUpdaters)if(candidate.isConnected&&candidate.querySelector('.edulog-last-teaching-toggle')?.dataset.edulogAdmission===submittedAdmission)update()
           if(!expanded)return
-          live.replaceChildren(element('p','原站已確認保存。上次教學摘要已更新為待重新讀取。'));reload.hidden=false;reload.disabled=false
+          live.replaceChildren(element('p',tx('原站已確認保存。上次教學摘要已更新為待重新讀取。')));reload.hidden=false;reload.disabled=false
         })
       }
       for(const row of reports.rows)if(row.querySelector('td')&&!row.hasAttribute('data-edulog-last-teaching-row'))makeHistoryPanel(row)
@@ -538,7 +540,7 @@
         const week=selectedWeek(),eligible=[...historyRowLoaders.keys()].filter(row=>{const cell=week&&row.cells[week.index];if(!cell||words.otherSession.test(text(cell)))return false;return Boolean(reportLinkFor(row,week)&&admissionFor(row,week))})
         view.classHistoryEligibleCount=eligible.length
         if(view.classHistoryAvailabilityValue)view.classHistoryAvailabilityValue.data=` ${eligible.length} `
-        if(view.classHistoryAvailabilityWeek)view.classHistoryAvailabilityWeek.textContent=week?.label||'原站未標示課次'
+        if(view.classHistoryAvailabilityWeek)view.classHistoryAvailabilityWeek.textContent=week?.label||tx('原站未標示課次')
       }
       view.loadClassHistory=async({onProgress=()=>{},isActive=()=>true}={})=>{
         const run=++batchRun,week=selectedWeek(),targets=[...historyRowLoaders.entries()].filter(([row])=>{const cell=week&&row.cells[week.index];return Boolean(cell&&!words.otherSession.test(text(cell))&&reportLinkFor(row,week)&&admissionFor(row,week))})
@@ -560,14 +562,14 @@
         const core = items.filter(n => /^(學生|梯次\/節次|課程名稱|總堂數|可補課次數)/.test(text(n)))
         const info = element('ul'); info.className = 'edulog-history-core'; summary.append(info)
         admission.before(summary)
-        const extra = element('details'); extra.className = 'edulog-history-stats'; extra.append(element('summary', '堂數與補課資訊'))
+        const extra = element('details'); extra.className = 'edulog-history-stats'; extra.append(element('summary', tx('堂數與補課資訊')))
         const statsList = element('ul'); extra.append(statsList)
         for (const item of core) move(item, /^(總堂數|可補課次數)/.test(text(item)) ? statsList : info)
         if (statsList.children.length) summary.append(extra)
         const stats = [...content.querySelectorAll('p,div')].find(n => !n.children.length && /目前進度.*實際出席/.test(text(n)))
         if (stats) summary.append(element('p', text(stats)))
         const details = scope.add(element('details')); details.className = 'edulog-admission-details'
-        details.append(element('summary', '報名與行政資訊')); admission.before(details); move(admission, details)
+        details.append(element('summary', tx('報名與行政資訊'))); admission.before(details); move(admission, details)
         details.open = view.admissionDetails === true; listen(details, 'toggle', () => { view.admissionDetails = details.open })
       }
       const table = [...content.querySelectorAll('table')].find(t => /學習評估/.test(text(t.rows[0])))
@@ -575,7 +577,7 @@
         const headers = [...table.rows[0].cells].map(text), dateIndex = headers.findIndex(h => h === '日期')
         const { tools, rows, refresh } = filterTable(context, table, 'historyQuery', '歷史課堂紀錄', dateIndex < 0 ? null : dateIndex)
         refreshers.push(refresh)
-        const newest = element('button', '前往最新紀錄'); newest.type = 'button'; tools.append(newest)
+        const newest = element('button', tx('前往最新紀錄')); newest.type = 'button'; tools.append(newest)
         listen(newest, 'click', () => {
           const dated = rows.filter(r => !r.hasAttribute('data-edulog-filtered') && !r.hidden && /\d{4}-\d{2}-\d{2}/.test(text(r.cells[dateIndex])))
           const completed = dated.filter(r => /評語|最新課程階段/.test(text(r)))
@@ -586,7 +588,7 @@
           const assessment = row.cells[headers.findIndex(h => /學習評估/.test(h))]
           if (assessment?.textContent.trim()) {
             const details = element('details'); details.className = 'edulog-assessment'
-            details.append(element('summary', '評語、聯絡與內部紀錄'))
+            details.append(element('summary', tx('評語、聯絡與內部紀錄')))
             const original = [...assessment.childNodes]; assessment.append(details); scope.add(details)
             for (const node of original) move(node, details)
           }
@@ -597,7 +599,7 @@
       const monthly = page.kind === 'unfilled'
       const heading = content.querySelector('h3')
       const title = region(scope, '', 'edulog-page-context')
-      title.append(element('strong', monthly ? `目前檢視：${text(heading) || '原站選定月份'}` : '補填學生課堂紀錄'), element('p', monthly ? '依班級時段分組；清單範圍以原站目前帳號及月份為準。' : '依班級時段分組，請儘速填寫的置頂；節次差異依原站內容呈現，不推定為錯誤。'))
+      title.append(element('strong', monthly ? tx('目前檢視：{month}', { month: text(heading) || tx('原站選定月份') }) : tx('補填學生課堂紀錄')), element('p', monthly ? tx('依班級時段分組；清單範圍以原站目前帳號及月份為準。') : tx('依班級時段分組，請儘速填寫的置頂；節次差異依原站內容呈現，不推定為錯誤。')))
       content.prepend(title)
       if (monthly && heading) mark(heading, 'data-edulog-duplicate-heading', '')
       const table = content.querySelector('table')
@@ -621,7 +623,7 @@
     }
     if (page.kind === 'classes') {
       const switcher = region(scope, '班級檢視', 'edulog-table-tools')
-      const listButton = element('button', '班級清單'), matrixButton = element('button', '原站時段矩陣')
+      const listButton = element('button', tx('班級清單')), matrixButton = element('button', tx('原站時段矩陣'))
       listButton.type = matrixButton.type = 'button'; switcher.append(listButton, matrixButton); content.prepend(switcher)
       const pairs = []
       for (const table of content.querySelectorAll('table.dt-stages')) {
@@ -631,7 +633,7 @@
           const cell = cells[r][c]
           if (!cell || cells[r].indexOf(cell) !== c || (r > 2 && cells[r - 1]?.[c] === cell)) continue
           for (const original of [...cell.querySelectorAll('a[href]')].filter(classLink)) {
-            const card = element('article'), link = element('a', text(cells[r][1]) || text(cells[r][0]) || '原站班級')
+            const card = element('article'), link = element('a', text(cells[r][1]) || text(cells[r][0]) || tx('原站班級'))
             link.href = original.href; card.append(link)
             const counts = text(original).match(/^(\d+)\s*\/\s*(\d+)\s*\/\s*(\d+)$/)
             card.append(facts(scope, [
@@ -642,7 +644,7 @@
             cards.append(card)
           }
         }
-        if (!cards.children.length) cards.append(element('p', '目前這個區域與時段沒有已載入的班級。'))
+        if (!cards.children.length) cards.append(element('p', tx('目前這個區域與時段沒有已載入的班級。')))
         table.before(cards)
         const scroll = scope.add(element('div')); scroll.className = 'edulog-table-scroll'
         table.before(scroll); move(table, scroll)
@@ -660,13 +662,13 @@
       const value = new URL(doc.location.href).searchParams.get('today')
       const current = new Date(); const today = `${current.getFullYear()}-${String(current.getMonth()+1).padStart(2,'0')}-${String(current.getDate()).padStart(2,'0')}`
       const context = region(scope, '', 'edulog-page-context')
-      context.append(element('strong', `課表基準日期：${value || today}`), element('p', '「我的班級」是固定班級入口；下方課表依原站選定日期顯示。'))
-      const todayLink = element('a', '回到今天'); todayLink.href = `/?today=${today}`; context.append(todayLink); content.prepend(context)
+      context.append(element('strong', tx('課表基準日期：{date}', { date: value || today })), element('p', tx('「我的班級」是固定班級入口；下方課表依原站選定日期顯示。')))
+      const todayLink = element('a', tx('回到今天')); todayLink.href = `/?today=${today}`; context.append(todayLink); content.prepend(context)
       const opener = [...content.querySelectorAll('a[href]')].find(a => /課程表.*點擊檢視/.test(text(a)))
       if (opener) {
-        mark(opener, 'aria-label', '載入選定日期課表')
-        const state = scope.add(element('p', '課表尚未展開，請按「課程表」載入。')); state.className = 'edulog-empty'; state.setAttribute('role', 'status'); opener.parentElement.after(state)
-        listen(opener, 'click', () => { state.textContent = '正在載入課表；若未載入，請重新按原站課表入口。' })
+        mark(opener, 'aria-label', tx('載入選定日期課表'))
+        const state = scope.add(element('p', tx('課表尚未展開，請按「課程表」載入。'))); state.className = 'edulog-empty'; state.setAttribute('role', 'status'); opener.parentElement.after(state)
+        listen(opener, 'click', () => { state.textContent = tx('正在載入課表；若未載入，請重新按原站課表入口。') })
       }
     }
     if (page.kind === 'calendar') {
@@ -675,18 +677,18 @@
       const selected = content.querySelector('.region-title.active')
       const selectedPanel = selected && content.querySelector(selected.getAttribute('href'))
       const day = selectedPanel?.querySelector('[id*="weekday-"][id$="-tab"].active')
-      description.textContent = `目前區域：${text(selected) || '尚未選擇'} · 日期：${text(day) || '請選擇日期'}`
+      description.textContent = tx('目前區域：{area} · 日期：{day}', { area: text(selected) || tx('尚未選擇'), day: text(day) || tx('請選擇日期') })
       const panels = [...(selectedPanel?.querySelectorAll('[id^=region-][id*=weekday-]:not([id$=-tab])') || [])]
       const active = day && selectedPanel?.querySelector(day.getAttribute('href'))
       const links = active ? [...active.querySelectorAll('a[href]')].filter(classLink) : []
-      status.textContent = !selected ? '請選擇區域以載入課程。' : !panels.length ? '正在載入區域課表；若未載入，請重新選擇原站區域。' : !active ? '請選擇日期。' : links.length ? `目前日期已載入 ${links.length} 個班級入口。` : '目前已載入的日期沒有課程。'
+      status.textContent = !selected ? tx('請選擇區域以載入課程。') : !panels.length ? tx('正在載入區域課表；若未載入，請重新選擇原站區域。') : !active ? tx('請選擇日期。') : links.length ? tx('目前日期已載入 {count} 個班級入口。', { count: links.length }) : tx('目前已載入的日期沒有課程。')
       for (const alert of content.querySelectorAll('.alert')) if (text(alert) === '請選擇區域') mark(alert, 'data-edulog-stale-alert', selected ? '' : null)
       }
       const description = element('p'), status = element('p'); status.setAttribute('role', 'status'); summary.append(description, status); content.prepend(summary)
       update(); refreshers.push(update)
       const input = content.querySelector('input[placeholder="選擇欲前往的日期"]:not([type=hidden])')
       if (input) {
-        mark(input, 'aria-label', '前往課程日期')
+        mark(input, 'aria-label', tx('前往課程日期'))
         const form = input.closest('form')
         if (form) {
           mark(form, 'data-edulog-calendar-controls', '')
@@ -701,7 +703,7 @@
           }
         }
       }
-      for (const a of content.querySelectorAll('.region-title,[id*="weekday-"][id$="-tab"]')) listen(a, 'click', () => { status.textContent = '正在切換原站課表…' })
+      for (const a of content.querySelectorAll('.region-title,[id*="weekday-"][id$="-tab"]')) listen(a, 'click', () => { status.textContent = tx('正在切換原站課表…') })
       for (const table of content.querySelectorAll('table.content-table')) { mark(table, 'data-edulog-calendar-table', ''); scrollTable(scope, table, 'calendar') }
     }
     return { refresh: () => { for (const refresh of refreshers) refresh() } }
@@ -712,7 +714,7 @@
     const { mark, element, listen, move } = scope
     mark(modal, 'data-edulog-dialog', '')
     if (view.reportTarget && form.getAttribute('action') === view.reportTarget.path.replace(/\/edit$/, '')) {
-      const target = scope.add(element('p', `課次：${view.reportTarget.label}`)); target.className = 'edulog-dialog-context'
+      const target = scope.add(element('p', tx('課次：{label}', { label: view.reportTarget.label }))); target.className = 'edulog-dialog-context'
       modal.querySelector('.modal-header')?.append(target)
     }
     const labels = {
@@ -724,7 +726,7 @@
     for (const [id, label] of Object.entries(labels)) {
       const input = form.querySelector(`#${id}`)
       if (!input) continue
-      mark(input, 'aria-label', label)
+      mark(input, 'aria-label', tx(label))
       const original = [...input.parentElement.querySelectorAll('label')].find(n => !n.htmlFor && text(n) === label)
       if (original) mark(original, 'for', id)
     }
@@ -764,14 +766,14 @@
     for (const [name, label] of [['participation_rating', '課程參與'], ['order_rating', '課堂秩序']]) {
       const radios = [...form.querySelectorAll(`input[type=radio][name$="[${name}]"]`)]
       if (!radios.length) continue
-      const wrapper = scope.add(element('label', `${label}評分`)); wrapper.className = 'edulog-rating-control'
-      const select = element('select'); select.setAttribute('aria-label', `${label}評分`)
-      const empty = element('option', '尚未評分'); empty.value = ''; select.append(empty)
+      const wrapper = scope.add(element('label', tx('{label}評分', { label: tx(label) }))); wrapper.className = 'edulog-rating-control'
+      const select = element('select'); select.setAttribute('aria-label', tx('{label}評分', { label: tx(label) }))
+      const empty = element('option', tx('尚未評分')); empty.value = ''; select.append(empty)
       const halfStars = radios.length === 10 && radios.every(n => /^[1-9]$|^10$/.test(n.value))
       for (const radio of [...radios].sort((a,b) => Number(a.value)-Number(b.value))) {
-        const option = element('option', halfStars ? `${Number(radio.value)/2} / 5 星` : `原站評分 ${radio.value}`)
+        const option = element('option', halfStars ? tx('{stars} / 5 星', { stars: Number(radio.value)/2 }) : tx('原站評分 {value}', { value: radio.value }))
         option.value = radio.value; select.append(option)
-        mark(radio, 'aria-label', `${label} ${option.textContent}`)
+        mark(radio, 'aria-label', `${tx(label)} ${option.textContent}`)
       }
       const sync = () => { select.value = radios.find(n => n.checked)?.value || '' }
       sync(); wrapper.append(select)
@@ -807,10 +809,10 @@
       const scope = createScope(doc), title = modal.querySelector('.modal-title')
       scope.mark(modal,'data-edulog-dialog','compact'); scope.mark(modal,'role','dialog'); scope.mark(modal,'aria-modal','true')
       if (title) { if (!title.id) scope.mark(title,'id',`edulog-${modal.id}-title`); scope.mark(modal,'aria-labelledby',title.id) }
-      scope.mark(field,'aria-label',modal.id === 'teachers-comment-modal' ? '學生總評' : '教學備註')
+      scope.mark(field,'aria-label',modal.id === 'teachers-comment-modal' ? tx('學生總評') : tx('教學備註'))
       const close = modal.querySelector('button[data-bs-dismiss=modal],button[aria-label=Close]')
-      if (close) { scope.mark(close,'data-edulog-close',''); scope.mark(close,'aria-label','關閉視窗') }
-      const note = scope.add(scope.element('p',modal.id === 'teachers-comment-modal' ? '學生總評與每次課堂記錄分開儲存，請使用原站送出按鈕。' : '教學備註使用原站儲存機制；關閉視窗不代表已儲存。'))
+      if (close) { scope.mark(close,'data-edulog-close',''); scope.mark(close,'aria-label',tx('關閉視窗')) }
+      const note = scope.add(scope.element('p',modal.id === 'teachers-comment-modal' ? tx('學生總評與每次課堂記錄分開儲存，請使用原站送出按鈕。') : tx('教學備註使用原站儲存機制；關閉視窗不代表已儲存。')))
       note.className = 'edulog-dialog-context'; field.before(note)
       entries.push({ root:modal, form:field.closest('form') || field, restore:scope.restore })
     }

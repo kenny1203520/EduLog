@@ -158,10 +158,10 @@ globalThis.edulogUi?.registerPhrases({
    "Teaching note"
   ],
   "學生總評": [
-   "Student review"
+   "Overall comment"
   ],
   "學習帳號設定": [
-   "Learning accounts"
+   "Learning account"
   ],
   "專案檢查": [
    "Project check"
@@ -278,7 +278,7 @@ globalThis.edulogUi?.registerPhrases({
    "Overdue"
   ],
   "待補填": [
-   "To fill"
+   "To file"
   ],
   "去填寫": [
    "Fill"
@@ -431,7 +431,7 @@ globalThis.edulogUi?.registerPhrases({
    "Absence reason"
   ],
   "章節進度": [
-   "Chapter progress"
+   "Chapters"
   ],
   "確認學生姓名與上課資訊": [
    "Confirm student and lesson details"
@@ -768,5 +768,482 @@ globalThis.edulogUi?.registerPhrases({
   ],
   "未能及時讀取主題偏好，已保留原站。可在當頁套用清晰主題。": [
    "Couldn't read the theme preference in time; kept the site look. You can apply the theme here."
+  ],
+  "本頁搜尋": [
+   "Search this page"
+  ],
+  "紀錄日期": [
+   "Record date"
+  ],
+  "顯示 {visible} / {total} 筆": [
+   "Showing {visible} / {total}"
+  ],
+  "目前篩選條件沒有符合的紀錄。": [
+   "No records match the current filters."
+  ],
+  "目前這份清單沒有紀錄。": [
+   "This list has no records."
+  ],
+  "整月未填課堂紀錄": [
+   "Unfiled records this month"
+  ],
+  "待補填課堂紀錄": [
+   "Records to file"
+  ],
+  "未命名學生": [
+   "Unnamed student"
+  ],
+  "節次不一致": [
+   "Lesson mismatch"
+  ],
+  "學習紀錄節次：{slot}；目前節次：{current}": [
+   "Record lesson: {slot}; current lesson: {current}"
+  ],
+  "學習紀錄 {slot}": [
+   "Record {slot}"
+  ],
+  "目前 {current}": [
+   "Now {current}"
+  ],
+  "請儘速填寫": [
+   "Overdue"
+  ],
+  "顯示電話": [
+   "Show phone"
+  ],
+  "顯示 {name} 的聯絡電話": [
+   "Show {name}'s phone"
+  ],
+  "填寫": [
+   "Fill in"
+  ],
+  "填寫 {name} 的課堂紀錄": [
+   "Fill in {name}'s record"
+  ],
+  "未標示節次": [
+   "No lesson"
+  ],
+  "{count} 份未填": [
+   "{count} unfiled"
+  ],
+  " · {count} 份請儘速填寫": [
+   " · {count} overdue"
+  ],
+  "沒有符合搜尋的學生": [
+   "No students match"
+  ],
+  "目前清單沒有紀錄": [
+   "No records in this list"
+  ],
+  "清除搜尋即可看到全部未填紀錄。": [
+   "Clear the search to see all unfiled records."
+  ],
+  "原站這個月份沒有列出未填的課堂紀錄。": [
+   "The site lists no unfiled records this month."
+  ],
+  "原站目前沒有列出需要補填的課堂紀錄。": [
+   "The site lists no records to file."
+  ],
+  "{count} 份": [
+   "{count}"
+  ],
+  "年份": [
+   "Year"
+  ],
+  "月份": [
+   "Month"
+  ],
+  "查詢月份：{year} {month}": [
+   "Month: {year} {month}"
+  ],
+  "鐘點與項目依原站明細呈現。": [
+   "Hours and items as listed by the site."
+  ],
+  "此月份沒有鐘點紀錄": [
+   "No hours this month"
+  ],
+  "聯絡資訊": [
+   "Contact"
+  ],
+  "基本資料": [
+   "Basic info"
+  ],
+  "其他資訊": [
+   "Other"
+  ],
+  "修改密碼": [
+   "Change password"
+  ],
+  "緊急聯絡人": [
+   "Emergency contact"
+  ],
+  "技能與照片": [
+   "Skills & photo"
+  ],
+  "不修改密碼請留空。修改後原站會強制登出。": [
+   "Leave blank to keep the password. Changing it signs you out."
+  ],
+  "儲存個人資料": [
+   "Save profile"
+  ],
+  "本站學生搜尋": [
+   "Search students"
+  ],
+  "班級工作區": [
+   "Class workspace"
+  ],
+  "班級資訊": [
+   "Class info"
+  ],
+  "上課人數": [
+   "Attending"
+  ],
+  "報名人數": [
+   "Enrolled"
+  ],
+  "人數上限": [
+   "Capacity"
+  ],
+  "其他班級資訊": [
+   "More class info"
+  ],
+  "原站學生查詢": [
+   "Site student lookup"
+  ],
+  "查詢原站學生": [
+   "Look up students"
+  ],
+  "課堂紀錄表，可依螢幕寬度捲動": [
+   "Lesson records table; scrolls to fit the screen"
+  ],
+  "課程啟用與課堂記錄是不同狀態；請依原站記錄內容確認報告是否已填寫。": [
+   "Enabling a lesson and filing its record are separate; check the record itself to confirm it is filed."
+  ],
+  "出席統計：{hint}": [
+   "Attendance: {hint}"
+  ],
+  "出席統計與專案": [
+   "Attendance & projects"
+  ],
+  "學生操作": [
+   "Student actions"
+  ],
+  "{student} {week} 填寫課堂記錄": [
+   "Fill in record: {student} {week}"
+  ],
+  "課堂記錄": [
+   "Record"
+  ],
+  "{student} 學習帳號設定": [
+   "{student}: learning account"
+  ],
+  "{student} 學生總評": [
+   "{student}: overall comment"
+  ],
+  "{student} 教學備註": [
+   "{student}: teaching note"
+  ],
+  "{student} 原站操作": [
+   "{student}: site action"
+  ],
+  "查看上次教學": [
+   "Last lesson"
+  ],
+  "重新整理上次教學": [
+   "Refresh last lesson"
+  ],
+  "原站未提供明確狀態": [
+   "No clear status from the site"
+  ],
+  "原站提供設定入口，結果待確認": [
+   "Site has a setting link; result unconfirmed"
+  ],
+  "原站未提供明確出席結果": [
+   "No clear attendance from the site"
+  ],
+  "可開啟課堂紀錄": [
+   "Record available"
+  ],
+  "原站未提供課堂紀錄入口": [
+   "No record link from the site"
+  ],
+  "原站未提供": [
+   "Not provided"
+  ],
+  "課程狀態與詳細資訊": [
+   "Lesson status & details"
+  ],
+  "本堂排定進度": [
+   "Planned"
+  ],
+  "已啟用教材": [
+   "Enabled"
+  ],
+  "出席狀態": [
+   "Attendance"
+  ],
+  "課堂紀錄": [
+   "Record"
+  ],
+  "課程狀態": [
+   "Course status"
+  ],
+  "課堂日期": [
+   "Lesson date"
+  ],
+  "來源未提供完整日期": [
+   "No full date from the site"
+  ],
+  "{label}：": [
+   "{label}: "
+  ],
+  "未找到所選課次日期之前、且含實際教學內容的紀錄。": [
+   "No earlier record with teaching content was found."
+  ],
+  "同一天有多份教學紀錄，無法可靠排序；請逐份查看。": [
+   "Several records share that day and cannot be ordered; check each."
+  ],
+  "日期未提供": [
+   "No date"
+  ],
+  "未完成": [
+   "Not done"
+  ],
+  "未提供": [
+   "N/A"
+  ],
+  "展開完整內部紀錄": [
+   "Show all internal notes"
+  ],
+  "評語、評分與聯絡欄": [
+   "Comments, ratings & contact"
+  ],
+  "課程參與評分": [
+   "Participation"
+  ],
+  "課堂秩序評分": [
+   "Behavior"
+  ],
+  "聯絡欄": [
+   "Contact note"
+  ],
+  "查看原站紀錄": [
+   "Open on site"
+  ],
+  "讀取時間：": [
+   "Read at: "
+  ],
+  "正在讀取此學生的相關報名與教學紀錄…": [
+   "Reading this student's enrollment and records…"
+  ],
+  "無法從本堂原站連結可靠識別報名與報告，請使用原站紀錄或從學生名單開啟報名。": [
+   "Couldn't identify the enrollment and report from this link; use the site record or open the enrollment from the roster."
+  ],
+  "目前擴充功能版本不支援按需讀取，請重新載入擴充功能後重試。": [
+   "This extension version can't read on demand; reload the extension and retry."
+  ],
+  "來源沒有完整日期，且目前版本無法從報告編輯頁補讀日期。": [
+   "The site has no full date, and this version can't read it from the report page."
+  ],
+  "報名識別資料無效，請從原站報名頁重新開啟。": [
+   "Invalid enrollment ID; reopen from the enrollment page."
+  ],
+  "讀取失敗：": [
+   "Read failed: "
+  ],
+  "未知錯誤": [
+   "Unknown error"
+  ],
+  "請重新整理此學生的摘要。": [
+   "Refresh this student's summary."
+  ],
+  "目前課次已變更；請按「重新整理上次教學」讀取對應摘要。": [
+   "The lesson changed; click \"Refresh last lesson\" to reload."
+  ],
+  "原站已確認保存。上次教學摘要已更新為待重新讀取。": [
+   "Saved on the site. The last-lesson summary will be re-read."
+  ],
+  "原站未標示課次": [
+   "No lesson label"
+  ],
+  "學生與課程": [
+   "Student & course"
+  ],
+  "堂數與補課資訊": [
+   "Lessons & make-ups"
+  ],
+  "報名與行政資訊": [
+   "Enrollment & admin"
+  ],
+  "歷史課堂紀錄": [
+   "Past records"
+  ],
+  "前往最新紀錄": [
+   "Latest record"
+  ],
+  "評語、聯絡與內部紀錄": [
+   "Comments, contact & notes"
+  ],
+  "目前檢視：{month}": [
+   "Viewing: {month}"
+  ],
+  "原站選定月份": [
+   "selected month"
+  ],
+  "補填學生課堂紀錄": [
+   "File student records"
+  ],
+  "依班級時段分組；清單範圍以原站目前帳號及月份為準。": [
+   "Grouped by class slot; covers the current account and month."
+  ],
+  "依班級時段分組，請儘速填寫的置頂；節次差異依原站內容呈現，不推定為錯誤。": [
+   "Grouped by class slot, overdue first; lesson differences are shown as the site lists them, not as errors."
+  ],
+  "未填寫課堂紀錄": [
+   "Unfiled records"
+  ],
+  "搜尋補填清單": [
+   "Search records to file"
+  ],
+  "班級檢視": [
+   "Class view"
+  ],
+  "班級清單": [
+   "Class list"
+  ],
+  "原站時段矩陣": [
+   "Site slot grid"
+  ],
+  "原站班級": [
+   "Class"
+  ],
+  "教室": [
+   "Room"
+  ],
+  "星期": [
+   "Day"
+  ],
+  "原站時段": [
+   "Slot"
+  ],
+  "付費（含長期停課）": [
+   "Paid (incl. long pause)"
+  ],
+  "所有報名": [
+   "All enrolled"
+  ],
+  "教室人數上限": [
+   "Room capacity"
+  ],
+  "原站人數資訊": [
+   "Headcount"
+  ],
+  "目前這個區域與時段沒有已載入的班級。": [
+   "No classes loaded for this area and slot."
+  ],
+  "課表基準日期：{date}": [
+   "Schedule date: {date}"
+  ],
+  "「我的班級」是固定班級入口；下方課表依原站選定日期顯示。": [
+   "\"My classes\" are fixed links; the schedule below follows the selected date."
+  ],
+  "回到今天": [
+   "Today"
+  ],
+  "載入選定日期課表": [
+   "Load schedule for the selected date"
+  ],
+  "課表尚未展開，請按「課程表」載入。": [
+   "Schedule not loaded; click \"Schedule\" to load it."
+  ],
+  "正在載入課表；若未載入，請重新按原站課表入口。": [
+   "Loading the schedule; if it doesn't load, click the site's schedule link again."
+  ],
+  "課程行事曆": [
+   "Course calendar"
+  ],
+  "目前區域：{area} · 日期：{day}": [
+   "Area: {area} · Date: {day}"
+  ],
+  "尚未選擇": [
+   "none"
+  ],
+  "請選擇日期": [
+   "pick a date"
+  ],
+  "請選擇區域以載入課程。": [
+   "Pick an area to load classes."
+  ],
+  "正在載入區域課表；若未載入，請重新選擇原站區域。": [
+   "Loading the area schedule; if it doesn't load, pick the area again."
+  ],
+  "請選擇日期。": [
+   "Pick a date."
+  ],
+  "目前日期已載入 {count} 個班級入口。": [
+   "{count} classes loaded for this date."
+  ],
+  "目前已載入的日期沒有課程。": [
+   "No classes on the loaded date."
+  ],
+  "前往課程日期": [
+   "Go to date"
+  ],
+  "正在切換原站課表…": [
+   "Switching schedule…"
+  ],
+  "課次：{label}": [
+   "Lesson: {label}"
+  ],
+  "學習課程": [
+   "Course"
+  ],
+  "章節起點": [
+   "From chapter"
+  ],
+  "章節終點": [
+   "To chapter"
+  ],
+  "學習狀況（內部）": [
+   "Learning status (internal)"
+  ],
+  "課程與專案進度": [
+   "Course & project progress"
+  ],
+  "課堂評量": [
+   "Ratings"
+  ],
+  "學習表現與聯絡欄": [
+   "Performance & contact"
+  ],
+  "確認與送出": [
+   "Confirm & submit"
+  ],
+  "課程參與": [
+   "Participation"
+  ],
+  "課堂秩序": [
+   "Behavior"
+  ],
+  "{label}評分": [
+   "{label} rating"
+  ],
+  "尚未評分": [
+   "Not rated"
+  ],
+  "{stars} / 5 星": [
+   "{stars} / 5 stars"
+  ],
+  "原站評分 {value}": [
+   "Rating {value}"
+  ],
+  "關閉視窗": [
+   "Close"
+  ],
+  "學生總評與每次課堂記錄分開儲存，請使用原站送出按鈕。": [
+   "The overall comment is saved separately from records; use the site's submit button."
+  ],
+  "教學備註使用原站儲存機制；關閉視窗不代表已儲存。": [
+   "Teaching notes save through the site; closing doesn't save."
   ]
 })
