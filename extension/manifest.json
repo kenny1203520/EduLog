@@ -63,6 +63,7 @@
         "sites/orange-apple/orange-apple-navigation.js",
         "sites/orange-apple/orange-apple-report-editor.js",
         "sites/orange-apple/orange-apple-roster.js",
+        "sites/orange-apple/orange-apple-renewals.js",
         "sites/orange-apple/orange-apple-workflows.js",
         "sites/orange-apple/orange-apple-integration.js",
         "content/editor-prefill.js",

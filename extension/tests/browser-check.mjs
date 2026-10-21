@@ -79,6 +79,35 @@ for (const [browserName, launchOptions] of executables) {
       await page.close()
     }
     // 720 CSS px at DPR 2 is a layout surrogate; native browser 200% zoom remains pending.
+    // 剩餘課堂 and the sign-in page: no overflow at phone to desktop widths, in zh-TW and English.
+    // Sign-in has no toolbar or navigation, so it is checked here rather than in the shell loop below.
+    for (const [width, name, path, locale] of [360, 768, 1440].flatMap(width => [[width, 'renewals', '/dt_admissions'], [width, 'sign-in', '/employees/sign_in']]).concat([[360, 'renewals', '/dt_admissions', 'en'], [360, 'sign-in', '/employees/sign_in', 'en']])) {
+      const page = await browser.newPage({ viewport: { width, height: 900 } })
+      const fixture = read(`fixtures/${name}.html`).replace('</head>', `<style>${nativeCss}</style><style>${css}</style></head>`)
+      await page.route('**/*', route => route.request().isNavigationRequest() ? route.fulfill({ contentType: 'text/html', body: fixture }) : route.abort())
+      await page.goto(`https://corp.orangeapple.co${path}`)
+      await page.evaluate(() => { window.chrome = { runtime: { sendMessage: async data => data.type === 'get-edulog-integration-status' ? { status: 'disconnected' } : ({ enabled: data.enabled ?? true }), onMessage: { addListener() {} } } } })
+      for (const file of ['shared/runtime-bridge.js', 'shared/ui-core.js', 'shared/ui-messages.js', 'shared/ui-phrases.js', ...['lexicon', 'model', 'navigation', 'renewals', 'workflows'].map(n => `sites/orange-apple/orange-apple-${n}.js`), 'sites/orange-apple/orange-apple.js', 'content/bootstrap.js', 'shared/connection-ui.js', 'shared/integration-ui.js', 'content/content.js']) await page.addScriptTag({ content: read(`../${file}`) })
+      await page.locator('html[data-edulog-ui=on]').waitFor()
+      if (locale) await page.evaluate(code => globalThis.edulogUi.setLocale(code), locale)
+      const card = page.locator(name === 'sign-in' ? '.edulog-signin' : '.edulog-renewal-list')
+      await card.waitFor()
+      await page.waitForTimeout(80)
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${browserName} ${name} ${width} ${locale || 'zh-TW'}: page overflow`)
+      const box = await card.boundingBox()
+      assert.ok(box.x >= 0 && box.x + box.width <= width + 1, `${browserName} ${name} ${width}: card fits ${JSON.stringify(box)}`)
+      if (name === 'sign-in') {
+        assert.equal(await page.locator('#edulog-extension-root').evaluate(el => getComputedStyle(el).display), 'none', `${browserName} sign-in: no toolbar`)
+        assert.equal(await page.locator('#page-body > .sidebar').evaluate(el => getComputedStyle(el).display), 'none', `${browserName} sign-in: no sidebar`)
+        assert.ok(box.width <= 421, `${browserName} sign-in ${width}: card width ${box.width}`)
+      } else {
+        const buttons = await page.locator('.edulog-renewal-actions button').first().boundingBox()
+        assert.ok(buttons.height >= (width < 768 ? 44 : 32), `${browserName} renewals ${width}: renewal button height ${buttons.height}`)
+      }
+      await page.screenshot({ path: join(output, `${browserName}-${name}-${locale || 'zh'}-${width}.png`), fullPage: true })
+      console.log(`${browserName} ${name} ${width} ${locale || 'zh-TW'}: passed`)
+      await page.close()
+    }
     const sourceRoutes = [['hours','/my/hour'],['profile','/my'],['profile-edit','/my/101/edit'],['overview', '/'], ['class', '/courses/dt/101'], ['real-class', '/courses/dt/101'], ['real-sidebar', '/courses/dt/101'], ['reports', '/courses/dt/101/lesson_reports'], ['classes','/courses/dt'], ['history','/dt_admissions/301'], ['calendar','/calendar'], ['unfilled','/admissions/month_unfilled_report'], ['unfilled-current','/admissions/unfilled_report'], ['report-editor','/dt_admissions/301/reports/401/edit']]
     // English runs only check the extension shell (toolbar, floating button, panel) at the narrowest width.
     const sourceCases = [...[360, 390, 768, 1024, 1200, 1440, 1920, 720].flatMap(width => sourceRoutes.map(([name, path]) => [width, name, path])), [360, 'class', '/courses/dt/101', 'en-US'], [360, 'report-editor', '/dt_admissions/301/reports/401/edit', 'en-US']]

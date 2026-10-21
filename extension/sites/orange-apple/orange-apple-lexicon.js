@@ -13,6 +13,9 @@
     { kind: 'report-editor', title: '課堂紀錄編輯', pattern: /^\/dt_admissions\/\d+\/reports\/\d+\/edit\/?$/ },
     { kind: 'history', title: '學生學習紀錄', pattern: /^\/dt_admissions\/\d+\/?$/ },
     { kind: 'class', title: '班級工作區', pattern: /^\/courses\/dt\/\d+\/?$/ },
+    { kind: 'renewals', title: '剩餘課堂', pattern: /^\/dt_admissions\/?$/ },
+    { kind: 'sign-in', title: '登入', pattern: /^\/employees\/sign_in\/?$/ },
+    { kind: 'password', title: '重設密碼', pattern: /^\/employees\/password(?:\/new|\/edit)?\/?$/ },
     { kind: 'reports', title: '課次報告', pattern: /^\/courses\/dt\/\d+\/lesson_reports\/?$/ },
   ])
   const selectors = Object.freeze({
@@ -47,6 +50,14 @@
     quickAttendanceBox: 'input[type=checkbox][name="report_ids[]"]',
     quickAttendanceSubmit: 'button[name="type"]',
     calendarDayPane: '.tab-pane[id*="-weekday-"]',
+    // 「剩餘課堂」: the renewal table, its status badge and the provider's (unbound) renewal menu.
+    renewTable: '#dt-admissions table',
+    renewStatus: 'span.renew-status',
+    renewAction: 'a.js-change-admission-renew-status[data-id][data-renew-status]',
+    renewFilter: 'form[action$="/dt_admissions"][method="get"]',
+    // Devise sign-in and password pages: found by id, not wording, in every site language.
+    signInForm: 'form#new_employee',
+    passwordForm: 'form[action$="/employees/password"]',
   })
   // Student learning-account modal (/students/:id/accounts, opened in remote_modal).
   const accounts = Object.freeze({
@@ -103,6 +114,8 @@
     ['專案檢查', '项目检查', '专案检查', 'Project Check', 'Check Project'], ['記錄', '记录', 'Record'], ['此週非本班學生', '此周非本班学生', 'Not in class this week'], ['已完課', '已完课', 'Completed'],
     ['暫停課程', '暂停课程', 'Suspended'], ['休假日'], ['停課', '停课'], ['課程取消', '课程取消'], ['待確認', '待确认'], ['顯示本週上課', '显示本周上课', 'Show This Week'], ['顯示全部', '显示全部', 'Show All'],
     ['搜尋學生姓名', '搜索学生姓名', 'Search student name'],
+    // Renewal list (only zh-TW wording seen; the site does not translate this table)
+    ['聯絡人'], ['剩餘次數'], ['續班與否'], ['下階段'], ['建立人'],
     // Calendar
     ['前一週', '前一周', 'Previous Week'], ['下一週', '下一周', 'Next Week'], ['請選擇區域', '请选择区域', 'Please select a region'], ['選擇欲前往的日期', '选择欲前往的日期', 'Select a date'],
     // Enrollment history
@@ -211,6 +224,8 @@
   const probes = Object.freeze({
     '*': [selectors.content],
     reports: [selectors.reportsTable],
+    renewals: [selectors.renewTable],
+    'sign-in': [selectors.signInForm],
   })
   globalThis.edulogSiteLexicon = Object.freeze({ routes, selectors, paths, sources, accounts, navigation, text, probes, locale })
 })()

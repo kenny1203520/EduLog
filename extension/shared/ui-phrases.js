@@ -1842,5 +1842,101 @@ globalThis.edulogUi?.registerPhrases({
   ],
   "下週": [
    "Next week"
+  ],
+  "剩餘課堂": [
+   "Remaining lessons"
+  ],
+  "將 {name} 設為「{status}」？": [
+   "Set {name} to \"{status}\"?"
+  ],
+  "已將 {name} 設為「{status}」。": [
+   "Set {name} to \"{status}\"."
+  ],
+  "無法變更 {name} 的續班狀態：{message}": [
+   "Couldn't change {name}'s renewal: {message}"
+  ],
+  "業務 {name}": [
+   "Sales: {name}"
+  ],
+  "剩餘 {remaining} 堂 · 可補 {makeup}": [
+   "{remaining} left · {makeup} make-up"
+  ],
+  "本期 {status} {date}": [
+   "This term: {status} {date}"
+  ],
+  "下階段 {status} {date}": [
+   "Next term: {status} {date}"
+  ],
+  "顯示聯絡方式": [
+   "Show contact"
+  ],
+  "顯示 {name} 的聯絡方式": [
+   "Show {name}'s contact"
+  ],
+  "{name} 的續班狀態": [
+   "{name}'s renewal"
+  ],
+  "未續班 {pending} · 已續班 {renewed} · 不續班 {stopped}": [
+   "Pending {pending} · Renewed {renewed} · Not renewing {stopped}"
+  ],
+  " · 剩餘 2 堂以下 {count} 位": [
+   " · {count} with ≤2 left"
+  ],
+  "可調整上方的剩餘堂數、城市或續班狀態篩選。": [
+   "Adjust the remaining-lessons, city or renewal filters above."
+  ],
+  "{count} 位": [
+   "{count}"
+  ],
+  "未續班": [
+   "Pending"
+  ],
+  "已續班": [
+   "Renewed"
+  ],
+  "不續班": [
+   "Not renewing"
+  ],
+  "未標示續班狀態": [
+   "No renewal status"
+  ],
+  "登入 Corp": [
+   "Sign in to Corp"
+  ],
+  "重設密碼": [
+   "Reset password"
+  ],
+  "使用原站帳號登入；EduLog 不會讀取或保存你的密碼。": [
+   "Sign in with your site account; EduLog never reads or stores your password."
+  ],
+  "輸入帳號 Email，原站會寄送重設密碼說明。": [
+   "Enter your account email; the site will send reset instructions."
+  ],
+  "登入": [
+   "Sign in"
+  ],
+  "登入中…": [
+   "Signing in…"
+  ],
+  "忘記密碼？": [
+   "Forgot password?"
+  ],
+  "返回登入": [
+   "Back to sign in"
+  ],
+  "電子郵件": [
+   "Email"
+  ],
+  "記住我": [
+   "Remember me"
+  ],
+  "這個續班狀態無法變更。": [
+   "This renewal status can't be changed."
+  ],
+  "原站登入狀態已失效，請重新整理頁面。": [
+   "Your site session expired; reload the page."
+  ],
+  "原站沒有接受這次變更（{status}）。": [
+   "The site rejected the change ({status})."
   ]
 })

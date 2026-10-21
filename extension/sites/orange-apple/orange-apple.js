@@ -318,7 +318,8 @@
       if(selected)selectWeek(selected.index,true)
     }
     // One left navigation bar built from the provider sidebar (after readers above used it).
-    view.navigation = globalThis.edulogSiteNavigation?.mount({ doc, scope }) || null
+    // Signed-out pages have no class menu: no EduLog navigation there.
+    view.navigation = page.kind === 'sign-in' || page.kind === 'password' ? null : globalThis.edulogSiteNavigation?.mount({ doc, scope }) || null
     const sourceTables = [...content.querySelectorAll('table')]
     const shape = sourceTables.map(table => ({ table, rows: table.rows.length }))
     return {

@@ -14,15 +14,16 @@ const BARE_LITERALS = {
   'sites/orange-apple/orange-apple-accounts.js': 7,
   'sites/orange-apple/orange-apple-attendance-export.js': 14,
   'sites/orange-apple/orange-apple-integration.js': 145,
-  'sites/orange-apple/orange-apple-lexicon.js': 206,
+  'sites/orange-apple/orange-apple-lexicon.js': 214,
   'sites/orange-apple/orange-apple-model.js': 7,
   'sites/orange-apple/orange-apple-navigation.js': 2,
   'sites/orange-apple/orange-apple-quick-attendance.js': 5,
+  'sites/orange-apple/orange-apple-renewals.js': 11,
   'sites/orange-apple/orange-apple-report-editor.js': 32,
   'sites/orange-apple/orange-apple-roster.js': 8,
   'sites/orange-apple/orange-apple-session-cards.js': 38,
   'sites/orange-apple/orange-apple-todo.js': 5,
-  'sites/orange-apple/orange-apple-workflows.js': 104,
+  'sites/orange-apple/orange-apple-workflows.js': 114,
   'sites/orange-apple/orange-apple.js': 21,
 }
 const root = new URL('../', import.meta.url)

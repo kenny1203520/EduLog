@@ -772,3 +772,62 @@ html[data-edulog-ui="on"] .edulog-popover-menu.edulog-popover-menu.edulog-popove
 html[data-edulog-ui="on"] .edulog-popover-menu[popover]:not(:popover-open) { display:none; }
 /* With the EduLog navigation mounted, the provider navbar and class switcher stay hidden at every width (one navigation, never two). */
 html[data-edulog-ui="on"] #page-body > .sidebar:has(.edulog-nav) :is(#nav-teacher,[data-edulog-replaced]) { display:none !important; }
+/* 「剩餘課堂」 renewal list: the unfilled list's rows, a compact filter row and segmented renewal buttons. */
+html[data-edulog-ui="on"] [data-edulog-renew-filter] { display:flex; flex-wrap:wrap; align-items:flex-end; gap:12px 20px; margin:0 0 16px; padding:12px 16px; border:1px solid var(--edulog-border); border-radius:var(--edulog-radius); background:var(--edulog-surface); }
+html[data-edulog-ui="on"] [data-edulog-renew-filter] .form-group { display:flex; flex-direction:column; gap:4px; margin:0; }
+html[data-edulog-ui="on"] [data-edulog-renew-filter] :is(.col-sm-2,.col-sm-3,.col-sm-10,.offset-sm-2) { flex:none; width:auto; max-width:none; margin:0; padding:0; }
+html[data-edulog-ui="on"] [data-edulog-renew-filter] .control-label { padding:0; font-size:var(--edulog-text-sm); font-weight:600; color:var(--edulog-text-muted); text-align:left; }
+html[data-edulog-ui="on"] [data-edulog-renew-filter] .checkbox { display:flex; flex-wrap:wrap; gap:4px 16px; min-height:var(--edulog-control-height); align-items:center; }
+html[data-edulog-ui="on"] [data-edulog-renew-filter] .checkbox label { display:inline-flex; align-items:center; gap:6px; margin:0; font-size:var(--edulog-text-sm); }
+html[data-edulog-ui="on"] .edulog-renewal-list .edulog-unfilled-row[data-bar="ok"]::before { background:var(--edulog-status-ok); }
+html[data-edulog-ui="on"] .edulog-renewal-list .edulog-unfilled-row[data-bar="neutral"]::before { background:var(--edulog-border-strong); }
+html[data-edulog-ui="on"] .edulog-renewal-list .edulog-unfilled-group[data-tone="ok"] .edulog-unfilled-head .edulog-status-dot { background:var(--edulog-status-ok); border-color:var(--edulog-status-ok); }
+html[data-edulog-ui="on"] .edulog-renewal-list .edulog-unfilled-group[data-tone="neutral"] .edulog-unfilled-head .edulog-status-dot { background:var(--edulog-text-subtle); border-color:var(--edulog-text-subtle); }
+html[data-edulog-ui="on"] .edulog-renewal-list .edulog-unfilled-main > .edulog-renewal-owner { font-size:var(--edulog-text-xs); color:var(--edulog-text-subtle); }
+html[data-edulog-ui="on"] .edulog-renewal-list .edulog-unfilled-main a { color:var(--edulog-primary); text-decoration:none; }
+html[data-edulog-ui="on"] .edulog-renewal-list .edulog-unfilled-main a:hover { text-decoration:underline; }
+html[data-edulog-ui="on"] .edulog-renewal-contact { display:inline-flex; flex-wrap:wrap; align-items:center; gap:4px 8px; font-size:var(--edulog-text-sm); color:var(--edulog-text-secondary); }
+html[data-edulog-ui="on"] .edulog-renewal-email { color:var(--edulog-primary); overflow-wrap:anywhere; text-decoration:none; }
+html[data-edulog-ui="on"] .edulog-renewal-list .edulog-renewal-actions { display:inline-flex; align-items:center; gap:0; min-width:0; }
+html[data-edulog-ui="on"] .edulog-renewal-actions button { min-height:var(--edulog-control-height); margin-left:-1px; padding:0 10px; border:1px solid var(--edulog-border-strong); border-radius:0; background:var(--edulog-surface); color:var(--edulog-text-secondary); font:inherit; font-size:var(--edulog-text-sm); white-space:nowrap; cursor:pointer; }
+html[data-edulog-ui="on"] .edulog-renewal-actions button:first-child { margin-left:0; border-radius:var(--edulog-radius-sm) 0 0 var(--edulog-radius-sm); }
+html[data-edulog-ui="on"] .edulog-renewal-actions button:last-of-type { border-radius:0 var(--edulog-radius-sm) var(--edulog-radius-sm) 0; }
+html[data-edulog-ui="on"] .edulog-renewal-actions button:hover:not(:disabled):not([aria-pressed="true"]) { background:var(--edulog-surface-subtle); }
+html[data-edulog-ui="on"] .edulog-renewal-actions button[aria-pressed="true"] { position:relative; z-index:1; border-color:var(--edulog-primary); background:var(--edulog-primary-soft); color:var(--edulog-primary); font-weight:600; cursor:default; }
+html[data-edulog-ui="on"] .edulog-renewal-actions button:disabled { opacity:.6; cursor:progress; }
+html[data-edulog-ui="on"] .edulog-renewal-actions > span { margin-left:8px; font-size:var(--edulog-text-xs); color:var(--edulog-text-muted); }
+html[data-edulog-ui="on"] .edulog-renewal-notice { margin:0; padding:8px 16px; border-bottom:1px solid var(--edulog-border); font-size:var(--edulog-text-sm); }
+html[data-edulog-ui="on"] .edulog-renewal-notice[data-tone="ok"] { background:var(--edulog-status-ok-soft); color:var(--edulog-status-ok-text); }
+html[data-edulog-ui="on"] .edulog-renewal-notice[data-tone="danger"] { background:var(--edulog-status-danger-soft); color:var(--edulog-status-danger-text); }
+@media (max-width:767px) {
+  html[data-edulog-ui="on"] .edulog-renewal-list .edulog-renewal-row .edulog-renewal-actions { grid-column:1 / -1; grid-row:3; justify-content:flex-start; }
+  html[data-edulog-ui="on"] .edulog-renewal-actions button { min-height:var(--edulog-touch-target); flex:1 1 0; }
+  html[data-edulog-ui="on"] [data-edulog-renew-filter] .form-group { flex:1 1 100%; }
+}
+/* Sign-in and password pages: one centred card; no sidebar, toolbar or EduLog navigation before login. */
+html[data-edulog-ui="on"]:is([data-edulog-page="sign-in"],[data-edulog-page="password"]) #page-body > .sidebar,
+html[data-edulog-ui="on"]:is([data-edulog-page="sign-in"],[data-edulog-page="password"]) #edulog-extension-root { display:none !important; }
+html[data-edulog-ui="on"]:is([data-edulog-page="sign-in"],[data-edulog-page="password"]) #page-body > .content { width:100%; margin:0; padding:48px 16px; background:var(--edulog-canvas); min-height:100vh; }
+html[data-edulog-ui="on"] #page-body .edulog-signin { box-sizing:border-box; display:flex; flex-direction:column; gap:16px; width:100%; max-width:420px; margin:0 auto; padding:28px 24px; border:1px solid var(--edulog-border); border-radius:var(--edulog-radius-lg); background:var(--edulog-surface); box-shadow:var(--edulog-shadow-popover); }
+html[data-edulog-ui="on"] #page-body .edulog-signin header h2 { margin:0; font-size:var(--edulog-text-xl); font-weight:700; color:var(--edulog-text-strong); }
+html[data-edulog-ui="on"] #page-body .edulog-signin header p { margin:4px 0 0; font-size:var(--edulog-text-sm); color:var(--edulog-text-muted); }
+html[data-edulog-ui="on"] #page-body .edulog-signin [data-edulog-signin-alert] { margin:0; padding:10px 12px; border:0; border-radius:var(--edulog-radius-sm); background:var(--edulog-status-danger-soft); color:var(--edulog-status-danger-text); font-size:var(--edulog-text-sm); }
+html[data-edulog-ui="on"] #page-body .edulog-signin form .form-group { margin:0 0 14px; }
+html[data-edulog-ui="on"] #page-body .edulog-signin form label { display:block; margin:0 0 6px; font-size:var(--edulog-text-sm); font-weight:600; color:var(--edulog-text-secondary); }
+html[data-edulog-ui="on"] #page-body .edulog-signin form .form-check { display:flex; align-items:center; gap:8px; min-height:var(--edulog-touch-target); padding:0; }
+html[data-edulog-ui="on"] #page-body .edulog-signin form .form-check-input { float:none; margin:0; width:18px; height:18px; }
+html[data-edulog-ui="on"] #page-body .edulog-signin form .form-check-label { margin:0; font-weight:400; }
+html[data-edulog-ui="on"] #page-body .edulog-signin form :is(input[type=email],input[type=password],input[type=text]) { box-sizing:border-box; width:100%; min-height:var(--edulog-touch-target); padding:8px 12px; border:1px solid var(--edulog-border-strong); border-radius:var(--edulog-radius-sm); background:var(--edulog-surface); color:var(--edulog-text-strong); font:inherit; font-size:var(--edulog-text-base); }
+html[data-edulog-ui="on"] #page-body .edulog-signin form :is(input,button):focus-visible { outline:3px solid var(--edulog-focus-ring); outline-offset:1px; border-color:var(--edulog-primary); }
+html[data-edulog-ui="on"] #page-body .edulog-signin form :is(input[type=submit],button[type=submit]) { width:100%; min-height:var(--edulog-touch-target); margin:8px 0 0 !important; border:1px solid var(--edulog-primary-bright) !important; border-radius:var(--edulog-radius-sm); background:var(--edulog-primary-bright) !important; color:var(--edulog-text-on-primary) !important; font:inherit; font-weight:600; cursor:pointer; }
+html[data-edulog-ui="on"] #page-body .edulog-signin form :is(input[type=submit],button[type=submit]):hover { background:var(--edulog-primary) !important; border-color:var(--edulog-primary) !important; }
+html[data-edulog-ui="on"] #page-body .edulog-signin form :is(input,button):disabled { opacity:.6; cursor:progress; }
+html[data-edulog-ui="on"] #page-body .edulog-signin footer { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; padding-top:12px; border-top:1px solid var(--edulog-border-soft); font-size:var(--edulog-text-sm); }
+html[data-edulog-ui="on"] #page-body .edulog-signin footer > a { color:var(--edulog-primary); text-decoration:none; }
+html[data-edulog-ui="on"] #page-body .edulog-signin footer .locale-selector { display:flex; flex-wrap:wrap; gap:4px; margin:0; padding:0; border:0; }
+html[data-edulog-ui="on"] #page-body .edulog-signin footer .locale-selector small { display:none !important; }
+html[data-edulog-ui="on"] #page-body .edulog-signin fieldset { min-width:0; margin:0 0 6px; padding:0; border:0; }
+html[data-edulog-ui="on"] #page-body .edulog-signin footer .locale-selector .btn { display:inline-flex; align-items:center; border:1px solid var(--edulog-border); border-radius:999px; background:var(--edulog-surface); color:var(--edulog-text-secondary); text-decoration:none; }
+html[data-edulog-ui="on"] #page-body .edulog-signin footer .locale-selector .btn-primary { border-color:var(--edulog-primary); background:var(--edulog-primary-soft); color:var(--edulog-primary); font-weight:600; }
+html[data-edulog-ui="on"] #page-body .edulog-signin footer .locale-selector .btn { min-height:32px; margin:0 !important; padding:4px 10px; font-size:var(--edulog-text-xs); }
+@media (max-width:767px) { html[data-edulog-ui="on"]:is([data-edulog-page="sign-in"],[data-edulog-page="password"]) #page-body > .content { padding:24px 16px; } html[data-edulog-ui="on"] #page-body .edulog-signin { padding:22px 18px; } }
