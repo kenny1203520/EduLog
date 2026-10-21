@@ -52,3 +52,23 @@ describe('AiCredentialList test results', () => {
         expect(wrapper.emitted('update:modelValue')!.at(-1)![0]).toMatchObject([{ status: 'invalid' }])
     })
 })
+
+describe('AiCredentialList test model', () => {
+    it('tests the model the teacher picks from the credential’s models', async () => {
+        service.testMyCredential.mockResolvedValue({ ok: true, error: null })
+        const second = { ...credential.models[0], id: 'm2', model_id: 'anthropic/claude-sonnet-5.5', display_name: 'Sonnet' }
+        const wrapper = mount(AiCredentialList, { props: { mode: 'personal', modelValue: [{ ...credential, models: [credential.models[0], second] }] }, global: { plugins: [i18n] } })
+
+        const select = wrapper.find('[data-testid="test-model-c1"]')
+        expect(select.findAll('option').map((option) => option.text())).toEqual(['Gemma', 'Sonnet'])
+        await select.setValue('m2')
+        await wrapper.findAll('button').find((button) => button.text() === '測試')!.trigger('click')
+        await flushPromises()
+        expect(service.testMyCredential).toHaveBeenCalledWith('c1', 'anthropic/claude-sonnet-5.5')
+    })
+
+    it('needs no picker when there is a single model', () => {
+        const wrapper = mount(AiCredentialList, { props: { mode: 'personal', modelValue: [{ ...credential }] }, global: { plugins: [i18n] } })
+        expect(wrapper.find('[data-testid="test-model-c1"]').exists()).toBe(false)
+    })
+})

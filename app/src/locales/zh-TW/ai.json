@@ -296,7 +296,8 @@
       "rate_limited": "這個模型目前被限流（免費模型常見），金鑰本身可能沒問題，請稍後或換一個模型測試。",
       "data_policy": "OpenRouter 的隱私設定不允許這個免費模型。請到 OpenRouter → Settings → Privacy 允許免費模型的資料政策，或改用付費模型。金鑰本身沒問題。",
       "open_privacy": "開啟 OpenRouter 隱私設定"
-    }
+    },
+    "test_model": "測試用的模型"
   },
   "history": {
     "tabs_label": "AI 助理分頁",
