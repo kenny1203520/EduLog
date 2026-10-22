@@ -1,6 +1,19 @@
 {
     "entries": [
         {
+            "version": "2.0.0-alpha.4",
+            "date": "2026-10-23",
+            "changes": {
+                "fixed": [
+                    "Fix Vue template type errors in student enrollment, suspension editing, and session details that blocked prerelease builds."
+                ],
+                "deployment": [
+                    "Use matching frontend and API images tagged 2.0.0-alpha.4. Alpha does not update stable image tags.",
+                    "Back up the database first, then apply all unapplied migrations in filename order through 1000155_enrollment_transfer_log.sql."
+                ]
+            }
+        },
+        {
             "version": "2.0.0-alpha.3",
             "date": "2026-10-23",
             "changes": {
@@ -92,7 +105,7 @@
                 ]
             }
         },
-    {
+        {
             "version": "1.8.0",
             "date": "2026-08-16",
             "changes": {
@@ -123,7 +136,8 @@
                     "Deploy migrations 1000037 and 1000038 before enabling private collaboration in production."
                 ]
             }
-        },        {
+        },
+        {
             "version": "1.7.5",
             "date": "2026-08-16",
             "changes": {
@@ -144,7 +158,8 @@
                     "Rebuild and redeploy the frontend with version 1.7.5."
                 ]
             }
-        },        {
+        },
+        {
             "version": "1.7.4",
             "date": "2026-08-08",
             "changes": {
@@ -169,7 +184,8 @@
                     "Rebuild and redeploy the frontend with version 1.7.4."
                 ]
             }
-        },        {
+        },
+        {
             "version": "1.7.3",
             "date": "2026-08-01",
             "changes": {
@@ -189,7 +205,8 @@
                     "Existing reports are not automatically cleaned up."
                 ]
             }
-        },        {
+        },
+        {
             "version": "1.7.2",
             "date": "2026-08-01",
             "changes": {

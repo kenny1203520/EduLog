@@ -105,7 +105,7 @@
                                             <label
                                                 class="inline-flex items-center text-[10px] font-black text-gray-400 hover:text-emerald-600 cursor-pointer transition-colors uppercase tracking-widest">
                                                 <input type="checkbox" :checked="!editForm.endDate"
-                                                    @change="(e) => editForm.endDate = ((e.target as HTMLInputElement).checked ? '' : (suspension.endDate || DateUtils.todayString(preferences.timeZone))) as string"
+                                                    @change="handleEndDateIndefiniteToggle($event, suspension)"
                                                     class="rounded border-gray-300 w-3.5 h-3.5 text-emerald-600 focus:ring-0 mr-2">
                                                 {{ $t('student.suspension.indefinite') }}
                                             </label>
@@ -369,6 +369,13 @@ function startEdit(suspension: Suspension) {
 function cancelEdit() {
     editingId.value = null
     editForm.value = { endDate: '', reason: '' }
+}
+
+function handleEndDateIndefiniteToggle(event: Event, suspension: Suspension) {
+    const isIndefinite = (event.target as HTMLInputElement).checked
+    editForm.value.endDate = isIndefinite
+        ? ''
+        : suspension.endDate || DateUtils.todayString(preferences.timeZone)
 }
 
 async function saveEdit(id: string) {
