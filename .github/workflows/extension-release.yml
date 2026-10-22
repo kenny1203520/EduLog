@@ -104,10 +104,11 @@ jobs:
           node-version: 26
           cache: npm
       - run: npm ci
-      - name: Install branded browser and video runtime
+      # Chromium too: the side-panel check loads the unpacked extension, which branded Chrome refuses.
+      - name: Install branded browser, Chromium and video runtime
         env:
           BROWSER: ${{ matrix.browser }}
-        run: npx playwright install --with-deps "$BROWSER" ffmpeg
+        run: npx playwright install --with-deps "$BROWSER" chromium ffmpeg
       - name: Run synthetic page suites without live site access
         env:
           EXTENSION_BROWSERS: ${{ matrix.browser }}
