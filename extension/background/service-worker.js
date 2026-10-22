@@ -3,7 +3,7 @@ import '../sites/orange-apple/core/model.js'
 import '../sites/orange-apple/core/adapter.js'
 import './installation.js'
 import { installWorkspaceBroker } from './workspace-broker.js'
-import { syncWebBridge } from './editor-window.js'
+import { forgetTab } from './editor-panel.js'
 
 chrome.runtime.onInstalled.addListener(() => {
   // Do not expose extension credentials to page content scripts.
@@ -113,8 +113,6 @@ async function getIntegrationStatus({ force = false } = {}) {
   if (!force && cached && cached.expiresAt > Date.now()) return cached.status
   if (!force && key && statusRequests.has(key)) return statusRequests.get(key)
   const request = verifyIntegrationStatus().then(status => {
-    // The web app bridge follows the verified pairing (registered, moved or removed).
-    void syncWebBridge(status).catch(() => {})
     const verifiedKey = extension?.origin && extension?.token && status.userId ? `${extension.origin}\n${extension.token}\n${status.userId}` : key
     if (verifiedKey && status.status === 'connected') return chrome.storage.local.get('edulogExtension').then(({ edulogExtension: current }) => {
       if (current?.origin === extension.origin && current?.token === extension.token && current?.userId === status.userId) statusCache.set(verifiedKey, { status, expiresAt: Date.now() + 30000 })
@@ -127,12 +125,7 @@ async function getIntegrationStatus({ force = false } = {}) {
 }
 
 installWorkspaceBroker(getIntegrationStatus)
-const refreshBridge = () => void getIntegrationStatus().then(syncWebBridge).catch(() => {})
-chrome.runtime.onStartup?.addListener(refreshBridge)
-chrome.runtime.onInstalled.addListener(refreshBridge)
-chrome.permissions?.onAdded.addListener(refreshBridge)
-chrome.permissions?.onRemoved.addListener(refreshBridge)
-chrome.storage.onChanged?.addListener((changes, area) => { if (area === 'local' && changes.edulogExtension) refreshBridge() })
+chrome.tabs?.onRemoved?.addListener(tabId => void forgetTab(tabId).catch(() => {}))
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const fromPopup = sender.id === chrome.runtime.id && sender.url?.startsWith(`chrome-extension://${chrome.runtime.id}/`)

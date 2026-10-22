@@ -10,7 +10,7 @@ const suites = [
   'browser-check', 'startup-browser-check', 'accounts-browser-check', 'hours-browser-check',
   'report-editor-browser-check', 'editor-date-browser-check', 'unfilled-rating-browser-check',
   'workspace-browser-check', 'history-browser-check', 'mapping-memory-browser-check',
-  'review-save-browser-check', 'stale-recovery-browser-check',
+  'review-save-browser-check', 'stale-recovery-browser-check', 'side-panel-browser-check',
 ]
 const failed = []
 for (const [name, options] of browserTargets()) {

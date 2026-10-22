@@ -143,21 +143,21 @@
     if(!target)return
     const sameDay=reports.filter(item=>item.enrollment_id===target.enrollmentId&&item.occurrence_date===form.date)
     const chip=make('span',sameDay.length?tx('EduLog 已有這天的報告。'):tx('EduLog 還沒有這天的報告；開啟後可在 EduLog 建立。'),'chip');chip.dataset.tone=sameDay.length?'ok':'neutral'
-    const actions=make('div',undefined,'actions'),open=action(tx('在 EduLog 編輯（右側視窗）'),()=>void openEditor(open),'primary');open.dataset.openEditor='';actions.append(open)
+    const actions=make('div',undefined,'actions'),open=action(tx('在 EduLog 編輯（側邊欄）'),()=>void openEditor(open),'primary');open.dataset.openEditor='';actions.append(open)
     if(sameDay.length===1)actions.append(action(tx('直接回填這天的 EduLog 報告'),()=>void selectReport(sameDay[0])))
     box.append(make('p',undefined,'muted'),actions);box.firstChild.append(chip)
   }
   async function openEditor(button){
     if(button.disabled)return
     if(!form?.date){status(tx('請先確認完整上課日期。'),true);return}
+    // The request goes out within this click: the browser opens the side panel only for a user action.
+    const opened=request('open-editor')
     button.disabled=true;status(tx('正在開啟 EduLog 編輯器…'))
     try{
-      const area={left:Math.round(screen.availLeft||0),top:Math.round(screen.availTop||0),width:Math.round(screen.availWidth||innerWidth),height:Math.round(screen.availHeight||innerHeight)}
-      const result=await request('open-editor',{screen:area})
+      const result=await opened
       if(result?.reason==='no-target'){status(tx('此學生尚未同步到 EduLog。同步本班後即可在 EduLog 編輯。'));root.querySelector('.sync-class').hidden=false;return}
-      if(result?.bridge===false){status(tx('已開啟 EduLog，但回填需要擴充功能可存取 EduLog 網站；請從擴充功能選單重新連線。'),true);return}
-      button.textContent=tx('回到 EduLog 視窗');stage('waiting')
-      status(tx('編輯完成後，在 EduLog 按「回填到原站」；這裡只會列出有變動的欄位讓你確認。'))
+      button.textContent=tx('重新開啟 EduLog 側邊欄');stage('waiting')
+      status(result?.access===false?tx('請在側邊欄允許存取 EduLog 網站，才能使用你的 EduLog 登入。'):tx('EduLog 已在側邊欄開啟。編輯完成後按「回填到原站」；這裡只會列出有變動的欄位讓你確認。'))
     }catch(error){status(error.message,true)}finally{if(button.isConnected)button.disabled=false}
   }
   function suggestion(field, selected) {

@@ -2029,9 +2029,6 @@ globalThis.edulogUi?.registerPhrases({
   "EduLog 還沒有這天的報告；開啟後可在 EduLog 建立。": [
    "EduLog has no report for this day yet; you can create it after opening."
   ],
-  "在 EduLog 編輯（右側視窗）": [
-   "Edit in EduLog (window on the right)"
-  ],
   "直接回填這天的 EduLog 報告": [
    "Fill from this day's EduLog report"
   ],
@@ -2046,12 +2043,6 @@ globalThis.edulogUi?.registerPhrases({
   ],
   "此學生尚未同步到 EduLog。同步本班後即可在 EduLog 編輯。": [
    "This student isn't in EduLog yet. Sync this class to edit in EduLog."
-  ],
-  "已在右側視窗開啟 EduLog。編輯完成後，按 EduLog 的「回填到原站」。": [
-   "EduLog is open in the window on the right. When you finish, press \"Fill source form\" there."
-  ],
-  "（回填需要擴充功能可存取 EduLog 網站；請從擴充功能選單重新連線。）": [
-   " (Filling back needs the extension to have access to the EduLog site; reconnect from the extension menu.)"
   ],
   "所選報告已無法讀取，請在 EduLog 確認後重新回填。": [
    "The selected report can't be read; check it in EduLog and fill again."
@@ -2073,12 +2064,6 @@ globalThis.edulogUi?.registerPhrases({
   ],
   "原站日期資料：{value}": [
    "Site date details: {value}"
-  ],
-  "已開啟 EduLog，但回填需要擴充功能可存取 EduLog 網站；請從擴充功能選單重新連線。": [
-   "EduLog is open, but filling back needs the extension to have access to the EduLog site; reconnect from the extension menu."
-  ],
-  "回到 EduLog 視窗": [
-   "Back to the EduLog window"
   ],
   "編輯完成後，在 EduLog 按「回填到原站」；這裡只會列出有變動的欄位讓你確認。": [
    "When you finish, press \"Fill source form\" in EduLog; only the fields that change are listed here for you to confirm."
@@ -2124,5 +2109,50 @@ globalThis.edulogUi?.registerPhrases({
   ],
   "前往第一個已填欄位": [
    "Go to the first filled field"
+  ],
+  "在 EduLog 編輯（側邊欄）": [
+   "Edit in EduLog (side panel)"
+  ],
+  "重新開啟 EduLog 側邊欄": [
+   "Reopen the EduLog side panel"
+  ],
+  "請在側邊欄允許存取 EduLog 網站，才能使用你的 EduLog 登入。": [
+   "Allow access to the EduLog site in the side panel to use your EduLog sign-in."
+  ],
+  "EduLog 已在側邊欄開啟。編輯完成後按「回填到原站」；這裡只會列出有變動的欄位讓你確認。": [
+   "EduLog is open in the side panel. When you finish, press \"Fill source form\"; only the fields that change are listed here for you to confirm."
+  ],
+  "EduLog 報告編輯": [
+   "EduLog report editor"
+  ],
+  "EduLog 報告編輯器": [
+   "EduLog report editor"
+  ],
+  "重新載入編輯器": [
+   "Reload the editor"
+  ],
+  "在新分頁開啟": [
+   "Open in a new tab"
+  ],
+  "允許存取 EduLog 網站": [
+   "Allow access to the EduLog site"
+  ],
+  "EduLog 尚未連線。請從擴充功能選單連接 EduLog 後，在原站報告按「在 EduLog 編輯」。": [
+   "EduLog isn't connected. Connect it from the extension menu, then press \"Edit in EduLog\" on a site report."
+  ],
+  "在原站的報告中按「在 EduLog 編輯」，這裡就會開啟該學生當天的 EduLog 報告。": [
+   "Press \"Edit in EduLog\" on a site report to open that student's EduLog report for the day here."
+  ],
+  "無法開啟 EduLog 編輯器。": [
+   "The EduLog editor couldn't open."
+  ],
+  "側邊欄會使用你在 EduLog 網站的登入，需要允許擴充功能存取 {origin}。": [
+   "The side panel uses your sign-in on the EduLog site, so the extension needs access to {origin}."
+  ],
+  "無法開啟 EduLog 側邊欄，請再按一次「在 EduLog 編輯」。": [
+   "The EduLog side panel couldn't open; press \"Edit in EduLog\" again."
+  ],
+  "EduLog 網址無法確認，請重新連線。": [
+   "The EduLog address couldn't be confirmed; reconnect."
   ]
 })

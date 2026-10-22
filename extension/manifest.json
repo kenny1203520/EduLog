@@ -14,7 +14,7 @@
   },
   "permissions": [
     "storage",
-    "scripting"
+    "sidePanel"
   ],
   "host_permissions": [
     "https://corp.orangeapple.co/*"

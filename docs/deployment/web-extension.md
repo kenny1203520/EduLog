@@ -10,6 +10,16 @@ The API uses this list for CORS and pairing-origin checks. Keep the regular `API
 
 Set `EDULOG_WEB_BASE_URL` explicitly to the browser-facing EduLog frontend URL users can open. There is no universal local port: Vite, preview, Docker Compose, a reverse proxy, and production deployments can all use different ports or hosts. The extension popup's server URL is where the API is reachable (for example, an API port or a frontend proxying `/api`); the API uses `EDULOG_WEB_BASE_URL` to construct the separate browser authorization link. These URLs may differ or share one host and port. The API container listens internally on port `3000` and does not serve dashboard pages; do not set this variable to an internal API container address unless that address is also browser-accessible and serves the frontend. Public deployments must use HTTPS. The old `API_BASE_URL` setting is no longer used for extension authorization links.
 
+## Report editor in the side panel
+
+The extension shows the EduLog report editor in the browser side panel, beside the teaching-site report form. The panel frames the EduLog web app, so the web front end must allow the extension to frame it; every other page stays blocked.
+
+- The app container builds `frame-ancestors` from `EDULOG_FRAME_ANCESTORS` (space-separated exact `chrome-extension://<id>` origins). When that is empty it uses `API_EXTENSION_ALLOWED_ORIGINS`. Anything that is not an exact extension origin is ignored, and with no valid origin the policy stays `frame-ancestors 'none'` with `X-Frame-Options: DENY`.
+- The Caddy and nginx proxy variants (`supabase/docker-compose.caddy.yml`, `supabase/docker-compose.nginx.yml`) replace the app's CSP with their own, so set `EDULOG_FRAME_ANCESTORS` explicitly there.
+- A custom `EDULOG_CSP_HEADER` replaces the built-in policy completely; it must list the extension origins in its own `frame-ancestors`, or leave it empty.
+
+Inside the panel the web app keeps the teacher's normal EduLog sign-in: requests carry its cookies because the extension holds access to the EduLog origin. Page scripts in the panel cannot read cookies, so the web app takes its CSRF token from `GET /api/auth/csrf` there. Restart the front end after changing these settings.
+
 ## Pairing
 
 The extension creates a ten-minute PKCE pairing request and opens EduLog's integration settings. A signed-in user must explicitly approve the displayed extension origin. The extension then exchanges its verifier for a random credential; the server stores only its SHA-256 digest. The credential is scoped to `/api/extension/v1/*`, expires after 90 days, and can be revoked in EduLog settings. Do not expose it to any site content script.

@@ -1,5 +1,5 @@
 import { workStore } from '../shared/work-store.js'
-import { frontendBase, frontendOrigin, openEditor, readChannel } from './editor-window.js'
+import { frontendBase, openPanel, panelFailed, preparePanel, readChannel, PANEL_PAGE } from './editor-panel.js'
 const supported = url => { try { const u = new URL(url), adapter = globalThis.edulogSiteAdapter; return u.origin === 'https://corp.orangeapple.co' && Boolean(adapter.matchesIntegrationPage?.(u.pathname) ?? adapter.matchesTeachingPage(u.pathname)) } catch { return false } }
 const fail = (message, code) => { const error=new Error(message);if(code)error.code=code;throw error }
 function validationFields(fields) {
@@ -123,26 +123,26 @@ export function installWorkspaceBroker(getStatus) {
       })().then(respond, error => respond({ error: { code: 'WORKSPACE_UNAVAILABLE', message: error.message } }))
       return true
     }
-    // 回填 from the EduLog web app (bridge script on the paired web origin): forwards the report id to
-    // the source form that opened this editor window, where the teacher reviews it before applying.
-    if (message?.type === 'source-fill-request' && sender.id === chrome.runtime.id && Number.isInteger(sender.tab?.id)) {
+    // 回填 from the EduLog web app in the side panel: the panel page has checked that the request came
+    // from its own frame of the paired web app. Forwards the report id to the source form that opened
+    // the panel, where the teacher reviews it before applying.
+    if (message?.type === 'source-fill-request' && sender.id === chrome.runtime.id && sender.url?.startsWith(chrome.runtime.getURL(PANEL_PAGE))) {
       void (async () => {
         const bound = await binding()
-        const origin = frontendOrigin(bound.status.settingsUrl)
-        if (!origin || new URL(sender.url).origin !== origin) return { ok: false, reason: 'ORIGIN_MISMATCH' }
         const channel = await readChannel(message.channel)
-        if (!channel || channel.instance !== bound.instance || channel.userId !== bound.userId) return { ok: false, reason: 'CHANNEL_EXPIRED' }
+        if (!channel || channel.instance !== bound.instance || channel.userId !== bound.userId || channel.sourceTabId !== message.tabId) return { ok: false, reason: 'CHANNEL_EXPIRED' }
         if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(message.reportId))) return { ok: false, reason: 'INVALID_REQUEST' }
         const tab = await chrome.tabs.get(channel.sourceTabId).catch(() => null)
         if (!tab || !supported(tab.url) || new URL(tab.url).pathname !== channel.sourcePath) return { ok: false, reason: 'SOURCE_CLOSED' }
         const reply = await chrome.tabs.sendMessage(tab.id, { type: 'edulog-fill-report', formId: channel.formId, reportId: message.reportId }).catch(() => null)
         if (!reply?.ok) return { ok: false, reason: reply?.reason || 'SOURCE_CLOSED' }
-        await chrome.windows.update(tab.windowId, { focused: true }).catch(() => {})
         return { ok: true }
       })().then(respond, () => respond({ ok: false, reason: 'EXTENSION_UNAVAILABLE' }))
       return true
     }
     if (message?.type === 'integration-inline-prefill' && sender.id === chrome.runtime.id && Number.isInteger(sender.tab?.id) && supported(sender.tab.url)) {
+      // The side panel must open during the teacher's click, before any lookup below.
+      const opening = message.operation === 'open-editor' ? openPanel(sender.tab.id).then(() => null, error => error) : null
       void (async () => {
         const tab = await source({ tabId: sender.tab.id, sourcePath: new URL(sender.tab.url).pathname })
         const bound = await binding()
@@ -166,14 +166,15 @@ export function installWorkspaceBroker(getStatus) {
           return call({operation:'catalog',query:{resource:query.resource,search:query.search||undefined,student_id:query.student_id||undefined,cursor:query.cursor||undefined,limit:50}})
         }
         if (operation === 'open-editor') {
+          if(await opening)fail('無法開啟 EduLog 側邊欄，請再按一次「在 EduLog 編輯」。')
           // Bound enrollments only (source link, confirmed memory or the teacher's pick); never by name.
           const target=await inlineTarget(form,bound)
-          if(!target)return {opened:false,reason:'no-target'}
+          if(!target){await panelFailed(tab.id,'此學生尚未同步到 EduLog。同步本班後即可在 EduLog 編輯。');return {opened:false,reason:'no-target'}}
           if(!form.date)fail('請先確認完整上課日期。')
           const base=frontendBase(bound.status.settingsUrl)
           if(!base)fail('EduLog 網址無法確認，請重新連線。')
-          const opened=await openEditor({sourceTab:tab,base,enrollmentId:target.enrollmentId,date:form.date,formId:form.formId,binding:{instance:bound.instance,userId:bound.userId},screen:message.screen})
-          return {opened:true,bridge:opened.bridge}
+          const opened=await preparePanel({sourceTab:tab,base,enrollmentId:target.enrollmentId,date:form.date,formId:form.formId,binding:{instance:bound.instance,userId:bound.userId},label:[target.studentName,target.className,form.date].filter(Boolean).join(' · ')})
+          return {opened:true,access:opened.access}
         }
         if (operation === 'lookup') {
           if(form.supplement?.enrollmentId&&(form.supplement.binding?.instance!==bound.instance||form.supplement.binding?.userId!==bound.userId)){
@@ -271,7 +272,11 @@ export function installWorkspaceBroker(getStatus) {
           catch { /* The source is already prefilled; history can retry the pending record without applying again. */ }
         }
         return { applied: applied.data.applied, pendingConfirmation: true, matchingTarget: Boolean(sameTarget), recordSaved: true }
-      })().then(data => respond({ data }), error => respond({ error: { code: error.code || 'INLINE_PREFILL_FAILED', message: error.message || '預填無法完成。', requestId: error.requestId, appliedFields:error.appliedFields } }))
+      })().then(data => respond({ data }), error => {
+        // A panel opened for this click shows why the editor could not load instead of loading forever.
+        if (opening) void panelFailed(sender.tab.id, error.message || '無法開啟 EduLog 編輯器。').catch(() => {})
+        respond({ error: { code: error.code || 'INLINE_PREFILL_FAILED', message: error.message || '預填無法完成。', requestId: error.requestId, appliedFields:error.appliedFields } })
+      })
       return true
     }
     if (!trusted(sender) || !message?.type?.startsWith('workspace-')) return

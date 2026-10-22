@@ -1,4 +1,4 @@
-import { apiV1Client, ApiV1Error, createRequestId, createTraceparent, readCsrfToken, type ApiErrorBody } from '@/services/api/ApiV1Client'
+import { apiV1Client, ApiV1Error, createRequestId, createTraceparent, csrfToken, type ApiErrorBody } from '@/services/api/ApiV1Client'
 
 /** Client for /api/ai/report-assist (see server/src/routes/rest/aiReportAssistRouter.ts). */
 
@@ -177,7 +177,7 @@ export const ReportAssistService = {
             headers: {
                 Accept: 'text/event-stream',
                 'Content-Type': 'application/json',
-                'X-CSRF-Token': readCsrfToken(),
+                'X-CSRF-Token': await csrfToken(),
                 'X-Request-Id': requestId,
                 traceparent: createTraceparent(),
             },

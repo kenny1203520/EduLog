@@ -7,6 +7,7 @@ import {
   DEFAULT_HSTS_HEADER,
   buildHttpsOptions,
   buildSecurityHeaders,
+  frameAncestors,
   parseAllowedHosts
 } from './vite.security'
 
@@ -40,6 +41,14 @@ describe('vite security helpers', () => {
     expect(DEFAULT_CSP_HEADER).not.toContain('unsafe-eval')
     expect(DEFAULT_CSP_HEADER).toContain('http://localhost:*')
     expect(DEFAULT_CSP_HEADER).toContain('ws://localhost:*')
+  })
+
+  it('lets only exact extension origins frame the app for the extension side panel', () => {
+    const extension = 'chrome-extension://caefagceiajdhjnmogiaicaijckmplge'
+    expect(DEFAULT_CSP_HEADER).toContain("frame-ancestors 'none'")
+    expect(frameAncestors({ API_EXTENSION_ALLOWED_ORIGINS: `${extension}, chrome-extension://*` })).toBe(extension)
+    expect(frameAncestors({ EDULOG_FRAME_ANCESTORS: 'https://evil.example *' })).toBe("'none'")
+    expect(buildSecurityHeaders({ EDULOG_FRAME_ANCESTORS: extension })['Content-Security-Policy']).toContain(`frame-ancestors ${extension};`)
   })
 
   it('allows HSTS and CSP overrides from env', () => {

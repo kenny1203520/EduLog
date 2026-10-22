@@ -25,7 +25,7 @@ function editor({ status, lookup = null, collapsed = false }) {
     if (message.type === 'get-edulog-integration-status') return state.status
     if (message.type === 'open-integration-workspace') return { opened: true }
     if (message.operation === 'lookup') return { data: lookup }
-    if (message.operation === 'open-editor') return { data: state.open || { opened: true, bridge: true } }
+    if (message.operation === 'open-editor') return { data: state.open || { opened: true, access: true } }
     if (message.operation === 'detail') return { data: state.details[message.reportId] || null }
     if (message.operation === 'apply') { for (const item of message.input.fields) sourceForm.fields.find(f => f.key === item.key).value = item.value; return { data: { applied: message.input.fields.length } } }
     return { data: null }
@@ -95,22 +95,23 @@ test('connected but unsynced student: one line plus 同步本班, no error and n
   s.dom.window.close()
 })
 
-test('在 EduLog 編輯 asks the background to open the editor beside the form, with the screen area', async () => {
+test('在 EduLog 編輯 asks the background to open the side panel within the same click', async () => {
   const s = editor({ status: connected })
   await settle(s.w)
   const root = await withLookup(s, synced(s))
   assert.match(root.querySelector('.editor-step').textContent, /EduLog 還沒有這天的報告/)
-  root.querySelector('[data-open-editor]').click(); await settle(s.w)
+  root.querySelector('[data-open-editor]').click()
+  // The browser opens a side panel only during the click, so the request may not wait for anything.
   const open = s.sent.find(message => message.operation === 'open-editor')
-  assert.equal(JSON.stringify([open.formId, open.fingerprint, Object.keys(open.screen).sort()]), JSON.stringify(['f1', 'fp', ['height', 'left', 'top', 'width']]))
-  assert.match(root.querySelector('[role=status]').textContent, /回填到原站/)
+  assert.equal(JSON.stringify([open.formId, open.fingerprint, 'screen' in open]), JSON.stringify(['f1', 'fp', false]))
+  await settle(s.w)
+  assert.match(root.querySelector('[role=status]').textContent, /側邊欄開啟.*回填到原站/)
   assert.equal(root.querySelector('section').dataset.state, 'waiting')
-  assert.equal(root.querySelector('[data-open-editor]').textContent, '回到 EduLog 視窗')
-  // Without permission for the web app, opening still works but 回填 cannot come back; say so.
-  s.state.open = { opened: true, bridge: false }
+  assert.equal(root.querySelector('[data-open-editor]').textContent, '重新開啟 EduLog 側邊欄')
+  // Without access to the web app origin, the panel asks for it; the card points there.
+  s.state.open = { opened: true, access: false }
   root.querySelector('[data-open-editor]').click(); await settle(s.w)
-  assert.match(root.querySelector('[role=status]').textContent, /重新連線/)
-  assert.equal(root.querySelector('[role=status]').dataset.error, 'true')
+  assert.match(root.querySelector('[role=status]').textContent, /允許存取 EduLog 網站/)
   s.dom.window.close()
 })
 

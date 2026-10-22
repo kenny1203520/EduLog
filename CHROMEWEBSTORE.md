@@ -41,9 +41,9 @@ Existing test screenshots are verification evidence, not automatically approved 
 | Entry | Type | Purpose |
 |---|---|---|
 | `storage` | permission | Save browser pairing, language, display preferences and recoverable work configuration. |
-| `scripting` | permission | Register one small content script (`content/edulog-bridge.js`) on the paired EduLog web origin only, so the EduLog report editor opened beside a teaching-site form can send a saved report id back for the teacher to review and apply. Removed when the pairing ends. |
+| `sidePanel` | permission | Show the user's own EduLog report editor in the browser side panel beside a teaching-site report form, opened only when the teacher clicks 「在 EduLog 編輯」 for that tab. The editor can send a saved report id back for the teacher to review and apply on the form. |
 | `https://corp.orangeapple.co/*` | host/content scripts | Provide supported teaching-page assistance and read class/student/report pages needed for user-requested review and sync. |
-| `https://*/*` | optional host | Users host EduLog at different HTTPS origins. Request only the entered origin to pair and perform chosen teaching operations; the only content script outside the teaching site is the 回填 bridge on that paired EduLog origin. |
+| `https://*/*` | optional host | Users host EduLog at different HTTPS origins. Request only the entered origin to pair and perform chosen teaching operations. The side panel frames that same origin, and this access lets the framed EduLog site use the user's existing EduLog sign-in. No content script runs outside the teaching site. |
 | `http://localhost/*` | optional host | Connect to an explicitly selected local development EduLog. |
 | `http://127.0.0.1/*` | optional host | Connect to an explicitly selected loopback development instance. |
 | `http://[::1]/*` | optional host | Connect to an explicitly selected IPv6 loopback instance. |

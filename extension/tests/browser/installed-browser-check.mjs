@@ -43,6 +43,12 @@ try {
     const { workStore } = await import(chrome.runtime.getURL('shared/work-store.js'))
     await workStore.put({ id: 'release-smoke', revision: 1, status: 'draft', snapshot: { content: 'synthetic draft' } }, { instance: 'https://test.example', userId: 'synthetic-user' })
   })
+  // The side panel page ships in the package and opens with its hint when no report is selected.
+  const panel = await context.newPage()
+  await panel.goto('chrome-extension://' + metadata.extensionId + '/sidepanel/panel.html')
+  await panel.locator('#message').waitFor({ state: 'visible' })
+  assert.equal(await panel.locator('#editor').isVisible(), false)
+  await panel.close()
   const source = await context.newPage()
   await source.goto('https://corp.orangeapple.co/courses/dt/101')
   await source.waitForFunction(() => document.querySelector('#edulog-extension-root'))

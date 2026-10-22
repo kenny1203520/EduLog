@@ -32,10 +32,22 @@ export function parseAllowedHosts(value?: string): ViteAllowedHosts {
   return hosts.length > 0 ? hosts : undefined
 }
 
+const EXTENSION_ORIGIN = /^chrome-extension:\/\/[a-p]{32}$/
+
+/**
+ * The EduLog extension shows the web app in the browser side panel. Only exact extension origins
+ * (EDULOG_FRAME_ANCESTORS, else the API extension allowlist) may frame it; otherwise nothing may.
+ */
+export function frameAncestors(env: Record<string, string | undefined>): string {
+  const listed = env.EDULOG_FRAME_ANCESTORS?.trim() || env.API_EXTENSION_ALLOWED_ORIGINS?.replace(/,/g, ' ') || ''
+  const origins = listed.split(/\s+/).filter((origin) => EXTENSION_ORIGIN.test(origin))
+  return origins.length > 0 ? origins.join(' ') : "'none'"
+}
+
 export function buildSecurityHeaders(env: Record<string, string | undefined>): OutgoingHttpHeaders {
   return {
     'Strict-Transport-Security': env.EDULOG_HSTS_HEADER?.trim() || DEFAULT_HSTS_HEADER,
-    'Content-Security-Policy': env.EDULOG_CSP_HEADER?.trim() || DEFAULT_CSP_HEADER
+    'Content-Security-Policy': env.EDULOG_CSP_HEADER?.trim() || DEFAULT_CSP_HEADER.replace("frame-ancestors 'none'", `frame-ancestors ${frameAncestors(env)}`)
   }
 }
 

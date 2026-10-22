@@ -752,6 +752,9 @@ services:
       EDULOG_HTTPS_PORT: ${EDULOG_HTTPS_PORT:-4174}
       EDULOG_HSTS_HEADER: "${EDULOG_HSTS_HEADER:-}"
       EDULOG_CSP_HEADER: "${EDULOG_CSP_HEADER:-}"
+      # Extension side panel: these exact extension origins may frame the web app (defaults to the API allowlist).
+      EDULOG_FRAME_ANCESTORS: "${EDULOG_FRAME_ANCESTORS:-}"
+      API_EXTENSION_ALLOWED_ORIGINS: ${API_EXTENSION_ALLOWED_ORIGINS:-}
       EDULOG_HTTP_ENABLED: ${EDULOG_HTTP_ENABLED:-true}
       EDULOG_HTTPS_ENABLED: ${EDULOG_HTTPS_ENABLED:-false}
       EDULOG_HTTPS_REDIRECT: ${EDULOG_HTTPS_REDIRECT:-false}

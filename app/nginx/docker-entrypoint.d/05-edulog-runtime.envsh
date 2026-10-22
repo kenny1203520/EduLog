@@ -3,7 +3,7 @@
 
 set -eu
 
-DEFAULT_CSP_HEADER="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http://localhost:* http://127.0.0.1:*; font-src 'self' data:; connect-src 'self' https: wss: http://localhost:* ws://localhost:* http://127.0.0.1:* ws://127.0.0.1:*; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests"
+DEFAULT_CSP_HEADER="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http://localhost:* http://127.0.0.1:*; font-src 'self' data:; connect-src 'self' https: wss: http://localhost:* ws://localhost:* http://127.0.0.1:* ws://127.0.0.1:*; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors __FRAME_ANCESTORS__; form-action 'self'; upgrade-insecure-requests"
 DEFAULT_HSTS_HEADER="max-age=31536000; includeSubDomains; preload"
 
 is_enabled() {
@@ -11,6 +11,24 @@ is_enabled() {
     1|true|yes|on) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+# The EduLog extension shows this web app in the browser side panel. Only the exact extension
+# origins listed here may frame it; with none configured, framing stays denied everywhere.
+frame_ancestors() {
+  set -f
+  origins="${EDULOG_FRAME_ANCESTORS:-$(printf '%s' "${API_EXTENSION_ALLOWED_ORIGINS:-}" | tr ',' ' ')}"
+  allowed=""
+  for origin in $origins; do
+    if printf '%s' "$origin" | grep -Eq '^chrome-extension://[a-p]{32}$'; then
+      allowed="$allowed $origin"
+    else
+      echo "edulog: ignoring frame ancestor '$origin'; use exact chrome-extension://<id> origins" >&2
+    fi
+  done
+  allowed="${allowed# }"
+  none="'none'"
+  printf '%s' "${allowed:-$none}"
 }
 
 js_string() {
@@ -59,15 +77,19 @@ write_runtime_config() {
 }
 
 write_security_headers() {
-  csp_header="${EDULOG_CSP_HEADER:-$DEFAULT_CSP_HEADER}"
+  ancestors="$(frame_ancestors)"
+  csp_header="${EDULOG_CSP_HEADER:-$(printf '%s' "$DEFAULT_CSP_HEADER" | sed "s|__FRAME_ANCESTORS__|$ancestors|")}"
   hsts_header="${EDULOG_HSTS_HEADER:-$DEFAULT_HSTS_HEADER}"
+  # X-Frame-Options has no allowlist; it is sent only while no extension may frame the app.
+  frame_options='add_header X-Frame-Options "DENY" always;'
+  [ "$ancestors" = "'none'" ] || frame_options=''
 
   cat > /etc/nginx/conf.d/edulog-security-headers.conf <<EOF
 add_header Content-Security-Policy "$csp_header" always;
 add_header X-Content-Type-Options "nosniff" always;
 add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()" always;
-add_header X-Frame-Options "DENY" always;
+$frame_options
 EOF
 
   cat > /etc/nginx/conf.d/edulog-hsts-header.conf <<EOF

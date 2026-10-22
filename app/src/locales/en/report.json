@@ -369,11 +369,11 @@
     "create_error": "Could not create the report",
     "source_fill": {
         "title": "Fill in the teaching site",
-        "hint": "Saves, then sends this report back to the teaching site beside this window, where you check each field before it is applied.",
+        "hint": "Saves, then sends this report back to the teaching site on the left; only the fields that change are listed for you to confirm.",
         "action": "Fill source form",
         "sending": "Saving and sending to the teaching site…",
-        "sent": "Sent to the teaching site. Check each field in the left window before applying; you still submit it there yourself.",
-        "failed": "Couldn't send to the teaching site ({reason}). Make sure the report window on the left is still open, then try again.",
+        "sent": "Sent to the teaching site. Confirm the fields to fill in on the report to the left; you still submit it there yourself.",
+        "failed": "Couldn't send to the teaching site ({reason}). Make sure the report on the left is still open, then try again.",
         "date_missing": "This student has no lesson on {date}; showing the nearest one instead."
     }
 }

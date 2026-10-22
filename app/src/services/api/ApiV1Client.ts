@@ -33,8 +33,26 @@ export function createRequestId() { return `edulog-${randomHex(24)}` }
 export function createTraceparent() { return `00-${randomHex(32)}-${randomHex(16)}-01` }
 function legacyBaseUrl() { return getRuntimeConfigValue('VITE_LEGACY_API_BASE_URL') || '/api' }
 function readCookie(name: string) { if (typeof document === 'undefined') return ''; const value = document.cookie.split('; ').find((item) => item.startsWith(`${name}=`))?.slice(name.length + 1); return value ? decodeURIComponent(value) : '' }
+// Inside the EduLog extension side panel this page is a frame of an extension page. Its requests
+// still carry the session cookies, but its scripts cannot read them, so the double-submit token is
+// read from /auth/csrf instead; only this origin's scripts can read that response.
+let servedCsrfToken = ''
+let servedCsrfRequest: Promise<string> | null = null
+const isFramed = () => typeof window !== 'undefined' && window.top !== window.self
+function serveCsrfToken(baseUrl: string) {
+  servedCsrfRequest ??= fetch(`${baseUrl}/auth/csrf`, { credentials: 'include', headers: { Accept: 'application/json' } })
+    .then((response) => response.ok ? response.json() : null)
+    .then((body: ApiEnvelope<{ csrf_token?: string }> | null) => { servedCsrfToken = typeof body?.data?.csrf_token === 'string' ? body.data.csrf_token : ''; return servedCsrfToken })
+    .catch(() => '')
+    .finally(() => { servedCsrfRequest = null })
+  return servedCsrfRequest
+}
 /** CSRF token for requests that cannot go through {@link ApiV1Client.request}, such as streamed responses. */
-export function readCsrfToken() { return readCookie('edulog_csrf') }
+export async function csrfToken(baseUrl = '/api') {
+  const cookie = readCookie('edulog_csrf')
+  if (cookie || !isFramed()) return cookie
+  return servedCsrfToken || serveCsrfToken(baseUrl.replace(/\/$/, ''))
+}
 
 export class ApiV1Client {
   private readonly baseUrl: string; private readonly sameOrigin: boolean
@@ -43,7 +61,7 @@ export class ApiV1Client {
     return this.requestAttempt<T>(path, options, true)
   }
 
-  private async requestAttempt<T>(path: string, options: ApiRequestOptions, allowAuthRecovery: boolean, preservedIdempotencyKey?: string): Promise<ApiEnvelope<T>> {
+  private async requestAttempt<T>(path: string, options: ApiRequestOptions, allowAuthRecovery: boolean, preservedIdempotencyKey?: string, allowCsrfRetry = true): Promise<ApiEnvelope<T>> {
     const method = (options.method ?? 'GET').toUpperCase(); const requestId = createRequestId(); const headers = new Headers(options.headers)
     headers.set('Accept', 'application/json'); headers.set('X-Request-Id', requestId); headers.set('traceparent', createTraceparent())
     if (!this.sameOrigin) throw new ApiV1Error(503, { error: { code: 'EXTERNAL_API_DISABLED', message: 'External browser API access is disabled', request_id: requestId, trace_id: '' } })
@@ -51,7 +69,9 @@ export class ApiV1Client {
       // Do not queue or pretend to save private business data while offline.
       throw new Error('Network offline')
     }
-    headers.set('X-CSRF-Token', readCookie('edulog_csrf'))
+    const unsafe = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)
+    const servedToken = unsafe && !readCookie('edulog_csrf') && isFramed()
+    headers.set('X-CSRF-Token', unsafe ? await csrfToken(this.baseUrl) : readCookie('edulog_csrf'))
     const idempotencyKey = options.idempotencyKey ?? preservedIdempotencyKey ?? `ui-${randomHex(32)}`
     if (options.body !== undefined) { headers.set('Content-Type', 'application/json'); if (['POST', 'PATCH', 'DELETE', 'PUT'].includes(method)) headers.set('Idempotency-Key', idempotencyKey) }
     dispatchRequestActivity('start')
@@ -62,6 +82,11 @@ export class ApiV1Client {
         const errorBody = body as ApiErrorBody | null
         if (errorBody?.error) {
           const error = new ApiV1Error(response.status, errorBody)
+          // Sign-in and refresh rotate the token; a served copy may be stale, so read it again once.
+          if (servedToken && allowCsrfRetry && response.status === 403 && error.code === 'CSRF_INVALID') {
+            servedCsrfToken = ''
+            return this.requestAttempt<T>(path, options, allowAuthRecovery, idempotencyKey, false)
+          }
           if (allowAuthRecovery && !isAuthEndpoint(path) && isRecoverableAuthError(error) && authRecovery) {
             authRecoveryPromise ??= authRecovery().finally(() => { authRecoveryPromise = null })
             const refreshedUser = await authRecoveryPromise
