@@ -20,6 +20,8 @@ The extension shows the EduLog report editor in the browser side panel, beside t
 
 Inside the panel the web app keeps the teacher's normal EduLog sign-in: requests carry its cookies because the extension holds access to the EduLog origin. Page scripts in the panel cannot read cookies, so the web app takes its CSRF token from `GET /api/auth/csrf` there. Restart the front end after changing these settings.
 
+The browser does not send the session cookie on the realtime WebSocket handshake from inside the panel, so live collaboration (report editor and class-session updates) first calls `POST /api/realtime/ticket` and opens `/api/realtime` with that one-time ticket. A ticket is encrypted with a key derived from `COOKIE_SECRET`, is bound to one report or class session, expires after 30 seconds, and is accepted once per API instance. All API instances must share the same `COOKIE_SECRET`.
+
 ## Pairing
 
 The extension creates a ten-minute PKCE pairing request and opens EduLog's integration settings. A signed-in user must explicitly approve the displayed extension origin. The extension then exchanges its verifier for a random credential; the server stores only its SHA-256 digest. The credential is scoped to `/api/extension/v1/*`, expires after 90 days, and can be revoked in EduLog settings. Do not expose it to any site content script.
