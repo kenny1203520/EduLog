@@ -67,6 +67,21 @@ describe('useSourceFill', () => {
     fromPanel({ type: 'edulog:source-fill-result', channel: CHANNEL, ok: false, reason: 'SOURCE_CLOSED' })
     expect(api().state.value).toBe('failed')
     expect(api().reason.value).toBe('SOURCE_CLOSED')
+    expect(api().result.value).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('keeps how many fields the extension filled, clamped to small whole numbers', () => {
+    const { wrapper, api } = harness(CHANNEL)
+    fromPanel({ type: 'edulog:bridge-ready' })
+    api().send(REPORT)
+    fromPanel({ type: 'edulog:source-fill-result', channel: CHANNEL, ok: true, applied: 4, skipped: 1e6, review: 'yes' })
+    expect(api().state.value).toBe('sent')
+    expect(api().result.value).toEqual({ applied: 4, skipped: 50, review: false })
+    api().send(REPORT)
+    expect(api().result.value).toBeNull()
+    fromPanel({ type: 'edulog:source-fill-result', channel: CHANNEL, ok: true, applied: 1.5, review: true })
+    expect(api().result.value).toEqual({ applied: 0, skipped: 0, review: true })
     wrapper.unmount()
   })
 

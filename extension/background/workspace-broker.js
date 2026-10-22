@@ -1,6 +1,8 @@
 import { workStore } from '../shared/work-store.js'
 import { frontendBase, openPanel, panelFailed, preparePanel, readChannel, PANEL_PAGE } from './editor-panel.js'
 const supported = url => { try { const u = new URL(url), adapter = globalThis.edulogSiteAdapter; return u.origin === 'https://corp.orangeapple.co' && Boolean(adapter.matchesIntegrationPage?.(u.pathname) ?? adapter.matchesTeachingPage(u.pathname)) } catch { return false } }
+// A field count reported by a site page, as a small whole number.
+const fillCount = value => Number.isInteger(value) ? Math.min(Math.max(value, 0), 50) : 0
 const fail = (message, code) => { const error=new Error(message);if(code)error.code=code;throw error }
 function validationFields(fields) {
   if (!fields || typeof fields !== 'object' || Array.isArray(fields)) return undefined
@@ -125,7 +127,7 @@ export function installWorkspaceBroker(getStatus) {
     }
     // 回填 from the EduLog web app in the side panel: the panel page has checked that the request came
     // from its own frame of the paired web app. Forwards the report id to the source form that opened
-    // the panel, where the teacher reviews it before applying.
+    // the panel, which fills it in (never submits it) and reports how many fields it filled.
     if (message?.type === 'source-fill-request' && sender.id === chrome.runtime.id && sender.url?.startsWith(chrome.runtime.getURL(PANEL_PAGE))) {
       void (async () => {
         const bound = await binding()
@@ -136,7 +138,7 @@ export function installWorkspaceBroker(getStatus) {
         if (!tab || !supported(tab.url) || new URL(tab.url).pathname !== channel.sourcePath) return { ok: false, reason: 'SOURCE_CLOSED' }
         const reply = await chrome.tabs.sendMessage(tab.id, { type: 'edulog-fill-report', formId: channel.formId, reportId: message.reportId }).catch(() => null)
         if (!reply?.ok) return { ok: false, reason: reply?.reason || 'SOURCE_CLOSED' }
-        return { ok: true }
+        return { ok: true, applied: fillCount(reply.applied), skipped: fillCount(reply.skipped), review: reply.review === true }
       })().then(respond, () => respond({ ok: false, reason: 'EXTENSION_UNAVAILABLE' }))
       return true
     }

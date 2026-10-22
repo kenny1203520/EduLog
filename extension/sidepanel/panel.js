@@ -64,7 +64,8 @@ window.addEventListener('message', event => {
   const origin = current.origin, channel = current.channel
   if (data.channel !== channel || !REPORT.test(String(data.reportId))) return reply({ type: 'edulog:source-fill-result', channel: String(data.channel || '').slice(0, 32), ok: false, reason: 'INVALID_REQUEST' }, origin)
   globalThis.edulogRuntime.send({ type: 'source-fill-request', tabId, channel, reportId: data.reportId })
-    .then(result => reply({ type: 'edulog:source-fill-result', channel, ok: result?.ok === true, reason: result?.ok ? null : String(result?.reason || 'EXTENSION_UNAVAILABLE').slice(0, 60) }, origin),
+    .then(result => reply({ type: 'edulog:source-fill-result', channel, ok: result?.ok === true, reason: result?.ok ? null : String(result?.reason || 'EXTENSION_UNAVAILABLE').slice(0, 60),
+      ...(result?.ok ? { applied: result.applied, skipped: result.skipped, review: result.review === true } : {}) }, origin),
       () => reply({ type: 'edulog:source-fill-result', channel, ok: false, reason: 'EXTENSION_UNAVAILABLE' }, origin))
 })
 

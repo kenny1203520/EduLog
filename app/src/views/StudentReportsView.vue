@@ -464,7 +464,7 @@
                         class="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-emerald-200 bg-white p-4 shadow-sm">
                         <div class="min-w-0 flex-1">
                             <p class="text-sm font-semibold text-gray-900">{{ $t('report.source_fill.title') }}</p>
-                            <p class="text-xs text-gray-600" role="status" aria-live="polite">{{ sourceFill.state.value === 'sending' ? $t('report.source_fill.sending') : sourceFill.state.value === 'sent' ? $t('report.source_fill.sent') : sourceFill.state.value === 'failed' ? $t('report.source_fill.failed', { reason: sourceFill.reason.value }) : $t('report.source_fill.hint') }}</p>
+                            <p class="text-xs text-gray-600" role="status" aria-live="polite">{{ sourceFillStatus('hint') }}</p>
                         </div>
                         <button type="button" @click="fillSource" :disabled="sourceFill.state.value === 'sending'"
                             class="min-h-[44px] cursor-pointer rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors duration-200 hover:bg-emerald-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-not-allowed disabled:opacity-60">
@@ -502,7 +502,7 @@
                     <!-- Side panel: 回填 stays reachable at the bottom while the report scrolls. -->
                     <div v-if="sourceFillAvailable && panel" data-testid="source-fill"
                         class="sticky bottom-0 z-10 -mx-3 mt-3 flex items-center gap-3 border-t border-emerald-200 bg-white/95 px-3 py-2 shadow-[0_-4px_12px_rgba(15,23,42,0.06)] backdrop-blur">
-                        <p class="min-w-0 flex-1 text-xs leading-snug text-gray-700" role="status" aria-live="polite">{{ sourceFill.state.value === 'sending' ? $t('report.source_fill.sending') : sourceFill.state.value === 'sent' ? $t('report.source_fill.sent') : sourceFill.state.value === 'failed' ? $t('report.source_fill.failed', { reason: sourceFill.reason.value }) : $t('report.source_fill.hint_short') }}</p>
+                        <p class="min-w-0 flex-1 text-xs leading-snug text-gray-700" role="status" aria-live="polite">{{ sourceFillStatus('hint_short') }}</p>
                         <button type="button" @click="fillSource" :disabled="sourceFill.state.value === 'sending'"
                             class="min-h-[44px] shrink-0 cursor-pointer rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors duration-200 hover:bg-emerald-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-not-allowed disabled:opacity-60">
                             {{ $t('report.source_fill.action') }}
@@ -659,6 +659,18 @@ watch(() => [loading.value, selectedReport.value?.id] as const, async ([isLoadin
     const reduced = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
     editorAnchor.value?.scrollIntoView?.({ block: 'start', behavior: reduced ? 'auto' : 'smooth' })
 })
+// The 回填 bar's status line: what was filled into the teaching-site form, or the idle hint.
+function sourceFillStatus(hintKey: 'hint' | 'hint_short') {
+    const state = sourceFill.state.value, result = sourceFill.result.value
+    if (state === 'sending') return t('report.source_fill.sending')
+    if (state === 'failed') return t('report.source_fill.failed', { reason: sourceFill.reason.value })
+    if (state !== 'sent') return t(`report.source_fill.${hintKey}`)
+    if (result?.review) return t('report.source_fill.sent_review')
+    if (!result?.applied && !result?.skipped) return t('report.source_fill.sent_same')
+    return result.skipped
+        ? t('report.source_fill.sent_skipped', { count: result.applied, skipped: result.skipped })
+        : t('report.source_fill.sent', { count: result.applied })
+}
 async function fillSource() {
     const reportId = selectedReport.value?.id
     if (!reportId) return

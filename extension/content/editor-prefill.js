@@ -1,6 +1,8 @@
 // EduLog report assistant inside the verified native source editor: a compact card above the site's
-// form. It opens the EduLog editor in a window beside this one, then lists only the fields that the
-// report sent back (回填) would change, applies the ticked ones and marks them on the site form.
+// form. It opens the EduLog editor in the side panel; a report sent back from there (回填) is written
+// straight into the site form, replacing what differs, and the filled fields are marked. The teacher
+// still checks the form and submits it with the site's own button. A report picked on the card itself
+// is listed field by field for review first.
 // The shadow root keeps its controls and styles separate from the provider DOM.
 (() => {
   if (!globalThis.edulogRuntime || !globalThis.edulogSourceIntegration || !document?.documentElement) return
@@ -157,7 +159,7 @@
       const result=await opened
       if(result?.reason==='no-target'){status(tx('此學生尚未同步到 EduLog。同步本班後即可在 EduLog 編輯。'));root.querySelector('.sync-class').hidden=false;return}
       button.textContent=tx('重新開啟 EduLog 側邊欄');stage('waiting')
-      status(result?.access===false?tx('請在側邊欄允許存取 EduLog 網站，才能使用你的 EduLog 登入。'):tx('EduLog 已在側邊欄開啟。編輯完成後按「回填到原站」；這裡只會列出有變動的欄位讓你確認。'))
+      status(result?.access===false?tx('請在側邊欄允許存取 EduLog 網站，才能使用你的 EduLog 登入。'):tx('EduLog 已在側邊欄開啟。編輯完成後按「回填到原站」，EduLog 的內容會直接填入下方表單，再由你按原站按鈕送出。'))
     }catch(error){status(error.message,true)}finally{if(button.isConnected)button.disabled=false}
   }
   function suggestion(field, selected) {
@@ -184,6 +186,20 @@
     }catch(error){if(serial===generation)status(error.message,true)}
   }
   const optionLabel=(field,value)=>field.options?.find(option=>option.value===value)?.label||value
+  // The fields a report would change on the current site form; everything else is listed as the same.
+  function plannedFields(selected){
+    const rows=[],same=[],mappings=globalThis.edulogFieldMappings
+    for(const field of form.fields){
+      const proposed=suggestion(field,selected),hasReportValue=!mappings.empty(mappings.reportValue(field,selected))
+      const nativeText=field.value?optionLabel(field,field.value):''
+      if(mappings.equal(field,selected,fieldRules)||!hasReportValue&&!proposed||proposed&&proposed===field.value){same.push(`${tx(field.label)}：${nativeText||tx('空白')}`);continue}
+      rows.push({field,proposed,hasReportValue,nativeText})
+    }
+    return {rows,same}
+  }
+  // A row 回填 can write by itself: an enabled field with a value, and for options a valid site option.
+  // An empty EduLog value never clears the site.
+  const fillable=({field,proposed})=>!field.disabled&&Boolean(proposed)&&(field.type==='text'||field.options.some(option=>option.value===proposed&&!option.disabled))
   const isMismatch=selected=>selected.template_only||!target||!form.date||Boolean(target.enrollmentId&&selected.enrollment_id!==target.enrollmentId)||(selected.student_id&&target.studentId&&selected.student_id!==target.studentId)||(form.date&&selected.occurrence_date!==form.date)
   // Review: only fields the report would change are listed, each as 原站 → EduLog. New content is
   // ticked; replacing content already on the site, internal notes and unmapped options start unticked,
@@ -198,13 +214,9 @@
     box.append(head)
     if(mismatch){const warn=make('div',undefined,'question'),l=make('label',undefined,'check'),c=make('input');c.type='checkbox';c.dataset.mismatch='';l.append(c,make('span',tx('我已核對，確認使用其他學生或日期的報告作為範本')));warn.append(make('p',tx('範本的學生或日期與原站表單不同。套用前需勾選確認；只會複製欄位，不改變身份對應。')),l);box.append(warn)}
     const draftKey=`${form.action||form.reportId}:${selected.id}:${selected.version}`,draft=drafts.get(draftKey)||{}
-    const changes=make('div',undefined,'changes'),same=[]
+    const changes=make('div',undefined,'changes'),{rows,same}=plannedFields(selected)
     const currentFormId=form.formId
-    for(const sourceField of form.fields){
-      const consistent=globalThis.edulogFieldMappings.equal(sourceField,selected,fieldRules),proposed=suggestion(sourceField,selected)
-      const mappings=globalThis.edulogFieldMappings,hasReportValue=!mappings.empty(mappings.reportValue(sourceField,selected))
-      const nativeText=sourceField.value?optionLabel(sourceField,sourceField.value):''
-      if(consistent||!hasReportValue&&!proposed||proposed&&proposed===sourceField.value){same.push(`${tx(sourceField.label)}：${nativeText||tx('空白')}`);continue}
+    for(const {field:sourceField,proposed,hasReportValue,nativeText} of rows){
       const kind=sourceField.disabled?'blocked':sourceField.value?'overwrite':'new'
       const card=make('div',undefined,'field');card.dataset.fieldKey=sourceField.key;card.dataset.kind=kind
       const label=make('label',undefined,'check'),check=make('input');check.type='checkbox';check.dataset.include='';check.disabled=sourceField.disabled
@@ -254,10 +266,12 @@
     for(const {key,ok} of results){const node=adapter.fieldNodes?.(document,key)?.[0];const box=node?.closest('.form-group,.mb-3,.field,fieldset')||node?.parentElement;if(!box)continue;box.setAttribute('data-edulog-filled',ok?'ok':'check');first||=node}
     return first
   }
-  function renderOutcome(results,partial){
+  function renderOutcome(results,partial,{replaced=false,skipped=[]}={}){
     const box=root.querySelector('.review'),outcome=make('div',undefined,'outcome');outcome.setAttribute('role','group')
-    outcome.append(make('strong',partial?tx('部分套用：請檢查原站並重新核對'):tx('已填入原站表單，請檢查後自行送出')))
-    for(const {label,ok,value} of results){const line=make('p',tx('{label}：{result} · {value}',{label,result:ok?tx('已確認套用'):tx('請在原站核對結果'),value}));line.dataset.ok=String(ok);outcome.append(line)}
+    outcome.append(make('strong',partial?tx('部分套用：請檢查原站並重新核對'):replaced?tx('已用 EduLog 內容覆蓋原站表單，請檢查後按原站按鈕送出'):tx('已填入原站表單，請檢查後自行送出')))
+    for(const {label,ok,value,before} of results){const line=make('p',before===undefined?tx('{label}：{result} · {value}',{label,result:ok?tx('已確認套用'):tx('請在原站核對結果'),value}):tx('{label}：{before} → {value}',{label,before:before||tx('空白'),value}));line.dataset.ok=String(ok);outcome.append(line)}
+    if(skipped.length)outcome.append(make('p',tx('需要在原站選擇：{fields}',{fields:skipped.join('、')}),'help'))
+    if(replaced)outcome.append(make('p',tx('原站尚未送出；不想保留時，關閉原站表單即可放棄這些變更。'),'muted'))
     const first=markFilled(results),actions=make('div',undefined,'actions')
     if(first)actions.append(action(tx('前往第一個已填欄位'),()=>{first.scrollIntoView({block:'center',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});first.focus({preventScroll:true})},'primary'))
     actions.append(action(tx('重新核對'),()=>void lookup()))
@@ -289,6 +303,60 @@
     const after=await adapter.readForm(document);if(serial!==generation||!host?.isConnected)return;form=after
     renderOutcome(fields.map(item=>{const actual=after.fields.find(f=>f.key===item.key);return{key:item.key,label:actual?.label?tx(actual.label):item.key,ok:actual?.value===item.value,value:actual?.value?optionLabel(actual,actual.value):tx('空白')}}),false)
     } catch(error){if(serial===generation){status(error.message,true);if(error.appliedFields?.length){const after=await adapter.readForm(document);if(serial!==generation||!host?.isConnected)return;form=after;renderOutcome(error.appliedFields.map(key=>{const actual=after.fields.find(f=>f.key===key);return{key,label:actual?.label?tx(actual.label):key,ok:false,value:actual?.value?optionLabel(actual,actual.value):tx('空白')}}),true)}}}finally{saving=false;if(button.isConnected)button.disabled=false}
+  }
+  // 回填 from the side panel: write every field that differs straight into the site form. Replacing
+  // site content and copying the internal note need no extra tick here, because nothing is saved
+  // until the teacher submits the site form. A report for another student or date is reviewed instead.
+  const failure=(reason,message)=>Object.assign(new Error(message||reason),{reason})
+  const outcomeLine=(after,key,before,ok)=>{const actual=after.fields.find(f=>f.key===key);return{key,label:actual?.label?tx(actual.label):key,ok:ok(actual),before,value:actual?.value?optionLabel(actual,actual.value):tx('空白')}}
+  async function autoFill(item){
+    if(saving)throw failure('BUSY',tx('上一次回填還在進行，請稍候再試。'))
+    const serial=++generation,stale=()=>serial!==generation||!host?.isConnected
+    status(tx('正在把 EduLog 報告填入原站表單…'))
+    const detail=await request('detail',{reportId:item.id,kind:item.kind})
+    if(stale())throw failure('SOURCE_CHANGED')
+    if(!detail)throw failure('REPORT_UNAVAILABLE',tx('所選報告已無法讀取，請在 EduLog 確認後重新回填。'))
+    const selected={...item,...detail}
+    await loadFieldRules(serial);if(stale())throw failure('SOURCE_CHANGED')
+    report=selected
+    const current=await adapter.readForm(document);if(stale())throw failure('SOURCE_CHANGED')
+    if(current.formId!==form.formId)throw failure('SOURCE_CHANGED',tx('原站表單內容已改變，請重新核對後再預填。'))
+    form=current
+    if(isMismatch(selected)){renderFields(selected);return {applied:0,skipped:0,review:true}}
+    saving=true
+    const filled=new Map();let skipped=[],partial=false
+    try{
+      // A chosen lesson can change other fields' options, so a second pass fills what became valid.
+      for(let pass=0;pass<2;pass++){
+        if(pass){const after=await adapter.readForm(document);if(stale())throw failure('SOURCE_CHANGED');form=after}
+        const {rows}=plannedFields(selected),fill=rows.filter(row=>fillable(row)&&!filled.has(row.field.key))
+        skipped=rows.filter(row=>!fillable(row)).map(row=>tx(row.field.label))
+        if(!fill.length)break
+        const fields=fill.map(({field,proposed})=>({key:field.key,value:proposed,overwrite:Boolean(field.value),includeInternal:Boolean(field.internal)}))
+        try{await request('apply',{input:{reportId:selected.id,kind:selected.kind,version:selected.version,targetEnrollmentId:target?.enrollmentId||null,identityConfirmed:false,fields}})}
+        catch(error){
+          for(const row of fill)if(error.appliedFields?.includes(row.field.key))filled.set(row.field.key,{value:row.proposed,before:row.nativeText})
+          if(pass||!error.appliedFields?.length)throw error
+          partial=true;continue
+        }
+        partial=false
+        for(const row of fill)filled.set(row.field.key,{value:row.proposed,before:row.nativeText})
+        if(!skipped.length)break
+      }
+      const after=await adapter.readForm(document);if(stale())throw failure('SOURCE_CHANGED');form=after
+      const results=[...filled].map(([key,{value,before}])=>outcomeLine(after,key,before,actual=>actual?.value===value))
+      if(!results.length&&!skipped.length){const box=root.querySelector('.review');box.replaceChildren(make('p',tx('EduLog 報告與原站表單內容相同，沒有需要回填的欄位。'),'muted'));box.hidden=false;stage('review');status(tx('沒有需要回填的欄位。'));return {applied:0,skipped:0}}
+      renderOutcome(results,partial,{replaced:true,skipped})
+      status(skipped.length?tx('已填入 {count} 個欄位；{skipped} 個欄位需要在原站選擇。',{count:results.length,skipped:skipped.length}):tx('已填入 {count} 個欄位，請檢查原站表單後送出。',{count:results.length}))
+      return {applied:results.length,skipped:skipped.length}
+    }catch(error){
+      if(!stale()){
+        status(error.message,true)
+        const after=filled.size?await adapter.readForm(document).catch(()=>null):null
+        if(after&&!stale()){form=after;renderOutcome([...filled].map(([key,{before}])=>outcomeLine(after,key,before,()=>false)),true)}
+      }
+      throw failure(error.reason||(filled.size?'PARTIAL_APPLY':'SOURCE_CHANGED'),error.message)
+    }finally{saving=false}
   }
   async function lookup(){
     if(saving)return
@@ -339,13 +407,13 @@
     teardown();setup({collapsed})
   }
   try{chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&changes.edulogExtension)void sync(true)})}catch{/* The page keeps the native editor when extension storage is unavailable. */}
-  // 回填: the background forwards the report the teacher sent from the EduLog editor window. It is
-  // shown for review; nothing is written to the site form until the teacher applies it.
+  // 回填: the background forwards the report the teacher sent from the EduLog side panel. It is written
+  // into the site form at once; the form is never submitted.
   globalThis.edulogRuntime.listen((message,_sender,respond)=>{
     if(message?.type!=='edulog-fill-report')return
     if(!host?.isConnected||!form||message.formId!==form.formId||typeof message.reportId!=='string'){respond({ok:false,reason:'FORM_CLOSED'});return}
     expandAssistant?.()
-    void selectReport({id:message.reportId}).then(()=>respond({ok:true}),()=>respond({ok:false,reason:'REPORT_UNAVAILABLE'}))
+    void autoFill({id:message.reportId}).then(result=>respond({ok:true,...result}),error=>respond({ok:false,reason:error.reason||'REPORT_UNAVAILABLE'}))
     return true
   })
   observer=new MutationObserver(records=>{if(records.some(record=>{

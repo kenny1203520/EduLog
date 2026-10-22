@@ -115,22 +115,68 @@ test('在 EduLog 編輯 asks the background to open the side panel within the sa
   s.dom.window.close()
 })
 
-test('a report sent back from the EduLog editor opens the review step; nothing is applied yet', async () => {
+const FIELDS = () => [
+  { key: 'content', label: '學習表現', type: 'text', value: '', options: [] },
+  { key: 'contact_notes', label: '聯絡欄', type: 'text', value: '舊的聯絡內容', options: [] },
+  { key: 'class_notes', label: '內部紀錄', type: 'text', value: '', internal: true, options: [] },
+  { key: 'absence_reason', label: '不出席原因', type: 'text', value: '原站原因', options: [] },
+  { key: 'lesson_id', label: '學習課程', type: 'select', value: '', options: [{ value: '11', label: '另一份教材' }] },
+  { key: 'progress_end', label: '章節終點', type: 'select', value: 'p2', options: [{ value: 'p2', label: 'B' }, { value: 'p3', label: 'C' }] },
+]
+const DETAIL = { id: REPORT, version: 3, enrollment_id: target.enrollmentId, student_id: 's1', occurrence_date: '2026-10-17', content: '今天表現很好', contact_notes: '新的聯絡內容', class_notes: '只給老師看', lesson_id: 'l1', lesson_name: '測試教材', progress_letter: 'B-C' }
+
+test('回填 from the side panel overwrites the site form with the EduLog report; it is never submitted', async () => {
   const s = editor({ status: connected, collapsed: true })
   await settle(s.w)
+  s.sourceForm.fields = FIELDS()
   await withLookup(s, synced(s))
-  s.state.details[REPORT] = { id: REPORT, version: 3, enrollment_id: target.enrollmentId, student_id: 's1', occurrence_date: '2026-10-17', student_name: '學生甲', course_name: '測試課程' }
+  s.state.details[REPORT] = DETAIL
   const reply = await s.sendFill({ type: 'edulog-fill-report', formId: 'f1', reportId: REPORT })
   await settle(s.w)
-  assert.equal(JSON.stringify(reply), JSON.stringify({ ok: true }))
+  assert.equal(JSON.stringify(reply), JSON.stringify({ ok: true, applied: 4, skipped: 1 }))
+  // Replacing site content and the internal note go in without a tick; an empty EduLog value never
+  // clears the site, and an option without a verified mapping is left for the teacher.
+  const sent = s.sent.filter(message => message.operation === 'apply').flatMap(message => message.input.fields)
+  assert.equal(JSON.stringify(sent.map(f => [f.key, f.value, f.overwrite, f.includeInternal])), JSON.stringify([
+    ['content', '今天表現很好', false, false], ['contact_notes', '新的聯絡內容', true, false],
+    ['class_notes', '只給老師看', false, true], ['progress_end', 'p3', true, false],
+  ]))
+  assert.equal(s.sourceForm.fields.find(f => f.key === 'absence_reason').value, '原站原因')
   const root = assistant(s.doc).shadowRoot
-  assert.equal(assistant(s.doc).dataset.collapsed, 'false', 'a collapsed assistant opens for the review')
-  assert.equal(root.querySelector('.review').hidden, false)
-  assert.match(root.querySelector('.review h3').textContent, /回填 EduLog 報告 · 2026-10-17/)
-  assert.equal(root.querySelector('section').dataset.state, 'review')
-  assert.equal(s.sent.some(message => message.operation === 'apply'), false)
+  assert.equal(assistant(s.doc).dataset.collapsed, 'false', 'a collapsed assistant opens to show what was filled')
+  assert.equal(root.querySelector('section').dataset.state, 'applied')
+  const outcome = root.querySelector('.outcome').textContent
+  assert.match(outcome, /已用 EduLog 內容覆蓋原站表單/)
+  assert.match(outcome, /聯絡欄：舊的聯絡內容 → 新的聯絡內容/)
+  assert.match(outcome, /需要在原站選擇：學習課程/)
+  assert.ok(s.doc.querySelector('[data-edulog-filled=ok]'), 'filled site fields are marked')
+  assert.equal(s.sent.some(message => /submit/i.test(JSON.stringify(message))), false)
   // A request for another form (closed, or a different student) is refused.
   assert.equal(JSON.stringify(await s.sendFill({ type: 'edulog-fill-report', formId: 'other', reportId: REPORT })), JSON.stringify({ ok: false, reason: 'FORM_CLOSED' }))
+  s.dom.window.close()
+})
+
+test('a report for another date is not filled automatically; it opens the review instead', async () => {
+  const s = editor({ status: connected })
+  await settle(s.w)
+  s.sourceForm.fields = FIELDS()
+  await withLookup(s, synced(s))
+  s.state.details[REPORT] = { ...DETAIL, occurrence_date: '2026-10-10' }
+  const reply = await s.sendFill({ type: 'edulog-fill-report', formId: 'f1', reportId: REPORT })
+  await settle(s.w)
+  assert.equal(JSON.stringify(reply), JSON.stringify({ ok: true, applied: 0, skipped: 0, review: true }))
+  const root = assistant(s.doc).shadowRoot
+  assert.equal(root.querySelector('section').dataset.state, 'review')
+  assert.ok(root.querySelector('[data-mismatch]'))
+  assert.equal(s.sent.some(message => message.operation === 'apply'), false)
+  s.dom.window.close()
+})
+
+test('when the report is unavailable, 回填 replies with the reason', async () => {
+  const s = editor({ status: connected })
+  await settle(s.w)
+  await withLookup(s, synced(s))
+  assert.equal(JSON.stringify(await s.sendFill({ type: 'edulog-fill-report', formId: 'f1', reportId: REPORT })), JSON.stringify({ ok: false, reason: 'REPORT_UNAVAILABLE' }))
   s.dom.window.close()
 })
 
@@ -149,7 +195,7 @@ test('collapse state is remembered and restored on the next editor', async () =>
   s.dom.window.close()
 })
 
-test('the review lists only changed fields; replacing site content or an internal note needs its own tick', async () => {
+test('picked on the card, the review lists only changed fields; replacing site content or an internal note needs its own tick', async () => {
   const s = editor({ status: connected })
   await settle(s.w)
   s.sourceForm.fields = [
@@ -159,10 +205,9 @@ test('the review lists only changed fields; replacing site content or an interna
     { key: 'absence_reason', label: '不出席原因', type: 'text', value: '', options: [] },
     { key: 'progress_start', label: '章節起點', type: 'text', value: 'B', options: [] },
   ]
-  await withLookup(s, synced(s))
+  const root = await withLookup(s, synced(s, [{ id: REPORT, enrollment_id: target.enrollmentId, occurrence_date: '2026-10-17' }]))
   s.state.details[REPORT] = { id: REPORT, version: 3, enrollment_id: target.enrollmentId, student_id: 's1', occurrence_date: '2026-10-17', content: '今天表現很好', contact_notes: '新的聯絡內容', class_notes: '只給老師看', progress_letter: 'B-C' }
-  await s.sendFill({ type: 'edulog-fill-report', formId: 'f1', reportId: REPORT }); await settle(s.w)
-  const root = assistant(s.doc).shadowRoot
+  ;[...root.querySelectorAll('.editor-step button')].find(button => button.textContent === '直接回填這天的 EduLog 報告').click(); await settle(s.w)
   const rows = Object.fromEntries([...root.querySelectorAll('.field')].map(row => [row.dataset.fieldKey, row]))
   assert.deepEqual(Object.keys(rows), ['content', 'contact_notes', 'class_notes'], 'unchanged and empty fields are folded away')
   assert.match(root.querySelector('.same summary').textContent, /^2 個欄位/)

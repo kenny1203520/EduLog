@@ -2119,8 +2119,32 @@ globalThis.edulogUi?.registerPhrases({
   "請在側邊欄允許存取 EduLog 網站，才能使用你的 EduLog 登入。": [
    "Allow access to the EduLog site in the side panel to use your EduLog sign-in."
   ],
-  "EduLog 已在側邊欄開啟。編輯完成後按「回填到原站」；這裡只會列出有變動的欄位讓你確認。": [
-   "EduLog is open in the side panel. When you finish, press \"Fill source form\"; only the fields that change are listed here for you to confirm."
+  "EduLog 已在側邊欄開啟。編輯完成後按「回填到原站」，EduLog 的內容會直接填入下方表單，再由你按原站按鈕送出。": [
+   "EduLog is open in the side panel. When you finish, press \"Fill source form\": the EduLog content goes straight into the form below, and you submit it with the site's own button."
+  ],
+  "已用 EduLog 內容覆蓋原站表單，請檢查後按原站按鈕送出": [
+   "The site form now holds the EduLog content; check it, then submit it with the site's button"
+  ],
+  "{label}：{before} → {value}": [
+   "{label}: {before} → {value}"
+  ],
+  "需要在原站選擇：{fields}": [
+   "Choose on the site: {fields}"
+  ],
+  "原站尚未送出；不想保留時，關閉原站表單即可放棄這些變更。": [
+   "Nothing is submitted yet. To discard these changes, close the site form without saving."
+  ],
+  "上一次回填還在進行，請稍候再試。": [
+   "The previous fill is still running; try again in a moment."
+  ],
+  "正在把 EduLog 報告填入原站表單…": [
+   "Filling the EduLog report into the site form…"
+  ],
+  "已填入 {count} 個欄位；{skipped} 個欄位需要在原站選擇。": [
+   "Filled {count} fields; {skipped} need choosing on the site."
+  ],
+  "已填入 {count} 個欄位，請檢查原站表單後送出。": [
+   "Filled {count} fields; check the site form, then submit it."
   ],
   "EduLog 報告編輯": [
    "EduLog report editor"

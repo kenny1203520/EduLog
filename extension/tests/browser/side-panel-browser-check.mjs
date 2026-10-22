@@ -99,12 +99,14 @@ try {
       const probe = probes.shift()
       assert.ok(probe, `${name}: the framed editor reported back`)
       assert.deepEqual({ signedIn: probe.signedIn, save: probe.save, panel: probe.panel, fill: probe.fill.ok }, { signedIn: 'signed-in', save: 200, panel: `chrome-extension://${id}`, fill: true }, JSON.stringify(probe))
+      assert.ok(probe.fill.applied >= 1 && probe.fill.review === false, JSON.stringify(probe.fill))
       assert.equal(probe.cookieReadable, false, 'page scripts in the panel cannot read cookies; the token came from /api/auth/csrf')
-      await page.waitForFunction(() => document.querySelector('aside[data-edulog-owned]').shadowRoot.querySelector('section').dataset.state === 'review', undefined, { timeout: 10000 })
-      assert.match(await card.locator('.review h3').textContent(), /回填 EduLog 報告 · 2026-10-04/)
-      assert.match(await card.locator('.field[data-field-key=content] .new').textContent(), /EduLog 寫好的學習表現/)
-      assert.equal(await page.locator('#lesson_report_feedback').inputValue(), '尚未送出的樣本內容', 'nothing is written before the teacher applies')
-      await page.screenshot({ path: join(output, `${name}-review.png`) })
+      // 回填 replaced the site's unsent text with the EduLog report; the form itself is not submitted.
+      await page.waitForFunction(() => document.querySelector('aside[data-edulog-owned]').shadowRoot.querySelector('section').dataset.state === 'applied', undefined, { timeout: 10000 })
+      assert.equal(await page.locator('#lesson_report_feedback').inputValue(), 'EduLog 寫好的學習表現')
+      assert.match(await card.locator('.outcome').textContent(), /尚未送出的樣本內容 → EduLog 寫好的學習表現/)
+      assert.equal(new URL(page.url()).pathname.endsWith('/edit'), true, 'the site form was not submitted')
+      await page.screenshot({ path: join(output, `${name}-filled.png`) })
       // The panel page at side-panel width: without access to the EduLog origin it asks for it instead
       // of framing a signed-out app; disconnected, it shows no editor at all.
       const panelPage = await context.newPage(); await panelPage.setViewportSize({ width: 400, height: 760 })

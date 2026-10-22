@@ -203,11 +203,11 @@ test('open-editor opens the side panel within the click, then gives it the edito
 })
 test('回填 requests come only from the side panel page and reach only the source tab that opened it',async()=>{
   const report='00000000-0000-4000-8000-000000000009',channel='d'.repeat(32)
-  const b=broker(undefined,async()=>({status:'connected',settingsUrl:'https://web.example/edulog/dashboard/settings',capabilities:{}}),{},async m=>m.type==='edulog-fill-report'?{ok:true}:{data:null})
+  const b=broker(undefined,async()=>({status:'connected',settingsUrl:'https://web.example/edulog/dashboard/settings',capabilities:{}}),{},async m=>m.type==='edulog-fill-report'?{ok:true,applied:4,skipped:999,review:'yes'}:{data:null})
   editorPanel.channels={[channel]:{sourceTabId:1,sourcePath:'/courses/dt/11',formId:'f1',instance:b.binding.instance,userId:b.binding.userId,at:Date.now()}}
   const panel={id:'a'.repeat(32),url:`chrome-extension://${'a'.repeat(32)}/sidepanel/panel.html?tab=1`}
   const ok=await b.send({type:'source-fill-request',tabId:1,channel,reportId:report},panel)
-  assert.equal(JSON.stringify(ok),JSON.stringify({ok:true}))
+  assert.equal(JSON.stringify(ok),JSON.stringify({ok:true,applied:4,skipped:50,review:false}),'counts from the site page are clamped')
   const forwarded=b.calls.find(call=>call.type==='edulog-fill-report')
   assert.equal(JSON.stringify([forwarded.tab,forwarded.formId,forwarded.reportId]),JSON.stringify([1,'f1',report]))
   const before=b.calls.length

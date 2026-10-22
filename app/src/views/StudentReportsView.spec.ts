@@ -167,6 +167,12 @@ describe('StudentReportsView scheduled report filter', () => {
         expect(source).toContain('<EnrollmentHistoryPanel v-if="route.params.enrollmentId && !panel"')
     })
 
+    it('the 回填 bar says how many site fields were filled and which need choosing there', () => {
+        expect(source).toContain("{{ sourceFillStatus('hint_short') }}")
+        expect(source).toContain("t('report.source_fill.sent_skipped', { count: result.applied, skipped: result.skipped })")
+        expect(source).toContain("t('report.source_fill.sent_review')")
+    })
+
     it('guards the historical class_session lookup against a missing joined session', () => {
         // ReportQueryService.getReportsWithDetails did not select class_session.id,
         // so occData.class_session.id was always undefined, and would throw a
