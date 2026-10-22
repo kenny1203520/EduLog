@@ -56,6 +56,12 @@ const selectedKodingEnrollment = ref<any | null>(null);
 const showDeleteConfirm = ref(false);
 const enrollmentToDelete = ref<string | null>(null);
 
+function formatStartDateWarningDates(dates: string[]): string {
+    return [...new Set(dates)]
+        .map(date => DateUtils.displayDateWithWeekday(date, preferences.locale))
+        .join('、');
+}
+
 function startEditEnrollment(enrollment: any) {
     editingEnrollmentId.value = enrollment.id;
     editingOriginalStartDate.value = enrollment.startDate || enrollment.start_date || null;
@@ -447,7 +453,7 @@ async function refreshData() {
         <ConfirmModal :is-open="startDateWarningDates !== null"
             :title="$t('student.start_date_impact.title')"
             :message="startDateWarningDates ? $t('student.start_date_impact.message', {
-                dates: [...new Set(startDateWarningDates)].map(date => DateUtils.displayDateWithWeekday(date, preferences.locale)).join('、')
+                dates: formatStartDateWarningDates(startDateWarningDates)
             }) : ''"
             :confirm-text="$t('student.start_date_impact.confirm')"
             :is-loading="isModifying" @close="startDateWarningDates = null"
