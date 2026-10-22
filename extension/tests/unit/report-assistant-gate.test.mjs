@@ -4,8 +4,9 @@ import { readFileSync } from 'node:fs'
 import { JSDOM } from '../../../app/node_modules/jsdom/lib/api.js'
 
 // The report assistant leaves the native editor exactly as the site shows it until EduLog is
-// connected, offers a class sync (not an error) for an unsynced student, opens the EduLog editor
-// beside the form, and reviews a report sent back from it (回填) before anything is applied.
+// connected. Connected, it is one card above the site's form: it offers a class sync (not an error)
+// for an unsynced student, opens the EduLog editor beside the window, and lists only the fields a
+// report sent back (回填) would change before anything is applied.
 const read = name => readFileSync(new URL(name, import.meta.url), 'utf8')
 const settle = async (w, rounds = 8) => { for (let i = 0; i < rounds; i++) await new Promise(resolve => w.setTimeout(resolve, 0)) }
 
@@ -26,11 +27,13 @@ function editor({ status, lookup = null, collapsed = false }) {
     if (message.operation === 'lookup') return { data: lookup }
     if (message.operation === 'open-editor') return { data: state.open || { opened: true, bridge: true } }
     if (message.operation === 'detail') return { data: state.details[message.reportId] || null }
+    if (message.operation === 'apply') { for (const item of message.input.fields) sourceForm.fields.find(f => f.key === item.key).value = item.value; return { data: { applied: message.input.fields.length } } }
     return { data: null }
   } }
   const form = w.document.querySelector('form[action^="/dt_admissions/"]')
   const sourceForm = { formId: 'f1', fingerprint: 'fp', action: '/dt_admissions/9001/reports/7001', admissionId: '9001', reportId: '7001', title: '學生甲 課堂紀錄', date: '2026-10-17', dateInfo: {}, supplement: null, fields: [] }
-  w.edulogSourceIntegration = { getForm: doc => doc?.contains?.(form) ? form : null, readForm: async () => sourceForm }
+  w.edulogSourceIntegration = { getForm: doc => doc?.contains?.(form) ? form : null, readForm: async () => sourceForm, fieldNodes: () => [form.querySelector('textarea') || form] }
+  w.eval(read('../../shared/field-mappings.js'))
   w.eval(read('../../content/editor-prefill.js'))
   const change = async next => { state.status = next; for (const fn of listeners) fn({ edulogExtension: { newValue: {} } }, 'local'); await settle(w) }
   const sendFill = message => new Promise(resolve => { const keep = fill(message, {}, resolve); if (keep !== true) resolve(undefined) })
@@ -52,7 +55,6 @@ test('not connected: the native editor stays exactly as the site shows it', asyn
   const s = editor({ status: { status: 'not-connected' } })
   await settle(s.w)
   assert.equal(assistant(s.doc), null)
-  assert.equal(s.doc.querySelector('.edulog-editor-layout'), null)
   assert.equal(s.doc.querySelector('.modal').hasAttribute('data-edulog-prefill'), false)
   assert.equal(s.doc.querySelector('[data-edulog-owned]'), null, 'no connect button or any other EduLog control')
   assert.equal(s.sent.some(message => message.type === 'integration-inline-prefill'), false)
@@ -101,7 +103,9 @@ test('在 EduLog 編輯 asks the background to open the editor beside the form, 
   root.querySelector('[data-open-editor]').click(); await settle(s.w)
   const open = s.sent.find(message => message.operation === 'open-editor')
   assert.equal(JSON.stringify([open.formId, open.fingerprint, Object.keys(open.screen).sort()]), JSON.stringify(['f1', 'fp', ['height', 'left', 'top', 'width']]))
-  assert.match(root.querySelector('[role=status]').textContent, /已在右側視窗開啟 EduLog/)
+  assert.match(root.querySelector('[role=status]').textContent, /回填到原站/)
+  assert.equal(root.querySelector('section').dataset.state, 'waiting')
+  assert.equal(root.querySelector('[data-open-editor]').textContent, '回到 EduLog 視窗')
   // Without permission for the web app, opening still works but 回填 cannot come back; say so.
   s.state.open = { opened: true, bridge: false }
   root.querySelector('[data-open-editor]').click(); await settle(s.w)
@@ -121,7 +125,8 @@ test('a report sent back from the EduLog editor opens the review step; nothing i
   const root = assistant(s.doc).shadowRoot
   assert.equal(assistant(s.doc).dataset.collapsed, 'false', 'a collapsed assistant opens for the review')
   assert.equal(root.querySelector('.review').hidden, false)
-  assert.match(root.querySelector('.editor-step summary').textContent, /回填 EduLog 報告 · 2026-10-17/)
+  assert.match(root.querySelector('.review h3').textContent, /回填 EduLog 報告 · 2026-10-17/)
+  assert.equal(root.querySelector('section').dataset.state, 'review')
   assert.equal(s.sent.some(message => message.operation === 'apply'), false)
   // A request for another form (closed, or a different student) is refused.
   assert.equal(JSON.stringify(await s.sendFill({ type: 'edulog-fill-report', formId: 'other', reportId: REPORT })), JSON.stringify({ ok: false, reason: 'FORM_CLOSED' }))
@@ -137,7 +142,46 @@ test('collapse state is remembered and restored on the next editor', async () =>
   const next = editor({ status: connected, collapsed: true })
   await settle(next.w)
   assert.equal(assistant(next.doc).dataset.collapsed, 'true')
-  assert.equal(next.doc.querySelector('.edulog-editor-layout').hidden, true)
+  assert.equal(assistant(next.doc).shadowRoot.querySelector('.assistant-body').hidden, true)
+  assert.ok(assistant(next.doc).nextElementSibling.matches('form'), 'the card sits right above the untouched site form')
   next.dom.window.close()
+  s.dom.window.close()
+})
+
+test('the review lists only changed fields; replacing site content or an internal note needs its own tick', async () => {
+  const s = editor({ status: connected })
+  await settle(s.w)
+  s.sourceForm.fields = [
+    { key: 'content', label: '學習表現', type: 'text', value: '', options: [] },
+    { key: 'contact_notes', label: '聯絡欄', type: 'text', value: '舊的聯絡內容', options: [] },
+    { key: 'class_notes', label: '內部紀錄', type: 'text', value: '', internal: true, options: [] },
+    { key: 'absence_reason', label: '不出席原因', type: 'text', value: '', options: [] },
+    { key: 'progress_start', label: '章節起點', type: 'text', value: 'B', options: [] },
+  ]
+  await withLookup(s, synced(s))
+  s.state.details[REPORT] = { id: REPORT, version: 3, enrollment_id: target.enrollmentId, student_id: 's1', occurrence_date: '2026-10-17', content: '今天表現很好', contact_notes: '新的聯絡內容', class_notes: '只給老師看', progress_letter: 'B-C' }
+  await s.sendFill({ type: 'edulog-fill-report', formId: 'f1', reportId: REPORT }); await settle(s.w)
+  const root = assistant(s.doc).shadowRoot
+  const rows = Object.fromEntries([...root.querySelectorAll('.field')].map(row => [row.dataset.fieldKey, row]))
+  assert.deepEqual(Object.keys(rows), ['content', 'contact_notes', 'class_notes'], 'unchanged and empty fields are folded away')
+  assert.match(root.querySelector('.same summary').textContent, /^2 個欄位/)
+  assert.equal(rows.content.querySelector('[data-include]').checked, true, 'new content starts ticked')
+  assert.equal(rows.contact_notes.dataset.kind, 'overwrite')
+  assert.equal(rows.contact_notes.querySelector('[data-include]').checked, false, 'replacing site content starts unticked')
+  assert.match(rows.contact_notes.querySelector('.old').textContent, /舊的聯絡內容/)
+  assert.match(rows.contact_notes.querySelector('.new').textContent, /新的聯絡內容/)
+  assert.equal(rows.class_notes.querySelector('[data-include]').checked, false, 'internal notes start unticked')
+  const apply = root.querySelector('[data-apply]')
+  assert.equal(apply.textContent, '套用 1 個欄位')
+  rows.contact_notes.querySelector('[data-include]').click(); await settle(s.w)
+  assert.equal(apply.textContent, '套用 2 個欄位（覆寫 1）')
+  apply.click(); await settle(s.w)
+  const sent = s.sent.find(message => message.operation === 'apply').input.fields
+  assert.equal(JSON.stringify(sent.map(f => [f.key, f.overwrite, Boolean(f.includeInternal)])), JSON.stringify([['content', false, false], ['contact_notes', true, false]]))
+  assert.equal(root.querySelector('section').dataset.state, 'applied')
+  assert.match(root.querySelector('.outcome').textContent, /已填入原站表單/)
+  assert.ok(s.doc.querySelector('[data-edulog-filled=ok]'), 'the filled site field is marked')
+  await s.change({ status: 'revoked' })
+  assert.equal(s.doc.querySelector('[data-edulog-filled]'), null, 'marks go away with the assistant')
   s.dom.window.close()
 })

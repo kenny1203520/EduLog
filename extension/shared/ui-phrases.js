@@ -2064,5 +2064,65 @@ globalThis.edulogUi?.registerPhrases({
   ],
   "已配對 EduLog 時，課堂紀錄可在旁邊的 EduLog 視窗編輯，再回填到原站。": [
    "When EduLog is paired, lesson records can be edited in an EduLog window alongside and filled back into the site."
+  ],
+  "等待 EduLog 回填…": [
+   "Waiting for EduLog to fill back…"
+  ],
+  "更多選項": [
+   "More options"
+  ],
+  "原站日期資料：{value}": [
+   "Site date details: {value}"
+  ],
+  "已開啟 EduLog，但回填需要擴充功能可存取 EduLog 網站；請從擴充功能選單重新連線。": [
+   "EduLog is open, but filling back needs the extension to have access to the EduLog site; reconnect from the extension menu."
+  ],
+  "回到 EduLog 視窗": [
+   "Back to the EduLog window"
+  ],
+  "編輯完成後，在 EduLog 按「回填到原站」；這裡只會列出有變動的欄位讓你確認。": [
+   "When you finish, press \"Fill source form\" in EduLog; only the fields that change are listed here for you to confirm."
+  ],
+  "回填 EduLog 報告 · {date}": [
+   "Fill from EduLog report · {date}"
+  ],
+  "覆寫原站內容": [
+   "Replaces site content"
+  ],
+  "原站空白": [
+   "Empty on site"
+  ],
+  "（空白）": [
+   "(empty)"
+  ],
+  "編輯要填入的內容": [
+   "Edit the text to fill in"
+  ],
+  "請選擇原站選項": [
+   "Choose a site option"
+  ],
+  "EduLog 報告與原站表單內容相同，沒有需要回填的欄位。": [
+   "The EduLog report matches the site form; nothing needs filling."
+  ],
+  "{count} 個欄位相同或 EduLog 未填": [
+   "{count} fields unchanged or empty in EduLog"
+  ],
+  "只會填入原站表單，不會自動送出；送出仍由老師操作。": [
+   "This only fills the site form and never submits it; you submit it yourself."
+  ],
+  "可預覽與編輯預填草稿；套用前請先確認完整上課日期。": [
+   "You can preview and edit the draft; confirm the full lesson date before applying."
+  ],
+  "請確認要填入的欄位；原站表單不會自動送出。": [
+   "Confirm the fields to fill in; the site form is never submitted for you."
+  ],
+  "沒有需要回填的欄位。": [
+   "Nothing needs filling."
+  ],
+  "已填入原站表單，請檢查後自行送出": [
+   "Filled into the site form; check it and submit it yourself"
+  ],
+  "前往第一個已填欄位": [
+   "Go to the first filled field"
   ]
 })

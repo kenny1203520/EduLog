@@ -1,5 +1,6 @@
-// EduLog report assistant inside the verified native source editor: opens the EduLog editor in a
-// window beside this one, then reviews and applies the report the teacher sends back (回填).
+// EduLog report assistant inside the verified native source editor: a compact card above the site's
+// form. It opens the EduLog editor in a window beside this one, then lists only the fields that the
+// report sent back (回填) would change, applies the ticked ones and marks them on the site form.
 // The shadow root keeps its controls and styles separate from the provider DOM.
 (() => {
   if (!globalThis.edulogRuntime || !globalThis.edulogSourceIntegration || !document?.documentElement) return
@@ -7,16 +8,14 @@
   const tx = (text, params = {}) => globalThis.edulogUi?.tx(text, params) ?? String(text).replace(/\{(\w+)\}/g, (_, name) => String(params[name] ?? ''))
   const adapter = globalThis.edulogSourceIntegration
   let host = null, root = null, form = null, target = null, report = null, generation = 0, observer
-  let nativeForm, layout, anchor, modal, settingsUrl, capabilities = {}, saving = false, suspended = false, containers = []
+  let nativeForm, modal, settingsUrl, capabilities = {}, saving = false, suspended = false
   let fieldRules=[]
   // The assistant mounts only for a verified EduLog connection; otherwise the native editor stays untouched.
   const COLLAPSE_KEY='edulogAssistantCollapsed'
   let blockedForm=null, pendingForm=null, accessSerial=0, expandAssistant=null
-  let stopLocale; let resizeHandler, paneScroll={native:0,assistant:0}
+  let stopLocale
   const drafts = new Map()
-  function formContext(){if(!modal)return;const header=modal.querySelector('.modal-header');if(!header)return;let context=header.querySelector('.edulog-prefill-context');if(!context){context=make('p',undefined,'edulog-prefill-context');context.dataset.edulogOwned='';context.setAttribute('aria-live','polite');header.append(context)}context.textContent=tx('原站目標：{student} · {date} · {course}',{student:target?.studentName||form?.title||tx('學生待確認'),date:form?.date||tx('日期待確認'),course:target?.courseName||tx('課程待確認')})+(report?` ｜ EduLog ${report.occurrence_date}${report.occurrence_date!==form?.date||report.enrollment_id!==target?.enrollmentId?tx('（範本）'):''}`:'')}
-  function preserveView(){const focused=root?.activeElement;return{action:form?.action,scroll:host?.scrollTop||0,nativeScroll:nativeForm?.parentElement?.scrollTop||0,windowY:window.scrollY,control:focused?.dataset.key?`[data-key="${CSS.escape(focused.dataset.key)}"]`:focused?.name?`[name="${CSS.escape(focused.name)}"]`:null,start:focused?.selectionStart,end:focused?.selectionEnd,openGroups:[...root?.querySelectorAll('.field-group[open]')||[]].map(d=>d.dataset.groupKey),questions:root?.querySelector('.questions')?.open,dateEdit:root?.querySelector('.date-edit')?.open,identityOpen:root?.querySelector('.identity-question')?.open,dateDraft:root?.querySelector('[name=confirmed-source-date]')?.value,identitySearch:root?.querySelector('[name=target-student-search]')?.value}}
-  function restoreView(state){if(!host||state.action!==form?.action)return;if(state.questions&&state.control)root.querySelector('.questions').open=true;const dateEdit=root.querySelector('.date-edit');if(dateEdit&&state.dateEdit)dateEdit.open=true;const identity=root.querySelector('.identity-question');if(identity&&state.identityOpen)identity.open=true;for(const [name,value] of [['confirmed-source-date',state.dateDraft],['target-student-search',state.identitySearch]]){const input=root.querySelector(`[name=${name}]`);if(input&&value!==undefined)input.value=value}for(const group of root.querySelectorAll('.field-group'))group.open=(state.openGroups||[]).includes(group.dataset.groupKey);const control=state.control&&root.querySelector(state.control);for(let d=control?.closest('details');d;d=d.parentElement?.closest('details'))d.open=true;control?.focus({preventScroll:true});if(control&&state.start!=null&&(control.tagName==='TEXTAREA'||['text','search'].includes(control.type))){try{control.setSelectionRange(state.start,state.end)}catch{/* Date fields do not expose text selection. */}}host.scrollTop=state.scroll;if(nativeForm?.parentElement)nativeForm.parentElement.scrollTop=state.nativeScroll;window.scrollTo({top:state.windowY,behavior:'instant'})}
+  const SECTIONS=new Map([['attendance_status','出席'],['absence_reason','出席'],['lesson_id','課程與進度'],['is_completed','課程與進度'],['progress_start','課程與進度'],['progress_end','課程與進度'],['class_participation','課堂評量'],['classroom_behavior','課堂評量'],['content','評語與聯絡'],['contact_notes','評語與聯絡'],['learning_status','學習狀態'],['class_notes','內部紀錄']])
   const make = (tag, text, className) => { const item=document.createElement(tag); if(text!==undefined)item.textContent=text; if(className)item.className=className; return item }
   const safeText = value => {
     if (typeof value !== 'string') return ''
@@ -43,107 +42,122 @@
   function status(message, error = false) {
     const node=root?.querySelector('[role=status]')
     if(node){node.textContent=message;node.dataset.error=String(error)}
-    const compact=layout?.querySelector('.edulog-editor-compact-status');if(compact){compact.textContent=message;compact.dataset.error=String(error)}
-    const local=root?.querySelector('.apply-feedback');if(local){local.textContent=message;local.dataset.error=String(error)}
   }
+  // One visible stage at a time: loading → date | unsynced | ready → waiting → review → applied.
+  function stage(name){const section=root?.querySelector('section');if(section)section.dataset.state=name}
   function setup({ collapsed = false } = {}) {
     if (host?.isConnected) return
     nativeForm=adapter.getForm(document)
     if (!nativeForm) return
     form=null; target=null; report=null
-    host=document.createElement('aside'); host.className='edulog-editor-assistant';host.dataset.edulogOwned=''; host.setAttribute('aria-label',tx('EduLog 報告預覽與預填'));
+    host=document.createElement('aside'); host.className='edulog-editor-assistant';host.dataset.edulogOwned=''; host.setAttribute('aria-label',tx('EduLog 報告助手'))
     root=host.attachShadow({mode:'open'})
     root.innerHTML=`<style>
-      :host{color:#172033;font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;display:block;min-width:0;overflow-wrap:anywhere}
-      [hidden]{display:none!important}
-      *{box-sizing:border-box}section{border:1px solid #cbd5e1;border-left:4px solid #2449bb;border-radius:10px;background:#f8fafc;padding:14px;min-width:0}
-      header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}h2{font-size:16px;margin:0}p{margin:7px 0;color:#475569;overflow-wrap:anywhere}
-      button,input,select{font:inherit}button{min-height:44px;padding:8px 12px;border:1px solid #b9c6db;border-radius:7px;background:white;color:#172033;cursor:pointer;touch-action:manipulation}
-      button.primary{background:#2449bb;border-color:#2449bb;color:white}button:hover{filter:brightness(.96)}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible,a:focus-visible{outline:3px solid #2563eb;outline-offset:2px}
-      input,select,textarea{font:inherit;width:100%;min-width:0;min-height:44px;padding:8px 10px;border:1px solid #aab8cc;border-radius:7px;background:white;color:#172033}textarea{min-height:110px;resize:vertical;line-height:1.6}
-      label{display:block;font-weight:600;margin:10px 0 4px}small{display:block;color:#475569;font-size:14px;overflow-wrap:anywhere;white-space:pre-wrap}
-      [role=status]{padding:9px 10px;background:#eef4ff;border-radius:6px;min-height:38px}[role=status][data-error=true]{background:#fff1f2;color:#9f1239}
-      .list{display:grid;gap:8px;margin-top:8px}.choice{text-align:left;display:grid;gap:2px;width:100%}.choice[aria-pressed=true]{border-color:#2449bb;background:#eef4ff}
-      .report{display:grid;gap:4px;padding:10px;background:white;border:1px solid #dbe3ee;border-radius:7px;margin:10px 0;overflow-wrap:anywhere}
-      .field{padding:10px 0;border-top:1px solid #dbe3ee}.check{display:flex;align-items:center;gap:9px;min-height:44px;margin:0}.check input{width:18px;height:18px;flex:none}.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.actions button{flex:1 1 160px}.apply-feedback{font-size:14px;padding:10px;background:#eff6ff;border-radius:6px}.apply-feedback[data-error=true]{color:#9f1239;background:#fff1f2}
-      details{margin-top:10px}summary{min-height:44px;display:flex;align-items:center;cursor:pointer;font-weight:600}.muted{font-size:14px}.question{padding:12px;background:#fffbeb;border-left:3px solid #b45309}.comparison{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.comparison small{padding:8px;background:white}.field-group{border:0;padding:0;margin:0}.field-group summary{font-weight:700;padding:12px 0}.field-group{border-top:1px solid #dbe3ee}.field-mapping-memory{padding:8px;background:white;border-radius:6px}.field-mapping-status{font-size:14px;color:#166534}.field-mapping-actions{display:flex;flex-wrap:wrap;gap:8px}.field-mapping-actions button{font-size:14px}a{color:#1e40af;min-height:44px;display:inline-block;padding:8px 0;overflow-wrap:anywhere}.help{font-size:14px;color:#92400e}
-      @media(max-width:480px){.comparison{grid-template-columns:1fr}}
-      @media(max-width:560px){section{padding:11px}header{align-items:flex-start}.actions button{flex:1 1 100%}}
-      @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
-    </style><section><header><div><h2>${tx('EduLog 報告預覽')}</h2><p class="target">${tx('正在查詢已記住的學生與日期…')}</p></div><button class="refresh" type="button">${tx('重新核對')}</button></header><p role="status" aria-live="polite" aria-atomic="true">${tx('正在驗證擴充套件連線…')}</p><div class="result"></div><div class="actions"><button class="sync-class primary" type="button" hidden>${tx('同步本班')}</button><button class="connect" type="button" hidden>${tx('開啟 EduLog 連線設定')}</button></div></section>`
-    if(globalThis.edulogUi){const style=document.createElement('style');style.textContent=globalThis.edulogUi.styles;root.append(style);globalThis.edulogUi.text(root.querySelector('.refresh'),'assistant.refresh');globalThis.edulogUi.text(root.querySelector('.sync-class'),'assistant.syncClass')}
+      :host{color:var(--edulog-text-strong,#172033);font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;display:block;min-width:0;overflow-wrap:anywhere}
+      [hidden]{display:none!important}*{box-sizing:border-box}
+      section{border:1px solid var(--edulog-border,#cbd5e1);border-radius:var(--edulog-radius,10px);background:var(--edulog-surface,#fff);box-shadow:0 1px 2px rgb(15 23 42/.06);min-width:0;overflow:hidden}
+      header{display:flex;align-items:center;gap:10px;padding:8px 8px 8px 14px;background:var(--edulog-surface-subtle,#f8fafc);border-bottom:1px solid var(--edulog-border-soft,#e2e8f0)}
+      :host([data-collapsed=true]) header{border-bottom:0}
+      .mark{flex:none;width:28px;height:28px;border-radius:8px;display:grid;place-items:center;background:var(--edulog-primary,#2449bb);color:#fff;font-weight:700;font-size:14px}
+      .heading{flex:1;min-width:0}h2{font-size:15px;line-height:1.3;margin:0}.target{margin:0;font-size:13px;color:var(--edulog-text-muted,#475569);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      button,input,select,textarea{font:inherit}button{min-height:44px;padding:8px 14px;border:1px solid var(--edulog-border-strong,#b9c6db);border-radius:var(--edulog-radius-sm,7px);background:var(--edulog-surface,#fff);color:inherit;cursor:pointer;touch-action:manipulation}
+      button:hover:not(:disabled){background:var(--edulog-surface-muted,#f1f5f9)}button:disabled{opacity:.55;cursor:not-allowed}
+      button.primary{background:var(--edulog-primary,#2449bb);border-color:var(--edulog-primary,#2449bb);color:var(--edulog-text-on-primary,#fff);font-weight:600}button.primary:hover:not(:disabled){filter:brightness(1.08);background:var(--edulog-primary,#2449bb)}
+      button.ghost{border-color:transparent;background:transparent;color:var(--edulog-text-secondary,#334155)}header button{min-width:44px;padding:8px 10px;font-size:14px}
+      button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible,a:focus-visible{outline:3px solid var(--edulog-focus-ring,#2563eb);outline-offset:2px}
+      input,select,textarea{width:100%;min-width:0;min-height:44px;padding:8px 10px;border:1px solid var(--edulog-border-input,#aab8cc);border-radius:var(--edulog-radius-sm,7px);background:var(--edulog-surface,#fff);color:inherit}textarea{min-height:120px;resize:vertical;line-height:1.6}
+      .assistant-body{padding:12px 14px 14px;display:grid;gap:10px}p{margin:0}.muted{font-size:14px;color:var(--edulog-text-muted,#475569)}
+      [role=status]{font-size:14px;padding:8px 10px;border-radius:var(--edulog-radius-sm,7px);background:var(--edulog-status-info-soft,#eef4ff);color:var(--edulog-status-info-text,#1e3a8a)}[role=status]:empty{display:none}[role=status][data-error=true]{background:var(--edulog-status-danger-soft,#fff1f2);color:var(--edulog-status-danger-text,#9f1239)}
+      .actions{display:flex;flex-wrap:wrap;gap:8px}.actions button{flex:1 1 180px}
+      .chip{display:inline-flex;align-items:center;gap:6px;font-size:13px;padding:2px 10px;border-radius:999px;background:var(--edulog-status-neutral-soft,#f1f5f9);color:var(--edulog-status-neutral-text,#334155)}.chip[data-tone=ok]{background:var(--edulog-status-ok-soft,#ecfdf3);color:var(--edulog-status-ok-text,#166534)}
+      .waiting{display:flex;align-items:center;gap:10px;font-size:14px;padding:10px 12px;border-radius:var(--edulog-radius-sm,7px);background:var(--edulog-primary-soft,#eef2ff)}
+      .pulse{flex:none;width:10px;height:10px;border-radius:50%;background:var(--edulog-primary-bright,#3b5bdb);animation:pulse 1.6s ease-in-out infinite}@keyframes pulse{50%{opacity:.35;transform:scale(.8)}}
+      section:not([data-state=waiting]) .waiting{display:none}
+      section:is([data-state=date],[data-state=review],[data-state=applied]) .editor-step{display:none!important}
+      .question{display:grid;gap:8px;padding:12px;border-radius:var(--edulog-radius-sm,7px);background:var(--edulog-status-warn-soft,#fffbeb);border-left:3px solid var(--edulog-status-warn,#b45309)}
+      label{display:block;font-weight:600}.check{display:flex;align-items:center;gap:10px;min-height:44px;font-weight:400;cursor:pointer}.check input{width:20px;height:20px;min-height:0;flex:none;margin:0;accent-color:var(--edulog-primary,#2449bb)}
+      .review-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 12px}.review-head h3{margin:0;font-size:15px}
+      .changes{display:grid;border:1px solid var(--edulog-border-soft,#e2e8f0);border-radius:var(--edulog-radius-sm,7px)}
+      .field{display:grid;gap:6px;padding:8px 12px 10px;border-top:1px solid var(--edulog-border-soft,#e2e8f0)}.field:first-child{border-top:0}
+      .field[data-kind=overwrite]{background:var(--edulog-status-warn-soft,#fffbeb)}.field .name{font-weight:600}
+      .tag{font-size:12px;font-weight:600;padding:1px 8px;border-radius:999px;background:var(--edulog-status-warn,#b45309);color:#fff}.tag[data-tone=info]{background:var(--edulog-status-neutral,#64748b)}
+      .diff{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1.4fr);align-items:start;gap:8px;font-size:14px;padding-left:30px}
+      .old{color:var(--edulog-text-muted,#64748b);text-decoration:line-through;text-decoration-color:rgb(100 116 139/.6)}.old[data-empty=true]{text-decoration:none;font-style:italic}.arrow{color:var(--edulog-text-subtle,#94a3b8)}
+      .new{white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}.field-body{padding-left:30px;display:grid;gap:6px}
+      details{min-width:0}summary{min-height:44px;display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px;color:var(--edulog-text-secondary,#334155)}
+      .same{font-size:14px}.same ul{margin:0;padding-left:20px;color:var(--edulog-text-muted,#475569)}.help{font-size:13px;color:var(--edulog-status-warn-text,#92400e)}
+      .outcome{display:grid;gap:4px;font-size:14px;padding:10px 12px;border-radius:var(--edulog-radius-sm,7px);background:var(--edulog-status-ok-soft,#ecfdf3)}.outcome [data-ok=false]{color:var(--edulog-status-warn-text,#92400e)}
+      .more{border-top:1px solid var(--edulog-border-soft,#e2e8f0);padding-top:2px}.more-body{display:grid;gap:10px;padding:4px 0}.list{display:grid;gap:6px}.list button{text-align:left}
+      .field-mapping-memory{font-size:14px}.field-mapping-actions{display:flex;flex-wrap:wrap;gap:8px}.field-mapping-status{font-size:13px;color:var(--edulog-status-ok-text,#166534)}
+      a{color:var(--edulog-primary,#1e40af);min-height:44px;display:inline-flex;align-items:center}
+      @media(max-width:560px){.diff{grid-template-columns:1fr;padding-left:0}.diff .arrow{display:none}.field-body{padding-left:0}.actions button{flex:1 1 100%}}
+      @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+    </style><section data-state="loading"><header><span class="mark" aria-hidden="true">E</span><div class="heading"><h2>${tx('EduLog 報告助手')}</h2><p class="target">${tx('正在查詢已記住的學生與日期…')}</p></div><button class="refresh ghost" type="button">${tx('重新核對')}</button><button class="collapse ghost" type="button">${tx('收合助手')}</button></header>
+      <div class="assistant-body"><p role="status" aria-live="polite" aria-atomic="true">${tx('正在驗證擴充套件連線…')}</p><div class="date-step" hidden></div><div class="editor-step" hidden></div><div class="waiting" aria-hidden="true"><span class="pulse"></span><span>${tx('等待 EduLog 回填…')}</span></div><div class="review" hidden></div><div class="actions sync-actions"><button class="sync-class primary" type="button" hidden>${tx('同步本班')}</button></div><details class="more"><summary>${tx('更多選項')}</summary><div class="more-body"></div></details></div></section>`
+    if(globalThis.edulogUi){const style=document.createElement('style');style.textContent=globalThis.edulogUi.styles;root.prepend(style);globalThis.edulogUi.text(root.querySelector('.sync-class'),'assistant.syncClass');globalThis.edulogUi.text(root.querySelector('.refresh'),'assistant.refresh');globalThis.edulogUi.text(root.querySelector('h2'),'assistant.title')}
     stopLocale=globalThis.edulogUiLegacy?.watch(root)
-    const section=root.querySelector('section'),header=root.querySelector('header')
-    header.querySelector('h2').textContent=tx('EduLog 報告助手');globalThis.edulogUi?.text(header.querySelector('h2'),'assistant.title')
-    const collapse=make('button',tx('收合助手'));collapse.type='button';globalThis.edulogUi?.text(collapse,'assistant.collapse');header.append(collapse)
-    const body=make('div');body.className='assistant-body';while(header.nextSibling)body.append(header.nextSibling);section.append(body)
-    const questions=make('details');questions.className='questions';questions.append(make('summary',tx('1 · 補足目標資訊')),make('div',undefined,'question-body'));body.querySelector('.result').before(questions)
-    const editorStep=make('details');editorStep.className='editor-step';editorStep.open=true;editorStep.append(make('summary',tx('2 · 在 EduLog 編輯')));body.querySelector('.result').before(editorStep);editorStep.append(body.querySelector('.result'))
-    const review=make('details');review.className='review';review.hidden=true;review.append(make('summary',tx('3 · 核對與回填欄位')),make('div',undefined,'fields-result'));editorStep.after(review)
-    anchor=document.createComment('EduLog native form position');nativeForm.before(anchor);layout=make('div',undefined,'edulog-editor-layout');layout.dataset.view='native';layout.dataset.collapsed='false'
-    const modalBody=nativeForm.closest('.modal-body');containers=[]
-    if(modalBody)for(let parent=anchor.parentElement;parent&&parent!==modalBody;parent=parent.parentElement){containers.push({node:parent,value:parent.getAttribute('data-edulog-prefill-container')});parent.setAttribute('data-edulog-prefill-container','')}
-    const tabs=make('div',undefined,'edulog-editor-tabs');tabs.setAttribute('aria-label',tx('報告編輯區'))
-    for(const [view,title] of [['assistant',tx('EduLog 預填')],['native',tx('原站表單')]]){const b=make('button',title);b.type='button';b.dataset.view=view;b.addEventListener('click',()=>setView(view));tabs.append(b)}
-    const compactStatus=make('small',tx('助手正在核對報告…'),'edulog-editor-compact-status');compactStatus.setAttribute('aria-live','polite');tabs.append(compactStatus)
-    const nativePane=make('div',undefined,'edulog-editor-native');nativePane.append(nativeForm);layout.append(tabs,nativePane,host);anchor.after(layout);modal=nativeForm.closest('.modal');modal?.setAttribute('data-edulog-prefill','');setView('native')
-    let paneWidth=innerWidth,paneHeight=innerHeight;paneScroll={native:0,assistant:0};nativePane.addEventListener('scroll',()=>{if(nativePane.offsetHeight&&innerWidth===paneWidth&&innerHeight===paneHeight)paneScroll.native=nativePane.scrollTop});host.addEventListener('scroll',()=>{if(host.offsetHeight&&innerWidth===paneWidth&&innerHeight===paneHeight)paneScroll.assistant=host.scrollTop})
-    resizeHandler=()=>{if(!layout||layout.hidden)return;const position={...paneScroll};requestAnimationFrame(()=>{if(!host?.isConnected)return;if(host.offsetHeight)host.scrollTop=position.assistant;if(nativePane.offsetHeight)nativePane.scrollTop=position.native;paneScroll=position;paneWidth=innerWidth;paneHeight=innerHeight})};window.addEventListener('resize',resizeHandler)
-    const applyCollapsed=(closed,persist=true)=>{const state=preserveView();layout.dataset.collapsed=String(closed);host.dataset.collapsed=String(closed);body.hidden=closed;layout.hidden=closed;modal?.toggleAttribute('data-edulog-prefill',!closed);for(const c of containers){if(closed){if(c.value===null)c.node.removeAttribute('data-edulog-prefill-container');else c.node.setAttribute('data-edulog-prefill-container',c.value)}else c.node.setAttribute('data-edulog-prefill-container','')}if(closed){anchor.after(host,nativeForm)}else{layout.querySelector('.edulog-editor-native').append(nativeForm);layout.append(host);anchor.after(layout)}collapse.textContent=closed?tx('展開 EduLog 助手'):tx('收合助手');globalThis.edulogUi?.text(collapse,closed?'assistant.expand':'assistant.collapse');restoreView(state);if(persist)saveCollapsed(closed)}
-    collapse.addEventListener('click',()=>applyCollapsed(layout.dataset.collapsed!=='true'))
-    expandAssistant=()=>{if(layout?.dataset.collapsed==='true')applyCollapsed(false)}
+    const body=root.querySelector('.assistant-body'),collapse=root.querySelector('.collapse')
+    // The card sits right above the site's form; the form itself is never moved or resized.
+    nativeForm.before(host);modal=nativeForm.closest('.modal');modal?.setAttribute('data-edulog-prefill','')
+    const applyCollapsed=(closed,persist=true)=>{host.dataset.collapsed=String(closed);body.hidden=closed;collapse.textContent=closed?tx('展開 EduLog 助手'):tx('收合助手');collapse.setAttribute('aria-expanded',String(!closed));globalThis.edulogUi?.text(collapse,closed?'assistant.expand':'assistant.collapse');if(persist)saveCollapsed(closed)}
+    collapse.addEventListener('click',()=>applyCollapsed(host.dataset.collapsed!=='true'))
+    expandAssistant=()=>{if(host?.dataset.collapsed==='true')applyCollapsed(false)}
     root.querySelector('.refresh').addEventListener('click',()=>void lookup())
     root.querySelector('.sync-class').addEventListener('click',async event=>{const button=event.currentTarget;button.disabled=true;try{const result=await globalThis.edulogRuntime.send({type:'open-integration-workspace',flow:'import'});if(result?.opened===false)throw new Error(result?.error?.message||tx('無法開啟整合工作台。'))}catch(error){status(error.message||tx('無法開啟整合工作台。'),true)}finally{if(button.isConnected)button.disabled=false}})
-    root.querySelector('.connect').addEventListener('click',async event=>{const button=event.currentTarget;button.disabled=true;try{await globalThis.edulogRuntime.send({type:'open-integration-workspace',flow:'prefill'})}catch(error){status(error.message||tx('無法開啟整合工作台。'),true)}finally{if(button.isConnected)button.disabled=false}})
-    if(collapsed)applyCollapsed(true,false)
+    applyCollapsed(collapsed,false)
     void lookup()
   }
-  function reportLabel(item){return `${item.student_name || tx('學生')} · ${item.occurrence_date || tx('日期待確認')} · ${item.course_name || tx('課程')} · ${item.completeness?.isMissing?tx('報告未齊備'):tx('報告已齊備')}`}
-  function setView(view){if(!layout)return;const pane=layout.querySelector('.edulog-editor-native');if(host?.offsetHeight)paneScroll.assistant=host.scrollTop;if(pane?.offsetHeight)paneScroll.native=pane.scrollTop;layout.dataset.view=view;layout.querySelectorAll('button[data-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===view)));requestAnimationFrame(()=>{if(!host?.isConnected)return;if(host.offsetHeight)host.scrollTop=paneScroll.assistant;if(pane?.offsetHeight)pane.scrollTop=paneScroll.native})}
   function action(label,fn,cls){const b=make('button',label,cls);b.type='button';b.addEventListener('click',fn);return b}
   function verifiedLink(parent,label,url){try{const u=new URL(url);if(!['http:','https:'].includes(u.protocol)||u.username||u.password)return;const a=make('a',`${label} ↗`);a.href=u.href;a.target='_blank';a.rel='noopener noreferrer';parent.append(a)}catch{/* Missing URLs remain unavailable. */}}
   function frontend(path){try{const u=new URL(settingsUrl),suffix='/dashboard/settings';if(!u.pathname.endsWith(suffix)||!['http:','https:'].includes(u.protocol))return null;u.pathname=u.pathname.slice(0,-suffix.length)+path;u.search='';u.hash='';return u.href}catch{return null}}
-  function questionUI(){
-    const box=root.querySelector('.question-body'),stage=root.querySelector('.questions');box.replaceChildren();stage.open=!form.date
-    stage.querySelector('summary').textContent=form.date&&target?tx('1 · 目標已核對 · {date}',{date:form.date}):tx('1 · 補足目標資訊')
-    const summary=make('div',undefined,'report');summary.append(make('strong',tx('原站報名 #{id} · {date}',{id:form.admissionId,date:form.date||tx('日期待確認')})),make('small',target?`${target.studentName||tx('學生')} · ${target.courseName||tx('課程')} · ${target.className||tx('班級')}`:tx('尚無有效 EduLog 報名對應，可先查看報告範本。')))
-    if(form.dateInfo?.raw?.length){const raw=make('details');raw.append(make('summary',tx('查看原站日期資料')),make('p',form.dateInfo.raw.join(' ／ ')));summary.append(raw)}
-    if(form.supplement)summary.append(make('small',tx('補充資訊：使用者確認（本次報告使用，不建立永久身份對應）')))
-    verifiedLink(summary,tx('查看原站報告'),form.sourceReportUrl);box.append(summary)
+  function targetLine(){return [target?.studentName||form?.title||tx('學生待確認'),target?.className,form?.date||tx('日期待確認')].filter(Boolean).join(' · ')}
+  // The date question: shown on its own while the date is missing, otherwise kept under 更多選項.
+  function dateQuestion(){
     const q=make('div',undefined,'question');q.append(make('strong',form.date?tx('修改上課日期'):tx('需要您確認：完整上課日期')),make('p',form.dateInfo?.reason||tx('日期影響精確配對與套用前核對；不會修改原站。'),'muted'))
     const input=make('input');input.type='date';input.name='confirmed-source-date';input.autocomplete='off';input.value=form.date||'';const label=make('label',tx('這份原站報告的完整上課日期'));label.append(input);q.append(label)
     let conflict
     if(form.dateInfo?.conflict){conflict=make('input');conflict.type='checkbox';const l=make('label',undefined,'check');l.append(conflict,make('span',tx('我已核對矛盾的來源日期，確認使用此日期')));q.append(l)}
-    const b=action(tx('確認上課日期'),()=>{if(!input.value){status(tx('請選擇完整上課日期。'),true);input.focus();return}void supplement({date:input.value,conflictAcknowledged:conflict?.checked===true},b)},'primary');q.append(b,action(tx('稍後處理'),()=>{stage.open=false;status(tx('可繼續查看候選，套用前仍需確認完整日期。'))}));if(form.date){const edit=make('details',undefined,'date-edit');edit.append(make('summary',tx('修改已確認的上課日期')),q);box.append(edit)}else box.append(q)
-    const identities=make('details',undefined,'identity-question');identities.open=false;identities.append(make('summary',target?tx('修改當次學生／報名'):tx('需要您確認：當次學生／報名')))
+    if(form.dateInfo?.raw?.length)q.append(make('p',tx('原站日期資料：{value}',{value:form.dateInfo.raw.join(' ／ ')}),'muted'))
+    const b=action(tx('確認上課日期'),()=>{if(!input.value){status(tx('請選擇完整上課日期。'),true);input.focus();return}void supplement({date:input.value,conflictAcknowledged:conflict?.checked===true},b)},'primary');q.append(b)
+    return q
+  }
+  // 更多選項: change the date or the student for this report only, open the workbench, source links.
+  function moreUI(){
+    const box=root.querySelector('.more-body');box.replaceChildren()
+    if(form.date)box.append(dateQuestion())
+    const identities=make('details',undefined,'identity-question');identities.append(make('summary',target?tx('修改當次學生／報名'):tx('需要您確認：當次學生／報名')))
     const student=make('input');student.type='search';student.name='target-student-search';student.autocomplete='off';student.maxLength=80;const lab=make('label',tx('搜尋既有 EduLog 學生'));lab.append(student);identities.append(lab)
     const feedback=make('p',tx('姓名不自動合併；選擇只用於本次報告。'),'muted');feedback.setAttribute('aria-live','polite');const results=make('div',undefined,'list');let serial=0,timer
     const search=async cursor=>{const id=++serial,scope=generation;feedback.textContent=tx('正在查詢學生…');try{const data=await request('identity-search',{query:{resource:'students',search:student.value.trim(),cursor}});if(id!==serial||scope!==generation||!identities.isConnected)return;if(!cursor)results.replaceChildren();for(const item of data.items||[])results.append(action(`${item.name} · #${item.id.slice(0,8)}`,()=>void enrollments(item)));feedback.textContent=tx('本頁找到 {count} 位學生。',{count:data.items?.length||0});if(data.next_cursor)results.append(action(tx('載入更多學生'),()=>void search(data.next_cursor)))}catch(e){if(id===serial)feedback.textContent=e.message}}
     const enrollments=async (s,cursor)=>{const id=++serial,scope=generation;feedback.textContent=tx('正在讀取 {name} 的報名…',{name:s.name});try{const data=await request('identity-search',{query:{resource:'enrollments',student_id:s.id,cursor}});if(id!==serial||scope!==generation||!identities.isConnected)return;if(!cursor)results.replaceChildren();for(const item of data.items||[]){const b=action(`${s.name} · ${item.course_name||tx('課程')} · ${item.class_session?.name||tx('班級')} · #${item.id.slice(0,8)}`,()=>void supplement({enrollmentId:item.id},b),'primary');results.append(b)}feedback.textContent=data.items?.length?tx('選擇與原站表單對應的報名（本次確認）。'):tx('沒有可讀取的報名；可搜尋其他學生或使用範本。');if(data.next_cursor)results.append(action(tx('載入更多報名'),()=>void enrollments(s,data.next_cursor)))}catch(e){if(id===serial)feedback.textContent=e.message}}
     student.addEventListener('input',()=>{serial++;clearTimeout(timer);timer=setTimeout(()=>void search(),300)});identities.append(action(tx('查詢學生'),()=>void search()),feedback,results);box.append(identities)
-    box.append(action(tx('開啟工作台確認並記住對應'),()=>void edulogRuntime.send({type:'open-integration-workspace',flow:'import'}).catch(e=>status(e.message,true))))
+    const links=make('div',undefined,'actions');links.append(action(tx('開啟工作台確認並記住對應'),()=>void edulogRuntime.send({type:'open-integration-workspace',flow:'import'}).catch(e=>status(e.message,true))));box.append(links)
+    if(form.supplement)box.append(make('p',tx('補充資訊：使用者確認（本次報告使用，不建立永久身份對應）'),'muted'))
+    verifiedLink(box,tx('查看原站報告'),form.sourceReportUrl)
   }
   async function supplement(input,b){if(saving||b.disabled)return;const scope=generation;saving=true;b.disabled=true;status(tx('正在保存當次確認資訊…'));try{const data=await request('supplement',{input});if(scope!==generation||!host?.isConnected)return;form=data.form;saving=false;await lookup()}catch(e){if(scope===generation)status(e.message,true)}finally{saving=false;if(b.isConnected)b.disabled=false}}
-  // Step 2: open the EduLog editor in a window beside this one. A single report already saved for
-  // this date can also be reviewed here directly.
+  // Ready: one primary action that opens the EduLog editor beside this window. A single report already
+  // saved for this date can also be reviewed here directly.
   function renderEditorStep(reports) {
-    const box=root.querySelector('.result');box.replaceChildren()
-    if(target)box.append(make('p',tx('目標：{student} · {className} · {course} · 報名 {id} · {date}',{student:target.studentName||tx('學生 {id}',{id:target.studentId?.slice(0,8)||tx('待確認')}),className:target.className||tx('班級名稱未提供'),course:target.courseName||tx('課程名稱未提供'),id:target.enrollmentId.slice(0,8),date:form.date||tx('日期待確認')}),'muted'))
-    const sameDay=reports.filter(item=>item.enrollment_id===target?.enrollmentId&&item.occurrence_date===form.date)
-    box.append(make('p',sameDay.length?tx('EduLog 已有這天的報告。'):tx('EduLog 還沒有這天的報告；開啟後可在 EduLog 建立。'),'muted'))
+    const box=root.querySelector('.editor-step');box.replaceChildren();box.hidden=!target
+    if(!target)return
+    const sameDay=reports.filter(item=>item.enrollment_id===target.enrollmentId&&item.occurrence_date===form.date)
+    const chip=make('span',sameDay.length?tx('EduLog 已有這天的報告。'):tx('EduLog 還沒有這天的報告；開啟後可在 EduLog 建立。'),'chip');chip.dataset.tone=sameDay.length?'ok':'neutral'
     const actions=make('div',undefined,'actions'),open=action(tx('在 EduLog 編輯（右側視窗）'),()=>void openEditor(open),'primary');open.dataset.openEditor='';actions.append(open)
     if(sameDay.length===1)actions.append(action(tx('直接回填這天的 EduLog 報告'),()=>void selectReport(sameDay[0])))
-    box.append(actions,make('p',tx('在 EduLog 編輯完成後，按 EduLog 的「回填到原站」；這裡會列出每個欄位讓你核對再套用。'),'muted'))
+    box.append(make('p',undefined,'muted'),actions);box.firstChild.append(chip)
   }
   async function openEditor(button){
     if(button.disabled)return
-    if(!form?.date){status(tx('請先在第 1 步確認完整上課日期。'),true);return}
+    if(!form?.date){status(tx('請先確認完整上課日期。'),true);return}
     button.disabled=true;status(tx('正在開啟 EduLog 編輯器…'))
     try{
       const area={left:Math.round(screen.availLeft||0),top:Math.round(screen.availTop||0),width:Math.round(screen.availWidth||innerWidth),height:Math.round(screen.availHeight||innerHeight)}
       const result=await request('open-editor',{screen:area})
       if(result?.reason==='no-target'){status(tx('此學生尚未同步到 EduLog。同步本班後即可在 EduLog 編輯。'));root.querySelector('.sync-class').hidden=false;return}
-      status(tx('已在右側視窗開啟 EduLog。編輯完成後，按 EduLog 的「回填到原站」。')+(result?.bridge===false?tx('（回填需要擴充功能可存取 EduLog 網站；請從擴充功能選單重新連線。）'):''),result?.bridge===false)
+      if(result?.bridge===false){status(tx('已開啟 EduLog，但回填需要擴充功能可存取 EduLog 網站；請從擴充功能選單重新連線。'),true);return}
+      button.textContent=tx('回到 EduLog 視窗');stage('waiting')
+      status(tx('編輯完成後，在 EduLog 按「回填到原站」；這裡只會列出有變動的欄位讓你確認。'))
     }catch(error){status(error.message,true)}finally{if(button.isConnected)button.disabled=false}
   }
   function suggestion(field, selected) {
@@ -165,56 +179,90 @@
       if(serial!==generation||!host?.isConnected)return
       if(!full)throw new Error(tx('所選報告已無法讀取，請在 EduLog 確認後重新回填。'))
       full={...item,...full}
-      await loadFieldRules(serial);if(serial!==generation||!host?.isConnected)return;report=full;formContext();renderFields(full)
-    }catch(error){if(serial===generation){if(/連接並驗證|請先連接/.test(error.message))root.querySelector('.connect').hidden=false;status(error.message,true)}}
+      await loadFieldRules(serial);if(serial!==generation||!host?.isConnected)return;report=full;renderFields(full)
+      host.scrollIntoView?.({block:'nearest',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'})
+    }catch(error){if(serial===generation)status(error.message,true)}
   }
+  const optionLabel=(field,value)=>field.options?.find(option=>option.value===value)?.label||value
+  const isMismatch=selected=>selected.template_only||!target||!form.date||Boolean(target.enrollmentId&&selected.enrollment_id!==target.enrollmentId)||(selected.student_id&&target.studentId&&selected.student_id!==target.studentId)||(form.date&&selected.occurrence_date!==form.date)
+  // Review: only fields the report would change are listed, each as 原站 → EduLog. New content is
+  // ticked; replacing content already on the site, internal notes and unmapped options start unticked,
+  // so ticking such a row is the teacher's explicit confirmation.
   function renderFields(selected) {
-    const box=root.querySelector('.fields-result');box.replaceChildren();root.querySelector('.review').hidden=false;root.querySelector('.review').open=true;root.querySelector('.editor-step').open=false
-    root.querySelector('.editor-step summary').textContent=tx('2 · 回填 EduLog 報告 · {date}',{date:selected.occurrence_date||tx('日期待確認')})
-    const mismatch=selected.template_only||!target||!form.date||Boolean(target.enrollmentId&&selected.enrollment_id!==target.enrollmentId)||(selected.student_id&&target.studentId&&selected.student_id!==target.studentId)||(form.date&&selected.occurrence_date!==form.date)
-    const identity=make('div',undefined,'report');identity.append(make('strong',reportLabel(selected)))
-    identity.append(make('p',mismatch?tx('範本的學生或日期與原站表單不同。套用前需勾選確認；只會複製欄位，不改變身份對應。'):tx('學生與日期符合目前表單。')))
-    if(selected.updated_at)identity.append(make('small',tx('EduLog 更新時間：{time}',{time:new Date(selected.updated_at).toLocaleString()})))
-    const reportUrl=frontend(`/dashboard/reports/${selected.enrollment_id}`)
-    if(reportUrl)verifiedLink(identity,tx('查看 EduLog 報名與報告'),reportUrl);else identity.append(make('small',tx('尚無可靠前端網址；請重新檢查連線。')))
-    if(selected.external_link)verifiedLink(identity,tx('查看原站報告連結'),selected.external_link)
-    box.append(identity)
-    if(target)box.append(make('p',tx('目前原站目標：{student} · {className} · {course} · 報名 {id} · {date}',{student:target.studentName||tx('學生 {id}',{id:target.studentId?.slice(0,8)||tx('待確認')}),className:target.className||tx('班級名稱未提供'),course:target.courseName||tx('課程名稱未提供'),id:target.enrollmentId.slice(0,8),date:form.date||tx('日期待確認')}),'muted'))
-    const currentFormId=form.formId;const fields=make('div')
+    // A refresh re-renders the same report: keep opened text editors, focus and caret.
+    const box=root.querySelector('.review'),focused=root.activeElement,prior={open:[...box.querySelectorAll('details.edit[open]')].map(d=>d.closest('.field')?.dataset.fieldKey),key:focused?.dataset?.key,start:focused?.selectionStart,end:focused?.selectionEnd}
+    box.replaceChildren();box.hidden=false;stage('review')
+    const mismatch=isMismatch(selected)
+    const head=make('div',undefined,'review-head');head.append(make('h3',tx('回填 EduLog 報告 · {date}',{date:selected.occurrence_date||tx('日期待確認')})))
+    if(selected.updated_at)head.append(make('span',tx('EduLog 更新時間：{time}',{time:new Date(selected.updated_at).toLocaleString()}),'muted'))
+    box.append(head)
+    if(mismatch){const warn=make('div',undefined,'question'),l=make('label',undefined,'check'),c=make('input');c.type='checkbox';c.dataset.mismatch='';l.append(c,make('span',tx('我已核對，確認使用其他學生或日期的報告作為範本')));warn.append(make('p',tx('範本的學生或日期與原站表單不同。套用前需勾選確認；只會複製欄位，不改變身份對應。')),l);box.append(warn)}
     const draftKey=`${form.action||form.reportId}:${selected.id}:${selected.version}`,draft=drafts.get(draftKey)||{}
-    const sections=new Map([['attendance_status','出席'],['absence_reason','出席'],['lesson_id','課程與進度'],['is_completed','課程與進度'],['progress_start','課程與進度'],['progress_end','課程與進度'],['class_participation','課堂評量'],['classroom_behavior','課堂評量'],['content','評語與聯絡'],['contact_notes','評語與聯絡'],['learning_status','學習狀態'],['class_notes','內部紀錄']]),fieldsets=new Map()
+    const changes=make('div',undefined,'changes'),same=[]
+    const currentFormId=form.formId
     for(const sourceField of form.fields){
-      const consistent=globalThis.edulogFieldMappings.equal(sourceField,selected,fieldRules);const card=make('div',undefined,'field'),label=make('label',undefined,'check'),check=make('input');check.type='checkbox';check.disabled=sourceField.disabled||sourceField.internal||consistent;check.checked=!sourceField.disabled&&!sourceField.internal&&!sourceField.value&&Boolean(suggestion(sourceField,selected));
-      card.dataset.fieldKey=sourceField.key;label.append(check,make('span',tx('套用{label}',{label:tx(sourceField.label)})+(sourceField.internal?tx('（內部紀錄，預設不套用）'):'')));card.append(label)
-      const comparison=make('div',undefined,'comparison');comparison.append(make('small',tx('原站目前：\n{value}',{value:sourceField.options?.find(option=>option.value===sourceField.value)?.label||sourceField.value||tx('空白')})))
-      const sourceReportValue=globalThis.edulogFieldMappings.display(sourceField,selected)
-      comparison.append(make('small',tx('EduLog：\n{value}',{value:sourceReportValue==null||sourceReportValue===''?tx('未填寫'):safeText(String(sourceReportValue))})));card.append(comparison)
-      const input=make(sourceField.type==='text'?'textarea':'select');input.dataset.value='';input.dataset.key=sourceField.key;input.disabled=sourceField.disabled
-      input.name=`edulog-prefill-${sourceField.key}`;input.autocomplete='off'
-      if(sourceField.type==='text'){input.value=suggestion(sourceField,selected)}else{input.append(new Option(suggestion(sourceField,selected)?tx('已對應建議；請核對'):tx('請人工選擇來源欄位選項'),''));for(const option of sourceField.options||[])input.append(new Option(option.label||option.value,option.value));input.value=suggestion(sourceField,selected)}
-      const valueLabel=make('label',tx('預填{label}',{label:tx(sourceField.label)}));valueLabel.append(input);card.append(valueLabel)
-      if(sourceField.type!=='text'&&!suggestion(sourceField,selected))card.append(make('p',sourceField.key==='lesson_id'?tx('需要您確認教材：原站選項未能唯一對應，請核對來源原文及實際選項。'):tx('需要您確認選項：EduLog 值缺漏或無已驗證對應，請選擇實際原站選項。'),'help'))
-      if(sourceField.disabled)card.append(make('p',tx('原站欄位目前停用，請先在原站完成連動操作，再重新核對。'),'help'))
-      if(consistent)card.append(make('p',tx('內容一致，保留原站；不需覆寫。'),'field-mapping-status'))
-      if(sourceField.value&&!consistent){const overwriteLabel=make('label',undefined,'check'),overwrite=make('input');overwrite.type='checkbox';overwrite.dataset.overwrite='';overwriteLabel.append(overwrite,make('span',tx('我確認覆寫目前原站內容')));card.append(overwriteLabel)}
-      check.dataset.include=''
-      if(draft[sourceField.key]){input.value=draft[sourceField.key].value;check.checked=!sourceField.disabled&&!consistent&&draft[sourceField.key].include;const overwrite=card.querySelector('[data-overwrite]');if(overwrite)overwrite.checked=draft[sourceField.key].overwrite}
-      globalThis.edulogFieldMappingUI?.attach(card,sourceField,selected,fieldRules,{enabled:capabilities.field_mapping_memory&&Boolean(target),sourceValue:input.value,confirm:item=>request('field-confirm',{items:[item]}),isCurrent:()=>report===selected&&form.formId===currentFormId,changed:()=>{if(!check.checked){input.value=suggestion(sourceField,selected);update()} }});
-      const group=sections.get(sourceField.key)||'其他欄位';if(!fieldsets.has(group)){const set=make('details',undefined,'field-group');set.dataset.groupKey='group:'+group;set.open=fieldsets.size===0;set.append(make('summary',tx(group)));fields.append(set);fieldsets.set(group,set)}fieldsets.get(group).append(card)
+      const consistent=globalThis.edulogFieldMappings.equal(sourceField,selected,fieldRules),proposed=suggestion(sourceField,selected)
+      const mappings=globalThis.edulogFieldMappings,hasReportValue=!mappings.empty(mappings.reportValue(sourceField,selected))
+      const nativeText=sourceField.value?optionLabel(sourceField,sourceField.value):''
+      if(consistent||!hasReportValue&&!proposed||proposed&&proposed===sourceField.value){same.push(`${tx(sourceField.label)}：${nativeText||tx('空白')}`);continue}
+      const kind=sourceField.disabled?'blocked':sourceField.value?'overwrite':'new'
+      const card=make('div',undefined,'field');card.dataset.fieldKey=sourceField.key;card.dataset.kind=kind
+      const label=make('label',undefined,'check'),check=make('input');check.type='checkbox';check.dataset.include='';check.disabled=sourceField.disabled
+      check.checked=kind==='new'&&!sourceField.internal&&Boolean(proposed)
+      label.append(check,make('span',tx(sourceField.label),'name'))
+      if(kind==='overwrite'){const t=make('span',tx('覆寫原站內容'),'tag');label.append(t)}
+      if(sourceField.internal){const t=make('span',tx('內部紀錄'),'tag');t.dataset.tone='info';label.append(t)}
+      card.append(label)
+      const diff=make('div',undefined,'diff'),old=make('span',nativeText||tx('原站空白'),'old');old.dataset.empty=String(!nativeText)
+      const input=make(sourceField.type==='text'?'textarea':'select');input.dataset.value='';input.dataset.key=sourceField.key;input.disabled=sourceField.disabled;input.name=`edulog-prefill-${sourceField.key}`;input.autocomplete='off';input.setAttribute('aria-label',tx('預填{label}',{label:tx(sourceField.label)}))
+      const fresh=make('span',undefined,'new'),body=make('div',undefined,'field-body')
+      if(sourceField.type==='text'){
+        input.value=proposed;fresh.textContent=proposed||tx('（空白）')
+        const edit=make('details',undefined,'edit');edit.append(make('summary',tx('編輯要填入的內容')),input);body.append(edit)
+        input.addEventListener('input',()=>{fresh.textContent=input.value||tx('（空白）')})
+      }else{
+        input.append(new Option(proposed?tx('已對應建議；請核對'):tx('請選擇原站選項'),''));for(const option of sourceField.options||[])input.append(new Option(option.label||option.value,option.value));input.value=proposed
+        fresh.append(input)
+      }
+      diff.append(old,make('span','→','arrow'),fresh);card.append(diff)
+      if(sourceField.type!=='text'&&!proposed)body.append(make('p',sourceField.key==='lesson_id'?tx('需要您確認教材：原站選項未能唯一對應，請核對來源原文及實際選項。'):tx('需要您確認選項：EduLog 值缺漏或無已驗證對應，請選擇實際原站選項。'),'help'))
+      if(sourceField.disabled)body.append(make('p',tx('原站欄位目前停用，請先在原站完成連動操作，再重新核對。'),'help'))
+      if(sourceField.type!=='text'&&!hasReportValue)body.append(make('p',tx('EduLog：{value}',{value:tx('未填寫')}),'muted'))
+      if(draft[sourceField.key]){input.value=draft[sourceField.key].value;check.checked=!sourceField.disabled&&draft[sourceField.key].include;if(sourceField.type==='text')fresh.textContent=input.value||tx('（空白）')}
+      globalThis.edulogFieldMappingUI?.attach(body,sourceField,selected,fieldRules,{enabled:capabilities.field_mapping_memory&&Boolean(target),sourceValue:input.value,confirm:item=>request('field-confirm',{items:[item]}),isCurrent:()=>report===selected&&form.formId===currentFormId,changed:()=>{if(!check.checked){input.value=suggestion(sourceField,selected);update()}}})
+      if(body.childElementCount)card.append(body)
+      changes.append(card)
     }
-    const matchConfirm=make('label',undefined,'check'),confirm=make('input');confirm.type='checkbox';confirm.dataset.mismatch='';confirm.hidden=!mismatch;matchConfirm.append(confirm,make('span',tx('我已核對，確認使用其他學生或日期的報告作為範本')));if(mismatch)box.append(matchConfirm)
-    box.append(fields)
-    const internal= form.fields.find(field=>field.internal)
-    if(internal){const allowed=make('label',undefined,'check'),check=make('input');check.type='checkbox';check.dataset.internal='';allowed.append(check,make('span',tx('我另外確認允許複製內部紀錄')));box.append(allowed);const row=fields.querySelector(`[data-key="${CSS.escape(internal.key)}"]`)?.closest('.field');if(row){const include=row.querySelector('[data-include]');if(include)include.disabled=internal.disabled}}
-    const actions=make('div',undefined,'actions'),apply=make('button',tx('套用已勾選欄位'),'primary');apply.type='button';actions.append(apply);box.append(actions)
-    box.append(make('p',tx('請核對所選欄位；原站確認與送出仍由老師操作。'),'apply-feedback'))
+    if(changes.childElementCount)box.append(changes);else box.append(make('p',tx('EduLog 報告與原站表單內容相同，沒有需要回填的欄位。'),'muted'))
+    if(same.length){const d=make('details',undefined,'same'),list=make('ul');d.append(make('summary',tx('{count} 個欄位相同或 EduLog 未填',{count:same.length})));for(const line of same)list.append(make('li',line));d.append(list);box.append(d)}
+    const actions=make('div',undefined,'actions'),apply=make('button',tx('套用已勾選欄位'),'primary');apply.type='button';apply.dataset.apply='';actions.append(apply)
+    const reportUrl=frontend(`/dashboard/reports/${selected.enrollment_id}`);box.append(actions)
+    const links=make('p',undefined,'muted');if(reportUrl)verifiedLink(links,tx('查看 EduLog 報名與報告'),reportUrl);if(links.childElementCount)box.append(links)
+    box.append(make('p',tx('只會填入原站表單，不會自動送出；送出仍由老師操作。'),'muted'))
     apply.addEventListener('click',()=>void applyFields(selected,apply))
-    const update=()=>{const cards=[...fields.querySelectorAll('.field')],chosen=cards.filter(c=>{const check=c.querySelector('[data-include]'),value=c.querySelector('[data-value]'),field=form.fields.find(f=>f.key===value?.dataset.key);return check.checked&&!check.disabled&&!field?.disabled&&value.value!==field?.value}),overwrites=chosen.filter(c=>c.querySelector('[data-overwrite]')?.checked).length;apply.textContent=tx('套用 {count} 個欄位',{count:chosen.length})+(overwrites?tx('（覆寫 {count}）',{count:overwrites}):'');globalThis.edulogUi?.text(apply,'assistant.apply',{count:chosen.length,overwrite:overwrites});apply.disabled=!form.date||saving||chosen.length===0;const state={};for(const c of cards){const input=c.querySelector('[data-value]');state[input.dataset.key]={value:input.value,include:c.querySelector('[data-include]').checked,overwrite:c.querySelector('[data-overwrite]')?.checked===true}}drafts.set(draftKey,state)}
-    fields.addEventListener('input',update);fields.addEventListener('change',update);update()
-    if(!form.date)box.append(make('p',tx('可預覽與編輯預填草稿；套用前請先在第 1 步確認完整上課日期。'),'help'))
-    status(tx('請檢查學生、日期及每個欄位；原站表單不會自動送出。'))
+    const update=()=>{const cards=[...changes.querySelectorAll('.field')],chosen=cards.filter(c=>{const check=c.querySelector('[data-include]'),value=c.querySelector('[data-value]'),field=form.fields.find(f=>f.key===value?.dataset.key);return check.checked&&!check.disabled&&!field?.disabled&&value.value!==field?.value}),overwrites=chosen.filter(c=>c.dataset.kind==='overwrite').length;apply.textContent=tx('套用 {count} 個欄位',{count:chosen.length})+(overwrites?tx('（覆寫 {count}）',{count:overwrites}):'');globalThis.edulogUi?.text(apply,'assistant.apply',{count:chosen.length,overwrite:overwrites});apply.disabled=!form.date||saving||chosen.length===0;const state={};for(const c of cards){const input=c.querySelector('[data-value]');state[input.dataset.key]={value:input.value,include:c.querySelector('[data-include]').checked}}drafts.set(draftKey,state)}
+    changes.addEventListener('input',update);changes.addEventListener('change',update);update()
+    for(const key of prior.open){const edit=changes.querySelector(`.field[data-field-key="${CSS.escape(key||'')}"] details.edit`);if(edit)edit.open=true}
+    const control=prior.key&&changes.querySelector(`[data-key="${CSS.escape(prior.key)}"]`);if(control){control.focus({preventScroll:true});if(control.tagName==='TEXTAREA'&&prior.start!=null)control.setSelectionRange(prior.start,prior.end)}
+    if(!form.date)box.append(make('p',tx('可預覽與編輯預填草稿；套用前請先確認完整上課日期。'),'help'))
+    status(changes.childElementCount?tx('請確認要填入的欄位；原站表單不會自動送出。'):tx('沒有需要回填的欄位。'))
   }
-  function contextLesson(selected){return selected.lesson_name|| (selected.lesson_id?tx('教材識別碼 {id}（請核對原站選項）',{id:String(selected.lesson_id).slice(0,8)}):tx('未填教材'))}
+  function clearMarks(){for(const node of document?.querySelectorAll?.('[data-edulog-filled]')||[])node.removeAttribute('data-edulog-filled')}
+  // Marks each filled site field so the teacher can see what changed before submitting.
+  function markFilled(results){
+    clearMarks();let first=null
+    for(const {key,ok} of results){const node=adapter.fieldNodes?.(document,key)?.[0];const box=node?.closest('.form-group,.mb-3,.field,fieldset')||node?.parentElement;if(!box)continue;box.setAttribute('data-edulog-filled',ok?'ok':'check');first||=node}
+    return first
+  }
+  function renderOutcome(results,partial){
+    const box=root.querySelector('.review'),outcome=make('div',undefined,'outcome');outcome.setAttribute('role','group')
+    outcome.append(make('strong',partial?tx('部分套用：請檢查原站並重新核對'):tx('已填入原站表單，請檢查後自行送出')))
+    for(const {label,ok,value} of results){const line=make('p',tx('{label}：{result} · {value}',{label,result:ok?tx('已確認套用'):tx('請在原站核對結果'),value}));line.dataset.ok=String(ok);outcome.append(line)}
+    const first=markFilled(results),actions=make('div',undefined,'actions')
+    if(first)actions.append(action(tx('前往第一個已填欄位'),()=>{first.scrollIntoView({block:'center',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});first.focus({preventScroll:true})},'primary'))
+    actions.append(action(tx('重新核對'),()=>void lookup()))
+    box.replaceChildren(outcome,actions);stage('applied')
+  }
   async function applyFields(selected,button){
     if(button.disabled||saving)return
     const serial=generation;button.disabled=true;saving=true
@@ -223,16 +271,15 @@
     if(serial!==generation||!host?.isConnected)return
     if(current.formId!==form.formId||current.fingerprint!==form.fingerprint){status(tx('原站表單內容已改變，請重新核對後再預填。'),true);return}
     if(!form.date){status(tx('請先確認完整上課日期。'),true);return}
-    const identityMismatch=selected.template_only||!target||Boolean(target.enrollmentId&&selected.enrollment_id!==target.enrollmentId)||(selected.student_id&&target.studentId&&selected.student_id!==target.studentId)||(form.date&&selected.occurrence_date!==form.date)
+    const identityMismatch=isMismatch(selected)
     if(identityMismatch&&!root.querySelector('[data-mismatch]')?.checked){status(tx('請先確認範本學生或日期與目前表單不同。'),true);return}
     const fields=[]
     for(const card of root.querySelectorAll('.field')){
-      const include=card.querySelector('[data-include]'),control=card.querySelector('[data-value]'),overwrite=card.querySelector('[data-overwrite]'),definition=form.fields.find(field=>field.key===control?.dataset.key)
+      const include=card.querySelector('[data-include]'),control=card.querySelector('[data-value]'),definition=form.fields.find(field=>field.key===control?.dataset.key)
       if(!include?.checked||!definition||definition.disabled||definition.value===control.value)continue
-      if(definition.internal&&!root.querySelector('[data-internal]')?.checked){status(tx('內部紀錄需要另外確認。'),true);return}
-      if(definition.value&&definition.value!==control.value&&!overwrite?.checked){status(tx('「{label}」已有原站內容，請確認是否覆寫。',{label:tx(definition.label)}),true);return}
       if(definition.type!=='text'&&!definition.options.some(option=>option.value===control.value&&!option.disabled)){status(tx('請人工選擇有效的「{label}」原站選項。',{label:tx(definition.label)}),true);return}
-      fields.push({key:definition.key,value:control.value,overwrite:overwrite?.checked===true,includeInternal:definition.internal})
+      // A ticked row is the confirmation for replacing site content or copying an internal note.
+      fields.push({key:definition.key,value:control.value,overwrite:Boolean(definition.value),includeInternal:definition.internal})
     }
     if(!fields.length){status(tx('請至少勾選一個要套用的欄位。'),true);return}
     status(tx('正在核對版本並套用欄位…'))
@@ -240,15 +287,12 @@
     if(serial!==generation||!host?.isConnected)return
     status(tx('已套用 {count} 個欄位，待人工送出。請檢查原生表單內容。',{count:result.applied})+(result.recordSaved===false?tx('本機工作紀錄暫時未保存，請勿重複套用。'):''),result.recordSaved===false)
     const after=await adapter.readForm(document);if(serial!==generation||!host?.isConnected)return;form=after
-    const outcome=make('details');outcome.dataset.groupKey='result';outcome.open=true;const outcomeTitle=make('summary',tx('4 · 查看已套用欄位（待人工送出）'));globalThis.edulogUi?.text(outcomeTitle,'assistant.result');outcome.append(outcomeTitle)
-    for(const item of fields){const actual=after.fields.find(f=>f.key===item.key);outcome.append(make('p',tx('{label}：{result} · {value}',{label:actual?.label?tx(actual.label):item.key,result:actual?.value===item.value?tx('已確認套用'):tx('請在原站核對結果'),value:actual?.options?.find(o=>o.value===actual.value)?.label||actual?.value||tx('空白')})))}
-    outcome.append(action(tx('切換至原站表單檢查'),()=>setView('native')));root.querySelector('.fields-result').append(outcome);button.dataset.applied='true';button.textContent=tx('已套用；請檢查原站')
-    } catch(error){if(serial===generation){status(error.message,true);if(error.appliedFields?.length){const after=await adapter.readForm(document);if(serial!==generation||!host?.isConnected)return;const result=make('details');result.open=true;result.append(make('summary',tx('部分套用：請檢查原站並重新核對')));for(const key of error.appliedFields){const actual=after.fields.find(f=>f.key===key);result.append(make('p',tx('{label} · 原站目前：{value}',{label:actual?.label?tx(actual.label):key,value:actual?.options?.find(o=>o.value===actual.value)?.label||actual?.value||tx('空白')})))}result.append(action(tx('查看原站表單'),()=>setView('native')));root.querySelector('.fields-result').append(result);button.dataset.applied='true';button.textContent=tx('部分套用；請重新核對')}}}finally{saving=false;if(button.isConnected&&!button.dataset.applied)button.disabled=false}
+    renderOutcome(fields.map(item=>{const actual=after.fields.find(f=>f.key===item.key);return{key:item.key,label:actual?.label?tx(actual.label):item.key,ok:actual?.value===item.value,value:actual?.value?optionLabel(actual,actual.value):tx('空白')}}),false)
+    } catch(error){if(serial===generation){status(error.message,true);if(error.appliedFields?.length){const after=await adapter.readForm(document);if(serial!==generation||!host?.isConnected)return;form=after;renderOutcome(error.appliedFields.map(key=>{const actual=after.fields.find(f=>f.key===key);return{key,label:actual?.label?tx(actual.label):key,ok:false,value:actual?.value?optionLabel(actual,actual.value):tx('空白')}}),true)}}}finally{saving=false;if(button.isConnected)button.disabled=false}
   }
   async function lookup(){
     if(saving)return
     const serial=++generation
-    const view=preserveView()
     status(tx('正在驗證連線並查詢這位學生當天的報告…'))
     try{
       const current=await adapter.readForm(document)
@@ -257,22 +301,24 @@
       const result=await request('lookup',{formId:form.formId,fingerprint:form.fingerprint})
       if(serial!==generation||!host?.isConnected)return
       if(!result||!result.form||!Array.isArray(result.reports))throw new Error(tx('EduLog 助手未取得完整報告資料。請確認此頁網址與報告表單後重新核對。'))
-      form=result.form;target=result.target;settingsUrl=result.settingsUrl;capabilities=result.capabilities||{};root.querySelector('.target').textContent=`${target?.studentName||form.title||tx('原站報告')} · ${form.date||tx('日期待確認')}${form.supplement?tx(' · 使用者確認'):''}`;questionUI()
-      formContext()
+      form=result.form;target=result.target;settingsUrl=result.settingsUrl;capabilities=result.capabilities||{}
+      root.querySelector('.target').textContent=targetLine()+(form.supplement?tx(' · 使用者確認'):'')
+      moreUI()
+      const dateStep=root.querySelector('.date-step');dateStep.replaceChildren();dateStep.hidden=Boolean(form.date);if(!form.date)dateStep.append(dateQuestion())
       await loadFieldRules(serial);if(serial!==generation||!host?.isConnected)return
-      if(!result.connected){root.querySelector('.connect').hidden=false;status(tx('請先連接 EduLog，配對完成後再重新核對。'),true);root.querySelector('.result').replaceChildren();return}
-      root.querySelector('.connect').hidden=true
+      if(!result.connected){status(tx('請先連接 EduLog，配對完成後再重新核對。'),true);root.querySelector('.editor-step').hidden=true;return}
       // An unsynced student is an ordinary state, not an error: offer the class sync instead of empty steps.
-      root.querySelector('.sync-class').hidden=Boolean(target);root.querySelector('.editor-step').hidden=!target
-      if(!target)status(tx('此學生尚未同步到 EduLog。同步本班後即可在 EduLog 編輯並回填。'))
-      else if(result.reason)status(result.reason)
-      else status(result.reports.length===1?tx('找到一份相符報告。'):tx('已查詢同一日期報告：{count} 份。',{count:result.reports.length}))
+      root.querySelector('.sync-class').hidden=Boolean(target)
       renderEditorStep(result.reports||[])
-      if(report){const selected=await request('detail',{reportId:report.id});if(serial!==generation||!host?.isConnected)return;if(!selected)throw new Error(tx('所選報告已無法讀取；目前預填草稿仍保留。'));const changed=selected.version!==report.version;if(changed){const key=`${form.action||form.reportId}:${report.id}:`;const old=drafts.get(key+report.version);if(old)drafts.set(key+selected.version,old)}report=selected;formContext();renderFields(report);restoreView(view);if(changed)status(tx('EduLog 報告已更新；已保留預填草稿，請重新核對後再套用。'))}
-      if(serial===generation)restoreView(view)
-    }catch(error){if(serial===generation){if(/連接並驗證|請先連接/.test(error.message))root.querySelector('.connect').hidden=false;status(error.message,true)}}
+      if(report){const selected=await request('detail',{reportId:report.id});if(serial!==generation||!host?.isConnected)return;if(!selected)throw new Error(tx('所選報告已無法讀取；目前預填草稿仍保留。'));const changed=selected.version!==report.version;if(changed){const key=`${form.action||form.reportId}:${report.id}:`;const old=drafts.get(key+report.version);if(old)drafts.set(key+selected.version,old)}report={...report,...selected};renderFields(report);if(changed)status(tx('EduLog 報告已更新；已保留預填草稿，請重新核對後再套用。'));return}
+      root.querySelector('.review').hidden=true
+      stage(!form.date?'date':target?'ready':'unsynced')
+      if(!target)status(tx('此學生尚未同步到 EduLog。同步本班後即可在 EduLog 編輯並回填。'))
+      else if(!form.date)status(tx('請先確認完整上課日期。'))
+      else status(result.reason||'')
+    }catch(error){if(serial===generation)status(error.message,true)}
   }
-  function teardown(){generation++;stopLocale?.();stopLocale=null;if(resizeHandler)window.removeEventListener('resize',resizeHandler);resizeHandler=null;if(layout&&nativeForm){anchor?.after(nativeForm);layout.remove();anchor?.remove()}for(const {node,value} of containers){if(value===null)node.removeAttribute('data-edulog-prefill-container');else node.setAttribute('data-edulog-prefill-container',value)}containers=[];modal?.querySelector('.edulog-prefill-context')?.remove();modal?.removeAttribute('data-edulog-prefill');host?.remove();host=root=nativeForm=layout=anchor=modal=form=target=report=null;saving=false}
+  function teardown(){generation++;stopLocale?.();stopLocale=null;clearMarks();modal?.removeAttribute('data-edulog-prefill');host?.remove();host=root=nativeForm=modal=form=target=report=null;saving=false}
   async function readAccess(){try{const value=await globalThis.edulogRuntime.send({type:'get-edulog-integration-status'});return value?.status==='connected'&&value?.capabilities?.report_prefill===true}catch{return false}}
   async function readCollapsed(){try{return (await chrome.storage.local.get(COLLAPSE_KEY))?.[COLLAPSE_KEY]===true}catch{return false}}
   function saveCollapsed(value){try{void chrome.storage.local.set({[COLLAPSE_KEY]:value}).catch(()=>{})}catch{/* Storage is unavailable after the extension context is invalidated. */}}
@@ -294,18 +340,18 @@
   }
   try{chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&changes.edulogExtension)void sync(true)})}catch{/* The page keeps the native editor when extension storage is unavailable. */}
   // 回填: the background forwards the report the teacher sent from the EduLog editor window. It is
-  // shown in the review step; nothing is written to the site form until the teacher applies it.
+  // shown for review; nothing is written to the site form until the teacher applies it.
   globalThis.edulogRuntime.listen((message,_sender,respond)=>{
     if(message?.type!=='edulog-fill-report')return
     if(!host?.isConnected||!form||message.formId!==form.formId||typeof message.reportId!=='string'){respond({ok:false,reason:'FORM_CLOSED'});return}
-    expandAssistant?.();setView('assistant')
+    expandAssistant?.()
     void selectReport({id:message.reportId}).then(()=>respond({ok:true}),()=>respond({ok:false,reason:'REPORT_UNAVAILABLE'}))
     return true
   })
   observer=new MutationObserver(records=>{if(records.some(record=>{
     const node=record.target.nodeType===1?record.target:record.target.parentElement
-    if(node?.closest('[data-edulog-owned],.edulog-editor-layout'))return false
-    const changed=[...record.addedNodes,...record.removedNodes].filter(n=>n.nodeType===1&&!n.matches('[data-edulog-owned],.edulog-editor-layout'))
+    if(node?.closest('[data-edulog-owned]'))return false
+    const changed=[...record.addedNodes,...record.removedNodes].filter(n=>n.nodeType===1&&!n.matches('[data-edulog-owned]'))
     return changed.length&&(node?.closest('.modal,#remote_modal')||changed.some(n=>n.matches('.modal,#remote_modal')||n.querySelector('.modal,#remote_modal')))
   }))void sync()})
   observer.observe(document.documentElement,{childList:true,subtree:true})

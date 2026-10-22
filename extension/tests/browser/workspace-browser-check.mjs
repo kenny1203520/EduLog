@@ -168,16 +168,16 @@ try {
         })
         await editorPage.addScriptTag({url:`http://127.0.0.1:${port}/shared/field-mappings.js`});await editorPage.addScriptTag({url:`http://127.0.0.1:${port}/shared/field-mapping-ui.js`});await editorPage.addScriptTag({url:`http://127.0.0.1:${port}/content/editor-prefill.js`})
         // The day's one EduLog report can be reviewed here directly, without opening the editor window.
-        await editorPage.waitForFunction(()=>[...document.querySelector('aside[data-edulog-owned]')?.shadowRoot?.querySelectorAll('.result .actions button')||[]].length===2,undefined,{timeout:5000})
-        await editorPage.locator('aside[data-edulog-owned]').evaluate(el=>el.shadowRoot.querySelectorAll('.result .actions button')[1].click())
+        await editorPage.waitForFunction(()=>[...document.querySelector('aside[data-edulog-owned]')?.shadowRoot?.querySelectorAll('.editor-step .actions button')||[]].length===2,undefined,{timeout:5000})
+        await editorPage.locator('aside[data-edulog-owned]').evaluate(el=>el.shadowRoot.querySelectorAll('.editor-step .actions button')[1].click())
         try { await editorPage.waitForFunction(()=>document.querySelector('aside[data-edulog-owned]')?.shadowRoot?.querySelector('[role=status]')?.textContent.includes('原站表單不會自動送出'),undefined,{timeout:5000}) }
         catch { throw new Error(`${name} ${width}: editor did not settle; errors=${JSON.stringify(editorErrors)}`) }
         assert.equal(await editorPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`${name} ${width}: embedded editor overflow`)
-        const defaults=await editorPage.evaluate(()=>{const root=document.querySelector('aside[data-edulog-owned]')?.shadowRoot,include=key=>root?.querySelector(`[data-key="${key}"]`)?.closest('.field')?.querySelector('[data-include]');return{attendance:include('attendance_status')?.checked,content:include('content')?.checked,internal:include('class_notes')?.checked,internalConsent:root?.querySelector('[data-internal]')?.checked}})
-        assert.deepEqual(defaults,{attendance:true,content:false,internal:false,internalConsent:false})
+        const defaults=await editorPage.evaluate(()=>{const root=document.querySelector('aside[data-edulog-owned]')?.shadowRoot,include=key=>root?.querySelector(`[data-key="${key}"]`)?.closest('.field')?.querySelector('[data-include]');return{attendance:include('attendance_status')?.checked,content:include('content')?.checked,internal:include('class_notes')?.checked}})
+        assert.deepEqual(defaults,{attendance:true,content:false,internal:false})
         console.log(`CHECK ${name} ${width}: defaults checked`)
-        await editorPage.locator('aside[data-edulog-owned]').evaluate(el=>{const root=el.shadowRoot;root.querySelector('[data-key="attendance_status"]').closest('.field').querySelector('[data-include]').checked=false;root.querySelector('[data-key="content"]').closest('.field').querySelector('[data-include]').checked=true;root.querySelector('[data-key="content"]').closest('.field').querySelector('[data-overwrite]').checked=true})
-        await editorPage.locator('aside[data-edulog-owned]').evaluate(el=>el.shadowRoot.querySelector('.fields-result .actions .primary').click())
+        await editorPage.locator('aside[data-edulog-owned]').evaluate(el=>{const root=el.shadowRoot;root.querySelector('[data-key="attendance_status"]').closest('.field').querySelector('[data-include]').checked=false;root.querySelector('[data-key="content"]').closest('.field').querySelector('[data-include]').checked=true})
+        await editorPage.locator('aside[data-edulog-owned]').evaluate(el=>el.shadowRoot.querySelector('[data-apply]').click())
         await editorPage.waitForFunction(()=>editorCalls.some(call=>call.operation==='apply'))
         assert.equal(await editorPage.evaluate(()=>sourceSubmitted),0,`${name}: prefill must never submit native form`)
         const appliedFields=await editorPage.evaluate(()=>editorCalls.find(call=>call.operation==='apply').input.fields)
