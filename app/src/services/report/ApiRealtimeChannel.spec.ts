@@ -119,7 +119,7 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     await settle()
     const socket = MockWebSocket.latest!
     expect(socket.url).toBe('wss://edulog.example/api/realtime?class_session=session-id&ticket=one-time-ticket')
-    expect(apiV1Client.post).toHaveBeenCalledWith('/realtime/ticket', { class_session: 'session-id' })
+    expect(apiV1Client.post).toHaveBeenCalledWith('/realtime/ticket', { class_session: 'session-id' }, { changesData: false })
     socket.emit('open')
     const { join_ref: joinRef, ref, topic } = JSON.parse(socket.sent[0])
     expect(topic).toBe('realtime:class-session:session-id')
@@ -440,7 +440,7 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     await vi.advanceTimersByTimeAsync(700)
 
     expect(apiV1Client.post).toHaveBeenCalledTimes(2)
-    expect(apiV1Client.post).toHaveBeenLastCalledWith('/realtime/ticket', { room: 'report-id' })
+    expect(apiV1Client.post).toHaveBeenLastCalledWith('/realtime/ticket', { room: 'report-id' }, { changesData: false })
     expect(MockWebSocket.latest!.url).toBe('ws://localhost:5173/api/realtime?room=report-id&ticket=second')
     channel.unsubscribe()
   })

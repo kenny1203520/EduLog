@@ -211,7 +211,8 @@ export class ApiRealtimeChannel {
     const parameter = this.channelKind === 'class_session' ? 'class_session' : 'room'
     // A side-panel frame sends the session cookie on fetch but not on the
     // WebSocket handshake, so every connection presents a one-time ticket.
-    apiV1Client.post<{ ticket: string }>('/realtime/ticket', { [parameter]: resourceId }).then(
+    // Issuing a ticket changes no page data, so it must not empty the read cache on every reconnect.
+    apiV1Client.post<{ ticket: string }>('/realtime/ticket', { [parameter]: resourceId }, { changesData: false }).then(
       (response) => {
         if (attempt !== this.connectAttempt || this.closedByUser) return
         this.openSocket(`${parameter}=${encodeURIComponent(resourceId)}&ticket=${encodeURIComponent(response.data.ticket)}`)

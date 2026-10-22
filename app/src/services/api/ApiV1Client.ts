@@ -7,7 +7,8 @@ export class ApiV1Error extends Error {
   readonly code: string; readonly status: number; readonly requestId: string; readonly traceId: string; readonly fields?: Record<string, string[]>; readonly reason?: string
   constructor(status: number, body: ApiErrorBody) { super(body.error.message); this.name = 'ApiV1Error'; this.status = status; this.code = body.error.code; this.requestId = body.error.request_id; this.traceId = body.error.trace_id; this.fields = body.error.fields; this.reason = body.error.details?.reason }
 }
-export type ApiRequestOptions = Omit<RequestInit, 'body'> & { body?: unknown; idempotencyKey?: string }
+/** `changesData: false` marks a POST that changes no page data (e.g. a realtime ticket), so cached reads stay. */
+export type ApiRequestOptions = Omit<RequestInit, 'body'> & { body?: unknown; idempotencyKey?: string; changesData?: boolean }
 type AuthRecovery = () => Promise<Record<string, unknown> | null>
 let authRecovery: AuthRecovery | null = null
 let authRecoveryPromise: Promise<Record<string, unknown> | null> | null = null
@@ -107,7 +108,7 @@ export class ApiV1Client {
         }
         throw new Error(`API request failed with status ${response.status}`)
       }
-      if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && typeof window !== 'undefined') {
+      if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && options.changesData !== false && typeof window !== 'undefined') {
         // Page data is private to the current session. Notify the in-memory
         // read cache only after a successful mutation; no resource ids or body
         // values are put on the event.

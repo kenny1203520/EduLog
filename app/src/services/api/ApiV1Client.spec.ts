@@ -46,6 +46,16 @@ describe('ApiV1Client', () => {
     ])
   })
 
+  it('announces data changes after a mutation unless the request changes no page data', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ data: {}, request_id: 'r', trace_id: 't' }), { status: 200 }))
+    const changed = vi.fn()
+    window.addEventListener('edulog:api-mutation', changed)
+    await new ApiV1Client('/api').post('/teachings', { name: 'A' })
+    await new ApiV1Client('/api').post('/realtime/ticket', { room: 'r' }, { changesData: false })
+    window.removeEventListener('edulog:api-mutation', changed)
+    expect(changed).toHaveBeenCalledTimes(1)
+  })
+
   it('announces pending API activity and ends it after the response', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ data: [], request_id: 'r', trace_id: 't' }), { status: 200 }))
     const started = vi.fn()
