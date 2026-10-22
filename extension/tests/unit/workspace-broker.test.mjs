@@ -3,14 +3,17 @@ import assert from 'node:assert/strict'
 import vm from 'node:vm'
 import { readFileSync } from 'node:fs'
 import {webcrypto} from 'node:crypto'
+// editor-window.js stand-ins: the web app base, recorded fill channels and opened editor windows.
+const editorWindow = { base: 'https://web.example/edulog', channels: {}, opened: [] }
+const editorStubs = { frontendBase: () => editorWindow.base, frontendOrigin: () => new URL(editorWindow.base).origin, readChannel: async id => editorWindow.channels[id] || null, openEditor: async args => { editorWindow.opened.push(args); return { channel: 'c'.repeat(32), bridge: true } } }
 function broker(fetchImpl, getStatus = async () => ({ status: 'connected' }), timers = {}, sourceHandler) {
   const id = 'a'.repeat(32), binding = { instance: 'http://localhost:3000', userId: 'user-A' }, settings = { origin: binding.instance, userId: binding.userId, token: 'trusted-secret' }
   const calls = [], tabs = [{ id: 1, url: 'https://corp.orangeapple.co/courses/dt/11', title: 'Class' }], rows = new Map(); let listener, changed
-  const chrome = { runtime: { id, getURL: p => `chrome-extension://${id}/${p}`, onMessage: { addListener: fn => { listener = fn } } }, storage: { local: { get: async () => ({ edulogExtension: settings }) }, onChanged: { addListener: fn => { changed = fn } } }, tabs: { query: async () => tabs, get: async n => { if (!tabs.find(t => t.id === n)) throw new Error('closed'); return tabs.find(t => t.id === n) }, create: async t => calls.push(t), update: async () => {}, sendMessage: async (n, m) => { calls.push({ tab: n, ...m }); return { data: { classId: '11' } } } } }
+  const chrome = { runtime: { id, getURL: p => `chrome-extension://${id}/${p}`, onMessage: { addListener: fn => { listener = fn } } }, storage: { local: { get: async () => ({ edulogExtension: settings }) }, onChanged: { addListener: fn => { changed = fn } } }, windows: { update: async (n, m) => { calls.push({ window: n, ...m }) } }, tabs: { query: async () => tabs, get: async n => { if (!tabs.find(t => t.id === n)) throw new Error('closed'); return tabs.find(t => t.id === n) }, create: async t => calls.push(t), update: async () => {}, sendMessage: async (n, m) => { calls.push({ tab: n, ...m }); return { data: { classId: '11' } } } } }
   const workStore = { purge: async () => {}, list: async b => [...rows.values()].filter(r => r.instance === b.instance && r.userId === b.userId), get: async (n, b) => { const r = rows.get(n); return r?.instance === b.instance && r?.userId === b.userId ? r : null }, put: async (r, b) => { rows.set(r.id, { ...r, ...b }); return rows.get(r.id) } }
   if(sourceHandler)chrome.tabs.sendMessage=async(n,m)=>{calls.push({tab:n,...m});return sourceHandler(m)}
   const adapter = { matchesTeachingPage: p => /^\/courses\/dt\/\d+$/.test(p), matchesIntegrationPage: p => /^\/courses\/dt\/\d+$/.test(p) || /^\/dt_admissions\/\d+\/reports\/\d+\/edit$/.test(p), matchPage: p => /^\/dt_admissions\/\d+\/reports\/\d+\/edit$/.test(p) ? { kind:'report-editor' } : /^\/courses\/dt\/\d+$/.test(p) ? { kind:'class' } : null }
-  const context = vm.createContext({ chrome, workStore, crypto:webcrypto, Intl, URL, AbortSignal, AbortController, TextEncoder, setTimeout: timers.setTimeout || setTimeout, clearTimeout: timers.clearTimeout || clearTimeout, getStatus, fetch: fetchImpl || (async (url, options) => { calls.push({ url, ...options }); return { ok: true, headers: { get: () => null }, json: async () => ({ data: {} }) } }), edulogSiteAdapter: adapter })
+  const context = vm.createContext({ chrome, workStore, crypto:webcrypto, Intl, URL, AbortSignal, AbortController, TextEncoder, setTimeout: timers.setTimeout || setTimeout, clearTimeout: timers.clearTimeout || clearTimeout, getStatus, fetch: fetchImpl || (async (url, options) => { calls.push({ url, ...options }); return { ok: true, headers: { get: () => null }, json: async () => ({ data: {} }) } }), edulogSiteAdapter: adapter, ...editorStubs })
   vm.runInContext(readFileSync(new URL('../../background/workspace-broker.js', import.meta.url), 'utf8').replace(/^import[^\n]*\n/gm, '').replace('export function', 'function') + '\ninstallWorkspaceBroker(getStatus)', context)
   const trusted = { id, url: `chrome-extension://${id}/workspace/workspace.html?flow=import` }, site = { id, url: tabs[0].url, tab: tabs[0] }
   return { send: (m, s = trusted) => new Promise(resolve => { const result = listener(m, s, resolve); if (!result) resolve(undefined) }), binding, calls, settings, tabs, rows, changed, site, trusted }
@@ -160,4 +163,41 @@ test('temporary enrollment answers cannot be reused across EduLog instances',asy
   const b=broker(async()=>({ok:true,json:async()=>({data:{memories:[],source_links:[]}})}),async()=>({status:'connected',capabilities:{nearest_report_candidates:true}}),{},async()=>({data:form}))
   const reply=await b.send({type:'integration-inline-prefill',operation:'candidates',query:{group:'same-course'}},b.site)
   assert.match(reply.error.message,/確認目標學生/);assert.equal(b.calls.some(c=>c.url?.includes('/enrollments/')),false)
+})
+
+test('open-editor opens the EduLog editor only for a bound enrollment and the confirmed date',async()=>{
+  const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`
+  const form={formId:'f1',fingerprint:'hash',admissionId:'301',reportId:'401',date:'2026-10-17'}
+  let memories=[{valid:true,target_id:id(1),student_id:id(2),course_id:id(3)}]
+  const b=broker(async url=>{const u=new URL(url);const data=u.pathname.endsWith('/resolve')?{memories}:u.pathname.includes('/enrollments/')?{student_id:id(2),course_id:id(3)}:{};return{ok:true,json:async()=>({data})}},async()=>({status:'connected',settingsUrl:'https://web.example/edulog/dashboard/settings',capabilities:{}}),{},async()=>({data:form}))
+  editorWindow.opened.length=0
+  const screen={left:0,top:0,width:1920,height:1040}
+  const reply=await b.send({type:'integration-inline-prefill',operation:'open-editor',formId:'f1',fingerprint:'hash',screen},b.site)
+  assert.equal(JSON.stringify(reply.data),JSON.stringify({opened:true,bridge:true}))
+  const opened=editorWindow.opened.at(-1)
+  assert.equal(JSON.stringify([opened.base,opened.enrollmentId,opened.date,opened.formId,opened.sourceTab.id,opened.screen]),JSON.stringify(['https://web.example/edulog',id(1),'2026-10-17','f1',1,screen]))
+  assert.equal(JSON.stringify(opened).includes('trusted-secret'),false)
+  // No binding: nothing opens; the page offers a class sync instead.
+  memories=[]
+  const unbound=await b.send({type:'integration-inline-prefill',operation:'open-editor',formId:'f1',fingerprint:'hash',screen},b.site)
+  assert.equal(JSON.stringify(unbound.data),JSON.stringify({opened:false,reason:'no-target'}))
+  assert.equal(editorWindow.opened.length,1)
+})
+test('回填 requests reach only the source form that opened the editor, from the paired web origin',async()=>{
+  const report='00000000-0000-4000-8000-000000000009',channel='d'.repeat(32)
+  const b=broker(undefined,async()=>({status:'connected',settingsUrl:'https://web.example/edulog/dashboard/settings',capabilities:{}}),{},async m=>m.type==='edulog-fill-report'?{ok:true}:{data:null})
+  editorWindow.channels={[channel]:{sourceTabId:1,sourcePath:'/courses/dt/11',formId:'f1',instance:b.binding.instance,userId:b.binding.userId,at:Date.now()}}
+  const web={id:'a'.repeat(32),url:'https://web.example/edulog/dashboard/reports/e1?date=2026-10-17&source_fill='+channel,tab:{id:9}}
+  const ok=await b.send({type:'source-fill-request',channel,reportId:report},web)
+  assert.equal(JSON.stringify(ok),JSON.stringify({ok:true}))
+  const forwarded=b.calls.find(call=>call.type==='edulog-fill-report')
+  assert.equal(JSON.stringify([forwarded.tab,forwarded.formId,forwarded.reportId]),JSON.stringify([1,'f1',report]))
+  assert.ok(b.calls.some(call=>call.focused===true),'the source window comes to the front for review')
+  const before=b.calls.length
+  assert.equal((await b.send({type:'source-fill-request',channel,reportId:report},{...web,url:'https://evil.example/dashboard'})).reason,'ORIGIN_MISMATCH')
+  assert.equal((await b.send({type:'source-fill-request',channel:'e'.repeat(32),reportId:report},web)).reason,'CHANNEL_EXPIRED')
+  assert.equal((await b.send({type:'source-fill-request',channel,reportId:'401'},web)).reason,'INVALID_REQUEST')
+  editorWindow.channels[channel].userId='someone-else'
+  assert.equal((await b.send({type:'source-fill-request',channel,reportId:report},web)).reason,'CHANNEL_EXPIRED')
+  assert.equal(b.calls.length,before,'rejected requests never reach the source tab')
 })

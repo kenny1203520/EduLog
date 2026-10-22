@@ -7,7 +7,7 @@ import StudentReportsView from './StudentReportsView.vue'
 const source = readFileSync(resolve(process.cwd(), 'src/views/StudentReportsView.vue'), 'utf8')
 
 vi.mock('vue-router', () => ({
-    useRoute: () => ({ params: {} }),
+    useRoute: () => ({ params: {}, query: {} }),
     useRouter: () => ({ back: vi.fn() })
 }))
 

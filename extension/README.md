@@ -6,8 +6,8 @@ Files are grouped by the runtime surface that loads them. `manifest.json`, `popu
 
 | Folder | Loaded by | Contents |
 |---|---|---|
-| `background/` | service worker (module) | `service-worker.js` (connection status, pairing), `workspace-broker.js` (trusted API/storage/source broker), `installation.js` |
-| `content/` | content scripts on the source site | `bootstrap.js` (document_start theme boot), `content.js` (toolbar), `editor-prefill.js/.css` (report assistant), `dialog-layout.css` |
+| `background/` | service worker (module) | `service-worker.js` (connection status, pairing), `workspace-broker.js` (trusted API/storage/source broker), `installation.js`, `editor-window.js` (EduLog editor window tiled beside the source window, 回填 channels, bridge registration) |
+| `content/` | content scripts on the source site | `bootstrap.js` (document_start theme boot), `content.js` (toolbar), `editor-prefill.js/.css` (report assistant: opens the EduLog editor beside the form, reviews and applies 回填), `edulog-bridge.js` (registered only on the paired EduLog web origin), `dialog-layout.css` |
 | `sites/orange-apple/` | content scripts and service worker | the corp.orangeapple.co adapter. `core/`: `lexicon.js` (routes, selectors, site wording), `model.js`, `adapter.js` (page matching, scope, restore), `navigation.js`. `pages/`: one file per page kind, registered through `common.js` and run by `index.js` (`report-table.js` runs on every page with the lesson-report table, `dialogs.js` handles modals). `features/`: overview to-do, session cards, roster, quick attendance, attendance export, accounts, report-editor extras, renewal status. `integration/`: EduLog source integration. `site.css` |
 | `popup/` | toolbar popup | `popup.html/.js/.css` |
 | `workspace/` | `workspace.html` (shell, module) | import and work-record flows: `views/` (shell, read/confirm/done steps, drawers, work log) built with `shared/render.js`; mapping, history sync and review, report skips, i18n; one stylesheet `workspace.css` |

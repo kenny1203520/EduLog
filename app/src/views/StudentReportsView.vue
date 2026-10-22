@@ -386,6 +386,10 @@
 
             <!-- Editor Section -->
             <div class="lg:col-span-1">
+                <p v-if="requestedDateMissing" role="status" data-testid="requested-date-missing"
+                    class="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                    {{ $t('report.source_fill.date_missing', { date: requestedDate }) }}
+                </p>
                 <div v-if="selectedOccurrence && selectedReport">
                     <!-- Occurrence Info Card -->
                     <div
@@ -450,6 +454,18 @@
                         </div>
                     </div>
 
+                    <!-- 回填: opened beside a teaching-site report form by the EduLog extension -->
+                    <div v-if="sourceFillAvailable" data-testid="source-fill"
+                        class="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-emerald-200 bg-white p-4 shadow-sm">
+                        <div class="min-w-0 flex-1">
+                            <p class="text-sm font-semibold text-gray-900">{{ $t('report.source_fill.title') }}</p>
+                            <p class="text-xs text-gray-600" role="status" aria-live="polite">{{ sourceFill.state.value === 'sending' ? $t('report.source_fill.sending') : sourceFill.state.value === 'sent' ? $t('report.source_fill.sent') : sourceFill.state.value === 'failed' ? $t('report.source_fill.failed', { reason: sourceFill.reason.value }) : $t('report.source_fill.hint') }}</p>
+                        </div>
+                        <button type="button" @click="fillSource" :disabled="sourceFill.state.value === 'sending'"
+                            class="min-h-[44px] cursor-pointer rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors duration-200 hover:bg-emerald-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-not-allowed disabled:opacity-60">
+                            {{ $t('report.source_fill.action') }}
+                        </button>
+                    </div>
                     <!-- Report Editor -->
                     <ReportEditor ref="reportEditorRef" :key="selectedReport.id" :report-id="selectedReport.id"
                         :initial-version="selectedReport.version" :loading="reportLoading" :show-manual-save="true"
@@ -564,6 +580,7 @@ import { sourceIdentityFromRow } from '@/utils/sourceReportLink'
 import SourceReportLink from '@/components/reports/SourceReportLink.vue'
 import PlacementBadge from '@/components/enrollment/PlacementBadge.vue'
 import type { ClassTimelineReport } from '@/models/ClassTimeline'
+import { sourceFillChannel, useSourceFill } from '@/composables/useSourceFill'
 
 type ReportEditorExpose = {
     saveNow: (options?: { reason?: 'manual' | 'switch' }) => Promise<boolean>
@@ -606,6 +623,22 @@ const enrollmentInfo = ref<{
     kodingAdmissionId?: string
 } | null>(null)
 const isEnrollmentActive = ref(false)
+// Opened from the teaching site by the extension: ?date= picks that lesson, ?source_fill= enables 回填.
+const requestedDate = computed(() => {
+    const value = Array.isArray(route.query.date) ? route.query.date[0] : route.query.date
+    return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null
+})
+const requestedDateMissing = ref(false)
+const sourceFill = useSourceFill(computed(() => sourceFillChannel(route.query.source_fill)))
+const sourceFillAvailable = computed(() => Boolean(sourceFillChannel(route.query.source_fill)) && sourceFill.bridgeReady.value)
+async function fillSource() {
+    const reportId = selectedReport.value?.id
+    if (!reportId) return
+    sourceFill.reset()
+    const saved = await reportEditorRef.value?.saveNow({ reason: 'manual' })
+    if (saved === false) return
+    sourceFill.send(reportId)
+}
 const effectiveTransferTargets = ref<Array<{
     transfer_id: string
     source_occurrence_id: string
@@ -1311,8 +1344,12 @@ async function loadOccurrences() {
 
         occurrences.value = merged
 
-        // 6. Auto-select nearest occurrence (User Request)
-        if (merged.length > 0) {
+        // 6. A lesson date requested by the extension wins; otherwise auto-select the nearest occurrence.
+        const requested = requestedDate.value ? merged.find(occ => DateUtils.formatLocalDate(occ.occurrenceDate) === requestedDate.value) : undefined
+        requestedDateMissing.value = Boolean(requestedDate.value && !requested)
+        if (requested) {
+            await selectOccurrence(requested, { allowCreatePrompt: isEnrollmentActive.value })
+        } else if (merged.length > 0) {
 
             // Find the occurrence with the smallest absolute difference from today (Date + Time)
             const now = new Date()

@@ -344,7 +344,7 @@
           }
         }).sort((a, b) => Number(Boolean(b.overdue)) - Number(Boolean(a.overdue)) || Number(b.today) - Number(a.today)))
         const note = element('p'); note.className = 'edulog-todo-note'
-        note.append(element('span', tx('已配對 EduLog 時，開啟課堂紀錄會出現 EduLog 預填。')))
+        note.append(element('span', tx('已配對 EduLog 時，課堂紀錄可在旁邊的 EduLog 視窗編輯，再回填到原站。')))
         const open = element('button', tx('設定 EduLog 配對')); open.type = 'button'; open.className = 'edulog-todo-link-button'
         listen(open, 'click', () => doc.getElementById('edulog-extension-root')?.shadowRoot?.querySelector('.integration')?.click())
         note.append(open)

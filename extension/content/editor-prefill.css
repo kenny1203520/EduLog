@@ -37,8 +37,3 @@
  .edulog-editor-native,.edulog-editor-assistant{padding:16px 12px max(24px,env(safe-area-inset-bottom))}
 }
 /* Not connected: a small secondary button in the modal header, never a mounted panel (MASTER §6.9). */
-.edulog-prefill-gate{display:inline-flex;align-items:center;gap:6px;font:600 var(--edulog-text-sm)/1.2 var(--edulog-font);min-height:30px;padding:0 10px;margin-inline-start:auto;border:1px solid var(--edulog-border-strong);border-radius:var(--edulog-radius-sm);background:var(--edulog-surface);color:var(--edulog-text);cursor:pointer;white-space:nowrap;transition:background-color var(--edulog-duration)}
-.edulog-prefill-gate:hover{background:var(--edulog-surface-muted)}
-.edulog-prefill-gate:focus-visible{outline:3px solid var(--edulog-focus-ring);outline-offset:2px}
-.edulog-prefill-gate:disabled{background:var(--edulog-surface-disabled);color:var(--edulog-text-subtle);border-color:transparent;cursor:progress}
-@media(max-width:767px){.edulog-prefill-gate{min-height:var(--edulog-touch-target)}}

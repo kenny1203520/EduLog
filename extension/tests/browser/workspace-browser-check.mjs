@@ -155,7 +155,7 @@ try {
           document.body.innerHTML='<div class="modal"><form id="source-report-form"><button type="submit">原站送出</button></form></div>'
           document.querySelector('form').addEventListener('submit',event=>{event.preventDefault();globalThis.sourceSubmitted++})
           globalThis.edulogSourceIntegration={getForm:doc=>doc.querySelector('#source-report-form'),readForm:async()=>structuredClone(form)}
-          globalThis.edulogRuntime={send:async message=>{if(message.type==='get-edulog-integration-status')return{status:'connected',capabilities:{report_prefill:true}};
+          globalThis.edulogRuntime={listen:()=>{},send:async message=>{if(message.type==='get-edulog-integration-status')return{status:'connected',capabilities:{report_prefill:true}};
             editorCalls.push(message)
             if(message.type==='open-integration-workspace')return{data:true}
             if(message.operation==='lookup')return{data:{connected:true,form:structuredClone(form),target:{enrollmentId:'target-enrollment',studentId:'target-student',studentName:'目標學生',className:'目標班級',courseName:'測試課程'},reports:[{id:'target-report',version:4,student_id:'target-student',student_name:'目標學生',enrollment_id:'target-enrollment',course_name:'測試課程',occurrence_date:'2026-10-02',updated_at:'2026-10-03T00:00:00Z',attendance_status:'present',content:'EduLog 學習摘要',class_notes:'內部文字',is_completed:false,completeness:{isMissing:false}}]}}
@@ -167,6 +167,9 @@ try {
           globalThis.MutationObserver=class extends Observer{constructor(callback){super((records,observer)=>{globalThis.editorObserverCalls++;if(globalThis.editorObserverCalls>20){observer.disconnect();globalThis.editorObserverLoop=true;return}callback(records,observer)})}}
         })
         await editorPage.addScriptTag({url:`http://127.0.0.1:${port}/shared/field-mappings.js`});await editorPage.addScriptTag({url:`http://127.0.0.1:${port}/shared/field-mapping-ui.js`});await editorPage.addScriptTag({url:`http://127.0.0.1:${port}/content/editor-prefill.js`})
+        // The day's one EduLog report can be reviewed here directly, without opening the editor window.
+        await editorPage.waitForFunction(()=>[...document.querySelector('aside[data-edulog-owned]')?.shadowRoot?.querySelectorAll('.result .actions button')||[]].length===2,undefined,{timeout:5000})
+        await editorPage.locator('aside[data-edulog-owned]').evaluate(el=>el.shadowRoot.querySelectorAll('.result .actions button')[1].click())
         try { await editorPage.waitForFunction(()=>document.querySelector('aside[data-edulog-owned]')?.shadowRoot?.querySelector('[role=status]')?.textContent.includes('原站表單不會自動送出'),undefined,{timeout:5000}) }
         catch { throw new Error(`${name} ${width}: editor did not settle; errors=${JSON.stringify(editorErrors)}`) }
         assert.equal(await editorPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`${name} ${width}: embedded editor overflow`)
@@ -174,7 +177,7 @@ try {
         assert.deepEqual(defaults,{attendance:true,content:false,internal:false,internalConsent:false})
         console.log(`CHECK ${name} ${width}: defaults checked`)
         await editorPage.locator('aside[data-edulog-owned]').evaluate(el=>{const root=el.shadowRoot;root.querySelector('[data-key="attendance_status"]').closest('.field').querySelector('[data-include]').checked=false;root.querySelector('[data-key="content"]').closest('.field').querySelector('[data-include]').checked=true;root.querySelector('[data-key="content"]').closest('.field').querySelector('[data-overwrite]').checked=true})
-        await editorPage.locator('aside[data-edulog-owned]').evaluate(el=>el.shadowRoot.querySelector('.actions .primary').click())
+        await editorPage.locator('aside[data-edulog-owned]').evaluate(el=>el.shadowRoot.querySelector('.fields-result .actions .primary').click())
         await editorPage.waitForFunction(()=>editorCalls.some(call=>call.operation==='apply'))
         assert.equal(await editorPage.evaluate(()=>sourceSubmitted),0,`${name}: prefill must never submit native form`)
         const appliedFields=await editorPage.evaluate(()=>editorCalls.find(call=>call.operation==='apply').input.fields)

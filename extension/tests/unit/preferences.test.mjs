@@ -18,7 +18,7 @@ function worker(fetchImpl = async () => { throw new Error('offline') }) {
       create: async options => opened.push(options),
     },
   }
-  const context = vm.createContext({ chrome, URL, AbortSignal, fetch: fetchImpl, installWorkspaceBroker() {}, crypto: { randomUUID: () => '11111111-1111-4111-8111-111111111111' }, navigator: { platform: 'Win32', userAgent: 'Chrome' } })
+  const context = vm.createContext({ chrome, URL, AbortSignal, fetch: fetchImpl, installWorkspaceBroker() {}, syncWebBridge: async () => {}, crypto: { randomUUID: () => '11111111-1111-4111-8111-111111111111' }, navigator: { platform: 'Win32', userAgent: 'Chrome' } })
   const read = file => readFileSync(new URL(file, import.meta.url), 'utf8')
   for (const file of siteFiles('lexicon', 'model')) vm.runInContext(read(`../../${file}`), context)
   vm.runInContext(read('../../sites/orange-apple/core/adapter.js'), context)

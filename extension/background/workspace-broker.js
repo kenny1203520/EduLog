@@ -1,4 +1,5 @@
 import { workStore } from '../shared/work-store.js'
+import { frontendBase, frontendOrigin, openEditor, readChannel } from './editor-window.js'
 const supported = url => { try { const u = new URL(url), adapter = globalThis.edulogSiteAdapter; return u.origin === 'https://corp.orangeapple.co' && Boolean(adapter.matchesIntegrationPage?.(u.pathname) ?? adapter.matchesTeachingPage(u.pathname)) } catch { return false } }
 const fail = (message, code) => { const error=new Error(message);if(code)error.code=code;throw error }
 function validationFields(fields) {
@@ -122,6 +123,25 @@ export function installWorkspaceBroker(getStatus) {
       })().then(respond, error => respond({ error: { code: 'WORKSPACE_UNAVAILABLE', message: error.message } }))
       return true
     }
+    // 回填 from the EduLog web app (bridge script on the paired web origin): forwards the report id to
+    // the source form that opened this editor window, where the teacher reviews it before applying.
+    if (message?.type === 'source-fill-request' && sender.id === chrome.runtime.id && Number.isInteger(sender.tab?.id)) {
+      void (async () => {
+        const bound = await binding()
+        const origin = frontendOrigin(bound.status.settingsUrl)
+        if (!origin || new URL(sender.url).origin !== origin) return { ok: false, reason: 'ORIGIN_MISMATCH' }
+        const channel = await readChannel(message.channel)
+        if (!channel || channel.instance !== bound.instance || channel.userId !== bound.userId) return { ok: false, reason: 'CHANNEL_EXPIRED' }
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(message.reportId))) return { ok: false, reason: 'INVALID_REQUEST' }
+        const tab = await chrome.tabs.get(channel.sourceTabId).catch(() => null)
+        if (!tab || !supported(tab.url) || new URL(tab.url).pathname !== channel.sourcePath) return { ok: false, reason: 'SOURCE_CLOSED' }
+        const reply = await chrome.tabs.sendMessage(tab.id, { type: 'edulog-fill-report', formId: channel.formId, reportId: message.reportId }).catch(() => null)
+        if (!reply?.ok) return { ok: false, reason: reply?.reason || 'SOURCE_CLOSED' }
+        await chrome.windows.update(tab.windowId, { focused: true }).catch(() => {})
+        return { ok: true }
+      })().then(respond, () => respond({ ok: false, reason: 'EXTENSION_UNAVAILABLE' }))
+      return true
+    }
     if (message?.type === 'integration-inline-prefill' && sender.id === chrome.runtime.id && Number.isInteger(sender.tab?.id) && supported(sender.tab.url)) {
       void (async () => {
         const tab = await source({ tabId: sender.tab.id, sourcePath: new URL(sender.tab.url).pathname })
@@ -144,6 +164,16 @@ export function installWorkspaceBroker(getStatus) {
           if(query.resource==='enrollments'&&!query.student_id)fail('請先選擇學生。')
           if(!['students','enrollments'].includes(query.resource))fail('身份查詢格式不正確。')
           return call({operation:'catalog',query:{resource:query.resource,search:query.search||undefined,student_id:query.student_id||undefined,cursor:query.cursor||undefined,limit:50}})
+        }
+        if (operation === 'open-editor') {
+          // Bound enrollments only (source link, confirmed memory or the teacher's pick); never by name.
+          const target=await inlineTarget(form,bound)
+          if(!target)return {opened:false,reason:'no-target'}
+          if(!form.date)fail('請先確認完整上課日期。')
+          const base=frontendBase(bound.status.settingsUrl)
+          if(!base)fail('EduLog 網址無法確認，請重新連線。')
+          const opened=await openEditor({sourceTab:tab,base,enrollmentId:target.enrollmentId,date:form.date,formId:form.formId,binding:{instance:bound.instance,userId:bound.userId},screen:message.screen})
+          return {opened:true,bridge:opened.bridge}
         }
         if (operation === 'lookup') {
           if(form.supplement?.enrollmentId&&(form.supplement.binding?.instance!==bound.instance||form.supplement.binding?.userId!==bound.userId)){

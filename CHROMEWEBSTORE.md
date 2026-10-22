@@ -41,8 +41,9 @@ Existing test screenshots are verification evidence, not automatically approved 
 | Entry | Type | Purpose |
 |---|---|---|
 | `storage` | permission | Save browser pairing, language, display preferences and recoverable work configuration. |
+| `scripting` | permission | Register one small content script (`content/edulog-bridge.js`) on the paired EduLog web origin only, so the EduLog report editor opened beside a teaching-site form can send a saved report id back for the teacher to review and apply. Removed when the pairing ends. |
 | `https://corp.orangeapple.co/*` | host/content scripts | Provide supported teaching-page assistance and read class/student/report pages needed for user-requested review and sync. |
-| `https://*/*` | optional host | Users host EduLog at different HTTPS origins. Request only the entered origin to pair and perform chosen teaching operations; no content scripts on arbitrary websites. |
+| `https://*/*` | optional host | Users host EduLog at different HTTPS origins. Request only the entered origin to pair and perform chosen teaching operations; the only content script outside the teaching site is the 回填 bridge on that paired EduLog origin. |
 | `http://localhost/*` | optional host | Connect to an explicitly selected local development EduLog. |
 | `http://127.0.0.1/*` | optional host | Connect to an explicitly selected loopback development instance. |
 | `http://[::1]/*` | optional host | Connect to an explicitly selected IPv6 loopback instance. |

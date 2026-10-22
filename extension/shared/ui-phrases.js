@@ -2016,5 +2016,53 @@ globalThis.edulogUi?.registerPhrases({
   ],
   "顯示金額": [
    "Show amounts"
+  ],
+  "2 · 在 EduLog 編輯": [
+   "2 · Edit in EduLog"
+  ],
+  "3 · 核對與回填欄位": [
+   "3 · Check and fill fields"
+  ],
+  "EduLog 已有這天的報告。": [
+   "EduLog already has a report for this day."
+  ],
+  "EduLog 還沒有這天的報告；開啟後可在 EduLog 建立。": [
+   "EduLog has no report for this day yet; you can create it after opening."
+  ],
+  "在 EduLog 編輯（右側視窗）": [
+   "Edit in EduLog (window on the right)"
+  ],
+  "直接回填這天的 EduLog 報告": [
+   "Fill from this day's EduLog report"
+  ],
+  "在 EduLog 編輯完成後，按 EduLog 的「回填到原站」；這裡會列出每個欄位讓你核對再套用。": [
+   "When you finish in EduLog, press \"Fill source form\" there; each field is listed here for you to check before applying."
+  ],
+  "請先在第 1 步確認完整上課日期。": [
+   "Confirm the full lesson date in step 1 first."
+  ],
+  "正在開啟 EduLog 編輯器…": [
+   "Opening the EduLog editor…"
+  ],
+  "此學生尚未同步到 EduLog。同步本班後即可在 EduLog 編輯。": [
+   "This student isn't in EduLog yet. Sync this class to edit in EduLog."
+  ],
+  "已在右側視窗開啟 EduLog。編輯完成後，按 EduLog 的「回填到原站」。": [
+   "EduLog is open in the window on the right. When you finish, press \"Fill source form\" there."
+  ],
+  "（回填需要擴充功能可存取 EduLog 網站；請從擴充功能選單重新連線。）": [
+   " (Filling back needs the extension to have access to the EduLog site; reconnect from the extension menu.)"
+  ],
+  "所選報告已無法讀取，請在 EduLog 確認後重新回填。": [
+   "The selected report can't be read; check it in EduLog and fill again."
+  ],
+  "2 · 回填 EduLog 報告 · {date}": [
+   "2 · Fill from EduLog report · {date}"
+  ],
+  "此學生尚未同步到 EduLog。同步本班後即可在 EduLog 編輯並回填。": [
+   "This student isn't in EduLog yet. Sync this class to edit in EduLog and fill back."
+  ],
+  "已配對 EduLog 時，課堂紀錄可在旁邊的 EduLog 視窗編輯，再回填到原站。": [
+   "When EduLog is paired, lesson records can be edited in an EduLog window alongside and filled back into the site."
   ]
 })

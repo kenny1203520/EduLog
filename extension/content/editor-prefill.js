@@ -1,4 +1,5 @@
-// A focused EduLog report preview inside the verified native source editor.
+// EduLog report assistant inside the verified native source editor: opens the EduLog editor in a
+// window beside this one, then reviews and applies the report the teacher sends back (回填).
 // The shadow root keeps its controls and styles separate from the provider DOM.
 (() => {
   if (!globalThis.edulogRuntime || !globalThis.edulogSourceIntegration || !document?.documentElement) return
@@ -10,9 +11,9 @@
   let fieldRules=[]
   // The assistant mounts only for a verified EduLog connection; otherwise the native editor stays untouched.
   const COLLAPSE_KEY='edulogAssistantCollapsed'
-  let gate=null, gateForm=null, pendingForm=null, accessSerial=0
+  let blockedForm=null, pendingForm=null, accessSerial=0, expandAssistant=null
   let stopLocale; let resizeHandler, paneScroll={native:0,assistant:0}
-  const groups = new Map(), drafts = new Map()
+  const drafts = new Map()
   function formContext(){if(!modal)return;const header=modal.querySelector('.modal-header');if(!header)return;let context=header.querySelector('.edulog-prefill-context');if(!context){context=make('p',undefined,'edulog-prefill-context');context.dataset.edulogOwned='';context.setAttribute('aria-live','polite');header.append(context)}context.textContent=tx('原站目標：{student} · {date} · {course}',{student:target?.studentName||form?.title||tx('學生待確認'),date:form?.date||tx('日期待確認'),course:target?.courseName||tx('課程待確認')})+(report?` ｜ EduLog ${report.occurrence_date}${report.occurrence_date!==form?.date||report.enrollment_id!==target?.enrollmentId?tx('（範本）'):''}`:'')}
   function preserveView(){const focused=root?.activeElement;return{action:form?.action,scroll:host?.scrollTop||0,nativeScroll:nativeForm?.parentElement?.scrollTop||0,windowY:window.scrollY,control:focused?.dataset.key?`[data-key="${CSS.escape(focused.dataset.key)}"]`:focused?.name?`[name="${CSS.escape(focused.name)}"]`:null,start:focused?.selectionStart,end:focused?.selectionEnd,openGroups:[...root?.querySelectorAll('.field-group[open]')||[]].map(d=>d.dataset.groupKey),questions:root?.querySelector('.questions')?.open,dateEdit:root?.querySelector('.date-edit')?.open,identityOpen:root?.querySelector('.identity-question')?.open,dateDraft:root?.querySelector('[name=confirmed-source-date]')?.value,identitySearch:root?.querySelector('[name=target-student-search]')?.value}}
   function restoreView(state){if(!host||state.action!==form?.action)return;if(state.questions&&state.control)root.querySelector('.questions').open=true;const dateEdit=root.querySelector('.date-edit');if(dateEdit&&state.dateEdit)dateEdit.open=true;const identity=root.querySelector('.identity-question');if(identity&&state.identityOpen)identity.open=true;for(const [name,value] of [['confirmed-source-date',state.dateDraft],['target-student-search',state.identitySearch]]){const input=root.querySelector(`[name=${name}]`);if(input&&value!==undefined)input.value=value}for(const group of root.querySelectorAll('.field-group'))group.open=(state.openGroups||[]).includes(group.dataset.groupKey);const control=state.control&&root.querySelector(state.control);for(let d=control?.closest('details');d;d=d.parentElement?.closest('details'))d.open=true;control?.focus({preventScroll:true});if(control&&state.start!=null&&(control.tagName==='TEXTAREA'||['text','search'].includes(control.type))){try{control.setSelectionRange(state.start,state.end)}catch{/* Date fields do not expose text selection. */}}host.scrollTop=state.scroll;if(nativeForm?.parentElement)nativeForm.parentElement.scrollTop=state.nativeScroll;window.scrollTo({top:state.windowY,behavior:'instant'})}
@@ -77,8 +78,8 @@
     const collapse=make('button',tx('收合助手'));collapse.type='button';globalThis.edulogUi?.text(collapse,'assistant.collapse');header.append(collapse)
     const body=make('div');body.className='assistant-body';while(header.nextSibling)body.append(header.nextSibling);section.append(body)
     const questions=make('details');questions.className='questions';questions.append(make('summary',tx('1 · 補足目標資訊')),make('div',undefined,'question-body'));body.querySelector('.result').before(questions)
-    const candidates=make('details');candidates.className='candidates';candidates.open=true;candidates.append(make('summary',tx('2 · 選擇 EduLog 報告')));body.querySelector('.result').before(candidates);candidates.append(body.querySelector('.result'))
-    const review=make('details');review.className='review';review.hidden=true;review.append(make('summary',tx('3 · 核對與套用欄位')),make('div',undefined,'fields-result'));candidates.after(review)
+    const editorStep=make('details');editorStep.className='editor-step';editorStep.open=true;editorStep.append(make('summary',tx('2 · 在 EduLog 編輯')));body.querySelector('.result').before(editorStep);editorStep.append(body.querySelector('.result'))
+    const review=make('details');review.className='review';review.hidden=true;review.append(make('summary',tx('3 · 核對與回填欄位')),make('div',undefined,'fields-result'));editorStep.after(review)
     anchor=document.createComment('EduLog native form position');nativeForm.before(anchor);layout=make('div',undefined,'edulog-editor-layout');layout.dataset.view='native';layout.dataset.collapsed='false'
     const modalBody=nativeForm.closest('.modal-body');containers=[]
     if(modalBody)for(let parent=anchor.parentElement;parent&&parent!==modalBody;parent=parent.parentElement){containers.push({node:parent,value:parent.getAttribute('data-edulog-prefill-container')});parent.setAttribute('data-edulog-prefill-container','')}
@@ -90,6 +91,7 @@
     resizeHandler=()=>{if(!layout||layout.hidden)return;const position={...paneScroll};requestAnimationFrame(()=>{if(!host?.isConnected)return;if(host.offsetHeight)host.scrollTop=position.assistant;if(nativePane.offsetHeight)nativePane.scrollTop=position.native;paneScroll=position;paneWidth=innerWidth;paneHeight=innerHeight})};window.addEventListener('resize',resizeHandler)
     const applyCollapsed=(closed,persist=true)=>{const state=preserveView();layout.dataset.collapsed=String(closed);host.dataset.collapsed=String(closed);body.hidden=closed;layout.hidden=closed;modal?.toggleAttribute('data-edulog-prefill',!closed);for(const c of containers){if(closed){if(c.value===null)c.node.removeAttribute('data-edulog-prefill-container');else c.node.setAttribute('data-edulog-prefill-container',c.value)}else c.node.setAttribute('data-edulog-prefill-container','')}if(closed){anchor.after(host,nativeForm)}else{layout.querySelector('.edulog-editor-native').append(nativeForm);layout.append(host);anchor.after(layout)}collapse.textContent=closed?tx('展開 EduLog 助手'):tx('收合助手');globalThis.edulogUi?.text(collapse,closed?'assistant.expand':'assistant.collapse');restoreView(state);if(persist)saveCollapsed(closed)}
     collapse.addEventListener('click',()=>applyCollapsed(layout.dataset.collapsed!=='true'))
+    expandAssistant=()=>{if(layout?.dataset.collapsed==='true')applyCollapsed(false)}
     root.querySelector('.refresh').addEventListener('click',()=>void lookup())
     root.querySelector('.sync-class').addEventListener('click',async event=>{const button=event.currentTarget;button.disabled=true;try{const result=await globalThis.edulogRuntime.send({type:'open-integration-workspace',flow:'import'});if(result?.opened===false)throw new Error(result?.error?.message||tx('無法開啟整合工作台。'))}catch(error){status(error.message||tx('無法開啟整合工作台。'),true)}finally{if(button.isConnected)button.disabled=false}})
     root.querySelector('.connect').addEventListener('click',async event=>{const button=event.currentTarget;button.disabled=true;try{await globalThis.edulogRuntime.send({type:'open-integration-workspace',flow:'prefill'})}catch(error){status(error.message||tx('無法開啟整合工作台。'),true)}finally{if(button.isConnected)button.disabled=false}})
@@ -122,31 +124,27 @@
     box.append(action(tx('開啟工作台確認並記住對應'),()=>void edulogRuntime.send({type:'open-integration-workspace',flow:'import'}).catch(e=>status(e.message,true))))
   }
   async function supplement(input,b){if(saving||b.disabled)return;const scope=generation;saving=true;b.disabled=true;status(tx('正在保存當次確認資訊…'));try{const data=await request('supplement',{input});if(scope!==generation||!host?.isConnected)return;form=data.form;saving=false;await lookup()}catch(e){if(scope===generation)status(e.message,true)}finally{saving=false;if(b.isConnected)b.disabled=false}}
-  function addGroup(parent,key,title,items,open){const details=make('details');details.open=open;const note=make('p',items.length?tx('找到 {count} 份。',{count:items.length}):key==='exact'?tx('當天沒有相符報告。'):tx('展開後載入候選。'),'muted');note.setAttribute('aria-live','polite');const list=make('div',undefined,'list'),more=action(tx('載入更多'),()=>void loadGroup(key,true));more.hidden=true;details.append(make('summary',title),note,list,more);parent.append(details);groups.set(key,{details,list,note,more,items,cursor:null,busy:false,loaded:key==='exact'});paintGroup(key);details.addEventListener('toggle',()=>{const g=groups.get(key);if(g&&details.open&&!g.loaded&&capabilities.nearest_report_candidates)void loadGroup(key)})}
-  function paintGroup(key){const g=groups.get(key);if(!g)return;g.list.replaceChildren();for(const item of g.items){if(key==='same-course'&&item.enrollment_id===target?.enrollmentId&&form.date&&item.occurrence_date===form.date)continue;const b=action('',()=>void selectReport(item),'choice');b.setAttribute('aria-pressed',String(report?.id===item.id));b.append(make('span',reportLabel(item)),make('small',`${item.class_name||tx('班級未提供')} · ${item.lesson_name||tx('教材未提供')} · ${tx('報名 #{id}',{id:String(item.enrollment_id||'').slice(0,8)})}`));if(Number.isFinite(item.date_difference))b.append(make('small',item.date_difference===0?tx('目標日當天'):(item.date_difference<0?tx('目標日前 {days} 天',{days:Math.abs(item.date_difference)}):tx('目標日後 {days} 天',{days:Math.abs(item.date_difference)}))));g.list.append(b)}g.more.hidden=!g.cursor}
-  async function loadGroup(key,more=false){const g=groups.get(key);if(!g||g.busy)return;g.busy=true;g.more.disabled=true;const scope=generation;g.note.textContent=tx('正在查詢候選…');try{const data=await request('candidates',{query:{group:key,cursor:more?g.cursor:undefined}});if(scope!==generation||groups.get(key)!==g)return;g.items=[...new Map([...(more?g.items:[]),...(data.reports||[])].map(r=>[r.id,r])).values()];g.cursor=data.next_cursor;g.loaded=true;g.more.textContent=tx('載入更多');paintGroup(key);const count=g.list.children.length;g.note.textContent=count?(g.cursor?tx('已載入 {count} 份，還有更多。',{count}):tx('已載入 {count} 份。',{count})):g.cursor?tx('這一頁沒有其他候選；可載入下一頁。'):tx('目前沒有其他可讀取的報告。')}catch(e){if(scope===generation){g.note.textContent=e.message;g.loaded=false;g.more.hidden=false;g.more.textContent=tx('重試')}}finally{g.busy=false;if(scope!==generation&&groups.get(key)===g){g.note.textContent=tx('查詢已因選擇變更而停止，請重新載入候選。');g.loaded=false;g.more.hidden=false;g.more.textContent=tx('重試')}if(g.more.isConnected)g.more.disabled=false}}
-  function renderList(items,cursor=null) {
-    const box=root.querySelector('.result');box.replaceChildren();groups.clear()
-    if(target) box.append(make('p',tx('目標：{student} · {className} · {course} · 報名 {id} · {date}',{student:target.studentName||tx('學生 {id}',{id:target.studentId?.slice(0,8)||tx('待確認')}),className:target.className||tx('班級名稱未提供'),course:target.courseName||tx('課程名稱未提供'),id:target.enrollmentId.slice(0,8),date:form.date||tx('日期待確認')}),'muted'))
-    box.append(make('p',form.date?tx('依距離目標日 {date} 排序；不同日期或報名的內容只作範本。',{date:form.date}):tx('日期尚未確認：暫以原站時區（台北）的今天排序。補足日期後不會自動改選報告。'),'muted'))
-    addGroup(box,'exact',tx('當天相符'),items,true)
-    groups.get('exact').cursor=cursor;paintGroup('exact')
-    if(target){addGroup(box,'same-course',tx('同學生、同課程的其他報告'),[],!items.length);addGroup(box,'other-course',tx('同學生、其他課程'),[],false);if(!items.length&&capabilities.nearest_report_candidates)void loadGroup('same-course')}
-    if(target&&capabilities.enrollment_history_reports)addGroup(box,'history',tx('已保存的歷史紀錄（範本）'),[],false)
-    if(target&&!capabilities.nearest_report_candidates)box.append(make('p',tx('目前連線未提供依目標日期排序的候選；仍可手動搜尋及選取報告。'),'help'))
-    renderSearch(box)
+  // Step 2: open the EduLog editor in a window beside this one. A single report already saved for
+  // this date can also be reviewed here directly.
+  function renderEditorStep(reports) {
+    const box=root.querySelector('.result');box.replaceChildren()
+    if(target)box.append(make('p',tx('目標：{student} · {className} · {course} · 報名 {id} · {date}',{student:target.studentName||tx('學生 {id}',{id:target.studentId?.slice(0,8)||tx('待確認')}),className:target.className||tx('班級名稱未提供'),course:target.courseName||tx('課程名稱未提供'),id:target.enrollmentId.slice(0,8),date:form.date||tx('日期待確認')}),'muted'))
+    const sameDay=reports.filter(item=>item.enrollment_id===target?.enrollmentId&&item.occurrence_date===form.date)
+    box.append(make('p',sameDay.length?tx('EduLog 已有這天的報告。'):tx('EduLog 還沒有這天的報告；開啟後可在 EduLog 建立。'),'muted'))
+    const actions=make('div',undefined,'actions'),open=action(tx('在 EduLog 編輯（右側視窗）'),()=>void openEditor(open),'primary');open.dataset.openEditor='';actions.append(open)
+    if(sameDay.length===1)actions.append(action(tx('直接回填這天的 EduLog 報告'),()=>void selectReport(sameDay[0])))
+    box.append(actions,make('p',tx('在 EduLog 編輯完成後，按 EduLog 的「回填到原站」；這裡會列出每個欄位讓你核對再套用。'),'muted'))
   }
-  function renderSearch(parent) {
-    const details=make('details'),summary=make('summary',tx('搜尋其他學生或日期的報告'));details.append(summary)
-    const label=make('label',tx('學生、課程或日期關鍵字')),input=make('input');input.type='search';input.maxLength=80;input.autocomplete='off';label.append(input);details.append(label)
-    const dates=make('div');dates.style.cssText='display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px'
-    const fromWrap=make('label',tx('開始日期')),from=make('input');from.type='date';fromWrap.append(from)
-    const toWrap=make('label',tx('結束日期')),to=make('input');to.type='date';toWrap.append(to);dates.append(fromWrap,toWrap);details.append(dates)
-    const button=make('button',tx('搜尋可讀取報告'));button.type='button';details.append(button)
-    const feedback=make('p','','muted'),list=make('div',undefined,'list'),more=make('button',tx('載入更多'));more.type='button';more.hidden=true;feedback.setAttribute('aria-live','polite');details.append(feedback,list,more)
-    let serial=0,cursor,timer
-    const run=async next=>{const id=++serial,scope=generation;button.disabled=true;more.disabled=true;feedback.textContent=tx('正在搜尋可讀取報告…');try{const data=await request('search',{query:{search:input.value.trim(),date_from:from.value||undefined,date_to:to.value||undefined,cursor:next?cursor:undefined}});if(id!==serial||scope!==generation||!details.isConnected)return;if(!next)list.replaceChildren();for(const item of data.reports||[])list.append(action(reportLabel(item),()=>void selectReport(item),'choice'));cursor=data.next_cursor;more.hidden=!cursor;feedback.textContent=tx('本頁找到 {count} 份。其他學生或日期的報告只作範本。',{count:data.reports?.length||0})}catch(e){if(id===serial)feedback.textContent=e.message}finally{if(button.isConnected){button.disabled=false;more.disabled=false}}}
-    input.addEventListener('input',()=>{serial++;clearTimeout(timer);timer=setTimeout(()=>void run(false),300)});button.addEventListener('click',()=>void run(false));more.addEventListener('click',()=>void run(true));parent.append(details)
+  async function openEditor(button){
+    if(button.disabled)return
+    if(!form?.date){status(tx('請先在第 1 步確認完整上課日期。'),true);return}
+    button.disabled=true;status(tx('正在開啟 EduLog 編輯器…'))
+    try{
+      const area={left:Math.round(screen.availLeft||0),top:Math.round(screen.availTop||0),width:Math.round(screen.availWidth||innerWidth),height:Math.round(screen.availHeight||innerHeight)}
+      const result=await request('open-editor',{screen:area})
+      if(result?.reason==='no-target'){status(tx('此學生尚未同步到 EduLog。同步本班後即可在 EduLog 編輯。'));root.querySelector('.sync-class').hidden=false;return}
+      status(tx('已在右側視窗開啟 EduLog。編輯完成後，按 EduLog 的「回填到原站」。')+(result?.bridge===false?tx('（回填需要擴充功能可存取 EduLog 網站；請從擴充功能選單重新連線。）'):''),result?.bridge===false)
+    }catch(error){status(error.message,true)}finally{if(button.isConnected)button.disabled=false}
   }
   function suggestion(field, selected) {
     const value=globalThis.edulogFieldMappings.suggest(field,selected,fieldRules)
@@ -165,14 +163,14 @@
     try{
       let full=await request('detail',{reportId:item.id,kind:item.kind})
       if(serial!==generation||!host?.isConnected)return
-      if(!full)throw new Error(tx('所選報告已無法讀取，請重新搜尋。'))
+      if(!full)throw new Error(tx('所選報告已無法讀取，請在 EduLog 確認後重新回填。'))
       full={...item,...full}
-      await loadFieldRules(serial);if(serial!==generation||!host?.isConnected)return;report=full;formContext();renderFields(full);for(const key of groups.keys())paintGroup(key)
+      await loadFieldRules(serial);if(serial!==generation||!host?.isConnected)return;report=full;formContext();renderFields(full)
     }catch(error){if(serial===generation){if(/連接並驗證|請先連接/.test(error.message))root.querySelector('.connect').hidden=false;status(error.message,true)}}
   }
   function renderFields(selected) {
-    const box=root.querySelector('.fields-result');box.replaceChildren();root.querySelector('.review').hidden=false;root.querySelector('.review').open=true;root.querySelector('.candidates').open=false
-    root.querySelector('.candidates summary').textContent=tx('2 · 已選擇報告 · {date}',{date:selected.occurrence_date||tx('日期待確認')})
+    const box=root.querySelector('.fields-result');box.replaceChildren();root.querySelector('.review').hidden=false;root.querySelector('.review').open=true;root.querySelector('.editor-step').open=false
+    root.querySelector('.editor-step summary').textContent=tx('2 · 回填 EduLog 報告 · {date}',{date:selected.occurrence_date||tx('日期待確認')})
     const mismatch=selected.template_only||!target||!form.date||Boolean(target.enrollmentId&&selected.enrollment_id!==target.enrollmentId)||(selected.student_id&&target.studentId&&selected.student_id!==target.studentId)||(form.date&&selected.occurrence_date!==form.date)
     const identity=make('div',undefined,'report');identity.append(make('strong',reportLabel(selected)))
     identity.append(make('p',mismatch?tx('範本的學生或日期與原站表單不同。套用前需勾選確認；只會複製欄位，不改變身份對應。'):tx('學生與日期符合目前表單。')))
@@ -262,49 +260,48 @@
       form=result.form;target=result.target;settingsUrl=result.settingsUrl;capabilities=result.capabilities||{};root.querySelector('.target').textContent=`${target?.studentName||form.title||tx('原站報告')} · ${form.date||tx('日期待確認')}${form.supplement?tx(' · 使用者確認'):''}`;questionUI()
       formContext()
       await loadFieldRules(serial);if(serial!==generation||!host?.isConnected)return
-      if(!result.connected){root.querySelector('.connect').hidden=false;status(tx('請先連接 EduLog，配對完成後再重新核對。'),true);renderList([]);return}
+      if(!result.connected){root.querySelector('.connect').hidden=false;status(tx('請先連接 EduLog，配對完成後再重新核對。'),true);root.querySelector('.result').replaceChildren();return}
       root.querySelector('.connect').hidden=true
       // An unsynced student is an ordinary state, not an error: offer the class sync instead of empty steps.
-      root.querySelector('.sync-class').hidden=Boolean(target);root.querySelector('.candidates').hidden=!target
-      if(!target)status(tx('此學生尚未同步到 EduLog。同步本班後即可預填。'))
+      root.querySelector('.sync-class').hidden=Boolean(target);root.querySelector('.editor-step').hidden=!target
+      if(!target)status(tx('此學生尚未同步到 EduLog。同步本班後即可在 EduLog 編輯並回填。'))
       else if(result.reason)status(result.reason)
       else status(result.reports.length===1?tx('找到一份相符報告。'):tx('已查詢同一日期報告：{count} 份。',{count:result.reports.length}))
-      renderList(result.reports||[],result.next_cursor)
+      renderEditorStep(result.reports||[])
       if(report){const selected=await request('detail',{reportId:report.id});if(serial!==generation||!host?.isConnected)return;if(!selected)throw new Error(tx('所選報告已無法讀取；目前預填草稿仍保留。'));const changed=selected.version!==report.version;if(changed){const key=`${form.action||form.reportId}:${report.id}:`;const old=drafts.get(key+report.version);if(old)drafts.set(key+selected.version,old)}report=selected;formContext();renderFields(report);restoreView(view);if(changed)status(tx('EduLog 報告已更新；已保留預填草稿，請重新核對後再套用。'))}
-      else if(result.reports?.length===1&&form.date&&target&&!target.userConfirmed)await selectReport(result.reports[0])
       if(serial===generation)restoreView(view)
     }catch(error){if(serial===generation){if(/連接並驗證|請先連接/.test(error.message))root.querySelector('.connect').hidden=false;status(error.message,true)}}
   }
-  function teardown(){generation++;stopLocale?.();stopLocale=null;if(resizeHandler)window.removeEventListener('resize',resizeHandler);resizeHandler=null;if(layout&&nativeForm){anchor?.after(nativeForm);layout.remove();anchor?.remove()}for(const {node,value} of containers){if(value===null)node.removeAttribute('data-edulog-prefill-container');else node.setAttribute('data-edulog-prefill-container',value)}containers=[];modal?.querySelector('.edulog-prefill-context')?.remove();modal?.removeAttribute('data-edulog-prefill');host?.remove();host=root=nativeForm=layout=anchor=modal=form=target=report=null;groups.clear();saving=false}
+  function teardown(){generation++;stopLocale?.();stopLocale=null;if(resizeHandler)window.removeEventListener('resize',resizeHandler);resizeHandler=null;if(layout&&nativeForm){anchor?.after(nativeForm);layout.remove();anchor?.remove()}for(const {node,value} of containers){if(value===null)node.removeAttribute('data-edulog-prefill-container');else node.setAttribute('data-edulog-prefill-container',value)}containers=[];modal?.querySelector('.edulog-prefill-context')?.remove();modal?.removeAttribute('data-edulog-prefill');host?.remove();host=root=nativeForm=layout=anchor=modal=form=target=report=null;saving=false}
   async function readAccess(){try{const value=await globalThis.edulogRuntime.send({type:'get-edulog-integration-status'});return value?.status==='connected'&&value?.capabilities?.report_prefill===true}catch{return false}}
   async function readCollapsed(){try{return (await chrome.storage.local.get(COLLAPSE_KEY))?.[COLLAPSE_KEY]===true}catch{return false}}
   function saveCollapsed(value){try{void chrome.storage.local.set({[COLLAPSE_KEY]:value}).catch(()=>{})}catch{/* Storage is unavailable after the extension context is invalidated. */}}
-  function removeGate(){gate?.remove();gate=gateForm=null}
-  function showGate(current){
-    if(gate?.isConnected&&gateForm===current)return
-    removeGate()
-    gate=make('button',tx('連接 EduLog 以啟用報告助手'),'edulog-prefill-gate');gate.type='button';gate.dataset.edulogOwned='';gateForm=current
-    globalThis.edulogUi?.text(gate,'assistant.connectToEnable')
-    gate.addEventListener('click',async()=>{gate.disabled=true;try{await globalThis.edulogRuntime.send({type:'open-integration-workspace',flow:'prefill'})}catch{/* The toolbar keeps the connection entry point available. */}finally{if(gate?.isConnected)gate.disabled=false}})
-    const header=current.closest('.modal,#remote_modal')?.querySelector('.modal-header')
-    if(header)header.append(gate);else current.before(gate)
-  }
   async function sync(force=false){
     if(suspended)return
     const current=adapter.getForm(document)
-    if(!current){pendingForm=null;accessSerial++;teardown();removeGate();return}
-    if(!force&&(pendingForm===current||host?.isConnected&&nativeForm===current||gate?.isConnected&&gateForm===current))return
+    if(!current){pendingForm=null;blockedForm=null;accessSerial++;teardown();return}
+    if(!force&&(pendingForm===current||host?.isConnected&&nativeForm===current||blockedForm===current))return
     const serial=++accessSerial;pendingForm=current
     const [ready,collapsed]=await Promise.all([readAccess(),readCollapsed()])
     if(serial!==accessSerial)return
     pendingForm=null
     if(suspended||adapter.getForm(document)!==current)return
-    if(!ready){teardown();showGate(current);return}
-    removeGate()
+    // Without a verified connection the native editor stays exactly as the site shows it.
+    if(!ready){teardown();blockedForm=current;return}
+    blockedForm=null
     if(host?.isConnected&&nativeForm===current)return
     teardown();setup({collapsed})
   }
   try{chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&changes.edulogExtension)void sync(true)})}catch{/* The page keeps the native editor when extension storage is unavailable. */}
+  // 回填: the background forwards the report the teacher sent from the EduLog editor window. It is
+  // shown in the review step; nothing is written to the site form until the teacher applies it.
+  globalThis.edulogRuntime.listen((message,_sender,respond)=>{
+    if(message?.type!=='edulog-fill-report')return
+    if(!host?.isConnected||!form||message.formId!==form.formId||typeof message.reportId!=='string'){respond({ok:false,reason:'FORM_CLOSED'});return}
+    expandAssistant?.();setView('assistant')
+    void selectReport({id:message.reportId}).then(()=>respond({ok:true}),()=>respond({ok:false,reason:'REPORT_UNAVAILABLE'}))
+    return true
+  })
   observer=new MutationObserver(records=>{if(records.some(record=>{
     const node=record.target.nodeType===1?record.target:record.target.parentElement
     if(node?.closest('[data-edulog-owned],.edulog-editor-layout'))return false
@@ -312,7 +309,7 @@
     return changed.length&&(node?.closest('.modal,#remote_modal')||changed.some(n=>n.matches('.modal,#remote_modal')||n.querySelector('.modal,#remote_modal')))
   }))void sync()})
   observer.observe(document.documentElement,{childList:true,subtree:true})
-  document.addEventListener('turbo:before-cache',()=>{suspended=true;accessSerial++;pendingForm=null;teardown();removeGate()})
+  document.addEventListener('turbo:before-cache',()=>{suspended=true;accessSerial++;pendingForm=blockedForm=null;teardown()})
   for(const name of ['turbo:render','turbo:load'])document.addEventListener(name,()=>{suspended=false;void sync()})
   void sync()
 })()

@@ -30,7 +30,7 @@ try{
      const make=(n,date)=>({id:`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`,version:4,student_id:student,student_name:'學生甲',enrollment_id:enrollment,course_id:course,course_name:'同一課程',class_name:'週日班級',lesson_name:'測試課程 Lesson 1',occurrence_date:date,is_completed:false,attendance_status:'present',content:'<p>第一段</p><p>第二段</p>',class_notes:'內部內容',completeness:{isMissing:false},date_difference:date==='2026-10-03'?-1:1,external_link:'https://corp.orangeapple.co/dt_admissions/301/reports/401/edit'})
      window.reports=[make(11,'2026-10-03'),make(12,'2026-10-05')]
      reports.forEach(r=>{r.course_name+=' · '+ 'LongCourseName'.repeat(8);r.class_name+=' · 長名稱測試班級'.repeat(4)})
-     window.edulogRuntime={send:async m=>{
+     window.edulogRuntime={listen:handler=>{window.__fill=handler},send:async m=>{
       editorCalls.push(m);if(m.type==='get-edulog-integration-status')return{status:'connected',capabilities:{report_prefill:true}};if(m.type==='open-integration-workspace')return{data:{opened:true}}
       const form=await edulogSourceIntegration.readForm(document)
       if(m.operation==='lookup')return{data:{connected:true,form,target:{studentId:student,enrollmentId:enrollment,courseId:course,studentName:'學生甲',courseName:'同一課程',className:'週日班級'},reports:[],settingsUrl:'https://web.example:8443/edulog/dashboard/settings?tab=integrations',capabilities:{nearest_report_candidates:true}}}
@@ -46,9 +46,11 @@ try{
     if(width<1200){await page.locator('.edulog-editor-native').waitFor({state:'visible'});await page.locator('button[data-view=assistant]').click()}
     const openGroups=()=>helper.evaluate(n=>n.shadowRoot.querySelectorAll('.field-group').forEach(d=>d.open=true))
     await shadow('.question input[type=date]').waitFor({state:'visible'})
-    await shadow('.choice').first().waitFor({state:'visible'})
+    await shadow('[data-open-editor]').waitFor({state:'visible'})
+    // 回填 from the EduLog editor window: the background forwards the report id to this form.
+    const fill=id=>page.evaluate(async id=>{const {formId}=await edulogSourceIntegration.readForm(document);return new Promise(r=>window.__fill({type:'edulog-fill-report',formId,reportId:id},{},r))},id)
     assert.equal(await shadow('.target').textContent().then(t=>t.includes('日期待確認')),true)
-    await shadow('.choice').first().click();await shadow('[data-key=content]').waitFor({state:'attached'});await openGroups();await shadow('[data-key=content]').waitFor({state:'visible'})
+    await fill(await page.evaluate(()=>reports[0].id));await shadow('[data-key=content]').waitFor({state:'attached'});await openGroups();await shadow('[data-key=content]').waitFor({state:'visible'})
     assert.equal(await shadow('.fields-result .primary').isDisabled(),true,'date answer gates apply but not preview')
     if(!await shadow('.question input[type=date]').isVisible())await shadow('.questions summary').first().click();await shadow('.question input[type=date]').fill('2026-10-04');await shadow('.question .primary').click()
     await page.waitForFunction(()=>document.querySelector('aside').shadowRoot.querySelector('.target').textContent.includes('2026-10-04'))
@@ -95,7 +97,7 @@ try{
     await page.evaluate(()=>edulogUi.setLocale('zh-TW'))
     await openGroups()
     if(width===390){
-      await page.evaluate(()=>{delayDetails=true;const root=document.querySelector('aside').shadowRoot,buttons=[...root.querySelectorAll('.result .choice')];buttons[1].click();buttons[0].click()})
+      await page.evaluate(()=>{delayDetails=true});const ids=await page.evaluate(()=>[reports[1].id,reports[0].id]);void fill(ids[0]);void fill(ids[1])
       await page.waitForFunction(()=>editorDelayed.length===2);await page.evaluate(()=>editorDelayed[1]());await shadow('[data-key=content]').waitFor({state:'attached'});await openGroups();await page.evaluate(()=>{editorDelayed[0]();delayDetails=false})
       await page.waitForFunction(()=>document.querySelector('aside').shadowRoot.querySelector('.fields-result .report').textContent.includes('2026-10-03'))
       assert.equal(await shadow('[data-key=content]').inputValue(),'助手草稿\n保留段落','late response cannot replace selected report or draft')
