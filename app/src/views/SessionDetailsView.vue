@@ -91,6 +91,15 @@ const joinFlagsByDate = computed(() => countJoinFlagsByDate(Object.values(roster
 const visibleCalendarRange = ref<CalendarDateRange | null>(null)
 const loadedOccurrenceRanges = new Map<string, Promise<void>>()
 const sessionTeachers = ref<SessionTeacherAssignmentDTO[]>([])
+const currentSessionTeachers = computed(() => {
+    const occurrence = todayOccurrence.value
+    if (!occurrence?.occurrenceDate) return []
+
+    const date = DateUtils.formatLocalDate(occurrence.occurrenceDate)
+    return sessionTeachers.value.filter(teacher =>
+        date >= teacher.effective_from && (!teacher.effective_to || date <= teacher.effective_to)
+    )
+})
 const weekAnchorDate = ref(DateUtils.todayDate(preferences.timeZone))
 const isCalendarExpanded = ref(false)
 const isOccurrenceInHoliday = ref(false)
@@ -3091,11 +3100,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                             </router-link>
                         </h4>
                         <div class="space-y-2">
-                            <div v-for="st in sessionTeachers.filter(st => {
-                                if (!todayOccurrence) return false;
-                                const ds = DateUtils.formatLocalDate(todayOccurrence.occurrenceDate);
-                                return ds >= st.effective_from && (!st.effective_to || ds <= st.effective_to);
-                            })" :key="st.id + st.effective_from"
+                            <div v-for="st in currentSessionTeachers" :key="st.id + st.effective_from"
                                 class="flex items-center justify-between p-3 rounded-xl bg-white border border-emerald-100 shadow-sm">
                                 <div class="flex items-center gap-3">
                                     <div
@@ -3131,11 +3136,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                     </button>
                                 </div>
                             </div>
-                            <div v-if="!sessionTeachers.some(st => {
-                                if (!todayOccurrence) return false;
-                                const ds = DateUtils.formatLocalDate(todayOccurrence.occurrenceDate);
-                                return ds >= st.effective_from && (!st.effective_to || ds <= st.effective_to);
-                            })" class="text-center py-4 text-xs font-bold text-gray-400 italic">
+                            <div v-if="currentSessionTeachers.length === 0" class="text-center py-4 text-xs font-bold text-gray-400 italic">
                                 {{ $t('classroom.no_teachers_assigned') }}
                             </div>
                         </div>
