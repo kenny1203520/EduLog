@@ -7,6 +7,7 @@ import type { ApiConfig } from '../config/config.js'
 import { createUserClient, validateAccessToken } from '../infra/supabase.js'
 import { resolveAllowedOrigins } from '../app.js'
 import { monitorRealtimeSocket } from './realtimeHeartbeat.js'
+import { redeemTicket } from './realtimeTicket.js'
 
 function cookieValue(header: string | undefined, name: string) {
   return header?.split(';').map((item) => item.trim()).find((item) => item.startsWith(`${name}=`))?.slice(name.length + 1)
@@ -115,20 +116,27 @@ export function attachRealtimeProxy(
     }))
     const origin = request.headers.origin
     if (origin && !resolveAllowedOrigins(config).includes(origin)) { log('realtime_upgrade_rejected', { phase: 'origin', outcome: 'denied' }); rejectUpgrade(socket, 403, 'Forbidden'); return }
-    const token = cookieValue(request.headers.cookie, 'edulog_access')
+    const cookieToken = cookieValue(request.headers.cookie, 'edulog_access')
+    const ticket = url.searchParams.get('ticket')
     const classSessionId = url.searchParams.get('class_session')
     const roomId = url.searchParams.get('room')
     const channelKind = classSessionId ? 'class_session' : 'report'
     const resourceId = classSessionId || roomId
-    if (!token) { log('realtime_upgrade_rejected', { phase: 'authentication', outcome: 'missing_cookie' }); rejectUpgrade(socket, 401, 'Unauthorized'); return }
+    if (!cookieToken && !ticket) { log('realtime_upgrade_rejected', { phase: 'authentication', outcome: 'missing_cookie' }); rejectUpgrade(socket, 401, 'Unauthorized'); return }
     if (!resourceId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(resourceId) || (classSessionId && roomId)) { log('realtime_upgrade_rejected', { phase: 'request_validation', outcome: 'invalid_resource' }); rejectUpgrade(socket, 400, 'Bad Request'); return }
     const resourceFingerprint = createHash('sha256').update(resourceId).digest('hex').slice(0, 12)
+    // An extension side panel frames the web app; the browser omits the
+    // SameSite cookie on that frame's WebSocket handshake, so the client
+    // presents a one-time ticket from POST /api/realtime/ticket instead.
+    const token = cookieToken || redeemTicket(config.COOKIE_SECRET, ticket, resourceId, channelKind)
+    if (!token) { log('realtime_upgrade_rejected', { phase: 'authentication', outcome: 'invalid_ticket', channel_kind: channelKind, resource_fingerprint: resourceFingerprint }); rejectUpgrade(socket, 401, 'Unauthorized'); return }
+    if (!cookieToken) log('realtime_authentication', { channel_kind: channelKind, resource_fingerprint: resourceFingerprint, outcome: 'ticket' })
     const authenticationStartedAt = Date.now()
     try {
       await validateAccessToken(adminClient, token, config)
       log('realtime_authentication', { channel_kind: channelKind, resource_fingerprint: resourceFingerprint, outcome: 'allowed', duration_ms: Date.now() - authenticationStartedAt })
     } catch {
-      log('realtime_upgrade_rejected', { phase: 'authentication', outcome: 'invalid_cookie', channel_kind: channelKind, resource_fingerprint: resourceFingerprint, duration_ms: Date.now() - authenticationStartedAt })
+      log('realtime_upgrade_rejected', { phase: 'authentication', outcome: cookieToken ? 'invalid_cookie' : 'invalid_ticket_token', channel_kind: channelKind, resource_fingerprint: resourceFingerprint, duration_ms: Date.now() - authenticationStartedAt })
       rejectUpgrade(socket, 401, 'Unauthorized'); return
     }
     socketServer.handleUpgrade(request, socket, head, (client) => {

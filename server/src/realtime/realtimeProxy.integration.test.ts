@@ -13,9 +13,11 @@ const supabaseMocks = vi.hoisted(() => ({
 vi.mock('../infra/supabase.js', () => supabaseMocks)
 
 import { attachRealtimeProxy } from './realtime.js'
+import { issueTicket } from './realtimeTicket.js'
 
 const RESOURCE_ID = 'bbe2ea83-8e94-4197-83c5-f126cf027abc'
 const AUTHORIZED = { data: true, error: null }
+const COOKIE_SECRET = 'a'.repeat(32)
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -110,6 +112,7 @@ describe('realtime proxy upgrade-to-join flow', () => {
       API_EXTENSION_ALLOWED_ORIGINS: '',
       SUPABASE_REALTIME_URL: `ws://127.0.0.1:${upstreamPort}/socket/websocket`,
       SUPABASE_ANON_KEY: 'test-anon-key',
+      COOKIE_SECRET,
     } as ApiConfig
     attachRealtimeProxy(apiServer, {} as never, config, options.proxyTimeouts)
     const apiPort = await listen(apiServer)
@@ -121,6 +124,21 @@ describe('realtime proxy upgrade-to-join flow', () => {
       headers: { Cookie: 'edulog_access=test-access-token', Origin: 'http://localhost:5173' },
     })
     return client
+  }
+
+  function connectWithTicket(url: string, parameter: 'class_session' | 'room', ticket: string) {
+    client = new WebSocket(`${url}?${parameter}=${RESOURCE_ID}&ticket=${encodeURIComponent(ticket)}`, {
+      headers: { Origin: 'http://localhost:5173' },
+    })
+    return client
+  }
+
+  function upgradeStatus(socket: WebSocket) {
+    return new Promise<number>((resolve, reject) => {
+      socket.once('unexpected-response', (_request, response) => resolve(response.statusCode ?? 0))
+      socket.once('open', () => reject(new Error('Upgrade unexpectedly succeeded')))
+      socket.once('error', () => {})
+    })
   }
 
   function sendJoin(socket: WebSocket, topic: string) {
@@ -156,6 +174,36 @@ describe('realtime proxy upgrade-to-join flow', () => {
     expect(upstreamConnections).toBe(1)
     expect(upstreamJoinFrames).toHaveLength(1)
     expect(JSON.parse(upstreamJoinFrames[0]!).payload.access_token).toBe('test-access-token')
+  })
+
+  it('accepts a one-time ticket in place of the session cookie', async () => {
+    supabaseMocks.createUserClient.mockReturnValue({ rpc: vi.fn().mockResolvedValue(AUTHORIZED) })
+    const url = await startProxy()
+    const ticket = issueTicket(COOKIE_SECRET, { accessToken: 'ticket-access-token', resourceId: RESOURCE_ID, channelKind: 'report' })
+    const socket = connectWithTicket(url, 'room', ticket)
+    await once(socket, 'open')
+    const topic = `realtime:room:${RESOURCE_ID}`
+    const reply = once(socket, 'message').then(([raw]) => JSON.parse(raw.toString()))
+    sendJoin(socket, topic)
+
+    expect(await reply).toMatchObject({ topic, event: 'phx_reply', payload: { status: 'ok' } })
+    expect(supabaseMocks.validateAccessToken).toHaveBeenCalledWith(expect.anything(), 'ticket-access-token', expect.anything())
+    expect(supabaseMocks.createUserClient).toHaveBeenCalledWith(expect.anything(), 'ticket-access-token')
+    expect(JSON.parse(upstreamJoinFrames[0]!).payload.access_token).toBe('ticket-access-token')
+  })
+
+  it('rejects a ticket issued for another channel kind, and a reused ticket', async () => {
+    supabaseMocks.createUserClient.mockReturnValue({ rpc: vi.fn().mockResolvedValue(AUTHORIZED) })
+    const url = await startProxy()
+    const reportTicket = issueTicket(COOKIE_SECRET, { accessToken: 'ticket-access-token', resourceId: RESOURCE_ID, channelKind: 'report' })
+    expect(await upgradeStatus(connectWithTicket(url, 'class_session', reportTicket))).toBe(401)
+
+    const ticket = issueTicket(COOKIE_SECRET, { accessToken: 'ticket-access-token', resourceId: RESOURCE_ID, channelKind: 'class_session' })
+    const first = connectWithTicket(url, 'class_session', ticket)
+    await once(first, 'open')
+    first.terminate()
+    expect(await upgradeStatus(connectWithTicket(url, 'class_session', ticket))).toBe(401)
+    expect(await upgradeStatus(connectWithTicket(url, 'class_session', 'tampered-ticket'))).toBe(401)
   })
 
   it('does not open an upstream connection when delayed authorization denies access', async () => {

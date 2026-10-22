@@ -31,6 +31,7 @@ import { createAiReportAssistRouter, defaultAiReportAssistDeps } from './routes/
 import { createAiMeRouter } from './routes/rest/aiMeRouter.js'
 import { createAiAdminRouter } from './routes/rest/aiAdminRouter.js'
 import { createAiDeidRouter } from './routes/rest/aiDeidRouter.js'
+import { createRealtimeTicketRouter } from './routes/rest/realtimeTicketRouter.js'
 
 const LOCAL_DEVELOPMENT_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://[::1]:5173']
 
@@ -80,6 +81,7 @@ export function createApp(env: NodeJS.ProcessEnv = process.env) {
   app.use('/api/users', csrfProtection, requireAuth(clients, config), rateLimitMiddleware(config, clients.adminClient), createUserSearchRouter())
   const protectedApi = Router()
   protectedApi.use(csrfProtection, requireAuth(clients, config), rateLimitMiddleware(config, clients.adminClient))
+  protectedApi.use(createRealtimeTicketRouter(config))
   protectedApi.use(createRbacRouter())
   protectedApi.use(createEnrollmentRouter())
   protectedApi.use(createReportRouter())

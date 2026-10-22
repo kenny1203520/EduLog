@@ -1,4 +1,5 @@
 import { authService } from '@/services/auth/AuthService'
+import { apiV1Client, ApiV1Error } from '@/services/api/ApiV1Client'
 
 type Callback = (payload: any) => void
 type SubscribeCallback = (status: string, detail?: string) => void
@@ -75,6 +76,7 @@ export class ApiRealtimeChannel {
   private closedByUser = false
   private failureHandled = false
   private retryInFlight = false
+  private connectAttempt = 0
   private pendingHeartbeatRef: string | null = null
   private onlineListener: (() => void) | null = null
   private offlineListener: (() => void) | null = null
@@ -204,10 +206,49 @@ export class ApiRealtimeChannel {
     }
     this.failureHandled = false
     this.subscribedCallback?.('CONNECTING')
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const attempt = ++this.connectAttempt
     const resourceId = this.topic.slice(this.channelKind === 'class_session' ? 'realtime:class-session:'.length : 'realtime:room:'.length)
     const parameter = this.channelKind === 'class_session' ? 'class_session' : 'room'
-    const socket = new WebSocket(`${protocol}//${window.location.host}/api/realtime?${parameter}=${encodeURIComponent(resourceId)}`)
+    // A side-panel frame sends the session cookie on fetch but not on the
+    // WebSocket handshake, so every connection presents a one-time ticket.
+    apiV1Client.post<{ ticket: string }>('/realtime/ticket', { [parameter]: resourceId }).then(
+      (response) => {
+        if (attempt !== this.connectAttempt || this.closedByUser) return
+        this.openSocket(`${parameter}=${encodeURIComponent(resourceId)}&ticket=${encodeURIComponent(response.data.ticket)}`)
+      },
+      (error: unknown) => {
+        if (attempt !== this.connectAttempt || this.closedByUser) return
+        this.handleTicketFailure(error)
+      }
+    )
+  }
+
+  private handleTicketFailure(error: unknown) {
+    const status = error instanceof ApiV1Error ? error.status : 0
+    if (status === 401) {
+      this.closedByUser = true
+      this.subscribedCallback?.('AUTH_EXPIRED')
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('edulog:auth-session-expired'))
+      return
+    }
+    if (status === 403 && (error as ApiV1Error).code === 'ACCOUNT_DISABLED') {
+      this.closedByUser = true
+      this.subscribedCallback?.('ACCOUNT_DISABLED')
+      return
+    }
+    if (status >= 400 && status < 500 && status !== 408 && status !== 429) {
+      this.closedByUser = true
+      this.subscribedCallback?.('PERMISSION_DENIED', 'Realtime resource access denied')
+      return
+    }
+    this.subscribedCallback?.('CHANNEL_ERROR', 'Could not prepare the realtime connection')
+    if (!this.isOnline()) this.subscribedCallback?.('OFFLINE')
+    else this.scheduleReconnect()
+  }
+
+  private openSocket(query: string) {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const socket = new WebSocket(`${protocol}//${window.location.host}/api/realtime?${query}`)
     this.socket = socket
     this.socketOpenTimer = setTimeout(() => {
       if (this.socket !== socket || socket.readyState === WebSocket.OPEN || this.closedByUser) return
