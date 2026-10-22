@@ -23,7 +23,7 @@ try {
     browser.on('page', page => page.on('pageerror', error => errors.push(error.message)))
     await browser.route('https://corp.orangeapple.co/**', route => route.fulfill({
       contentType: 'text/html; charset=utf-8',
-      body: readFileSync(new URL('./fixtures/class.html', import.meta.url), 'utf8'),
+      body: readFileSync(new URL('../fixtures/class.html', import.meta.url), 'utf8'),
     }))
     return browser
   }
