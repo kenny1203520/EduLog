@@ -1,4 +1,4 @@
-// Provider page enhancement. Routes, selectors and wording live in orange-apple-lexicon.js.
+// Provider page enhancement. Routes, selectors and wording live in core/lexicon.js.
 (() => {
   const lexicon = globalThis.edulogSiteLexicon, model = globalThis.edulogSiteModel
   const words = lexicon.text
