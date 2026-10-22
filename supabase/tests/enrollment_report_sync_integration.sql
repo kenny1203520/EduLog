@@ -27,7 +27,7 @@ BEGIN
   -- Ten Saturdays from 2026-09-05; the third one is cancelled.
   FOR week IN 0..9 LOOP
     INSERT INTO public.class_occurrences(class_session_id, occurrence_date, status, is_conducted)
-    VALUES (session_a, DATE '2026-09-05' + week * 7, CASE WHEN week = 2 THEN 'cancelled' ELSE 'scheduled' END, false);
+    VALUES (session_a, DATE '2026-09-05' + week * 7, CASE WHEN week = 2 THEN 'cancelled' ELSE 'scheduled' END, true);
   END LOOP;
 
   INSERT INTO public.enrollments(id, student_id, course_id, classroom_id, class_session_id, user_id, status, start_date)

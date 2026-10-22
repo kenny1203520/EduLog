@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { authService } from '@/services/auth/AuthService'
 import type { BffSession, BffUser } from '@/services/auth/AuthService'
 import { AggregateService } from '@/services/AggregateService'
+import { localDraftStore } from '@/services/report/LocalDraftStore'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<BffUser | null>(null)
@@ -27,7 +28,15 @@ export const useAuthStore = defineStore('auth', () => {
     accountDisabled.value = false
   }
 
+  // Unsaved report drafts hold student data; they must not outlive the
+  // person's session on a shared device. An expired session keeps them so the
+  // same teacher can restore after signing in again.
+  function clearLocalDrafts() {
+    void localDraftStore.clearAll().catch((error) => console.warn('Local report drafts could not be cleared', error))
+  }
+
   function markAccountDisabled() {
+    clearLocalDrafts()
     clearSession()
     accountDisabled.value = true
   }
@@ -71,6 +80,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function signOut() {
     const { error } = await authService.logout()
     if (error) throw error
+    clearLocalDrafts()
     clearSession()
   }
 

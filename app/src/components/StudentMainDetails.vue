@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
+import { useFeedback } from '@/composables/useFeedback'
 import { useRouter } from 'vue-router'
 import { useStudentStore } from '@/stores/useStudentStore'
 import { useEmailValidation } from '@/composables/useEmailValidation'
@@ -22,6 +23,7 @@ const props = withDefaults(defineProps<{
 
 const { t } = useI18n()
 const toast = useToast()
+const { errorKey, reportError } = useFeedback()
 const router = useRouter()
 const studentStore = useStudentStore()
 const { validateEmail, getEmailError } = useEmailValidation()
@@ -106,7 +108,7 @@ function toggleEditMainDetails() {
 async function saveMainDetails() {
     if (form.value.email && !validateEmail(form.value.email)) {
         emailTouched.value = true
-        toast.error(t('student.errors.email_invalid'))
+        errorKey('student.errors.email_invalid')
         return
     }
 
@@ -132,7 +134,7 @@ async function saveMainDetails() {
         isEditingMainDetails.value = false
     } catch (e) {
         console.error(e)
-        toast.error(t('student.errors.save_details_failed'))
+        reportError(e, 'student.errors.save_details_failed')
     } finally {
         isSaving.value = false
     }
@@ -150,7 +152,7 @@ async function confirmDeleteStudent() {
         router.push('/dashboard')
     } catch (e: any) {
         console.error(e)
-        toast.error(t('student.errors.delete_student_failed') + ': ' + (e.message || e))
+        reportError(e, 'student.errors.delete_student_failed')
     } finally {
         isDeleting.value = false
     }

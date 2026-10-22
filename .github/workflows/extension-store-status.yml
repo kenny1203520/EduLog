@@ -1,0 +1,43 @@
+name: Extension store review status
+
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  status:
+    if: vars.EXTENSION_STORE_MONITOR_ENABLED == 'true' && github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    environment: extension-store-monitor
+    timeout-minutes: 10
+    concurrency:
+      group: extension-store
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 26
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        id: auth
+        with:
+          workload_identity_provider: ${{ vars.CWS_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.CWS_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/chromewebstore.readonly
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: Update release only on a changed store state
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CWS_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+        run: node scripts/extension/store.mjs monitor

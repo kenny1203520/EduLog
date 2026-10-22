@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
 import { Router, type Request, type Response, type NextFunction } from 'express'
+import { measureReportAdoptions } from '../../ai/adoption/adoptionTracker.js'
 import { z } from 'zod'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { ApiError, mapDatabaseError } from '../../http/errors.js'
@@ -61,6 +62,11 @@ export const memoryConfirmation = z.object({
     versions: z.record(uuid,z.string().regex(/^[a-f0-9]{32}$/)).optional(),
   }).strict()).min(1).max(50),
 }).strict()
+// Source rows without a reportId are attendance evidence: date, count and class only.
+const evidenceCount = z.number().int().min(0).max(20)
+export const attendanceEvidence = z.object({ source_origin: source, items: z.array(z.object({ enrollment_id: uuid, source_admission_id: z.string().regex(/^\d+$/).max(40), source_class_id: z.string().regex(/^\d+$/).max(40).optional(), evidence_date: date, attendance_count: evidenceCount.min(1), present_count: evidenceCount.default(0), absent_count: evidenceCount.default(0) }).strict().refine(item => item.present_count + item.absent_count <= item.attendance_count, 'Attendance counts exceed the row count')).min(1).max(50) }).strict()
+const attendanceEvidenceQuery = z.object({ enrollment_id: uuid, before_date: date.optional(), limit: z.coerce.number().int().min(1).max(100).default(100) }).strict()
+export const sourceReportConflictsQuery = z.object({ action: z.enum(['kept','superseded','archived_evidence','occurrence_backfilled','occurrence_conflict','link_conflict']).optional(), cursor: uuid.optional(), limit: z.coerce.number().int().min(1).max(50).default(50) }).strict()
 const wrap = (fn: (req: Request, res: Response) => Promise<unknown>) => (req: Request, res: Response, next: NextFunction) => void fn(req, res).catch(next)
 const mappingField = z.enum(['attendance_status','absence_reason','is_completed','class_participation','classroom_behavior','lesson_id','progress_start','progress_end'])
 const fieldReference = z.object({ field_key: mappingField, course_id: uuid.optional(), class_session_id: uuid.optional(), options_signature: z.string().min(2).max(16000).refine(value => {
@@ -110,6 +116,18 @@ function databaseError(error: { message: string; code?: string; details?: string
       }
     } catch { /* Return a safe batch-level diagnostic for legacy database errors. */ }
     return new ApiError(422, 'INVALID_REFERENCE', 'One or more records could not be verified. Refresh the source and target catalogs, then retry.', { job: ['REFERENCE_CHECK_FAILED'] })
+  }
+  if (error.message === 'SOURCE_MAPPING_CONFLICT' || error.message === 'INVALID_IMPORT') {
+    // Source report identity checks name the row and an allowlisted reason.
+    const reasons = error.message === 'SOURCE_MAPPING_CONFLICT' ? new Set(['SOURCE_REPORT_ALREADY_IMPORTED','SOURCE_REPORT_BOUND_ELSEWHERE','OCCURRENCE_REPORT_HAS_OTHER_SOURCE','SOURCE_LINK_CONFLICT']) : new Set(['REPORT_IDENTITY_REQUIRED'])
+    try {
+      const diagnostic = JSON.parse(error.details ?? '') as { kind?: unknown; source_id?: unknown; field?: unknown; reason?: unknown }
+      if (diagnostic.kind === 'history_report' && diagnostic.field === 'source_report_id' && typeof diagnostic.source_id === 'string' && diagnostic.source_id.length <= 256 && /^[a-zA-Z0-9._:-]+$/.test(diagnostic.source_id) && reasons.has(String(diagnostic.reason))) {
+        return error.message === 'SOURCE_MAPPING_CONFLICT'
+          ? new ApiError(409, 'SOURCE_MAPPING_CONFLICT', 'This source report is already linked to another EduLog record. Review the identity conflict before syncing.', { [`rows.history_report.${diagnostic.source_id}.source_report_id`]: [String(diagnostic.reason)] })
+          : new ApiError(422, 'INVALID_IMPORT', 'Source rows without a report ID are attendance evidence and cannot be imported as reports.', { [`rows.history_report.${diagnostic.source_id}.source_report_id`]: [String(diagnostic.reason)] })
+      }
+    } catch { /* Other conflicts keep the generic response. */ }
   }
   if(error.message==='VERSION_CONFLICT') {
     try {
@@ -194,6 +212,9 @@ export function createExtensionWorkspaceRouter(admin: SupabaseClient) {
   router.get('/history-reports/:id', wrap(async (req,res) => reply(req,res,await run(req,'detail',{ id: uuid.parse(req.params.id) },'web_extension_history'))))
   router.get('/history-reports/:id/candidates', wrap(async (req,res) => reply(req,res,await run(req,'candidates',{ history_id: uuid.parse(req.params.id), ...z.object({cursor:uuid.optional(),limit:z.coerce.number().int().min(1).max(50).default(50)}).strict().parse(req.query) },'web_extension_history'))))
   for (const action of ['preview','apply'] as const) router.post(`/history-reports/:id/bind/${action}`,wrap(async (req,res) => reply(req,res,await run(req,`bind-${action}`,{history_id:uuid.parse(req.params.id),...historyBinding.parse(req.body)},'web_extension_history'))))
+  router.post('/attendance-evidence', wrap(async (req, res) => reply(req, res, await run(req, 'record', attendanceEvidence.parse(req.body), 'web_extension_attendance_evidence'))))
+  router.get('/attendance-evidence', wrap(async (req, res) => reply(req, res, await run(req, 'list', attendanceEvidenceQuery.parse(req.query), 'web_extension_attendance_evidence'))))
+  router.get('/source-report-conflicts', wrap(async (req, res) => reply(req, res, await run(req, 'list', sourceReportConflictsQuery.parse(req.query), 'web_extension_source_report_conflicts'))))
   router.get('/reports', wrap(async (req, res) => {
     const summary = z.enum(['true','false']).default('false').parse(req.query.summary) === 'true'
     const search = req.query.search === undefined ? null : z.string().trim().max(80).parse(req.query.search)
@@ -252,6 +273,12 @@ export function createExtensionWorkspaceRouter(admin: SupabaseClient) {
   router.patch('/imports/:id', wrap(async (req, res) => reply(req, res, await run(req, 'job-status', { job_id: uuid.parse(req.params.id), ...jobStatus.parse(req.body) }))))
   router.get('/work', wrap(async (req, res) => reply(req, res, await run(req, 'work', {}))))
   // Confirmation is intentionally absent until the adapter has a verified success contract.
-  router.post('/report-pushes', wrap(async (req, res) => reply(req, res, await run(req, 'pending-push', pendingPush.parse(req.body)))))
+  router.post('/report-pushes', wrap(async (req, res) => {
+    const input = pendingPush.parse(req.body)
+    const result = await run(req, 'pending-push', input)
+    // The pushed report is what parents receive: record how much adopted AI text it kept.
+    void measureReportAdoptions(admin, input.report_id, 'push').catch((error) => req.log?.warn?.({ err: error, report_id: input.report_id }, 'ai_adoption_measure_failed'))
+    return reply(req, res, result)
+  }))
   return router
 }

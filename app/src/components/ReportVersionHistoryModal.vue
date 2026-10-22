@@ -325,6 +325,7 @@
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
+import { useFeedback } from '@/composables/useFeedback'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import type { ReportVersion, OccurrenceReportDTO } from '@/models/OccurrenceReport'
@@ -345,6 +346,7 @@ const emit = defineEmits<{
 
 const { t, locale } = useI18n()
 const toast = useToast()
+const { reportError } = useFeedback()
 const authStore = useAuthStore()
 
 function handleKeydown(event: KeyboardEvent) {
@@ -412,7 +414,7 @@ async function loadVersions() {
         versions.value = await OccurrenceReportService.getReportVersions(props.reportId)
     } catch (error) {
         console.error('Failed to load version history:', error)
-        toast.error(t('report.editor.load_history_failed'))
+        reportError(error, 'report.editor.load_history_failed')
     } finally {
         isLoading.value = false
     }
@@ -462,9 +464,9 @@ async function executeRestore() {
     } catch (error: any) {
         console.error('Failed to restore version:', error)
         if (error?.message?.includes('Conflict') || error?.message?.includes('modified by another user')) {
-            toast.error(t('report.editor.restore_conflict_error'))
+            reportError(error, 'report.editor.restore_conflict_error')
         } else {
-            toast.error(t('report.editor.restore_failed'))
+            reportError(error, 'report.editor.restore_failed')
         }
     } finally {
         confirmState.value.isLoading = false

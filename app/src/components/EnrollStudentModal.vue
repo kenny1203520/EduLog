@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
+import { useFeedback } from '@/composables/useFeedback'
 import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
 import { AggregateService } from '@/services/AggregateService'
 import { SessionService } from '@/services/session/SessionService'
@@ -25,6 +26,7 @@ const emit = defineEmits(['close', 'success'])
 
 const { t } = useI18n()
 const toast = useToast()
+const { errorKey, reportError } = useFeedback()
 const preferences = usePreferencesStore()
 
 const isSubmitting = ref(false)
@@ -156,12 +158,12 @@ watch(() => props.isOpen, (val) => {
 
 async function submitEnrollment() {
     if (!enrollForm.value.course_catalog_id || !enrollForm.value.class_session_id || !enrollForm.value.start_date) {
-        toast.error(t('student.management.required_fields', 'Missing required fields'))
+        errorKey('student.management.required_fields')
         return
     }
 
     if (isFull.value) {
-        toast.error(t('student.errors.session_full', 'Selected session is full in the chosen period'))
+        errorKey('student.errors.session_full')
         return
     }
 
@@ -188,9 +190,8 @@ async function submitEnrollment() {
         emit('close')
     } catch (e: any) {
         console.error(e)
-        toast.error(e.message?.includes('TARGET_SESSION_COURSE_MISMATCH')
-            ? t('student.errors.session_course_mismatch')
-            : (e.message || 'Failed to enroll student'))
+        if (e.message?.includes('TARGET_SESSION_COURSE_MISMATCH')) errorKey('student.errors.session_course_mismatch')
+        else reportError(e, 'student.errors.enroll_failed')
     } finally {
         isSubmitting.value = false
     }

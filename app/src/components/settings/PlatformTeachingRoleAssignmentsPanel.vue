@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
+import { useFeedback } from '@/composables/useFeedback'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import EffectiveTeachingRoles from '@/components/rbac/EffectiveTeachingRoles.vue'
@@ -22,6 +23,7 @@ type Session = ClassSessionDTO & { id: string }
 
 const { t, locale } = useI18n()
 const toast = useToast()
+const { errorKey, reportError } = useFeedback()
 const roles = ref<RoleDTO[]>([])
 const classrooms = ref<Classroom[]>([])
 const sessions = ref<Session[]>([])
@@ -205,7 +207,7 @@ async function load() {
         await loadAssignments()
     } catch (error) {
         rootAssignments.value = []
-        if (error) toast.error(t('rbac.platform_teaching_assignments.load_failed'))
+        if (error) reportError(error, 'rbac.platform_teaching_assignments.load_failed')
     } finally { loading.value = false }
 }
 
@@ -268,7 +270,7 @@ function onUserSelected(id: string) {
 
 async function mutateAssignment(target: 'root' | 'local') {
     if (!userId.value || !roleId.value || !effectiveFrom.value || (target === 'local' && !scopeReady.value)) return
-    if (effectiveTo.value && effectiveTo.value < effectiveFrom.value) { toast.error(t('classroom.role_assignments.invalid_date_range')); return }
+    if (effectiveTo.value && effectiveTo.value < effectiveFrom.value) { errorKey('classroom.role_assignments.invalid_date_range'); return }
     saving.value = true
     try {
         const body: Record<string, unknown> = { user_id: userId.value, role_id: roleId.value, effective_from: effectiveFrom.value, effective_to: effectiveTo.value || null, expected_epoch: epoch.value }
@@ -277,14 +279,14 @@ async function mutateAssignment(target: 'root' | 'local') {
         toast.success(t('rbac.platform_teaching_assignments.saved'))
         await loadAssignments()
     } catch (error: any) {
-        if (error?.code === 'TEACHING_ROLE_ASSIGNMENT_OVERLAP' || error?.code === 'PLATFORM_TEACHING_ROLE_ASSIGNMENT_OVERLAP') toast.error(t('rbac.platform_teaching_assignments.overlap'))
-        else toast.error(t('rbac.platform_teaching_assignments.save_failed'))
+        if (error?.code === 'TEACHING_ROLE_ASSIGNMENT_OVERLAP' || error?.code === 'PLATFORM_TEACHING_ROLE_ASSIGNMENT_OVERLAP') errorKey('rbac.platform_teaching_assignments.overlap')
+        else reportError(error, 'rbac.platform_teaching_assignments.save_failed')
     } finally { saving.value = false }
 }
 
 async function excludeRole() {
     if (!scopeReady.value || !userId.value || !roleId.value || !effectiveFrom.value) return
-    if (effectiveTo.value && effectiveTo.value < effectiveFrom.value) { toast.error(t('classroom.role_assignments.invalid_date_range')); return }
+    if (effectiveTo.value && effectiveTo.value < effectiveFrom.value) { errorKey('classroom.role_assignments.invalid_date_range'); return }
     saving.value = true
     try {
         await apiV1Client.post(`/teaching-role-exclusions?scope_type=${scopeType.value}&scope_id=${encodeURIComponent(scopeId.value)}`, {
@@ -294,8 +296,8 @@ async function excludeRole() {
         toast.success(t('rbac.platform_teaching_assignments.exclusion_saved'))
         await loadLists()
     } catch (error: any) {
-        if (error?.code === 'ROLE_ASSIGNMENT_EXCLUSION_OVERLAP') toast.error(t('rbac.platform_teaching_assignments.overlap'))
-        else toast.error(t('rbac.platform_teaching_assignments.save_failed'))
+        if (error?.code === 'ROLE_ASSIGNMENT_EXCLUSION_OVERLAP') errorKey('rbac.platform_teaching_assignments.overlap')
+        else reportError(error, 'rbac.platform_teaching_assignments.save_failed')
     } finally { saving.value = false }
 }
 
@@ -310,7 +312,7 @@ async function removeAssignment(assignment: TeachingRoleAssignment, target: 'roo
         if (target === 'root') await loadRootAssignments()
         else await loadLists()
         toast.success(t('common.deleted'))
-    } catch { toast.error(t('rbac.platform_teaching_assignments.remove_failed')) }
+    } catch { errorKey('rbac.platform_teaching_assignments.remove_failed') }
     finally { saving.value = false }
 }
 

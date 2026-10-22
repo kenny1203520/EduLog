@@ -1,8 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiRealtimeChannel, decodePhoenixMessage, encodePhoenixMessage } from './ApiRealtimeChannel'
 import { authService } from '@/services/auth/AuthService'
+import { apiV1Client, ApiV1Error } from '@/services/api/ApiV1Client'
 
 vi.mock('@/services/auth/AuthService', () => ({ authService: { getSession: vi.fn() } }))
+vi.mock('@/services/api/ApiV1Client', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/services/api/ApiV1Client')>(),
+  apiV1Client: { post: vi.fn() }
+}))
+
+const ticketResponse = (ticket = 'one-time-ticket') => ({ data: { ticket, expires_in: 30 }, request_id: 'r', trace_id: 't' })
+const apiError = (status: number, code: string) => new ApiV1Error(status, { error: { code, message: code, request_id: 'r', trace_id: 't' } })
+
+/** Lets the ticket request resolve and the socket open attempt run. */
+async function settle() {
+  for (let index = 0; index < 5; index += 1) await Promise.resolve()
+}
 
 class MockWebSocket {
   static CONNECTING = 0
@@ -47,6 +60,8 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
   beforeEach(() => {
     vi.mocked(authService.getSession).mockClear()
     vi.mocked(authService.getSession).mockResolvedValue({ session: { user: { id: 'u' } } as any, error: null })
+    vi.mocked(apiV1Client.post).mockReset()
+    vi.mocked(apiV1Client.post).mockResolvedValue(ticketResponse())
   })
 
   afterEach(() => {
@@ -57,7 +72,7 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     vi.mocked(authService.getSession).mockReset()
   })
 
-  it('encodes and decodes Phoenix 1.0 JSON object frames', () => {
+  it('encodes and decodes Phoenix 1.0 JSON object frames', async () => {
     const frame = encodePhoenixMessage({ joinRef: '7', ref: '7', topic: 'realtime:room:r', event: 'phx_join', payload: {} })
     expect(JSON.parse(frame)).toEqual({ join_ref: '7', ref: '7', topic: 'realtime:room:r', event: 'phx_join', payload: {} })
     expect(decodePhoenixMessage(frame)).toEqual({ joinRef: '7', ref: '7', topic: 'realtime:room:r', event: 'phx_join', payload: {} })
@@ -72,6 +87,7 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     const callback = vi.fn()
     const channel = new ApiRealtimeChannel('report-id', 'presence-key')
     channel.subscribe(callback)
+    await settle()
     const socket = MockWebSocket.latest!
     socket.emit('open')
     expect(JSON.parse(socket.sent[0])).toMatchObject({
@@ -92,7 +108,7 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     channel.unsubscribe()
   })
 
-  it('opens a private class-session invalidation channel using the scoped endpoint', () => {
+  it('opens a private class-session invalidation channel using the scoped endpoint', async () => {
     vi.stubGlobal('WebSocket', MockWebSocket)
     stubWindow('https:', 'edulog.example')
     const callback = vi.fn()
@@ -100,8 +116,10 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     const channel = new ApiRealtimeChannel('session-id', 'session-presence', 'class_session')
     channel.on('broadcast', { event: 'class_session_invalidated' }, invalidate)
     channel.subscribe(callback)
+    await settle()
     const socket = MockWebSocket.latest!
-    expect(socket.url).toBe('wss://edulog.example/api/realtime?class_session=session-id')
+    expect(socket.url).toBe('wss://edulog.example/api/realtime?class_session=session-id&ticket=one-time-ticket')
+    expect(apiV1Client.post).toHaveBeenCalledWith('/realtime/ticket', { class_session: 'session-id' }, { changesData: false })
     socket.emit('open')
     const { join_ref: joinRef, ref, topic } = JSON.parse(socket.sent[0])
     expect(topic).toBe('realtime:class-session:session-id')
@@ -121,6 +139,7 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     const callback = vi.fn()
     const channel = new ApiRealtimeChannel('report-id', 'presence-key')
     channel.subscribe(callback)
+    await settle()
     const firstSocket = MockWebSocket.latest!
 
     await vi.advanceTimersByTimeAsync(10_800)
@@ -139,6 +158,7 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     const callback = vi.fn()
     const channel = new ApiRealtimeChannel('report-id', 'presence-key', 'class_session')
     channel.subscribe(callback)
+    await settle()
     const firstSocket = MockWebSocket.latest!
     firstSocket.emit('open')
 
@@ -159,6 +179,7 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     const callback = vi.fn()
     const channel = new ApiRealtimeChannel('report-id', 'presence-key')
     channel.subscribe(callback)
+    await settle()
     const socket = MockWebSocket.latest!
     socket.emit('open')
     socket.emit('message', { data: new ArrayBuffer(4) })
@@ -170,12 +191,13 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     channel.unsubscribe()
   })
 
-  it('sends heartbeat, broadcast, and presence frames as Phoenix JSON objects', () => {
+  it('sends heartbeat, broadcast, and presence frames as Phoenix JSON objects', async () => {
     vi.useFakeTimers()
     vi.stubGlobal('WebSocket', MockWebSocket)
     stubWindow()
     const channel = new ApiRealtimeChannel('report-id', 'presence-key')
     channel.subscribe(vi.fn())
+    await settle()
     const socket = MockWebSocket.latest!
     socket.emit('open')
     const { join_ref: joinRef, ref, topic } = JSON.parse(socket.sent[0])
@@ -195,13 +217,14 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     channel.unsubscribe()
   })
 
-  it('only treats the matching join reply as subscribed', () => {
+  it('only treats the matching join reply as subscribed', async () => {
     vi.useFakeTimers()
     vi.stubGlobal('WebSocket', MockWebSocket)
     stubWindow()
     const callback = vi.fn()
     const channel = new ApiRealtimeChannel('report-id', 'presence-key')
     channel.subscribe(callback)
+    await settle()
     const socket = MockWebSocket.latest!
     socket.emit('open')
     const { join_ref: joinRef, topic } = JSON.parse(socket.sent[0])
@@ -214,7 +237,7 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     channel.unsubscribe()
   })
 
-  it('dispatches broadcast and presence replies decoded from Phoenix JSON objects', () => {
+  it('dispatches broadcast and presence replies decoded from Phoenix JSON objects', async () => {
     vi.stubGlobal('WebSocket', MockWebSocket)
     stubWindow()
     const channel = new ApiRealtimeChannel('report-id', 'presence-key')
@@ -223,6 +246,7 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     channel.on('broadcast', { event: 'sync-update' }, broadcast)
     channel.on('presence', { event: 'sync' }, presenceSync)
     channel.subscribe(vi.fn())
+    await settle()
     const socket = MockWebSocket.latest!
     socket.emit('open')
     const { join_ref: joinRef, ref, topic } = JSON.parse(socket.sent[0])
@@ -249,6 +273,7 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     const callback = vi.fn()
     const channel = new ApiRealtimeChannel('report-id', 'presence-key')
     channel.subscribe(callback)
+    await settle()
     const firstSocket = MockWebSocket.latest!
     firstSocket.emit('close', { code: 1012, reason: 'upstream disconnected' })
 
@@ -271,6 +296,7 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     const callback = vi.fn()
     const channel = new ApiRealtimeChannel('report-id', 'presence-key')
     channel.subscribe(callback)
+    await settle()
     const firstSocket = MockWebSocket.latest!
     firstSocket.emit('open')
     online.onLine = false
@@ -298,6 +324,7 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     const callback = vi.fn()
     const channel = new ApiRealtimeChannel('report-id', 'presence-key')
     channel.subscribe(callback)
+    await settle()
     const firstSocket = MockWebSocket.latest!
     firstSocket.emit('close', { code: 1012 })
     await vi.advanceTimersByTimeAsync(700)
@@ -317,6 +344,7 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     const callback = vi.fn()
     const channel = new ApiRealtimeChannel('report-id', 'presence-key')
     channel.subscribe(callback)
+    await settle()
     const firstSocket = MockWebSocket.latest!
     firstSocket.emit('close', { code: 1012 })
     await vi.advanceTimersByTimeAsync(700)
@@ -326,7 +354,7 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     expect(MockWebSocket.latest).toBe(firstSocket)
   })
 
-  it('does not retry a forbidden resource or after explicit unsubscribe', () => {
+  it('does not retry a forbidden resource or after explicit unsubscribe', async () => {
     vi.useFakeTimers()
     vi.stubGlobal('WebSocket', MockWebSocket)
     stubWindow()
@@ -334,6 +362,7 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     const callback = vi.fn()
     const channel = new ApiRealtimeChannel('report-id', 'presence-key')
     channel.subscribe(callback)
+    await settle()
     const forbiddenSocket = MockWebSocket.latest!
     forbiddenSocket.emit('close', { code: 4403, reason: 'access denied' })
     expect(callback).toHaveBeenCalledWith('PERMISSION_DENIED', 'access denied')
@@ -354,6 +383,7 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     const callback = vi.fn()
     const channel = new ApiRealtimeChannel('report-id', 'presence-key')
     channel.subscribe(callback)
+    await settle()
     const socket = MockWebSocket.latest!
     socket.emit('open')
     const join = JSON.parse(socket.sent[0])
@@ -376,6 +406,7 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.5)
     const channel = new ApiRealtimeChannel('report-id', 'presence-key')
     channel.subscribe(vi.fn())
+    await settle()
     const firstSocket = MockWebSocket.latest!
     firstSocket.emit('close', { code: 1012 })
     await vi.advanceTimersByTimeAsync(500)
@@ -393,5 +424,92 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     await vi.advanceTimersByTimeAsync(500)
     expect(MockWebSocket.latest).not.toBe(secondSocket)
     channel.unsubscribe()
+  })
+  it('fetches a fresh one-time ticket for every connection attempt', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('WebSocket', MockWebSocket)
+    stubWindow()
+    vi.stubGlobal('navigator', { onLine: true })
+    vi.mocked(apiV1Client.post).mockResolvedValueOnce(ticketResponse('first')).mockResolvedValueOnce(ticketResponse('second'))
+    const channel = new ApiRealtimeChannel('report-id', 'presence-key')
+    channel.subscribe(vi.fn())
+    await settle()
+    const firstSocket = MockWebSocket.latest!
+    expect(firstSocket.url).toBe('ws://localhost:5173/api/realtime?room=report-id&ticket=first')
+    firstSocket.emit('close', { code: 1012 })
+    await vi.advanceTimersByTimeAsync(700)
+
+    expect(apiV1Client.post).toHaveBeenCalledTimes(2)
+    expect(apiV1Client.post).toHaveBeenLastCalledWith('/realtime/ticket', { room: 'report-id' }, { changesData: false })
+    expect(MockWebSocket.latest!.url).toBe('ws://localhost:5173/api/realtime?room=report-id&ticket=second')
+    channel.unsubscribe()
+  })
+
+  it('stops with AUTH_EXPIRED when the ticket request is unauthenticated', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('WebSocket', MockWebSocket)
+    const fakeWindow = stubWindow()
+    vi.stubGlobal('navigator', { onLine: true })
+    vi.mocked(apiV1Client.post).mockRejectedValue(apiError(401, 'AUTH_REQUIRED'))
+    const callback = vi.fn()
+    const channel = new ApiRealtimeChannel('report-id', 'presence-key')
+    channel.subscribe(callback)
+    await settle()
+
+    expect(callback).toHaveBeenCalledWith('AUTH_EXPIRED')
+    expect(fakeWindow.dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'edulog:auth-session-expired' }))
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(apiV1Client.post).toHaveBeenCalledOnce()
+    expect(MockWebSocket.latest).toBeNull()
+  })
+
+  it('pauses with PERMISSION_DENIED when the ticket request is forbidden', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('WebSocket', MockWebSocket)
+    stubWindow()
+    vi.stubGlobal('navigator', { onLine: true })
+    vi.mocked(apiV1Client.post).mockRejectedValue(apiError(403, 'FORBIDDEN'))
+    const callback = vi.fn()
+    const channel = new ApiRealtimeChannel('report-id', 'presence-key', 'class_session')
+    channel.subscribe(callback)
+    await settle()
+
+    expect(callback).toHaveBeenCalledWith('PERMISSION_DENIED', 'Realtime resource access denied')
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(apiV1Client.post).toHaveBeenCalledOnce()
+    expect(MockWebSocket.latest).toBeNull()
+  })
+
+  it('retries with backoff when the ticket request fails on the network', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('WebSocket', MockWebSocket)
+    stubWindow()
+    vi.stubGlobal('navigator', { onLine: true })
+    vi.spyOn(Math, 'random').mockReturnValue(0.5)
+    vi.mocked(apiV1Client.post).mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    const callback = vi.fn()
+    const channel = new ApiRealtimeChannel('report-id', 'presence-key')
+    channel.subscribe(callback)
+    await settle()
+
+    expect(callback).toHaveBeenCalledWith('CHANNEL_ERROR', 'Could not prepare the realtime connection')
+    expect(callback).toHaveBeenCalledWith('RECONNECTING')
+    expect(MockWebSocket.latest).toBeNull()
+    await vi.advanceTimersByTimeAsync(500)
+    expect(MockWebSocket.latest!.url).toContain('ticket=one-time-ticket')
+    channel.unsubscribe()
+  })
+
+  it('ignores a ticket that arrives after unsubscribe', async () => {
+    vi.stubGlobal('WebSocket', MockWebSocket)
+    stubWindow()
+    let resolveTicket!: (value: ReturnType<typeof ticketResponse>) => void
+    vi.mocked(apiV1Client.post).mockReturnValue(new Promise((resolve) => { resolveTicket = resolve }) as never)
+    const channel = new ApiRealtimeChannel('report-id', 'presence-key')
+    channel.subscribe(vi.fn())
+    channel.unsubscribe()
+    resolveTicket(ticketResponse())
+    await settle()
+    expect(MockWebSocket.latest).toBeNull()
   })
 })

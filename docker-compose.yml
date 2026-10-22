@@ -707,6 +707,11 @@ services:
       API_EXTENSION_ALLOWED_ORIGINS: ${API_EXTENSION_ALLOWED_ORIGINS:-}
       API_BODY_LIMIT: ${EDULOG_API_BODY_LIMIT:-1mb}
       API_RATE_LIMIT_PER_MINUTE: ${EDULOG_API_RATE_LIMIT_PER_MINUTE:-120}
+      # AI report assistant. Server-only; never pass to the Vue container.
+      AI_SECRET_KEY: ${EDULOG_AI_SECRET_KEY:-}
+      PRESIDIO_ANALYZER_URL: ${EDULOG_PRESIDIO_ANALYZER_URL:-}
+      OPENAI_SIWC_CLIENT_ID: ${EDULOG_OPENAI_SIWC_CLIENT_ID:-}
+      OPENAI_SIWC_CLIENT_SECRET: ${EDULOG_OPENAI_SIWC_CLIENT_SECRET:-}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r => { if (!r.ok) process.exit(1) })"]
       interval: 10s
@@ -715,6 +720,20 @@ services:
       start_period: 20s
     networks:
       - frontend
+      - ai
+  presidio-analyzer:
+    build:
+      context: ./docker/presidio
+      args:
+        # Installed languages (zh, en, ja, ko); rebuild after changing.
+        PRESIDIO_LANGUAGES: ${EDULOG_PRESIDIO_LANGUAGES:-zh,en}
+    container_name: edulog-presidio-analyzer
+    restart: unless-stopped
+    # Point the API at it with EDULOG_PRESIDIO_ANALYZER_URL=http://presidio-analyzer:3000.
+    # No published ports: only the API may reach it. Text sent here is raw
+    # report content, so it must stay on the internal network.
+    networks:
+      - ai
   edulog:
     container_name: edulog-frontend
     image: ghcr.io/kenny1203520/edulog:${EDULOG_IMAGE_TAG:-latest}
@@ -733,6 +752,9 @@ services:
       EDULOG_HTTPS_PORT: ${EDULOG_HTTPS_PORT:-4174}
       EDULOG_HSTS_HEADER: "${EDULOG_HSTS_HEADER:-}"
       EDULOG_CSP_HEADER: "${EDULOG_CSP_HEADER:-}"
+      # Extension side panel: these exact extension origins may frame the web app (defaults to the API allowlist).
+      EDULOG_FRAME_ANCESTORS: "${EDULOG_FRAME_ANCESTORS:-}"
+      API_EXTENSION_ALLOWED_ORIGINS: ${API_EXTENSION_ALLOWED_ORIGINS:-}
       EDULOG_HTTP_ENABLED: ${EDULOG_HTTP_ENABLED:-true}
       EDULOG_HTTPS_ENABLED: ${EDULOG_HTTPS_ENABLED:-false}
       EDULOG_HTTPS_REDIRECT: ${EDULOG_HTTPS_REDIRECT:-false}
@@ -756,3 +778,6 @@ networks:
     driver: bridge
   frontend:
     driver: bridge
+  ai:
+    driver: bridge
+    internal: true

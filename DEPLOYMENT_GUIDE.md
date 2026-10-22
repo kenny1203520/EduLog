@@ -31,7 +31,8 @@ cp .env.example .env
    - `EDULOG_HTTPS_PORT`：前端原生 HTTPS 對外開放的 Port（預設為 `4174`）。
    - `EDULOG_IMAGE_TAG`：欲使用的 EduLog 版本標籤，您可以指定特定的版本號（如 `v1.3.0`），或保持為 `latest`。
    - `EDULOG_HTTP_ENABLED` / `EDULOG_HTTPS_ENABLED`：控制前端 Nginx 是否啟用 HTTP 與 HTTPS。HTTPS 會使用 `EDULOG_SSL_*` 指定的憑證。
-   - `EDULOG_CSP_HEADER` / `EDULOG_HSTS_HEADER`：前端 Nginx 的安全 header；未覆寫時會使用安全預設值。
+   - `EDULOG_CSP_HEADER` / `EDULOG_HSTS_HEADER`：前端 Nginx 的安全 header；未覆寫時會使用安全預設值。自訂 CSP 會完全取代預設值，須自行在 `frame-ancestors` 列出擴充功能 origin，否則擴充功能側邊欄無法顯示 EduLog。
+   - `EDULOG_FRAME_ANCESTORS`：允許在瀏覽器側邊欄嵌入 EduLog 的擴充功能 origin（以空白分隔的精確 `chrome-extension://<id>`）。留空時前端容器沿用 `API_EXTENSION_ALLOWED_ORIGINS`；使用 Caddy/nginx 反向代理時需明確設定。詳見 [docs/deployment/web-extension.md](docs/deployment/web-extension.md)。
 
 ## 第二步：啟動服務
 

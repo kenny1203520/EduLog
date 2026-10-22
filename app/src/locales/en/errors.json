@@ -36,6 +36,27 @@
         "ORIGINAL_REPORT_NOT_FOUND": "The original lesson's report was not found. Refresh and try again.",
         "SOURCE_REPORT_HAS_CONTENT": "The original date already has a report with content for this student, so the transfer can't be cancelled. Resolve that report first.",
         "TRANSFER_CHAIN_HAS_MERGED_REPORT": "A later transfer of this lesson merged reports. Cancel the latest transfer first.",
-        "REPORT_ALREADY_EXISTS": "A report already exists for this lesson."
+        "REPORT_ALREADY_EXISTS": "A report already exists for this lesson.",
+        "TRANSFER_NOTE_TOO_LONG": "The transfer note must be 200 characters or fewer."
+    },
+    "rate_limited": "Too many requests. Please wait a moment and try again.",
+    "service_unavailable": "The service is temporarily unavailable.",
+    "toast": {
+        "details": "Error code",
+        "copy": "Copy",
+        "copied": "Copied"
+    },
+    "hints": {
+        "network": "Check your connection and try again.",
+        "unknown": "Try again. If it keeps happening, open \"Error code\", copy it and report it.",
+        "unexpected": "Open \"Error code\", copy it and send it to support.",
+        "request_timeout": "Keep this page open and retry so your changes are not lost.",
+        "save_outcome_unknown": "Keep this page open and retry so your changes are not lost.",
+        "conflict": "Reload the page to get the latest data, then make your change again.",
+        "permission_denied": "Ask a system administrator if you need this permission.",
+        "session_expired": "Sign in again and retry.",
+        "validation_failed": "Fix the highlighted fields and submit again.",
+        "rate_limited": "Wait about a minute and try again.",
+        "service_unavailable": "Try again in a few minutes. If it keeps happening, contact support."
     }
 }

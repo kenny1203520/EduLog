@@ -7,9 +7,10 @@ import { requireAuthorizationDecision } from '../../auth/authorization.js'
 import { findReportProgressGaps } from '../../domain/reportProgressGaps.js'
 import { transferRpcError } from './transferRouter.js'
 import { orderByRelation } from './relationOrder.js'
+import { ensurePlannedLessons } from './lessonProvisioning.js'
 
 const occurrenceFields = 'id,class_session_id,occurrence_date,status,original_start_time,original_end_time,actual_start_time,actual_end_time,time_zone,is_conducted,teacher_ids,teacher_attendance,created_at,updated_at,class_sessions(id,name,time_zone,classroom_id,classrooms(id,name,color))'
-const reportFields = 'id,enrollment_id,class_occurrence_id,lesson_id,is_completed,progress_letter,attendance_status,absence_reason,class_participation,classroom_behavior,contact_notes,contact_notes_document,class_notes,class_notes_document,content,content_document,external_link,version,last_edited_by,last_edited_at,created_at,updated_at'
+const reportFields = 'id,enrollment_id,class_occurrence_id,lesson_id,is_completed,progress_letter,attendance_status,absence_reason,class_participation,classroom_behavior,contact_notes,contact_notes_document,class_notes,class_notes_document,content,content_document,external_link,source_origin,source_admission_id,source_report_id,version,last_edited_by,last_edited_at,created_at,updated_at'
 const reportPatchFields = ['lesson_id', 'is_completed', 'progress_letter', 'attendance_status', 'absence_reason', 'class_participation', 'classroom_behavior', 'contact_notes', 'contact_notes_document', 'class_notes', 'class_notes_document', 'content', 'content_document', 'external_link'] as const
 const uuid = z.string().uuid()
 
@@ -388,13 +389,12 @@ async function transferClass(req: Request, res: Response) {
   const enrollmentId = uuid.parse(req.params.id)
   const input = z.object({
     target_class_session_id: uuid,
-    original_last_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     transfer_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    note: z.string().trim().max(200).nullable().optional(),
   }).strict().parse(req.body)
-  const current = await req.db!.from('enrollments').select('id,course_id,class_session_id').eq('id', enrollmentId).maybeSingle()
+  const current = await req.db!.from('enrollments').select('id,course_id,class_session_id,start_date').eq('id', enrollmentId).maybeSingle()
   if (current.error) throw mapDatabaseError(current.error); if (!current.data) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found')
   if (!current.data.class_session_id) throw new ApiError(422, 'TRANSFER_INVALID', 'Enrollment has no current class session')
-  if (current.data.class_session_id === input.target_class_session_id) throw new ApiError(422, 'TARGET_SESSION_SAME_AS_CURRENT', 'The target class session is already assigned')
   await permission(req, 'teaching.enrollments.update', current.data.class_session_id)
   const target = await req.db!.from('class_sessions').select('id,classroom_id,course_ids,teaching_id').eq('id', input.target_class_session_id).maybeSingle()
   if (target.error) throw mapDatabaseError(target.error); if (!target.data) throw new ApiError(404, 'NOT_FOUND', 'Target class session was not found')
@@ -402,16 +402,55 @@ async function transferClass(req: Request, res: Response) {
   if (!courseIds.includes(current.data.course_id)) throw new ApiError(422, 'COURSE_MISMATCH', 'The target class session does not contain the enrollment course')
   await permission(req, 'teaching.enrollments.update', target.data.id)
   const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
+  // Generate the target class's lessons first so the student keeps the same
+  // number of reports: one per report on/after the date, plus the target
+  // lessons that cannot hold one (cancelled or rescheduled).
+  const effectiveDate = current.data.start_date && current.data.start_date > input.transfer_date ? current.data.start_date : input.transfer_date
+  const [later, unusable] = await Promise.all([
+    req.db!.from('occurrence_reports').select('id,class_occurrences!inner(occurrence_date)', { count: 'exact', head: true }).eq('enrollment_id', enrollmentId).gte('class_occurrences.occurrence_date', effectiveDate),
+    req.db!.from('class_occurrences').select('id', { count: 'exact', head: true }).eq('class_session_id', target.data.id).gte('occurrence_date', effectiveDate).in('status', ['cancelled', 'rescheduled']),
+  ])
+  if (later.error) throw mapDatabaseError(later.error); if (unusable.error) throw mapDatabaseError(unusable.error)
+  await ensurePlannedLessons(req, target.data.id, effectiveDate, (later.count ?? 0) + (unusable.count ?? 0))
   // The RPC runs with the caller JWT and re-checks both class permissions. It
-  // records the date-effective class history and moves blank placeholder
-  // reports on/after the transfer date; reports with content stay put.
-  const transferred = await req.db!.rpc('transfer_enrollment_class', { p_enrollment_id: enrollmentId, p_target_session_id: target.data.id, p_effective_date: input.transfer_date })
+  // rewrites the class history from the date, keeps reports with content in
+  // place, moves blank placeholders, keeps the report count and logs the
+  // transfer in enrollment_class_transfers.
+  const transferred = await req.db!.rpc('transfer_enrollment_class', { p_enrollment_id: enrollmentId, p_target_session_id: target.data.id, p_effective_date: input.transfer_date, p_note: input.note || null })
   if (transferred.error) throw transferRpcError(transferred.error)
-  const summary = (transferred.data ?? {}) as { effective_date?: string; moved_reports?: number; removed_placeholders?: number; retained_reports?: unknown[] }
+  const summary = (transferred.data ?? {}) as { transfer_id?: string; effective_date?: string; moved_reports?: number; created_reports?: number; removed_placeholders?: number; retained_reports?: unknown[]; missing_count?: number }
   const updated = await req.db!.from('enrollments').select('id,student_id,course_id,classroom_id,class_session_id,status,lesson_number,updated_at').eq('id', enrollmentId).single()
   if (updated.error) throw mapDatabaseError(updated.error)
-  const body = envelope(req, updated.data, { transfer_date: summary.effective_date ?? input.transfer_date, original_last_date: input.original_last_date ?? null, moved_reports: summary.moved_reports ?? 0, removed_placeholders: summary.removed_placeholders ?? 0, retained_reports: summary.retained_reports ?? [] })
+  const body = envelope(req, updated.data, { transfer_id: summary.transfer_id ?? null, transfer_date: summary.effective_date ?? input.transfer_date, moved_reports: summary.moved_reports ?? 0, created_reports: summary.created_reports ?? 0, removed_placeholders: summary.removed_placeholders ?? 0, retained_reports: summary.retained_reports ?? [], missing_count: summary.missing_count ?? 0 })
   await complete(req, 200, body); return res.json(body)
+}
+
+/** Class history, transfer log, single-lesson transfers and report placements for one enrollment. */
+async function enrollmentClassTimeline(req: Request, res: Response) {
+  const enrollmentId = uuid.parse(req.params.id)
+  const enrollment = await req.db!.from('enrollments').select('id,class_session_id').eq('id', enrollmentId).maybeSingle()
+  if (enrollment.error) throw mapDatabaseError(enrollment.error); if (!enrollment.data) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found')
+  await permission(req, 'teaching.enrollments.read', enrollment.data.class_session_id)
+  const result = await req.db!.rpc('get_enrollment_class_timeline', { p_enrollment_id: enrollmentId })
+  if (result.error) throw transferRpcError(result.error)
+  return res.json(envelope(req, result.data))
+}
+
+const rosterFlagsQuery = z.object({
+  start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  end: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+}).strict()
+
+/** Students who joined or left a class lesson by transfer within a date range (at most 120 days). */
+async function classSessionRosterFlags(req: Request, res: Response) {
+  const sessionId = uuid.parse(req.params.id)
+  const query = rosterFlagsQuery.parse(req.query)
+  if (query.start > query.end) throw new ApiError(422, 'INVALID_DATE_RANGE', 'end must not be before start')
+  if ((Date.parse(query.end) - Date.parse(query.start)) / 86400000 > 120) throw new ApiError(422, 'INVALID_DATE_RANGE', 'The range must not exceed 120 days')
+  await permission(req, 'teaching.class_sessions.read', sessionId)
+  const result = await req.db!.rpc('get_class_session_roster_flags', { p_session_id: sessionId, p_start: query.start, p_end: query.end })
+  if (result.error) throw transferRpcError(result.error)
+  return res.json(envelope(req, result.data ?? [], { start: query.start, end: query.end }))
 }
 
 async function bulkDeleteTeachers(req: Request, res: Response) {
@@ -449,6 +488,8 @@ export function createDomainRouter() {
   router.get('/enrollments/:id/progress', wrap(enrollmentProgress))
   router.post('/enrollments/:id/progress/recalculate', wrap(recalculateProgress))
   router.post('/enrollments/:id/transfers/class', wrap(transferClass))
+  router.get('/enrollments/:id/class-timeline', wrap(enrollmentClassTimeline))
+  router.get('/class-sessions/:id/roster-flags', wrap(classSessionRosterFlags))
   router.post('/teachers/bulk-delete', wrap(bulkDeleteTeachers))
   router.put('/copy-templates/:templateType/:scopeType/:scopeEntityId', wrap(putCopyTemplate))
   return router

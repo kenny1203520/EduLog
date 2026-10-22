@@ -1,0 +1,754 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EduLog 介面原型 v2</title>
+<!-- P7 clickable prototype (v2). Single file, fake data only. Tokens are a copy of
+     extension/styles/edulog-tokens.css plus the --edulog-font-* role aliases; spec: docs/design/MASTER.md.
+     Routes: #<screen>/<state>  screens: ws, popup, site. Needs Chrome 125+ (Popover + anchor positioning). -->
+<style>
+:root{
+  --edulog-canvas:#f4f6fa;--edulog-surface:#fff;--edulog-surface-subtle:#f8fafc;--edulog-surface-muted:#f1f5f9;--edulog-surface-disabled:#e2e8f0;
+  --edulog-text-strong:#0f172a;--edulog-text:#172033;--edulog-text-secondary:#334155;--edulog-text-muted:#475569;--edulog-text-subtle:#64748b;--edulog-text-on-primary:#fff;
+  --edulog-border-soft:#eef2f7;--edulog-border:#dbe3ee;--edulog-border-strong:#cbd5e1;--edulog-border-input:#94a3b8;
+  --edulog-primary:#1e40af;--edulog-primary-bright:#2563eb;--edulog-primary-soft:#eff4ff;--edulog-primary-soft-strong:#e0e9ff;--edulog-primary-border:#bfdbfe;--edulog-focus-ring:#2563eb;
+  --edulog-status-ok:#047857;--edulog-status-ok-soft:#e8f7ef;--edulog-status-ok-text:#166534;
+  --edulog-status-warn:#d97706;--edulog-status-warn-soft:#fef3c7;--edulog-status-warn-text:#78350f;
+  --edulog-status-notice:#ea580c;--edulog-status-notice-soft:#fff7ed;--edulog-status-notice-text:#9a3412;
+  --edulog-status-danger:#b91c1c;--edulog-status-danger-soft:#fef2f2;--edulog-status-danger-text:#991b1b;
+  --edulog-status-info:#2563eb;--edulog-status-info-soft:#eff4ff;--edulog-status-info-text:#1e40af;
+  --edulog-status-neutral:#94a3b8;--edulog-status-neutral-soft:#f1f5f9;--edulog-status-neutral-text:#475569;
+  --edulog-status-bar-width:3px;--edulog-status-dot:8px;
+  --edulog-shadow-bar:0 2px 8px #1720330a;--edulog-shadow-popover:0 12px 32px #17203320;--edulog-shadow-modal:0 24px 48px #17203329;
+  --edulog-font:system-ui,-apple-system,"Segoe UI","Noto Sans TC","Microsoft JhengHei",sans-serif;
+  --edulog-text-xs:12px;--edulog-text-sm:13px;--edulog-text-md:14px;--edulog-text-base:16px;--edulog-text-lg:18px;--edulog-text-xl:22px;
+  /* role aliases — the only font sizes code may use */
+  --edulog-font-tag:var(--edulog-text-xs);--edulog-font-caption:var(--edulog-text-sm);--edulog-font-body:var(--edulog-text-md);--edulog-font-button:var(--edulog-text-md);
+  --edulog-font-name:var(--edulog-text-base);--edulog-font-heading:var(--edulog-text-lg);--edulog-font-title:var(--edulog-text-xl);
+  --edulog-leading:1.5;--edulog-leading-tight:1.35;
+  --edulog-radius-xs:4px;--edulog-radius-sm:6px;--edulog-radius:8px;--edulog-radius-lg:12px;--edulog-radius-pill:999px;
+  --edulog-space-1:4px;--edulog-space-2:8px;--edulog-space-3:12px;--edulog-space-4:16px;--edulog-space-5:20px;--edulog-space-6:24px;--edulog-space-7:32px;--edulog-space-8:40px;
+  --edulog-control-height:36px;--edulog-control-height-sm:30px;--edulog-touch-target:44px;--edulog-row-min-height:52px;--edulog-icon-sm:16px;--edulog-icon:20px;
+  --edulog-z-sticky:20;--edulog-z-overlay:30;--edulog-duration:160ms;--edulog-ease:cubic-bezier(.2,0,0,1);
+  color-scheme:light;
+}
+@media (prefers-reduced-motion:reduce){:root{--edulog-duration:0ms}}
+@media (max-width:767px){:root{--edulog-control-height:var(--edulog-touch-target);--edulog-control-height-sm:var(--edulog-touch-target)}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--edulog-canvas);color:var(--edulog-text);font:var(--edulog-font-body)/var(--edulog-leading) var(--edulog-font);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+h1,h2,h3,h4,p,ul,dl,dd{margin:0}
+ul{padding:0;list-style:none}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--edulog-focus-ring);outline-offset:2px}
+[hidden]{display:none!important}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.ic{width:var(--edulog-icon-sm);height:var(--edulog-icon-sm);flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ic-lg{width:var(--edulog-icon);height:var(--edulog-icon)}
+.ic-xl{width:24px;height:24px}
+.muted{color:var(--edulog-text-muted)}
+.caption{font-size:var(--edulog-font-caption);color:var(--edulog-text-muted)}
+.spacer{flex:1}
+
+/* ---------- Prototype chrome (not part of the product) ---------- */
+.proto-top{position:relative;background:var(--edulog-text-strong);color:#fff}
+.proto-top-inner{max-width:1440px;margin:0 auto;padding:8px 16px;display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px}
+.proto-title{font-weight:700;font-size:var(--edulog-font-caption);display:flex;gap:8px;align-items:center}
+.proto-title small{font-weight:500;font-size:var(--edulog-font-tag);background:#ffffff26;padding:2px 8px;border-radius:var(--edulog-radius-pill)}
+.proto-nav{display:flex;gap:4px;margin-left:auto}
+.proto-nav button,.proto-states button{border:0;background:none;color:#cbd5e1;padding:4px 10px;border-radius:var(--edulog-radius-sm);cursor:pointer;font-size:var(--edulog-font-caption);font-weight:500;min-height:30px}
+.proto-nav button[aria-current=page]{background:#fff;color:var(--edulog-text-strong)}
+.proto-states{max-width:1440px;margin:0 auto;padding:0 16px 8px;display:flex;flex-wrap:wrap;gap:4px}
+.proto-states button{border:1px dashed #64748b}
+.proto-states button[aria-pressed=true]{border-style:solid;border-color:#fff;color:#fff;background:#ffffff1f}
+
+/* ---------- Buttons ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:var(--edulog-control-height);padding:0 14px;border-radius:var(--edulog-radius-sm);border:1px solid transparent;font-weight:600;font-size:var(--edulog-font-button);cursor:pointer;white-space:nowrap;text-decoration:none;background:none;transition:background var(--edulog-duration),border-color var(--edulog-duration),color var(--edulog-duration)}
+.btn-primary{background:var(--edulog-primary-bright);color:var(--edulog-text-on-primary)}
+.btn-primary:hover{background:var(--edulog-primary)}
+.btn-secondary{background:var(--edulog-surface);border-color:var(--edulog-border-strong);color:var(--edulog-text)}
+.btn-secondary:hover{background:var(--edulog-surface-muted)}
+.btn-soft{background:var(--edulog-primary-soft);color:var(--edulog-primary);border-color:var(--edulog-primary-border)}
+.btn-soft:hover{background:var(--edulog-primary-soft-strong)}
+.btn-ghost{color:var(--edulog-primary);padding:0 8px}
+.btn-ghost:hover{background:var(--edulog-primary-soft)}
+.btn-danger-ghost{color:var(--edulog-status-danger-text);padding:0 8px}
+.btn-sm{min-height:var(--edulog-control-height-sm);padding:0 10px}
+.btn-block{width:100%;min-height:var(--edulog-touch-target)}
+.btn-icon{width:var(--edulog-control-height);padding:0;color:var(--edulog-text-muted)}
+.btn-icon:hover{background:var(--edulog-surface-muted);color:var(--edulog-text-strong)}
+.btn:disabled{background:var(--edulog-surface-disabled);color:var(--edulog-text-subtle);border-color:transparent;cursor:not-allowed}
+
+/* ---------- Tags, dots, chips ---------- */
+.tag{display:inline-flex;align-items:center;gap:4px;font-size:var(--edulog-font-tag);font-weight:500;line-height:1;padding:4px 6px;border-radius:var(--edulog-radius-xs);white-space:nowrap}
+.tag-ok{background:var(--edulog-status-ok-soft);color:var(--edulog-status-ok-text)}
+.tag-warn{background:var(--edulog-status-warn-soft);color:var(--edulog-status-warn-text)}
+.tag-notice{background:var(--edulog-status-notice-soft);color:var(--edulog-status-notice-text)}
+.tag-danger{background:var(--edulog-status-danger-soft);color:var(--edulog-status-danger-text)}
+.tag-info{background:var(--edulog-status-info-soft);color:var(--edulog-status-info-text)}
+.tag-neutral{background:var(--edulog-status-neutral-soft);color:var(--edulog-status-neutral-text)}
+.dot{width:var(--edulog-status-dot);height:var(--edulog-status-dot);border-radius:50%;flex:none;background:var(--edulog-status-neutral);display:inline-block}
+.dot-ok{background:var(--edulog-status-ok)}.dot-warn{background:var(--edulog-status-warn)}.dot-danger{background:var(--edulog-status-danger)}.dot-notice{background:var(--edulog-status-notice)}.dot-info{background:var(--edulog-status-info)}
+.conn{display:inline-flex;align-items:center;gap:6px;font-size:var(--edulog-font-caption);font-weight:500;color:var(--edulog-text-muted);white-space:nowrap}
+.conn[data-tone=ok]{color:var(--edulog-status-ok-text)}.conn[data-tone=ok] .dot{background:var(--edulog-status-ok)}
+.conn[data-tone=danger]{color:var(--edulog-status-danger-text)}.conn[data-tone=danger] .dot{background:var(--edulog-status-danger)}
+.count{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 6px;border-radius:var(--edulog-radius-pill);background:var(--edulog-surface-muted);color:var(--edulog-text-secondary);font-size:var(--edulog-font-tag);font-weight:600}
+.logo{width:24px;height:24px;border-radius:var(--edulog-radius-sm);background:var(--edulog-primary-bright);color:#fff;display:inline-grid;place-items:center;font-weight:700;font-size:var(--edulog-font-caption);flex:none}
+
+/* ---------- Form controls ---------- */
+.input,.select{min-height:var(--edulog-control-height);border:1px solid var(--edulog-border-input);border-radius:var(--edulog-radius-sm);background:var(--edulog-surface);padding:0 10px;font-size:var(--edulog-font-body);min-width:0}
+.select{padding-right:28px;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center}
+@media (max-width:767px){.input,.select{font-size:var(--edulog-font-name)}}
+.input-danger{border-color:var(--edulog-status-danger);box-shadow:0 0 0 1px var(--edulog-status-danger)}
+.field{display:grid;gap:4px}
+.field>label,.lbl{font-size:var(--edulog-font-caption);font-weight:600;color:var(--edulog-text-secondary)}
+.check{display:flex;align-items:center;gap:8px;min-height:var(--edulog-control-height);cursor:pointer}
+.check input{width:16px;height:16px;accent-color:var(--edulog-primary-bright);margin:0}
+.seg{justify-self:start;display:inline-flex;border:1px solid var(--edulog-border-strong);border-radius:var(--edulog-radius-sm);overflow:hidden;flex:none}
+.seg button{border:0;background:var(--edulog-surface);min-height:var(--edulog-control-height-sm);padding:0 12px;font-size:var(--edulog-font-button);font-weight:500;color:var(--edulog-text-secondary);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.seg button+button{border-left:1px solid var(--edulog-border-strong)}
+.seg button[aria-pressed=true]{background:var(--edulog-primary-soft-strong);color:var(--edulog-primary);font-weight:600}
+.switch{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;min-height:var(--edulog-control-height)}
+.switch input{appearance:none;width:36px;height:20px;border-radius:999px;background:var(--edulog-border-strong);position:relative;flex:none;cursor:pointer;margin:0;transition:background var(--edulog-duration)}
+.switch input::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform var(--edulog-duration)}
+.switch input:checked{background:var(--edulog-primary-bright)}
+.switch input:checked::after{transform:translateX(16px)}
+.switch small{display:block;font-size:var(--edulog-font-caption);color:var(--edulog-text-muted);font-weight:400}
+
+/* ---------- Popover menus (top layer + anchor positioning) ---------- */
+.menu{margin:0;padding:4px;border:1px solid var(--edulog-border);border-radius:var(--edulog-radius);background:var(--edulog-surface);box-shadow:var(--edulog-shadow-popover);min-width:200px;max-width:280px;
+  position-area:block-end span-inline-start;position-try-fallbacks:flip-block,flip-inline;margin-block:4px}
+.menu button,.menu a{display:flex;align-items:center;gap:8px;width:100%;min-height:36px;padding:0 10px;border:0;background:none;border-radius:var(--edulog-radius-sm);font-size:var(--edulog-font-body);color:var(--edulog-text);text-align:left;cursor:pointer;text-decoration:none}
+.menu button:hover,.menu a:hover{background:var(--edulog-surface-muted)}
+.menu hr{border:0;border-top:1px solid var(--edulog-border-soft);margin:4px 0}
+.menu .danger{color:var(--edulog-status-danger-text)}
+
+/* ================= WORKSPACE ================= */
+.ws{max-width:1200px;margin:0 auto;padding:0 16px 40px}
+.ws-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:16px 0 0}
+.ws-head h1{font-size:var(--edulog-font-title);font-weight:700;color:var(--edulog-text-strong);display:flex;align-items:center;gap:10px}
+.ws-tabs{display:flex;gap:4px;border-bottom:1px solid var(--edulog-border);margin-top:12px}
+.ws-tabs button{border:0;background:none;min-height:40px;padding:0 14px;font-size:var(--edulog-font-button);font-weight:600;color:var(--edulog-text-muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;display:inline-flex;align-items:center;gap:8px}
+.ws-tabs button[aria-selected=true]{color:var(--edulog-primary);border-bottom-color:var(--edulog-primary-bright)}
+.ws-tabs button:hover{color:var(--edulog-text-strong)}
+.ws-body{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;margin-top:16px;align-items:start}
+.ws-body.has-drawer{grid-template-columns:minmax(0,1fr) 440px}
+.ws-col{min-width:0;display:grid;gap:16px}
+
+.stepper{display:flex;align-items:center;gap:8px;list-style:none;padding:0;margin:0}
+.stepper li{display:flex;align-items:center;gap:8px;font-size:var(--edulog-font-button);color:var(--edulog-text-muted)}
+.stepper li+li::before{content:"";width:32px;height:1px;background:var(--edulog-border-strong)}
+.stepper .n{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--edulog-border-strong);font-size:var(--edulog-font-tag);font-weight:600;background:var(--edulog-surface)}
+.stepper [aria-current=step]{color:var(--edulog-text-strong);font-weight:600}
+.stepper [aria-current=step] .n{background:var(--edulog-primary-bright);border-color:var(--edulog-primary-bright);color:#fff}
+.stepper .done .n{background:var(--edulog-status-ok);border-color:var(--edulog-status-ok);color:#fff}
+.stepper-compact{display:none;font-size:var(--edulog-font-caption);color:var(--edulog-text-muted)}
+.stepper-compact b{color:var(--edulog-text-strong)}
+
+.panel{background:var(--edulog-surface);border:1px solid var(--edulog-border);border-radius:var(--edulog-radius);overflow:hidden}
+.panel-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--edulog-border-soft)}
+.panel-head h2{font-size:var(--edulog-font-heading);font-weight:600;color:var(--edulog-text-strong)}
+.panel-head p{font-size:var(--edulog-font-caption);color:var(--edulog-text-muted);flex-basis:100%}
+
+/* list rows */
+.row{position:relative;display:flex;align-items:center;gap:12px;min-height:var(--edulog-row-min-height);padding:10px 16px;border-top:1px solid var(--edulog-border-soft);background:var(--edulog-surface);transition:background var(--edulog-duration)}
+.rows>.row:first-child,.group-head+.row{border-top:0}
+.row::before{content:"";position:absolute;left:0;top:0;bottom:0;width:var(--edulog-status-bar-width);background:transparent}
+.row[data-tone=warn]::before{background:var(--edulog-status-warn)}
+.row[data-tone=notice]::before{background:var(--edulog-status-notice)}
+.row[data-tone=danger]::before{background:var(--edulog-status-danger)}
+.row[data-tone=info]::before{background:var(--edulog-status-info)}
+.row.clickable{cursor:pointer}
+.row.clickable:hover{background:var(--edulog-surface-subtle)}
+.row[aria-selected=true]{background:var(--edulog-primary-soft)}
+.row-main{flex:1;min-width:0;display:grid;gap:2px}
+.row-name{font-size:var(--edulog-font-name);font-weight:600;color:var(--edulog-text-strong);display:flex;align-items:center;gap:8px;flex-wrap:wrap;line-height:var(--edulog-leading-tight)}
+.row-meta{font-size:var(--edulog-font-caption);color:var(--edulog-text-muted)}
+.row-side{display:flex;align-items:center;gap:8px;flex:none}
+.radio-row input{width:18px;height:18px;accent-color:var(--edulog-primary-bright);margin:0;flex:none}
+
+.group-head{display:flex;align-items:center;gap:8px;padding:8px 16px;background:var(--edulog-surface-subtle);border-top:1px solid var(--edulog-border-soft);border-bottom:1px solid var(--edulog-border-soft);font-size:var(--edulog-font-caption);font-weight:600;color:var(--edulog-text-secondary);flex-wrap:wrap}
+.group-head .hint{font-weight:400;color:var(--edulog-text-muted)}
+
+/* exception rows */
+.ex{display:grid;gap:8px;padding:12px 16px 12px 19px;border-top:1px solid var(--edulog-border-soft);position:relative}
+.group-head+.ex{border-top:0}
+.ex::before{content:"";position:absolute;left:0;top:0;bottom:0;width:var(--edulog-status-bar-width)}
+.ex[data-tone=warn]::before{background:var(--edulog-status-warn)}
+.ex[data-tone=notice]::before{background:var(--edulog-status-notice)}
+.ex[data-tone=danger]::before{background:var(--edulog-status-danger)}
+.ex[data-tone=ok]::before{background:var(--edulog-status-ok)}
+.ex[aria-selected=true]{background:var(--edulog-primary-soft)}
+.ex-top{display:flex;align-items:flex-start;gap:12px}
+.ex-choice{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap}
+.ex-choice .select{min-width:200px;max-width:100%}
+.prefill{display:flex;align-items:center;gap:6px 12px;flex-wrap:wrap;font-size:var(--edulog-font-caption);color:var(--edulog-text-muted)}
+.prefill .select,.prefill .input{min-height:var(--edulog-control-height-sm);font-size:var(--edulog-font-caption);min-width:0}
+.prefill label{display:inline-flex;align-items:center;gap:6px}
+.err{display:flex;align-items:center;gap:6px;color:var(--edulog-status-danger-text);font-size:var(--edulog-font-caption);font-weight:600}
+.diff{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.diff>div{border:1px solid var(--edulog-border);border-radius:var(--edulog-radius-sm);padding:8px 10px;font-size:var(--edulog-font-caption)}
+.diff b{display:block;font-size:var(--edulog-font-body);color:var(--edulog-text-strong)}
+.diff>div[aria-pressed=true]{border-color:var(--edulog-primary-bright);box-shadow:0 0 0 1px var(--edulog-primary-bright);background:var(--edulog-primary-soft)}
+
+.auto-line{display:flex;align-items:center;gap:8px;padding:12px 16px;font-size:var(--edulog-font-body);color:var(--edulog-text-secondary);border:0;background:none;width:100%;cursor:pointer;text-align:left}
+.auto-line:hover{background:var(--edulog-surface-subtle)}
+.auto-line .ic{color:var(--edulog-status-ok)}
+.auto-line{flex-wrap:wrap}
+.auto-line .caption{flex:1 1 auto}
+.auto-line .chev{margin-left:auto;color:var(--edulog-text-muted);transition:transform var(--edulog-duration)}
+.auto-line[aria-expanded=true] .chev{transform:rotate(180deg)}
+
+.summary{display:flex;align-items:center;gap:8px 16px;flex-wrap:wrap;padding:12px 16px;background:var(--edulog-surface);border:1px solid var(--edulog-border);border-radius:var(--edulog-radius)}
+.summary .stat{display:flex;align-items:baseline;gap:6px;font-size:var(--edulog-font-caption);color:var(--edulog-text-muted)}
+.summary .stat b{font-size:var(--edulog-font-heading);color:var(--edulog-text-strong)}
+
+.actionbar{position:sticky;bottom:0;z-index:var(--edulog-z-sticky);display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;padding:12px 16px;background:var(--edulog-surface);border:1px solid var(--edulog-border);border-radius:var(--edulog-radius);box-shadow:var(--edulog-shadow-bar)}
+.actionbar .status{font-size:var(--edulog-font-caption);color:var(--edulog-text-muted);display:flex;align-items:center;gap:6px}
+.actionbar .status.bad{color:var(--edulog-status-danger-text);font-weight:600}
+
+details.adv{border-top:1px solid var(--edulog-border-soft)}
+details.adv summary{list-style:none;display:flex;align-items:center;gap:8px;padding:12px 16px;cursor:pointer;font-size:var(--edulog-font-button);font-weight:600;color:var(--edulog-text-secondary)}
+details.adv summary::-webkit-details-marker{display:none}
+details.adv summary .chev{transition:transform var(--edulog-duration)}
+details.adv[open] summary .chev{transform:rotate(180deg)}
+.adv-body{padding:0 16px 16px;display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+
+/* tiles */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.tile{background:var(--edulog-surface);border:1px solid var(--edulog-border);border-radius:var(--edulog-radius);padding:14px 16px;display:grid;gap:2px}
+.tile b{font-size:var(--edulog-font-title);font-weight:700;color:var(--edulog-text-strong)}
+.tile span{font-size:var(--edulog-font-caption);color:var(--edulog-text-muted)}
+.tile.warn b{color:var(--edulog-status-warn-text)}
+.result-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.result-head .ic-xl{color:var(--edulog-status-ok)}
+.result-head h2{font-size:var(--edulog-font-title);font-weight:700;color:var(--edulog-text-strong)}
+
+/* interrupt */
+.interrupt{border:1px solid var(--edulog-status-notice);border-radius:var(--edulog-radius);background:var(--edulog-surface);overflow:hidden}
+.interrupt-head{display:flex;gap:12px;align-items:flex-start;padding:16px;background:var(--edulog-status-notice-soft);border-bottom:1px solid var(--edulog-border-soft)}
+.interrupt-head .ic-xl{color:var(--edulog-status-notice)}
+.interrupt-head h2{font-size:var(--edulog-font-heading);font-weight:600;color:var(--edulog-text-strong)}
+.interrupt-head p{font-size:var(--edulog-font-body);color:var(--edulog-text-secondary)}
+
+.progress{height:6px;border-radius:999px;background:var(--edulog-surface-muted);overflow:hidden}
+.progress span{display:block;height:100%;background:var(--edulog-primary-bright);border-radius:inherit}
+.spin{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* toolbar for work log */
+.filters{display:flex;gap:8px;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--edulog-border-soft)}
+.search{position:relative;flex:1;min-width:180px}
+.search .ic{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--edulog-text-muted)}
+.search .input{width:100%;padding-left:34px}
+
+/* drawer */
+.drawer{background:var(--edulog-surface);border:1px solid var(--edulog-border);border-radius:var(--edulog-radius);display:flex;flex-direction:column;position:sticky;top:16px;max-height:calc(100vh - 120px);min-width:0}
+.drawer-head{display:flex;align-items:center;gap:8px;padding:10px 8px 10px 16px;border-bottom:1px solid var(--edulog-border-soft)}
+.drawer-head h2{font-size:var(--edulog-font-heading);font-weight:600;color:var(--edulog-text-strong);flex:1;min-width:0}
+.drawer-head .back{display:none}
+.drawer-body{padding:16px;overflow:auto;display:grid;gap:16px;align-content:start}
+.drawer-foot{display:flex;gap:8px;justify-content:flex-end;padding:12px 16px;border-top:1px solid var(--edulog-border-soft);flex-wrap:wrap}
+.scrim.narrow{display:none}
+.scrim{position:fixed;inset:0;background:#0f172a66;z-index:var(--edulog-z-overlay)}
+.drawer.wide .drawer-body{flex:1}
+.drawer.wide{position:fixed;top:0;right:0;bottom:0;width:min(720px,100vw);max-height:none;border-radius:0;z-index:calc(var(--edulog-z-overlay) + 1);box-shadow:var(--edulog-shadow-modal);border-width:0 0 0 1px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:var(--edulog-font-body)}
+.kv dt{color:var(--edulog-text-muted);font-size:var(--edulog-font-caption);padding-top:1px}
+.kv dd{color:var(--edulog-text-strong)}
+.section-title{font-size:var(--edulog-font-caption);font-weight:600;color:var(--edulog-text-secondary);text-transform:none;display:flex;align-items:center;gap:8px}
+.timeline{display:grid;gap:10px;font-size:var(--edulog-font-body)}
+.timeline li{display:flex;gap:10px;align-items:flex-start}
+.timeline .dot{margin-top:7px}
+.timeline small{display:block;font-size:var(--edulog-font-caption);color:var(--edulog-text-muted)}
+.adv-tabs{display:flex;gap:4px;padding:8px 16px 0;border-bottom:1px solid var(--edulog-border);overflow-x:auto}
+.adv-tabs button{border:0;background:none;min-height:40px;padding:0 12px;font-size:var(--edulog-font-button);font-weight:600;color:var(--edulog-text-muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.adv-tabs button[aria-selected=true]{color:var(--edulog-primary);border-bottom-color:var(--edulog-primary-bright)}
+.tbl{width:100%;border-collapse:collapse;font-size:var(--edulog-font-body)}
+.tbl th{font-size:var(--edulog-font-caption);font-weight:600;color:var(--edulog-text-muted);text-align:left;padding:8px;border-bottom:1px solid var(--edulog-border);background:var(--edulog-surface-subtle);white-space:nowrap}
+.tbl td{padding:8px;border-bottom:1px solid var(--edulog-border-soft);vertical-align:middle}
+.tbl td .select{min-height:var(--edulog-control-height-sm);font-size:var(--edulog-font-caption);width:100%}
+.tbl .name{font-weight:600;color:var(--edulog-text-strong)}
+.tbl-wrap{border:1px solid var(--edulog-border);border-radius:var(--edulog-radius);overflow:auto}
+.card-lite{border:1px solid var(--edulog-border);border-radius:var(--edulog-radius);padding:12px 14px;display:grid;gap:8px}
+.card-lite h3{font-size:var(--edulog-font-body);font-weight:600;color:var(--edulog-text-strong)}
+
+@media (max-width:1023px){
+  .ws-body.has-drawer{grid-template-columns:minmax(0,1fr)}
+  .scrim.narrow{display:block}
+  .drawer:not(.wide){position:fixed;top:0;right:0;bottom:0;width:min(440px,100vw);max-height:none;border-radius:0;z-index:calc(var(--edulog-z-overlay) + 1);box-shadow:var(--edulog-shadow-modal);border-width:0 0 0 1px}
+}
+@media (max-width:639px){
+  .ws{padding:0 12px 32px}
+  .drawer,.drawer.wide{width:100vw;border:0}
+  .drawer-head .back{display:inline-flex}
+  .drawer-head .close{display:none}
+  .stepper{display:none}
+  .stepper-compact{display:block}
+  .ex-top{flex-wrap:wrap}
+  .ex-choice .select{flex:1 1 100%}
+  .diff{grid-template-columns:1fr}
+  .actionbar .btn-primary{flex:1}
+  .row{flex-wrap:wrap}
+  .row-side{width:100%;justify-content:flex-end}
+  .themed .row{flex-wrap:nowrap}
+  .themed .row-side{width:auto}
+  .radio-row .row-side{width:auto}
+  .ws-head h1{font-size:var(--edulog-font-heading)}
+}
+
+/* ================= POPUP ================= */
+.popup-stage{display:flex;flex-wrap:wrap;gap:16px;justify-content:center;padding:24px 16px}
+@media (max-width:400px){.popup-stage{padding:16px 8px}}
+.popup-col{display:grid;gap:8px;justify-items:center;width:360px;max-width:100%}
+.popup{width:360px;max-width:100%;background:var(--edulog-surface);border:1px solid var(--edulog-border);border-radius:var(--edulog-radius-lg);box-shadow:var(--edulog-shadow-popover);overflow:hidden}
+.popup-head{display:flex;align-items:center;gap:8px;padding:8px 8px 8px 14px;border-bottom:1px solid var(--edulog-border-soft);min-height:52px}
+.popup-head .brand{font-size:var(--edulog-font-heading);font-weight:600;color:var(--edulog-text-strong)}
+.popup-body{padding:16px 14px;display:grid;gap:12px}
+.ctx{display:flex;gap:12px;align-items:flex-start}
+.ctx-ic{width:36px;height:36px;border-radius:var(--edulog-radius);background:var(--edulog-primary-soft);color:var(--edulog-primary);display:grid;place-items:center;flex:none}
+.ctx-ic.neutral{background:var(--edulog-surface-muted);color:var(--edulog-text-muted)}
+.ctx-title{font-size:var(--edulog-font-name);font-weight:600;color:var(--edulog-text-strong);line-height:var(--edulog-leading-tight)}
+.ctx-sub{font-size:var(--edulog-font-caption);color:var(--edulog-text-muted)}
+.hint{font-size:var(--edulog-font-caption);color:var(--edulog-text-muted)}
+.popup-foot{border-top:1px solid var(--edulog-border-soft);padding:4px}
+.linkrow{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:0 10px;border:0;background:none;border-radius:var(--edulog-radius-sm);cursor:pointer;font-size:var(--edulog-font-button);font-weight:500;color:var(--edulog-text);text-align:left}
+.linkrow:hover{background:var(--edulog-surface-muted)}
+.linkrow .chev{margin-left:auto;color:var(--edulog-text-muted)}
+.popup-caption,.frame-caption{font-size:var(--edulog-font-tag);color:var(--edulog-text-muted)}
+.url-bar{display:flex;align-items:center;gap:8px;width:100%;font-size:var(--edulog-font-tag);color:var(--edulog-text-muted);background:var(--edulog-surface);border:1px solid var(--edulog-border);border-radius:var(--edulog-radius-pill);padding:4px 12px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.prow{display:flex;align-items:center;gap:10px;padding:10px 4px;border-top:1px solid var(--edulog-border-soft)}
+.prow:first-child{border-top:0}
+.settings-group{display:grid;gap:6px}
+.dl-row{display:flex;justify-content:space-between;gap:12px;font-size:var(--edulog-font-caption)}
+.dl-row dt{color:var(--edulog-text-muted)}.dl-row dd{color:var(--edulog-text-strong);text-align:right;word-break:break-all}
+
+/* ================= SOURCE SITE (fake) ================= */
+.site-stage{padding:16px;max-width:1240px;margin:0 auto;display:grid;gap:8px}
+.frame{position:relative;border:1px solid var(--edulog-border-strong);border-radius:var(--edulog-radius);overflow:hidden;background:#fafafa;min-height:640px}
+.legacy-head{background:#4b5563;color:#fff;padding:10px 16px;display:flex;align-items:center;gap:12px;font-size:var(--edulog-font-body)}
+.legacy-head b{font-size:var(--edulog-font-name)}
+.legacy-body{padding:16px;display:grid;gap:12px;color:#333}
+.legacy-body h2{font-size:var(--edulog-font-heading);font-weight:600}
+.legacy-table{width:100%;border-collapse:collapse;background:#fff;font-size:var(--edulog-font-body)}
+.legacy-table th,.legacy-table td{border:1px solid #d4d4d4;padding:8px;text-align:left}
+.legacy-table th{background:#eee}
+.legacy-scroll{overflow-x:auto}
+
+.tb{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;min-height:48px;padding:6px 12px 6px 16px;background:var(--edulog-surface);border-bottom:1px solid var(--edulog-border);box-shadow:var(--edulog-shadow-bar)}
+.tb-title{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
+.tb-title b{font-size:var(--edulog-font-button);color:var(--edulog-text-strong);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tb-title .tb-sub{font-size:var(--edulog-font-caption);color:var(--edulog-text-muted);white-space:nowrap}
+.tb-actions{display:flex;align-items:center;gap:8px}
+.themed{background:var(--edulog-canvas);padding:16px;display:grid;gap:12px}
+.themed .panel{overflow:clip}  /* reproduces the clipping container that used to cut menus */
+.status-set{display:flex;gap:12px;flex-wrap:wrap}
+.status-set span{display:inline-flex;align-items:center;gap:6px;font-size:var(--edulog-font-caption);color:var(--edulog-text-muted)}
+@media (max-width:767px){.tb-title .tb-sub{display:none}.frame{min-height:560px}.status-set{display:none}.tb .conn-label{display:none}}
+
+.fab{position:absolute;right:16px;bottom:16px;width:40px;height:40px;border-radius:50%;border:1px solid var(--edulog-border);background:var(--edulog-surface);box-shadow:var(--edulog-shadow-popover);display:grid;place-items:center;cursor:pointer;anchor-name:--edulog-fab;padding:0}
+.fab:hover{border-color:var(--edulog-primary-border)}
+.fab .fab-dot{position:absolute;top:-1px;right:-1px;width:10px;height:10px;border-radius:50%;border:2px solid #fff;background:var(--edulog-status-ok)}
+.fab .fab-dot[data-tone=neutral]{background:var(--edulog-status-neutral)}
+.fab .fab-dot[data-tone=danger]{background:var(--edulog-status-danger)}
+.fab-panel{margin:0;padding:0;width:300px;max-width:calc(100vw - 32px);border:1px solid var(--edulog-border);border-radius:var(--edulog-radius-lg);background:var(--edulog-surface);box-shadow:var(--edulog-shadow-popover);
+  position-anchor:--edulog-fab;position-area:block-start span-inline-start;margin-block-end:8px;position-try-fallbacks:flip-block}
+.fab-panel .fp-head{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--edulog-border-soft)}
+.fab-panel .fp-head b{font-size:var(--edulog-font-heading);color:var(--edulog-text-strong)}
+.fab-panel .fp-body{padding:12px;display:grid;gap:12px}
+.fab-panel .fp-conn{display:flex;gap:10px;align-items:flex-start;font-size:var(--edulog-font-caption);color:var(--edulog-text-muted)}
+.fab-panel .fp-conn .ic{margin-top:2px}
+.fab-panel .fp-foot{border-top:1px solid var(--edulog-border-soft);padding:4px}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-settings" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
+<symbol id="i-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+<symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol>
+<symbol id="i-chev-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+<symbol id="i-chev-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+<symbol id="i-chev-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+<symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+<symbol id="i-circle-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+<symbol id="i-plug" viewBox="0 0 24 24"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></symbol>
+<symbol id="i-dashboard" viewBox="0 0 24 24"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></symbol>
+<symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></symbol>
+<symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></symbol>
+<symbol id="i-external" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+<symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+<symbol id="i-user-plus" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/></symbol>
+<symbol id="i-sparkles" viewBox="0 0 24 24"><path d="M9.94 14.06A2 2 0 0 0 8.5 12.6L2.4 11a.5.5 0 0 1 0-.96L8.5 8.4A2 2 0 0 0 9.94 7L11.5.9a.5.5 0 0 1 .96 0L14.06 7A2 2 0 0 0 15.5 8.4l6.1 1.6a.5.5 0 0 1 0 .96L15.5 12.6a2 2 0 0 0-1.44 1.44L12.46 20.1a.5.5 0 0 1-.96 0z"/></symbol>
+<symbol id="i-calendar" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+<symbol id="i-merge" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></symbol>
+<symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+<symbol id="i-sliders" viewBox="0 0 24 24"><path d="M21 4h-7"/><path d="M10 4H3"/><path d="M21 12h-9"/><path d="M8 12H3"/><path d="M21 20h-5"/><path d="M12 20H3"/><path d="M14 2v4"/><path d="M8 10v4"/><path d="M16 18v4"/></symbol>
+<symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></symbol>
+<symbol id="i-rotate" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+<symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></symbol>
+<symbol id="i-play" viewBox="0 0 24 24"><path d="m6 3 14 9-14 9z"/></symbol>
+<symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></symbol>
+<symbol id="i-loader" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></symbol>
+<symbol id="i-pencil" viewBox="0 0 24 24"><path d="M21.17 6.81a1 1 0 0 0-3.99-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/></symbol>
+<symbol id="i-palette" viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r="1"/><circle cx="17.5" cy="10.5" r="1"/><circle cx="8.5" cy="7.5" r="1"/><circle cx="6.5" cy="12.5" r="1"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.84-.44-1.13-.29-.29-.44-.65-.44-1.13a1.64 1.64 0 0 1 1.67-1.67h2c3.05 0 5.55-2.5 5.55-5.55C21.97 6.01 17.46 2 12 2z"/></symbol>
+<symbol id="i-book" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></symbol>
+<symbol id="i-phone" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></symbol>
+<symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+</defs></svg>
+
+<header class="proto-top" aria-label="原型導覽">
+  <div class="proto-top-inner">
+    <span class="proto-title">EduLog 原型 <small>v2 · 假資料</small></span>
+    <nav class="proto-nav" id="proto-nav"></nav>
+  </div>
+  <div class="proto-states" id="proto-states" aria-label="狀態"></div>
+</header>
+<div id="app"></div>
+
+<script>
+const I = (n, c = '') => `<svg class="ic ${c}" aria-hidden="true"><use href="#i-${n}"/></svg>`
+const SCREENS = {
+  ws:    { label:'整合工作台', states:{ read:'匯入 · 讀取', confirm:'確認（例外）', detail:'確認 · 詳情抽屜', advanced:'進階：全部對應', syncing:'同步中', conflict:'中斷：衝突／過期', done:'完成', log:'工作紀錄', 'log-detail':'工作紀錄 · 詳情' } },
+  popup: { label:'Popup', states:{ off:'未連線', class:'班級頁', report:'報告頁', other:'其他頁', jobs:'工作紀錄', settings:'設定' } },
+  site:  { label:'原站', states:{ on:'主題開 · 工具列', 'on-menu':'主題開 · 列選單', off:'主題關 · 浮動鈕', 'off-panel':'主題關 · 面板', 'off-report':'報告頁 · 面板', 'off-offline':'未連線 · 面板' } },
+}
+const CLASSES = [
+  { id:'a', name:'週三 16:00 自然探索 A 班', meta:'原站分頁已開啟 · 12 位學生 · 上次同步 10/12', current:true },
+  { id:'b', name:'週五 18:30 程式積木 B 班', meta:'上次同步 10/10 · 9 位學生' },
+  { id:'c', name:'週六 10:00 機器人入門 C 班', meta:'尚未同步過 · 需開啟原站分頁讀取' },
+]
+const st = { screen:'ws', sub:'read', pick:'a', autoOpen:false, fixed:false, advTab:'students',
+  choice:{ s1:'new', s2:'map', s3:'new', c1:'map', o1:'map', b1:'source' }, sel:null, logSel:null }
+
+/* ---------------- Workspace ---------------- */
+function stepper(step){
+  const names = ['讀取','確認','完成']
+  return `<ol class="stepper" aria-label="匯入步驟">${names.map((n,i)=>{
+    const k = i+1, cur = k===step, done = k<step
+    return `<li class="${done?'done':''}" ${cur?'aria-current="step"':''}><span class="n">${done?I('check'):k}</span>${n}</li>`}).join('')}</ol>
+    <p class="stepper-compact">步驟 ${step} / 3 · <b>${names[step-1]}</b></p>`
+}
+function wsShell(tab, inner, drawer = '', wide = ''){
+  return `<div class="ws">
+    <header class="ws-head">
+      <h1><span class="logo" aria-hidden="true">E</span>整合工作台</h1>
+      <span class="spacer"></span>
+      <span class="conn" data-tone="ok"><span class="dot"></span>已連線 EduLog</span>
+    </header>
+    <div class="ws-tabs" role="tablist">
+      <button role="tab" aria-selected="${tab==='import'}" data-go="ws/read">${I('download')}匯入</button>
+      <button role="tab" aria-selected="${tab==='log'}" data-go="ws/log">${I('history')}工作紀錄<span class="count">2</span></button>
+    </div>
+    <div class="ws-body ${drawer?'has-drawer':''}"><div class="ws-col">${inner}</div>${drawer}</div>
+    ${wide}
+  </div>`
+}
+function wsRead(){
+  const rows = CLASSES.map(c => `<label class="row clickable radio-row" ${st.pick===c.id?'aria-selected="true"':''}>
+      <input type="radio" name="cls" value="${c.id}" ${st.pick===c.id?'checked':''} data-pick="${c.id}">
+      <span class="row-main"><span class="row-name">${c.name}${c.current?'<span class="tag tag-info">目前分頁</span>':''}</span><span class="row-meta">${c.meta}</span></span>
+    </label>`).join('')
+  return wsShell('import', `${stepper(1)}
+    <section class="panel" aria-labelledby="pick-h">
+      <div class="panel-head"><h2 id="pick-h">選擇班級</h2><span class="spacer"></span><button class="btn btn-ghost btn-sm">${I('refresh')}重新整理</button>
+        <p>已自動選取目前開啟的班級。讀取會核對原站名單、報名與課堂紀錄。</p></div>
+      <div class="rows" role="radiogroup" aria-labelledby="pick-h">${rows}</div>
+      <details class="adv"><summary>${I('sliders')}進階設定<span class="caption" style="font-weight:400">讀取範圍、歷史課堂</span><svg class="ic chev" style="margin-left:auto" aria-hidden="true"><use href="#i-chev-down"/></svg></summary>
+        <div class="adv-body">
+          <div class="field"><label for="rng">讀取範圍</label><select id="rng" class="select"><option>本學期（2026/09 起）</option><option>最近 4 週</option><option>全部</option></select></div>
+          <div class="field"><span class="lbl">歷史課堂</span><label class="check"><input type="checkbox" checked>一併讀取已結束的課堂紀錄</label></div>
+          <div class="field"><span class="lbl">來源分頁</span><label class="check"><input type="checkbox">讀取前先重新整理原站分頁</label></div>
+        </div>
+      </details>
+    </section>
+    <div class="actionbar"><span class="status">${I('users')}週三 16:00 自然探索 A 班 · 12 位學生</span><span class="spacer"></span>
+      <button class="btn btn-primary" data-go="ws/confirm">${I('download')}讀取並核對</button></div>`)
+}
+const choiceSeg = (id, a, b, la = '對應既有', lb = '新建') =>
+  `<div class="seg" role="group" aria-label="處理方式"><button aria-pressed="${st.choice[id]===a}" data-choice="${id}:${a}">${I('link')}${la}</button><button aria-pressed="${st.choice[id]===b}" data-choice="${id}:${b}">${I('plus')}${lb}</button></div>`
+function exRow(id, tone, name, meta, body){
+  return `<div class="ex" data-tone="${tone}" ${st.sel===id?'aria-selected="true"':''}>
+    <div class="ex-top"><div class="row-main"><span class="row-name">${name}</span><span class="row-meta">${meta}</span></div>
+      <button class="btn btn-ghost btn-sm" data-detail="${id}" aria-label="${name.replace(/<[^>]+>/g,'')} 詳情">詳情${I('chev-right')}</button></div>${body}</div>`
+}
+const prefillNew = (date = '2026-09-03', status = '正常') => `<div class="prefill">新建報名：
+  <label>狀態 <select class="select"><option ${status==='正常'?'selected':''}>正常</option><option>試聽</option><option>暫停</option></select></label>
+  <label>開始日期 <input class="input" type="date" value="${date}"></label><span class="tag tag-neutral">同步時自動記住</span></div>`
+function confirmGroups(){
+  const missingFixed = st.fixed
+  const g = (title, tone, n, hint, rows, batch = '') => `<div class="group-head"><span class="dot dot-${tone}"></span>${title}<span class="count">${n}</span><span class="hint">${hint}</span><span class="spacer"></span>${batch}</div>${rows}`
+  return [
+    g('班級不明','warn',1,'原站班級沒有對應的 EduLog 班級',
+      exRow('c1','warn','自然探索 A（原站）','原站班級代碼 NA-0912 · 週三 16:00', `<div class="ex-choice">${choiceSeg('c1','map','new')}
+        ${st.choice.c1==='map'?'<select class="select" aria-label="EduLog 班級"><option>建議：自然探索 A 班（週三 16:00）</option><option>自然探索 B 班（週四 16:00）</option></select>':'<span class="caption">將新建班級「自然探索 A」，時段週三 16:00</span>'}</div>`)),
+    g('配對不到課堂','warn',1,'原站紀錄找不到同日同時段的課堂',
+      exRow('o1','warn','10/15（三）16:00 課堂紀錄','原站有出席與報告 · EduLog 該日無課堂', `<div class="ex-choice">${choiceSeg('o1','map','new','對應既有課堂','新建課堂')}
+        ${st.choice.o1==='map'?'<select class="select" aria-label="EduLog 課堂"><option>建議：10/16（四）16:00 補課</option><option>10/22（三）16:00</option></select>':'<span class="caption">將在 10/15 16:00 新建一堂課</span>'}</div>`)),
+    g('兩邊都改過','notice',1,'上次同步後兩邊都改了同一欄',
+      exRow('b1','notice','陳宥廷 · 10/08 出席','上次同步 10/06 後兩邊都修改', `<div class="diff" role="radiogroup" aria-label="保留哪一邊">
+        <div role="radio" tabindex="0" aria-pressed="${st.choice.b1==='source'}" aria-checked="${st.choice.b1==='source'}" data-choice="b1:source"><span class="caption">原站（10/18 修改）</span><b>出席</b></div>
+        <div role="radio" tabindex="0" aria-pressed="${st.choice.b1==='edulog'}" aria-checked="${st.choice.b1==='edulog'}" data-choice="b1:edulog"><span class="caption">EduLog（10/09 修改）</span><b>請假 · 家長來電</b></div></div>`)),
+    g('學生未對應','warn',2,'原站學生在 EduLog 找不到或有多個可能',
+      exRow('s1','warn','林小安','原站報名 2026-09-03 · 首堂 09/03', `<div class="ex-choice">${choiceSeg('s1','map','new')}${st.choice.s1==='map'?'<select class="select" aria-label="EduLog 學生"><option>選擇 EduLog 學生…</option><option>林小恩（自然探索 B 班）</option></select>':''}</div>${st.choice.s1==='new'?prefillNew():''}`) +
+      exRow('s2','warn','黃品睿','原站報名 2026-09-10 · 相似：黃品睿（程式積木 B 班）', `<div class="ex-choice">${choiceSeg('s2','map','new')}${st.choice.s2==='map'?'<select class="select" aria-label="EduLog 學生"><option>建議：黃品睿（程式積木 B 班）</option><option>黃品瑞（機器人入門 C 班）</option></select><span class="caption">將新增本班報名，狀態 正常 · 開始 2026-09-10</span>':''}</div>${st.choice.s2==='new'?prefillNew('2026-09-10'):''}`),
+      `<button class="btn btn-ghost btn-sm" data-batch="new">${I('user-plus')}全部新建</button>`),
+    g('缺少資料', missingFixed?'ok':'danger', 1, missingFixed?'已補齊':'補齊後才能同步，不會被略過',
+      exRow('s3', missingFixed?'ok':'danger','張語彤','原站沒有報名日期，也還沒有課堂紀錄', `<div class="ex-choice">${choiceSeg('s3','map','new')}</div>
+        <div class="prefill">新建報名：<label>狀態 <select class="select"><option selected>正常</option><option>試聽</option></select></label>
+        <label>開始日期 <input class="input ${missingFixed?'':'input-danger'}" type="date" value="${missingFixed?'2026-10-22':''}" aria-invalid="${!missingFixed}" aria-describedby="err-s3"></label>
+        ${missingFixed?'<span class="tag tag-ok">'+I('check')+'已補上</span>':`<button class="btn btn-soft btn-sm" data-fix="1">${I('calendar')}用下一堂課 10/22</button>`}</div>
+        ${missingFixed?'':`<p class="err" id="err-s3">${I('circle-alert')}缺少開始日期</p>`}`)),
+  ].join('')
+}
+function wsConfirm(withDetail = false, withAdv = false){
+  const missing = !st.fixed
+  const autoList = st.autoOpen ? `<div class="rows" style="border-top:1px solid var(--edulog-border-soft)">${['李沐晴','許書豪','周安琪','蔡宇恆','鄭以涵'].map((n,i)=>`<div class="row"><div class="row-main"><span class="row-name">${n}</span><span class="row-meta">對應 EduLog 學生 ${n} · 報名 正常 · ${['依記住的對應','姓名與生日相符','依記住的對應','姓名相符','依記住的對應'][i]}</span></div><span class="tag tag-ok">${I('check')}已配對</span></div>`).join('')}<div class="row"><span class="caption">還有 37 筆 · 完整清單在「進階：全部對應」</span></div></div>` : ''
+  const drawer = withDetail ? `<div class="scrim narrow" data-go="ws/confirm"></div>${detailDrawer()}` : ''
+  const adv = withAdv ? advancedDrawer() : ''
+  return wsShell('import', `${stepper(2)}
+    <div class="summary"><span class="stat"><b>48</b>筆原站資料</span><span class="stat"><b>42</b>已自動配對</span><span class="stat"><b style="color:var(--edulog-status-warn-text)">6</b>需要你決定</span><span class="spacer"></span>
+      <button class="btn btn-secondary btn-sm" data-go="ws/advanced">${I('sliders')}進階：全部對應</button></div>
+    <section class="panel" aria-label="已自動配對">
+      <button class="auto-line" aria-expanded="${st.autoOpen}" data-auto>${I('check-circle')}已自動配對 <b>42</b> 筆<span class="caption">學生 12 · 報名 12 · 課堂紀錄 18</span>${I('chev-down','chev')}</button>${autoList}
+    </section>
+    <section class="panel" aria-labelledby="ex-h">
+      <div class="panel-head"><h2 id="ex-h">需要處理</h2><span class="count">6</span><p>每列選一種處理方式；新建的學生與報名已預填，可直接修改。</p></div>
+      ${confirmGroups()}
+    </section>
+    <div class="actionbar">
+      <button class="btn btn-secondary" data-go="ws/read">${I('chev-left')}返回</button>
+      <span class="status ${missing?'bad':''}">${missing?I('circle-alert')+'還有 1 筆缺少資料':I('check')+'都處理好了 · 將新建 2 位學生、3 筆報名'}</span>
+      <span class="spacer"></span>
+      <button class="btn btn-primary" ${missing?'disabled aria-describedby="why"':''} data-go="ws/syncing">${I('refresh')}確認並同步</button>
+    </div>`, drawer, adv)
+}
+function detailDrawer(){
+  return `<aside class="drawer" role="dialog" aria-labelledby="dr-h">
+    <div class="drawer-head"><button class="btn btn-icon back" aria-label="返回清單" data-go="ws/confirm">${I('chev-left','ic-lg')}</button><h2 id="dr-h">林小安</h2><button class="btn btn-icon close" aria-label="關閉" data-go="ws/confirm">${I('x','ic-lg')}</button></div>
+    <div class="drawer-body">
+      <div class="card-lite"><h3>原站資料</h3><dl class="kv"><dt>姓名</dt><dd>林小安</dd><dt>班級</dt><dd>自然探索 A（NA-0912）</dd><dt>報名日期</dt><dd>2026-09-03</dd><dt>課堂紀錄</dt><dd>7 筆（09/03 – 10/15）</dd><dt>報告</dt><dd>5 份</dd></dl></div>
+      <div class="field"><span class="lbl">處理方式</span>${choiceSeg('s1','map','new')}</div>
+      <div class="card-lite"><h3>將建立</h3><dl class="kv"><dt>EduLog 學生</dt><dd>林小安（新）</dd><dt>報名</dt><dd>自然探索 A 班 · 狀態 正常</dd><dt>開始日期</dt><dd>2026-09-03（原站報名日期）</dd><dt>報告</dt><dd>5 份，依班級時段掛到對應課堂</dd></dl></div>
+      <div class="field"><span class="lbl">可能的既有學生</span>
+        <div class="rows panel"><div class="row"><div class="row-main"><span class="row-name">林小恩</span><span class="row-meta">自然探索 B 班 · 生日不同 · 相似度低</span></div><button class="btn btn-secondary btn-sm" data-choice="s1:map">對應</button></div></div></div>
+    </div>
+    <div class="drawer-foot"><button class="btn btn-secondary" data-go="ws/confirm">完成</button></div>
+  </aside>`
+}
+function advancedDrawer(){
+  const tabs = { students:'學生與報名', classes:'班級與課程', fields:'同步欄位', maint:'資料維護' }
+  let body = ''
+  if (st.advTab === 'students') body = `<div class="search">${I('search')}<input class="input" type="search" placeholder="搜尋姓名" aria-label="搜尋姓名"></div>
+    <div class="tbl-wrap"><table class="tbl"><thead><tr><th>原站學生</th><th>EduLog 對應</th><th>報名</th><th>來源</th></tr></thead><tbody>
+    ${[['李沐晴','李沐晴','正常','記住的對應'],['許書豪','許書豪','正常','姓名＋生日'],['林小安','（新建）','正常 · 09/03','本次'],['黃品睿','黃品睿（程式積木 B）','新增 · 09/10','建議'],['張語彤','（新建）','<span class="tag tag-danger">缺開始日期</span>','本次'],['周安琪','周安琪','正常','記住的對應'],['蔡宇恆','蔡宇恆','暫停','記住的對應']]
+      .map(r=>`<tr><td class="name">${r[0]}</td><td><select class="select" aria-label="${r[0]} 對應"><option>${r[1]}</option><option>（新建）</option><option>不匯入</option></select></td><td>${r[2]}</td><td class="caption">${r[3]}</td></tr>`).join('')}
+    </tbody></table></div><p class="caption">共 12 位學生 · 顯示 7 位</p>`
+  if (st.advTab === 'classes') body = `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>類型</th><th>原站</th><th>EduLog</th><th></th></tr></thead><tbody>
+    <tr><td>教室</td><td class="name">二樓 201</td><td><select class="select"><option>201 教室</option></select></td><td></td></tr>
+    <tr><td>班級</td><td class="name">自然探索 A（NA-0912）</td><td><select class="select"><option>自然探索 A 班</option></select></td><td></td></tr>
+    <tr><td>課程</td><td class="name">自然探索 秋季</td><td><select class="select"><option>自然探索（2026 秋）</option></select></td><td></td></tr></tbody></table></div>
+    <div class="section-title">已記住的對應 <span class="count">23</span></div>
+    <div class="panel rows">${[['班級 NA-0912 → 自然探索 A 班','10/12 記住'],['學生 李沐晴 → 李沐晴','09/10 記住'],['課程 自然探索 秋季 → 自然探索（2026 秋）','09/03 記住']].map(r=>`<div class="row"><div class="row-main"><span style="font-weight:500">${r[0]}</span><span class="row-meta">${r[1]}</span></div><button class="btn btn-danger-ghost btn-sm">忘記</button></div>`).join('')}</div>`
+  if (st.advTab === 'fields') body = `<p class="caption">勾選要從原站同步到 EduLog 的欄位。未勾選的欄位保留 EduLog 現有值。</p>
+    <div class="panel" style="padding:4px 16px">${['出席','完成狀況','內部紀錄','學習表現','報告內容','聯絡電話（不建議）'].map((f,i)=>`<label class="check"><input type="checkbox" ${i<5?'checked':''}>${f}</label>`).join('')}</div>`
+  if (st.advTab === 'maint') body = `<div class="card-lite"><h3>補讀來源資料</h3><p class="caption">原站有新紀錄但本次沒讀到時使用。會重新讀取所選範圍的課堂與報告。</p><div><button class="btn btn-secondary btn-sm">${I('download')}補讀來源資料</button></div></div>
+    <div class="card-lite"><h3>重新核對歷史</h3><p class="caption">重新比對已同步過的課堂紀錄，找出兩邊不一致的地方。不會自動覆寫。</p><div><button class="btn btn-secondary btn-sm">${I('rotate')}重新核對歷史</button></div></div>`
+  return `<div class="scrim" data-go="ws/confirm"></div><aside class="drawer wide" role="dialog" aria-modal="true" aria-labelledby="adv-h">
+    <div class="drawer-head"><button class="btn btn-icon back" aria-label="返回" data-go="ws/confirm">${I('chev-left','ic-lg')}</button><h2 id="adv-h">進階：全部對應</h2><button class="btn btn-icon close" aria-label="關閉" data-go="ws/confirm">${I('x','ic-lg')}</button></div>
+    <div class="adv-tabs" role="tablist">${Object.entries(tabs).map(([k,v])=>`<button role="tab" aria-selected="${st.advTab===k}" data-adv="${k}">${v}</button>`).join('')}</div>
+    <div class="drawer-body">${body}</div>
+    <div class="drawer-foot"><button class="btn btn-primary" data-go="ws/confirm">套用並返回</button></div></aside>`
+}
+function wsSyncing(){
+  return wsShell('import', `${stepper(2)}
+    <section class="panel" aria-live="polite"><div class="panel-head"><h2>同步中…</h2><p>正在先預覽伺服器變更；沒有衝突會直接寫入，請勿關閉此分頁。</p></div>
+      <div style="padding:16px;display:grid;gap:12px"><div class="progress" role="progressbar" aria-valuenow="62" aria-valuemin="0" aria-valuemax="100"><span style="width:62%"></span></div>
+      <ul class="timeline"><li><span class="dot dot-ok"></span><div>預覽變更<small>48 筆，無衝突</small></div></li><li><span class="dot dot-ok"></span><div>新建學生與報名<small>2 位學生、3 筆報名</small></div></li><li>${I('loader','spin')}<div>寫入課堂紀錄與報告<small>18 / 29</small></div></li></ul></div></section>
+    <div class="actionbar"><span class="status">${I('clock')}約需 10 秒</span><span class="spacer"></span><button class="btn btn-primary" disabled>${I('loader','spin')}同步中…</button></div>`)
+}
+function wsConflict(){
+  return wsShell('import', `${stepper(2)}
+    <section class="interrupt" role="alert">
+      <div class="interrupt-head">${I('alert','ic-xl')}<div><h2>同步已暫停：有 2 筆資料在你確認後變動</h2><p>其他 46 筆尚未寫入。請決定這 2 筆要用哪一邊，再繼續同步。</p></div></div>
+      <div class="group-head"><span class="dot dot-notice"></span>EduLog 剛被修改<span class="count">1</span></div>
+      ${exRow('b2','notice','周安琪 · 10/15 學習表現','EduLog 於 14:32 被修改（確認後 3 分鐘）', `<div class="diff"><div aria-pressed="true"><span class="caption">原站</span><b>專注，完成兩個實驗</b></div><div><span class="caption">EduLog（最新）</span><b>專注，完成兩個實驗；下次帶護目鏡</b></div></div>`)}
+      <div class="group-head"><span class="dot dot-warn"></span>原站資料已過期<span class="count">1</span><span class="hint">讀取於 12 分鐘前，原站之後又有更新</span></div>
+      ${exRow('st1','warn','10/15（三）16:00 課堂紀錄','原站 14:40 新增了 1 位學生的出席', `<div class="ex-choice"><button class="btn btn-secondary btn-sm">${I('download')}重新讀取這堂課</button><span class="caption">或略過這堂，稍後再處理</span></div>`)}
+    </section>
+    <div class="actionbar"><button class="btn btn-secondary" data-go="ws/confirm">${I('chev-left')}返回確認</button><span class="spacer"></span><button class="btn btn-primary" data-go="ws/done">${I('refresh')}套用選擇並繼續同步</button></div>`)
+}
+function wsDone(){
+  const tiles = [['2','新建學生'],['3','新建報名'],['36','更新出席'],['12','報告掛到課堂'],['1','略過','warn']]
+  return wsShell('import', `${stepper(3)}
+    <div class="result-head">${I('check-circle','ic-xl')}<h2>同步完成</h2><span class="caption">週三 16:00 自然探索 A 班 · 10/19 14:36</span></div>
+    <div class="tiles">${tiles.map(t=>`<div class="tile ${t[2]||''}"><b>${t[0]}</b><span>${t[1]}</span></div>`).join('')}</div>
+    <section class="panel" aria-labelledby="skip-h"><div class="panel-head"><h2 id="skip-h">略過的項目</h2><span class="count">1</span><p>這些沒有寫入 EduLog。處理後可單獨重新同步。</p></div>
+      <div class="rows"><div class="row" data-tone="warn"><div class="row-main"><span class="row-name">黃品睿 · 10/01 報告</span><span class="row-meta">原站課堂已刪除，找不到可掛的課堂</span></div><div class="row-side"><button class="btn btn-secondary btn-sm" data-go="ws/confirm">${I('rotate')}重新處理</button></div></div></div></section>
+    <div class="actionbar"><button class="btn btn-secondary" data-go="ws/read">匯入其他班級</button><span class="spacer"></span><a class="btn btn-primary" href="#ws/done">${I('external')}在 EduLog 檢視</a></div>`)
+}
+const LOG = {
+  open:[ {id:'w1',t:'週三 16:00 自然探索 A 班',m:'停在「確認」 · 1 筆缺少資料 · 10/19 14:20',tone:'warn',tag:'確認中'},
+         {id:'w2',t:'週六 10:00 機器人入門 C 班',m:'同步暫停：2 筆衝突 · 10/18 11:05',tone:'notice',tag:'已暫停'} ],
+  done:[ {id:'w3',t:'週五 18:30 程式積木 B 班',m:'10/17 19:42 · 新建 1 · 更新 24 · 略過 0'},
+         {id:'w4',t:'週三 16:00 自然探索 A 班',m:'10/12 17:10 · 更新 31 · 略過 1'},
+         {id:'w5',t:'週五 18:30 程式積木 B 班',m:'10/10 19:30 · 新建 3 · 更新 20 · 略過 0'} ],
+}
+function wsLog(withDetail = false){
+  const row = (w, open) => `<div class="row clickable" ${w.tone?`data-tone="${w.tone}"`:''} ${st.logSel===w.id?'aria-selected="true"':''} data-log="${w.id}" tabindex="0">
+    <div class="row-main"><span class="row-name">${w.t}${w.tag?`<span class="tag tag-${w.tone}">${w.tag}</span>`:''}</span><span class="row-meta">${w.m}</span></div>
+    <div class="row-side">${open?`<button class="btn btn-soft btn-sm" data-go="ws/confirm">${I('play')}繼續</button>`:`<button class="btn btn-secondary btn-sm" data-log="${w.id}">${I('eye')}查看</button>`}</div></div>`
+  const drawer = withDetail ? `<div class="scrim narrow" data-go="ws/log"></div><aside class="drawer" role="dialog" aria-labelledby="ld-h">
+    <div class="drawer-head"><button class="btn btn-icon back" aria-label="返回清單" data-go="ws/log">${I('chev-left','ic-lg')}</button><h2 id="ld-h">程式積木 B 班 · 10/17</h2><button class="btn btn-icon close" aria-label="關閉" data-go="ws/log">${I('x','ic-lg')}</button></div>
+    <div class="drawer-body"><dl class="kv"><dt>狀態</dt><dd><span class="tag tag-ok">${I('check')}已完成</span></dd><dt>開始</dt><dd>10/17 19:38</dd><dt>完成</dt><dd>10/17 19:42</dd><dt>來源</dt><dd>週五 18:30 程式積木 B 班</dd></dl>
+      <div class="tiles"><div class="tile"><b>1</b><span>新建學生</span></div><div class="tile"><b>24</b><span>更新</span></div><div class="tile"><b>0</b><span>略過</span></div></div>
+      <div class="section-title">過程</div><ul class="timeline"><li><span class="dot dot-ok"></span><div>讀取 33 筆<small>19:38</small></div></li><li><span class="dot dot-ok"></span><div>確認 1 筆例外（新建 許書豪）<small>19:40</small></div></li><li><span class="dot dot-ok"></span><div>同步完成<small>19:42</small></div></li></ul></div>
+    <div class="drawer-foot"><a class="btn btn-primary" href="#ws/log-detail">${I('external')}在 EduLog 檢視</a></div></aside>` : ''
+  return wsShell('log', `<section class="panel">
+      <div class="filters"><div class="search">${I('search')}<input class="input" type="search" placeholder="搜尋班級或學生" aria-label="搜尋"></div>
+        <select class="select" aria-label="班級"><option>全部班級</option>${CLASSES.map(c=>`<option>${c.name}</option>`).join('')}</select></div>
+      <div class="group-head"><span class="dot dot-warn"></span>未完成<span class="count">2</span></div>${LOG.open.map(w=>row(w,true)).join('')}
+      <div class="group-head"><span class="dot dot-ok"></span>已完成<span class="count">3</span></div>${LOG.done.map(w=>row(w,false)).join('')}
+    </section>`, drawer)
+}
+
+/* ---------------- Popup ---------------- */
+function popupHead(on){
+  return `<div class="popup-head"><span class="logo" aria-hidden="true">E</span><span class="brand">EduLog</span>
+    <span class="conn" data-tone="${on?'ok':'neutral'}"><span class="dot"></span>${on?'已連線':'未連線'}</span><span class="spacer"></span>
+    <button class="btn btn-icon" aria-label="設定" data-go="popup/settings">${I('settings','ic-lg')}</button></div>`
+}
+const popupFoot = `<div class="popup-foot"><button class="linkrow" data-go="popup/jobs">${I('history')}工作紀錄<span class="count">2</span>${I('chev-right','chev')}</button></div>`
+function popupView(){
+  const s = st.sub; let body = '', url = 'corp.example.test/courses/dt/0912'
+  if (s==='off') body = `${popupHead(false)}<div class="popup-body">
+      <div class="ctx"><span class="ctx-ic neutral">${I('plug','ic-lg')}</span><div><p class="ctx-title">連接 EduLog</p><p class="ctx-sub">連接後可同步班級、預填報告。網站主題不需連線也能使用。</p></div></div>
+      <div class="field"><label for="inst">EduLog 連線網址</label><input id="inst" class="input" type="url" placeholder="https://edulog.example.com"><p class="hint">自架網址可含連接埠。</p></div>
+      <button class="btn btn-primary btn-block">${I('plug')}連接 EduLog</button></div>`
+  if (s==='class') body = `${popupHead(true)}<div class="popup-body">
+      <div class="ctx"><span class="ctx-ic">${I('users','ic-lg')}</span><div><p class="ctx-title">週三 16:00 自然探索 A 班</p><p class="ctx-sub">12 位學生 · 上次同步 10/12</p></div></div>
+      <button class="btn btn-primary btn-block" data-go="ws/read">${I('refresh')}同步本班</button>
+      <button class="btn btn-ghost">${I('dashboard')}開啟工作台</button></div>${popupFoot}`
+  if (s==='report') { url = 'corp.example.test/reports/edit/5531'; body = `${popupHead(true)}<div class="popup-body">
+      <div class="ctx"><span class="ctx-ic">${I('file','ic-lg')}</span><div><p class="ctx-title">林小安 · 10/15 學習報告</p><p class="ctx-sub">EduLog 有 1 筆對應紀錄可預填</p></div></div>
+      <button class="btn btn-primary btn-block">${I('sparkles')}預填本報告</button>
+      <button class="btn btn-ghost" data-go="ws/read">${I('dashboard')}開啟工作台</button></div>${popupFoot}` }
+  if (s==='other') { url = 'corp.example.test/home'; body = `${popupHead(true)}<div class="popup-body">
+      <div class="ctx"><span class="ctx-ic neutral">${I('dashboard','ic-lg')}</span><div><p class="ctx-title">這頁沒有可同步的內容</p><p class="ctx-sub">開啟班級頁可同步本班；在工作台可選擇任一班級。</p></div></div>
+      <button class="btn btn-primary btn-block" data-go="ws/read">${I('dashboard')}開啟工作台</button></div>${popupFoot}` }
+  if (s==='jobs') body = `<div class="popup-head"><button class="btn btn-icon" aria-label="返回" data-go="popup/class">${I('chev-left','ic-lg')}</button><span class="brand">工作紀錄</span></div>
+      <div class="popup-body" style="gap:0;padding-top:4px">
+      <p class="section-title" style="padding:8px 4px 4px">未完成 <span class="count">2</span></p>
+      ${LOG.open.map(w=>`<div class="prow"><div class="row-main"><span style="font-weight:600;color:var(--edulog-text-strong)">${w.t}</span><span class="row-meta">${w.m}</span></div><button class="btn btn-soft btn-sm" data-go="ws/confirm">繼續</button></div>`).join('')}
+      <p class="section-title" style="padding:12px 4px 4px">已完成</p>
+      ${LOG.done.slice(0,2).map(w=>`<div class="prow"><div class="row-main"><span style="font-weight:600;color:var(--edulog-text-strong)">${w.t}</span><span class="row-meta">${w.m}</span></div><button class="btn btn-secondary btn-sm" data-go="ws/log-detail">查看</button></div>`).join('')}
+      <button class="btn btn-ghost" style="margin-top:8px" data-go="ws/log">${I('dashboard')}在工作台查看全部</button></div>`
+  if (s==='settings') body = `<div class="popup-head"><button class="btn btn-icon" aria-label="返回" data-go="popup/class">${I('chev-left','ic-lg')}</button><span class="brand">設定</span></div>
+      <div class="popup-body">
+      <div class="settings-group"><span class="lbl">網站主題</span><label class="switch"><span>套用 EduLog 清晰主題<small>不需連線也能使用</small></span><input type="checkbox" checked></label></div>
+      <div class="settings-group"><label class="lbl" for="lang">語言</label><select id="lang" class="select"><option>繁體中文</option><option>English</option></select></div>
+      <div class="settings-group"><span class="lbl">EduLog 伺服器</span><dl><div class="dl-row"><dt>網址</dt><dd>edulog.example.com</dd></div><div class="dl-row"><dt>最近驗證</dt><dd>10/19 14:02</dd></div><div class="dl-row"><dt>此瀏覽器</dt><dd>教室筆電</dd></div></dl>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-secondary btn-sm">${I('external')}開啟整合設定</button><button class="btn btn-ghost btn-sm">變更伺服器</button></div></div>
+      <p class="hint">整合憑證只用於 EduLog 專用 API，可在整合設定中撤銷。</p></div>`
+  return `<div class="popup-stage"><div class="popup-col">${s==='jobs'||s==='settings'?'':`<div class="url-bar">${I('external')}${url}</div>`}<div class="popup">${body}</div><p class="popup-caption">實際寬度 360px</p></div></div>`
+}
+
+/* ---------------- Source site ---------------- */
+const ROSTER = [
+  ['李沐晴','國小三年級',['ok','ok','ok','ok']],['林小安','國小二年級',['ok','warn','warn','warn']],['許書豪','國小三年級',['ok','ok','ok','warn']],
+  ['周安琪','國小四年級',['neutral','neutral','neutral','neutral'],'請假'],['陳宥廷','國小三年級',['ok','danger','ok','danger']],['黃品睿','國小二年級',['ok','ok','warn','ok']],
+]
+const SL = { ok:'已填', warn:'未填', danger:'逾期', neutral:'請假' }
+function themedPage(){
+  const statusNames = ['出席','完成','內部','表現']
+  const rows = ROSTER.map((r,i)=>{
+    const worst = r[2].includes('danger')?'danger':r[2].includes('warn')?'warn':''
+    const last = i===ROSTER.length-1
+    return `<div class="row" ${worst?`data-tone="${worst}"`:''}><div class="row-main"><span class="row-name">${r[0]}${r[3]?`<span class="tag tag-neutral">${r[3]}</span>`:''}</span><span class="row-meta">${r[1]} · 10/15（三）第 7 堂</span></div>
+      <div class="status-set">${r[2].map((s,j)=>`<span><span class="dot dot-${s}"></span>${statusNames[j]} ${SL[s]}</span>`).join('')}</div>
+      <div class="row-side"><button class="btn btn-ghost btn-sm">${I('pencil')}填寫</button>
+      <button class="btn btn-icon btn-sm" aria-label="${r[0]} 更多" popovertarget="rm-${i}" style="anchor-name:--rm-${i}">${I('more')}</button>
+      <div class="menu" popover id="rm-${i}" style="position-anchor:--rm-${i}"><button>${I('history')}完整紀錄</button><button>${I('file')}未填清單</button><button>${I('phone')}顯示電話</button><hr><button>${I('external')}在 EduLog 開啟</button></div></div></div>`}).join('')
+  return `<div class="tb"><div class="tb-title"><span class="logo">E</span><b>週三 16:00 自然探索 A 班</b><span class="tb-sub">班級頁 · 10/15 第 7 堂</span></div>
+      <div class="tb-actions"><span class="conn" data-tone="ok"><span class="dot"></span><span class="conn-label">已連線</span></span>
+      <button class="btn btn-primary btn-sm">${I('refresh')}同步本班</button>
+      <button class="btn btn-icon" aria-label="EduLog 更多" popovertarget="tb-more" style="anchor-name:--tb-more">${I('more','ic-lg')}</button>
+      <div class="menu" popover id="tb-more" style="position-anchor:--tb-more"><button data-go="ws/read">${I('dashboard')}開啟工作台</button><button data-go="ws/log">${I('history')}工作紀錄</button><button data-go="popup/settings">${I('settings')}設定</button><hr><button data-go="site/off">${I('palette')}關閉本頁主題</button></div></div></div>
+    <div class="themed"><div class="panel"><div class="panel-head"><h2>學生名單</h2><span class="count">12</span><span class="spacer"></span><span class="caption">顯示 6 位</span></div><div class="rows">${rows}</div></div>
+      <p class="frame-caption">名單容器有 <code>overflow:clip</code>；最後一列的「更多」選單仍完整顯示（Popover 在 top layer）。</p></div>`
+}
+function legacyPage(report){
+  return `<div class="legacy-head"><b>補習班後台（示意）</b><span>${report?'學習報告編輯':'班級 · 自然探索 A'}</span></div>
+    <div class="legacy-body">${report?`<h2>林小安 10/15 學習報告</h2><div style="background:#fff;border:1px solid #d4d4d4;padding:12px;display:grid;gap:8px"><label>課堂表現<br><textarea style="width:100%;height:80px"></textarea></label><label>老師評語<br><textarea style="width:100%;height:80px"></textarea></label></div>`
+      :`<h2>學生名單（10/15 第 7 堂）</h2><div class="legacy-scroll"><table class="legacy-table"><thead><tr><th>姓名</th><th>年級</th><th>出席</th><th>報告</th></tr></thead><tbody>${ROSTER.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2][0]==='ok'?'出席':'請假'}</td><td><a href="#site/off">編輯</a></td></tr>`).join('')}</tbody></table></div>`}</div>`
+}
+function fabAndPanel(kind){
+  const offline = kind==='offline', report = kind==='report'
+  const tone = offline ? 'neutral' : 'ok'
+  return `<button class="fab" popovertarget="fab-panel" aria-label="EduLog（${offline?'未連線':'已連線'}）"><span class="logo">E</span><span class="fab-dot" data-tone="${tone}"></span></button>
+    <div class="fab-panel" popover id="fab-panel" role="dialog" aria-label="EduLog 功能">
+      <div class="fp-head"><span class="logo">E</span><b>EduLog</b><span class="spacer"></span><span class="conn" data-tone="${tone}"><span class="dot"></span>${offline?'未連線':'已連線'}</span></div>
+      <div class="fp-body">
+        <label class="switch"><span>本頁套用 EduLog<small>清晰主題，不需連線</small></span><input type="checkbox" data-go="site/on"></label>
+        ${offline ? `<div class="fp-conn">${I('plug')}<span>連接 EduLog 後，可在這裡${report?'預填本報告':'同步本班'}。</span></div><button class="btn btn-secondary btn-block">${I('plug')}連接 EduLog</button>`
+          : `<button class="btn btn-primary btn-block">${report?I('sparkles')+'預填本報告':I('refresh')+'同步本班'}</button>
+             <div class="fp-conn">${I('check-circle')}<span>edulog.example.com<br>${report?'找到 1 筆對應紀錄':'上次同步 10/12 17:10'}</span></div>`}
+      </div>
+      <div class="fp-foot"><button class="linkrow" data-go="popup/settings">${I('settings')}設定${I('chev-right','chev')}</button></div>
+    </div>`
+}
+function siteView(){
+  const s = st.sub
+  const on = s.startsWith('on'), report = s==='off-report'
+  const url = report ? 'corp.example.test/reports/edit/5531' : 'corp.example.test/courses/dt/0912'
+  const inner = on ? themedPage() : legacyPage(report) + fabAndPanel(s==='off-offline'?'offline':report?'report':'class')
+  return `<div class="site-stage"><div class="url-bar">${I('external')}${url}</div><div class="frame">${inner}</div>
+    <p class="frame-caption">${on?'主題開啟：EduLog 工具列 sticky 在原站頂部；只有一顆主操作。':'主題關閉：右下角只有一顆 EduLog 圖示按鈕，狀態點表示連線；點擊開啟功能面板。'}</p></div>`
+}
+
+/* ---------------- Router ---------------- */
+function render(){
+  const [screen, sub] = (location.hash.slice(1) || 'ws/read').split('/')
+  st.screen = SCREENS[screen] ? screen : 'ws'
+  st.sub = SCREENS[st.screen].states[sub] ? sub : Object.keys(SCREENS[st.screen].states)[0]
+  if (st.screen==='ws' && st.sub==='detail' && !st.sel) st.sel = 's1'
+  if (st.screen==='ws' && st.sub==='log-detail') st.logSel = 'w3'
+  document.getElementById('proto-nav').innerHTML = Object.entries(SCREENS).map(([k,v])=>`<button ${k===st.screen?'aria-current="page"':''} data-go="${k}/${Object.keys(v.states)[0]}">${v.label}</button>`).join('')
+  document.getElementById('proto-states').innerHTML = Object.entries(SCREENS[st.screen].states).map(([k,v])=>`<button aria-pressed="${k===st.sub}" data-go="${st.screen}/${k}">${v}</button>`).join('')
+  let html = ''
+  if (st.screen==='ws') html = ({ read:wsRead, confirm:()=>wsConfirm(), detail:()=>wsConfirm(true), advanced:()=>wsConfirm(false,true), syncing:wsSyncing, conflict:wsConflict, done:wsDone, log:()=>wsLog(), 'log-detail':()=>wsLog(true) })[st.sub]()
+  if (st.screen==='popup') html = popupView()
+  if (st.screen==='site') html = siteView()
+  document.getElementById('app').innerHTML = html
+  document.title = `EduLog 原型 v2 · ${SCREENS[st.screen].label} · ${SCREENS[st.screen].states[st.sub]}`
+  if (st.screen==='site') {
+    if (st.sub==='on-menu') document.getElementById('rm-5')?.showPopover()
+    if (st.sub.startsWith('off-')) document.getElementById('fab-panel')?.showPopover()
+  }
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-go],[data-choice],[data-pick],[data-auto],[data-fix],[data-detail],[data-adv],[data-log],[data-batch]')
+  if (!t) return
+  const d = t.dataset
+  if (d.choice) { const [k,v] = d.choice.split(':'); st.choice[k] = v; render(); return }
+  if (d.pick) { st.pick = d.pick; render(); return }
+  if (d.auto !== undefined) { st.autoOpen = !st.autoOpen; render(); return }
+  if (d.fix) { st.fixed = true; render(); return }
+  if (d.batch) { st.choice.s1 = st.choice.s2 = 'new'; render(); return }
+  if (d.detail) { e.preventDefault(); st.sel = d.detail; location.hash = 'ws/detail'; return }
+  if (d.adv) { st.advTab = d.adv; render(); return }
+  if (d.log) { e.stopPropagation(); st.logSel = d.log; location.hash = 'ws/log-detail'; render(); return }
+  if (d.go) { e.preventDefault(); if (d.go==='ws/confirm') st.sel = null; if (location.hash.slice(1)===d.go) render(); else location.hash = d.go
+    if (d.go==='ws/syncing') setTimeout(()=>{ if (location.hash==='#ws/syncing') location.hash='ws/done' }, 2500) }
+})
+addEventListener('hashchange', render)
+render()
+</script>
+</body>
+</html>

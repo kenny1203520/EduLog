@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useToast } from 'vue-toastification'
+import { useFeedback } from '@/composables/useFeedback'
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
@@ -42,7 +42,7 @@ const emit = defineEmits<{
 }>()
 
 const { t, locale } = useI18n()
-const toast = useToast()
+const { errorKey, reportError } = useFeedback()
 const authStore = useAuthStore()
 const preferences = usePreferencesStore()
 
@@ -184,7 +184,7 @@ async function loadCandidates() {
         selectCurrentUserTeacher()
     } catch (error: any) {
         console.error(error)
-        toast.error(error.message || t('classroom.koding_load_candidates_failed'))
+        reportError(error, 'classroom.koding_load_candidates_failed')
     } finally {
         isLoadingCandidates.value = false
     }
@@ -233,27 +233,27 @@ function launchKodingCheck() {
     const userName = getSelectedUsername()
 
     if (!admissionId) {
-        toast.error(t('classroom.koding_missing_admission_id'))
+        errorKey('classroom.koding_missing_admission_id')
         return
     }
 
     if (!lesson) {
-        toast.error(t('classroom.koding_missing_lesson'))
+        errorKey('classroom.koding_missing_lesson')
         return
     }
 
     if (!selectedCandidate.value) {
-        toast.error(t('classroom.koding_missing_comparison'))
+        errorKey('classroom.koding_missing_comparison')
         return
     }
 
     if (selectedCandidateCredentials.value.length === 0) {
-        toast.error(t('classroom.koding_no_account'))
+        errorKey('classroom.koding_no_account')
         return
     }
 
     if (!userName) {
-        toast.error(t('classroom.koding_missing_account'))
+        errorKey('classroom.koding_missing_account')
         return
     }
 

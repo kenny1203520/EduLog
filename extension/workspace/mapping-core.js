@@ -1,0 +1,45 @@
+import { mergeEvidence } from './mapping-presentation.js'
+// Source labels are rules, never source IDs. Unknown labels remain admission-specific.
+export function courseIdentity(row) {
+  if (row.sourceCourseCode) return `code:${row.sourceCourseCode}`
+  if (row.source_course_id) return `id:${row.source_course_id}`
+  const label = (row.sourceCourseLabel || '').trim().replace(/\s+/g, ' ')
+  return label ? `label:${label}` : `missing:${row.source_id}`
+}
+export function admissionIdentity(row) { return JSON.stringify([row.student_source_id || null,courseIdentity(row)]) }
+export function classifyAdmissionIdentityChange(previous,current,{studentLinkedToExisting=false,courseLinkedToExisting=false,sameCourseLabel=false}={}) {
+  let before,after
+  try { before=JSON.parse(previous);after=JSON.parse(current) } catch { return 'conflict' }
+  if(!Array.isArray(before)||!Array.isArray(after)||before.length!==2||after.length!==2)return 'conflict'
+  const sameStudent=before[0]===after[0]
+  const studentEnriched=before[0]==null&&after[0]!=null&&studentLinkedToExisting
+  const sameCourse=before[1]===after[1]
+  const courseEnriched=String(before[1]).startsWith('label:')&&String(after[1]).startsWith('code:')&&courseLinkedToExisting&&sameCourseLabel
+  if((sameStudent||studentEnriched)&&(sameCourse||courseEnriched))return sameStudent&&sameCourse?'same':'enriched'
+  return 'conflict'
+}
+export function groupCourses(records) {
+  const groups = new Map()
+  for (const row of records.filter(r => r.kind === 'enrollment')) {
+    const key = courseIdentity(row)
+    if (!groups.has(key)) groups.set(key, { key, label: row.sourceCourseLabel || '課程尚未辨識', sourceId: row.source_course_id || null, rows: [] })
+    groups.get(key).rows.push(row)
+  }
+  return [...groups.values()]
+}
+export function rankCandidates(rows, name, label = r => r.name) {
+  const exact = value => String(value || '').trim() === String(name || '').trim()
+  return [...rows].sort((a,b) => Number(exact(label(b))) - Number(exact(label(a))) || String(label(a)).localeCompare(String(label(b)), 'zh-Hant') || a.id.localeCompare(b.id))
+}
+// Reports merge by reportId alone. Rows without one are never merged by
+// content or position; they only carry attendance evidence.
+export function mergeRecords(existing, incoming) {
+  const identity=r=>r.kind==='report'?(r.source_id?`report:${r.source_id}`:null):`${r.kind}:${r.source_id}`
+  const records = new Map(), loose = []
+  const add = row => { const key = identity(row); if (!key) { loose.push(row); return } const old = records.get(key); if (!old) { records.set(key, row); return }
+    const classPage = old.sourceClassBasis === 'class-page' && row.sourceClassBasis !== 'class-page'
+    records.set(key, { ...old, ...Object.fromEntries(Object.entries(row).filter(([,v]) => v != null && v !== '')), ...(classPage ? { sourceClassId: old.sourceClassId, sourceClassBasis: 'class-page' } : {}), data: { ...old.data, ...row.data }, sourceEvidence: mergeEvidence(old.sourceEvidence || [], row.sourceEvidence || []) }) }
+  for (const row of existing) add(row)
+  for (const row of incoming) add(row)
+  return [...records.values(), ...loose]
+}

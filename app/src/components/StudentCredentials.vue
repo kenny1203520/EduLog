@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
+import { useFeedback } from '@/composables/useFeedback'
 import { StudentService } from '@/services/student/StudentService'
 import { useStudentStore } from '@/stores/useStudentStore'
 import { copyToClipboard as copyToClipboardUtil } from '@/utils/clipboard'
@@ -16,6 +17,7 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const toast = useToast()
+const { errorKey, reportError } = useFeedback()
 const studentStore = useStudentStore()
 
 const isModifying = ref(false)
@@ -59,11 +61,11 @@ async function addCredential() {
     const platformValue = newCredential.value.platform === 'Other' ? otherPlatformAdd.value.trim() : newCredential.value.platform
 
     if (!platformValue) {
-        toast.error(t('student.errors.platform_required'))
+        errorKey('student.errors.platform_required')
         return
     }
     if (![newCredential.value.username, newCredential.value.password, newCredential.value.url].some(value => value.trim())) {
-        toast.error(t('student.errors.credential_value_required'))
+        errorKey('student.errors.credential_value_required')
         return
     }
 
@@ -75,7 +77,7 @@ async function addCredential() {
         toast.success(t('student.credentials.add_btn') + ' ' + t('common.success'))
     } catch (e: any) {
         console.error(e)
-        toast.error(e.message || t('student.errors.add_credential_failed'))
+        reportError(e, 'student.errors.add_credential_failed')
     } finally {
         isModifying.value = false
     }
@@ -107,11 +109,11 @@ async function saveCredential() {
     if (!editingCredentialId.value) return
     const platformValue = editCredentialForm.value.platform === 'Other' ? otherPlatformEdit.value.trim() : editCredentialForm.value.platform
     if (!platformValue) {
-        toast.error(t('student.errors.platform_required'))
+        errorKey('student.errors.platform_required')
         return
     }
     if (![editCredentialForm.value.username, editCredentialForm.value.password, editCredentialForm.value.url].some(value => value.trim())) {
-        toast.error(t('student.errors.credential_value_required'))
+        errorKey('student.errors.credential_value_required')
         return
     }
     try {
@@ -122,7 +124,7 @@ async function saveCredential() {
         toast.success(t('common.save_success'))
     } catch (e) {
         console.error(e)
-        toast.error(t('student.errors.update_credential_failed'))
+        reportError(e, 'student.errors.update_credential_failed')
     } finally {
         isModifying.value = false
     }
@@ -142,7 +144,7 @@ async function handleDeleteCredential() {
         toast.success(t('common.deleted'))
     } catch (e: any) {
         console.error(e)
-        toast.error(e.message || t('student.errors.delete_credential_failed'))
+        reportError(e, 'student.errors.delete_credential_failed')
     } finally {
         isModifying.value = false
         showDeleteConfirm.value = false
@@ -164,7 +166,7 @@ async function copyToClipboard(text: string) {
     if (success) {
         toast.success(t('common.copy_success'))
     } else {
-        toast.error(t('common.copy_error', 'Failed to copy to clipboard'))
+        errorKey('common.copy_error')
     }
 }
 

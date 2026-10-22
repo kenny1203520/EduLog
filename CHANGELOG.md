@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0-alpha.3] - 2026-10-23
+
+### Added
+- Added the AI report assistant with personal provider credentials, model selection, de-identification rules, generation history, and adoption tracking.
+- Added the browser-extension side-panel report editor and direct form filling, with interface translations that follow the teaching site.
+- Added class timelines, a paged class calendar, and clearer transfer-history feedback.
+
+### Changed
+- Report editing keeps local drafts safe through network loss, retries unsent changes, and resolves conflicts using editable fields only.
+- AI generation can continue after disconnects and recover structured drafts from more provider response formats.
+- Realtime side-panel connections use one-time tickets, while cached reads remain available as the ticket is issued.
+
+### Fixed
+- Fixed report and classroom loading, AI assistant panel visibility, OpenRouter sign-in return handling, and extension side-panel form checks.
+
+### Deployment Notes
+- Publish matching frontend and API images tagged `2.0.0-alpha.3`; alpha images do not update stable aliases.
+- Back up the database, then apply all unapplied migrations in filename order through `1000155_enrollment_transfer_log.sql`.
+- Configure `API_EXTENSION_ALLOWED_ORIGINS` and `EDULOG_WEB_BASE_URL` before using the extension integration. No production deployment is included.
+- Release notes are generated from GitHub pull requests and commits when the `v2.0.0-alpha.3` tag is published.
+
 ## [2.0.0-alpha.2] - 2026-10-17
 
 ### Added

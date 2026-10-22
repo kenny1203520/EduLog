@@ -6,6 +6,7 @@
 import { DateUtils } from '@/utils/DateUtils'
 import { calculateTextEditorMetrics, createTextEditorContent } from '@/components/common/text-editor/content'
 import type { RichTextDocumentV1 } from '@/components/common/text-editor/types'
+import type { SourceReportIdentity } from '@/utils/sourceReportLink'
 
 export interface OccurrenceReportDTO {
     id?: string
@@ -27,6 +28,10 @@ export interface OccurrenceReportDTO {
     class_notes_document?: RichTextDocumentV1 | null
     content_document?: RichTextDocumentV1 | null
     external_link?: string
+    // Read-only identity of the imported source report (null when not imported)
+    source_origin?: string | null
+    source_admission_id?: string | null
+    source_report_id?: string | null
 
     version: number
     occurrence_date?: string
@@ -67,7 +72,7 @@ export interface ReportVersionDTO {
 /**
  * OccurrenceReport domain model
  */
-export class OccurrenceReport {
+export class OccurrenceReport implements SourceReportIdentity {
     id?: string
     enrollmentId: string
     classOccurrenceId: string
@@ -87,6 +92,9 @@ export class OccurrenceReport {
     content: string
     contentDocument: RichTextDocumentV1
     externalLink?: string
+    sourceOrigin: string | null = null
+    sourceAdmissionId: string | null = null
+    sourceReportId: string | null = null
 
     version: number
     occurrenceDate?: Date
@@ -132,6 +140,9 @@ export class OccurrenceReport {
         this.content = content.plainText
         this.contentDocument = content.richText
         this.externalLink = data.external_link
+        this.sourceOrigin = data.source_origin ?? null
+        this.sourceAdmissionId = data.source_admission_id ?? null
+        this.sourceReportId = data.source_report_id ?? null
 
         this.version = data.version
         this.occurrenceDate = DateUtils.parseLocalDate(data.occurrence_date)
@@ -165,6 +176,9 @@ export class OccurrenceReport {
             content: this.content,
             content_document: this.contentDocument,
             external_link: this.externalLink,
+            source_origin: this.sourceOrigin,
+            source_admission_id: this.sourceAdmissionId,
+            source_report_id: this.sourceReportId,
 
             version: this.version,
             occurrence_date: DateUtils.formatLocalDate(this.occurrenceDate),
@@ -294,7 +308,7 @@ export interface SaveReportResult {
     serverContent?: string
     serverReport?: OccurrenceReportDTO // Full server report for deep comparison
     updatedReport?: OccurrenceReportDTO // Authoritative row returned after a successful save
-    errorCode?: 'request_timeout' | 'save_outcome_unknown' | 'conflict' | 'permission_denied' | 'validation_error' | 'system_managed'
+    errorCode?: 'request_timeout' | 'save_outcome_unknown' | 'network_error' | 'conflict' | 'permission_denied' | 'validation_error' | 'system_managed'
     /** Latest canonical version observed while reconciling a conflict. */
     serverVersion?: number
     /** True when the local draft was safely merged and retried. */

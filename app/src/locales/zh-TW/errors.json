@@ -1,8 +1,8 @@
 {
     "network": "網路連線發生問題，請檢查連線後再試一次。",
     "unknown": "發生錯誤，請再試一次。",
-    "request_timeout": "\u5132\u5b58\u8981\u6c42\u903e\u6642\uff0c\u8b8a\u66f4\u4ecd\u5f85\u5132\u5b58\uff0c\u8acb\u91cd\u8a66\u3002",
-    "save_outcome_unknown": "\u7121\u6cd5\u78ba\u8a8d\u5132\u5b58\u7d50\u679c\uff0c\u8b8a\u66f4\u4ecd\u5f85\u5132\u5b58\uff0c\u8acb\u91cd\u8a66\u3002",
+    "request_timeout": "儲存要求逾時，變更仍待儲存，請重試。",
+    "save_outcome_unknown": "無法確認儲存結果，變更仍待儲存，請重試。",
     "unexpected": "發生未預期的錯誤。如果持續發生，請聯絡支援人員。",
     "conflict": "此資料已被其他人變更，請重新載入後再繼續。",
     "system_role_assignment_overlap": "此使用者在重疊期間已具有相同的系統角色。",
@@ -36,6 +36,27 @@
         "ORIGINAL_REPORT_NOT_FOUND": "找不到原始課次的報告，請重新整理後再試。",
         "SOURCE_REPORT_HAS_CONTENT": "原日期已經有這位學生寫了內容的報告，無法取消調課。請先處理那份報告。",
         "TRANSFER_CHAIN_HAS_MERGED_REPORT": "這堂課之後的調課曾合併過報告，請先取消最後一筆調課。",
-        "REPORT_ALREADY_EXISTS": "此課次已存在報告。"
+        "REPORT_ALREADY_EXISTS": "此課次已存在報告。",
+        "TRANSFER_NOTE_TOO_LONG": "轉班備註不可超過 200 字。"
+    },
+    "rate_limited": "操作太頻繁，請稍候再試。",
+    "service_unavailable": "服務暫時無法使用。",
+    "toast": {
+        "details": "錯誤代碼",
+        "copy": "複製",
+        "copied": "已複製"
+    },
+    "hints": {
+        "network": "請確認網路連線正常後再試一次。",
+        "unknown": "請再試一次；若持續發生，請展開「錯誤代碼」複製後回報。",
+        "unexpected": "請展開「錯誤代碼」複製後回報給支援人員。",
+        "request_timeout": "請保持頁面開啟並重試，避免變更遺失。",
+        "save_outcome_unknown": "請保持頁面開啟並重試，避免變更遺失。",
+        "conflict": "請重新載入頁面取得最新資料後再修改。",
+        "permission_denied": "如需此權限，請聯絡系統管理員。",
+        "session_expired": "請重新登入後再試一次。",
+        "validation_failed": "請依欄位提示修正後再送出。",
+        "rate_limited": "請等待約一分鐘後再試。",
+        "service_unavailable": "請稍候幾分鐘再試；若持續發生，請聯絡支援人員。"
     }
 }

@@ -1,6 +1,29 @@
 {
     "entries": [
         {
+            "version": "2.0.0-alpha.3",
+            "date": "2026-10-23",
+            "changes": {
+                "added": [
+                    "Added the AI report assistant with personal provider credentials, model selection, de-identification rules, generation history, and adoption tracking.",
+                    "Added the browser-extension side-panel report editor and direct form filling, with translations that follow the teaching site.",
+                    "Added class timelines, a paged class calendar, and clearer transfer-history feedback."
+                ],
+                "changed": [
+                    "Report editing keeps local drafts safe through network loss, retries unsent changes, and resolves conflicts using editable fields only.",
+                    "AI generation can continue after disconnects and recover drafts from more provider response formats.",
+                    "Realtime side-panel connections use one-time tickets while cached reads remain available."
+                ],
+                "fixed": [
+                    "Fixed report and classroom loading, AI assistant panel visibility, OpenRouter sign-in return handling, and extension side-panel checks."
+                ],
+                "deployment": [
+                    "Use matching frontend and API images tagged 2.0.0-alpha.3. Alpha does not update stable image tags.",
+                    "Back up the database and apply every unapplied migration in filename order through 1000155_enrollment_transfer_log.sql."
+                ]
+            }
+        },
+        {
             "version": "2.0.0-alpha.2",
             "date": "2026-10-17",
             "changes": {

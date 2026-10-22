@@ -5,6 +5,10 @@ import { apiV1Client } from '@/services/api/ApiV1Client'
 import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 export class OccurrenceQueryService {
+    /** The API's maximum page size for /occurrences. */
+    private static readonly PAGE_SIZE = 100
+    private static readonly MAX_PAGES = 50
+
     private static formatDate(date: Date): string {
         return DateUtils.formatLocalDate(date)
     }
@@ -57,10 +61,19 @@ export class OccurrenceQueryService {
         sessionIds?: string[]
     ): Promise<ClassOccurrence[]> {
         if (getApiV1Mode() === 'v1') {
-            const params = new URLSearchParams({ start: this.formatDate(startDate), end: this.formatDate(endDate), limit: '100', offset: '0', sort: 'occurrence_date' })
-            if (sessionIds?.length) params.set('session_ids', sessionIds.join(','))
-            const response = await apiV1Client.get<any[]>(`/occurrences?${params}`)
-            return (response.data || []).map((row) => this.fromApi(row))
+            // The API returns at most PAGE_SIZE rows per request; page through
+            // meta.total so a long range never silently drops its later lessons.
+            const rows: any[] = []
+            for (let page = 0; page < this.MAX_PAGES; page++) {
+                const params = new URLSearchParams({ start: this.formatDate(startDate), end: this.formatDate(endDate), limit: String(this.PAGE_SIZE), offset: String(page * this.PAGE_SIZE), sort: 'occurrence_date' })
+                if (sessionIds?.length) params.set('session_ids', sessionIds.join(','))
+                const response = await apiV1Client.get<any[]>(`/occurrences?${params}`)
+                const batch = response.data || []
+                rows.push(...batch)
+                const total = Number((response.meta as any)?.total)
+                if (batch.length < this.PAGE_SIZE || (Number.isFinite(total) && rows.length >= total)) break
+            }
+            return rows.map((row) => this.fromApi(row))
         }
         let query = apiDataClient
             .from('class_occurrences')

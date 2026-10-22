@@ -1,5 +1,5 @@
 <template>
-    <div class="report-editor bg-white rounded-lg shadow-sm p-4 sm:p-6 relative min-h-[400px]" @focusin="handleEditorFieldFocus" @focusout="handleEditorFieldBlur">
+    <div class="report-editor bg-white rounded-lg shadow-sm relative min-h-[400px]" :class="props.compact ? 'p-3' : 'p-4 sm:p-6'" @focusin="handleEditorFieldFocus" @focusout="handleEditorFieldBlur">
         <!-- Loading Overlay -->
         <div v-if="props.loading"
             class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/60 backdrop-blur-[2px] rounded-lg transition-all duration-300">
@@ -11,9 +11,10 @@
             <span class="text-sm font-bold text-gray-500">{{ $t('report.loading_full') }}</span>
         </div>
 
-        <!-- Header -->
+        <!-- Header (compact: title dropped, status and tools share one row) -->
+        <div :class="props.compact ? 'mb-3 flex flex-wrap items-center gap-x-3 gap-y-1' : 'contents'" data-testid="report-editor-header">
         <div class="flex items-center justify-between gap-3">
-            <h3 class="text-lg font-semibold text-gray-800">
+            <h3 v-if="!props.compact" class="text-lg font-semibold text-gray-800">
                 {{ props.title || $t('report.editor.title') }}
             </h3>
             <div class="flex min-w-0 flex-wrap items-center justify-end gap-2">
@@ -83,6 +84,9 @@
                     </svg>
                     {{ $t('report.saving') }}
                 </span>
+                <span v-else-if="saveProblemStatus" :class="saveProblemStatus.className" role="status" data-testid="report-save-problem">
+                    {{ saveProblemStatus.text }}
+                </span>
                 <span v-else-if="lastSaved" class="text-gray-500">
                     {{ getLastSavedString() }}
                 </span>
@@ -94,8 +98,8 @@
                 </span>
             </div>
 
-            <!-- Delete Button -->
-            <button v-if="props.reportId" @click="handleDeleteReport"
+            <!-- Delete Button (not in the side panel: too easy to hit by mistake there) -->
+            <button v-if="props.reportId && !props.compact" @click="handleDeleteReport" data-testid="report-delete"
                 class="text-sm font-medium text-red-500 hover:text-red-700 flex items-center gap-1 focus:outline-none"
                 :title="$t('report.editor.delete_report')">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
@@ -106,11 +110,30 @@
                 <span class="hidden sm:inline">{{ $t('report.editor.delete_report') }}</span>
             </button>
         </div>
+        </div>
+
+        <!-- Unsaved draft kept on this device -->
+        <div v-if="pendingDraftRecovery" class="my-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"
+            role="alert" data-testid="report-draft-recovery">
+            <span class="min-w-0 flex-1">
+                {{ pendingDraftRecovery.action === 'merge'
+                    ? $t('report.editor.draft_recovery.merge_prompt', { time: draftRecoveryTime })
+                    : $t('report.editor.draft_recovery.restore_prompt', { time: draftRecoveryTime }) }}
+            </span>
+            <button type="button" data-testid="report-draft-restore" @click="restoreLocalDraft"
+                class="rounded-md bg-amber-600 px-3 py-1 font-medium text-white hover:bg-amber-700">
+                {{ $t('report.editor.draft_recovery.restore') }}
+            </button>
+            <button type="button" data-testid="report-draft-discard" @click="discardLocalDraft"
+                class="rounded-md px-3 py-1 font-medium text-amber-800 hover:bg-amber-100">
+                {{ $t('report.editor.draft_recovery.discard') }}
+            </button>
+        </div>
 
         <!-- Lesson Selection & Completion  -->
         <div class="grid grid-cols-1">
             <!-- Lesson Selection -->
-            <div class="mb-6">
+            <div :class="props.compact ? 'mb-4' : 'mb-6'">
                 <div class="flex items-center justify-between mb-2">
                     <div class="flex items-center gap-2">
                         <label class="block text-sm font-medium text-gray-700">
@@ -139,13 +162,14 @@
                     </div>
                     <!-- Enrollment External Link Button -->
                     <a v-if="safeExternalHref(initialEnrollmentExternalLink)" :href="safeExternalHref(initialEnrollmentExternalLink) || undefined" target="_blank" rel="noopener noreferrer"
+                        :title="$t('report.editor.view_external_report')" :aria-label="$t('report.editor.view_external_report')"
                         class="text-xs flex items-center gap-1 text-blue-600 hover:text-blue-800 font-bold bg-blue-50 px-2 py-1 rounded-lg border border-blue-100 hover:border-blue-300 transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                         </svg>
-                        {{ $t('report.editor.view_external_report') || $t('report.editor.course_folder') }}
+                        <span v-if="!props.compact">{{ $t('report.editor.view_external_report') || $t('report.editor.course_folder') }}</span>
                     </a>
                 </div>
                 <BaseDropdown data-collab-field="lesson" v-model="selectedLessonId" :options="lessonOptions" :disabled="disabled"
@@ -153,7 +177,15 @@
                 <section v-if="progressContextLoading || progressContextError || progressGaps.length || previousProgressReport"
                     class="mt-3 rounded-xl border px-3 py-3 sm:px-4"
                     :class="progressContextError ? 'border-rose-200 bg-rose-50' : 'border-amber-200 bg-amber-50'"
-                    :aria-busy="progressContextLoading" aria-live="polite" aria-atomic="true">
+                    :aria-busy="progressContextLoading" aria-live="polite" aria-atomic="true" data-testid="progress-context">
+                    <button v-if="props.compact" type="button" data-testid="progress-summary"
+                        class="flex min-h-[36px] w-full cursor-pointer items-center gap-2 text-left text-sm"
+                        :aria-expanded="panelUi.progressOpen" @click="panelUi.progressOpen = !panelUi.progressOpen">
+                        <svg class="h-4 w-4 shrink-0 transition-transform duration-200 motion-reduce:transition-none" :class="{ 'rotate-90': panelUi.progressOpen }" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                        <span class="font-bold text-amber-950">{{ $t('report.editor.progress_check.summary_title') }}</span>
+                        <span class="min-w-0 truncate text-slate-700">{{ progressSummary }}</span>
+                    </button>
+                    <div v-show="!props.compact || panelUi.progressOpen" :class="{ 'mt-2': props.compact }">
                     <p v-if="progressContextLoading" class="text-sm text-slate-600" role="status">{{ $t('report.editor.progress_check.loading') }}</p>
                     <div v-else-if="progressContextError" class="flex flex-wrap items-center justify-between gap-2 text-sm text-rose-800" role="status">
                         <span>{{ $t('report.editor.progress_check.load_error') }}</span>
@@ -181,11 +213,15 @@
                                 @click="viewPreviousProgressReport">{{ $t('report.editor.progress_check.view_report') }}</button>
                         </div>
                     </div>
+                    </div>
                 </section>
             </div>
 
+            <!-- Source report (imported) -->
+            <SourceReportLink v-if="!props.compact" :identity="sourceIdentity" class="mb-4" />
+
             <!-- Report External Link Input -->
-            <div class="mb-4">
+            <div v-if="!props.compact" class="mb-4">
                 <label class="block text-xs font-medium text-gray-600 mb-1">
                     {{ $t('report.editor.report_link_label') }}
                 </label>
@@ -334,7 +370,7 @@
         </div>
 
         <!-- Editor Font Size Stepper -->
-        <div class="flex items-center gap-4 mb-4 justify-end">
+        <div v-if="!props.compact" class="flex items-center gap-4 mb-4 justify-end">
             <div class="flex items-center gap-1 bg-gray-50 border border-gray-100 rounded-xl p-1 shadow-sm select-none touch-manipulation">
                 <button @click="preferences.adjustEditorScale(-preferences.STEP)"
                     class="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-500 hover:text-emerald-600 hover:border-emerald-200 hover:bg-emerald-50 transition-all font-bold text-xs shadow-sm">
@@ -358,6 +394,11 @@
                         d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
                 </svg>
                 {{ $t('report.editor.contact_notes_label') }}
+                <button v-if="props.compact && preferences.editorSettings.formattingEnabled" type="button" data-testid="format-toggle-contact"
+                    class="ml-auto inline-flex min-h-[36px] cursor-pointer items-center rounded-md px-2 text-xs font-semibold transition-colors duration-200"
+                    :class="panelUi.toolbars.contact ? 'bg-emerald-50 text-emerald-700' : 'text-gray-500 hover:bg-gray-100'"
+                    :aria-pressed="panelUi.toolbars.contact" :aria-label="$t('report.editor.formatting_toggle_label', { field: $t('report.editor.contact_notes_label') })"
+                    @click.prevent="panelUi.toolbars.contact = !panelUi.toolbars.contact">{{ $t('report.editor.formatting_toggle') }}</button>
             </label>
             <CollaborativeTextEditor
                 :key="'collab-contact-notes'"
@@ -369,7 +410,7 @@
                 :provider="awarenessProvider"
                 :disabled="props.disabled"
                 :formatting-enabled="preferences.editorSettings.formattingEnabled"
-                :toolbar-visible="preferences.editorSettings.toolbarVisible"
+                :toolbar-visible="toolbarVisible('contact')"
                 :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
                 preset="notes"
                 :font-scale="preferences.editorFontScale"
@@ -379,9 +420,9 @@
                 @change="handleTextEditorChange('contactNotes', $event)"
                 @activity="handleCollaborationActivity('contactNotes', $event)" />
             <!-- Fallback standard editor if ydoc not ready -->
-            <TextEditor v-else :key="'plain-contact-notes'" v-model="contactNotesEditorValue" preset="notes" :disabled="props.disabled"
+            <TextEditor v-else :key="'plain-contact-notes'" ref="contactNotesEditorRef" v-model="contactNotesEditorValue" preset="notes" :disabled="props.disabled"
                 :formatting-enabled="preferences.editorSettings.formattingEnabled"
-                :toolbar-visible="preferences.editorSettings.toolbarVisible"
+                :toolbar-visible="toolbarVisible('contact')"
                 :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
                 :font-scale="preferences.editorFontScale" :min-height="120"
                 :placeholder="$t('report.editor.contact_notes_placeholder')"
@@ -397,6 +438,11 @@
                 </svg>
                 {{ $t('report.editor.class_notes_label') }}
                 <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.class_notes_subtitle') }}</span>
+                <button v-if="props.compact && preferences.editorSettings.formattingEnabled" type="button" data-testid="format-toggle-class"
+                    class="ml-auto inline-flex min-h-[36px] cursor-pointer items-center rounded-md px-2 text-xs font-semibold transition-colors duration-200"
+                    :class="panelUi.toolbars.class ? 'bg-emerald-50 text-emerald-700' : 'text-gray-500 hover:bg-gray-100'"
+                    :aria-pressed="panelUi.toolbars.class" :aria-label="$t('report.editor.formatting_toggle_label', { field: $t('report.editor.class_notes_label') })"
+                    @click.prevent="panelUi.toolbars.class = !panelUi.toolbars.class">{{ $t('report.editor.formatting_toggle') }}</button>
             </label>
             <CollaborativeTextEditor
                 :key="'collab-class-notes'"
@@ -408,7 +454,7 @@
                 :provider="awarenessProvider"
                 :disabled="props.disabled"
                 :formatting-enabled="preferences.editorSettings.formattingEnabled"
-                :toolbar-visible="preferences.editorSettings.toolbarVisible"
+                :toolbar-visible="toolbarVisible('class')"
                 :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
                 preset="notes"
                 :font-scale="preferences.editorFontScale"
@@ -418,9 +464,9 @@
                 :placeholder="$t('report.editor.class_notes_placeholder')"
                 @change="handleTextEditorChange('classNotes', $event)"
                 @activity="handleCollaborationActivity('classNotes', $event)" />
-            <TextEditor v-else :key="'plain-class-notes'" v-model="classNotesEditorValue" preset="notes" :disabled="props.disabled"
+            <TextEditor v-else :key="'plain-class-notes'" ref="classNotesEditorRef" v-model="classNotesEditorValue" preset="notes" :disabled="props.disabled"
                 :formatting-enabled="preferences.editorSettings.formattingEnabled"
-                :toolbar-visible="preferences.editorSettings.toolbarVisible"
+                :toolbar-visible="toolbarVisible('class')"
                 :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
                 :font-scale="preferences.editorFontScale" :min-height="140" mono
                 :placeholder="$t('report.editor.class_notes_placeholder')"
@@ -439,11 +485,31 @@
                     <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.learning_report_subtitle')
                         }}</span>
                 </span>
-                <span v-if="wordCount > 0" class="text-xs text-gray-500">
-                    {{ wordCount }} {{ $t('report.editor.word_count') }} · {{ characterCount }} {{
-                        $t('report.editor.character_count') }}
+                <span class="flex items-center gap-3">
+                    <button v-if="props.compact && preferences.editorSettings.formattingEnabled" type="button" data-testid="format-toggle-learning"
+                    class="inline-flex min-h-[36px] cursor-pointer items-center rounded-md px-2 text-xs font-semibold transition-colors duration-200"
+                    :class="panelUi.toolbars.learning ? 'bg-emerald-50 text-emerald-700' : 'text-gray-500 hover:bg-gray-100'"
+                    :aria-pressed="panelUi.toolbars.learning" :aria-label="$t('report.editor.formatting_toggle_label', { field: $t('report.editor.learning_report_label') })"
+                    @click.prevent="panelUi.toolbars.learning = !panelUi.toolbars.learning">{{ $t('report.editor.formatting_toggle') }}</button>
+                    <span v-if="wordCount > 0" class="text-xs text-gray-500">
+                        {{ wordCount }} {{ $t('report.editor.word_count') }} · {{ characterCount }} {{
+                            $t('report.editor.character_count') }}
+                    </span>
+                    <button v-if="!props.disabled" type="button" data-testid="ai-panel-open"
+                        :disabled="!props.reportId"
+                        :title="props.reportId ? $t('ai.open_button_hint') : $t('ai.open_button_disabled')"
+                        class="inline-flex min-h-[36px] cursor-pointer items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-700 transition-colors duration-200 hover:bg-emerald-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
+                        @click.prevent="showAiPanel = true">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                        </svg>
+                        {{ $t('ai.open_button') }}
+                    </button>
                 </span>
             </label>
+            <div class="rounded-lg transition-shadow duration-700 motion-reduce:transition-none"
+                :class="aiInsertFlash ? 'ring-2 ring-emerald-400 ring-offset-2' : ''">
             <CollaborativeTextEditor
                 :key="'collab-content'"
                 ref="contentEditorRef"
@@ -454,7 +520,7 @@
                 :provider="awarenessProvider"
                 :disabled="props.disabled"
                 :formatting-enabled="preferences.editorSettings.formattingEnabled"
-                :toolbar-visible="preferences.editorSettings.toolbarVisible"
+                :toolbar-visible="toolbarVisible('learning')"
                 :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
                 preset="report"
                 :font-scale="preferences.editorFontScale"
@@ -464,19 +530,20 @@
                 :placeholder="props.placeholder || $t('report.editor.learning_report_placeholder')"
                 @change="handleTextEditorChange('content', $event)"
                 @activity="handleCollaborationActivity('content', $event)" />
-            <TextEditor v-else :key="'plain-content'" v-model="contentEditorValue" preset="report"
+            <TextEditor v-else :key="'plain-content'" ref="contentEditorRef" v-model="contentEditorValue" preset="report"
                 :placeholder="props.placeholder || $t('report.editor.learning_report_placeholder')"
                 :disabled="props.disabled"
                 :formatting-enabled="preferences.editorSettings.formattingEnabled"
-                :toolbar-visible="preferences.editorSettings.toolbarVisible"
+                :toolbar-visible="toolbarVisible('learning')"
                 :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
                 :font-scale="preferences.editorFontScale" :min-height="300" mono
                 @change="handleTextEditorChange('content', $event)" />
+            </div>
         </div>
 
         <!-- Error Display -->
         <div v-if="saveError" class="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-            <strong>{{ $t('report.editor.error') }}:</strong> {{ saveError }}
+            <strong>{{ $t('report.editor.error') }}:</strong> {{ saveErrorMessage || saveError }}
         </div>
 
         <!-- Manual Save Button (Optional) -->
@@ -493,6 +560,11 @@
             :focused-lesson-title="focusedProgressReport?.lesson.title" :focused-course-name="props.courseDisplayName || props.courseName"
             :focused-student-name="props.initialStudentName"
             @copy="handleCopyContent" />
+
+        <AiReportPanel :show="showAiPanel" :report-id="props.reportId"
+            :templates="savedTemplates.map(t => ({ id: t.id, name: t.name }))"
+            :has-content="Boolean(localContent?.trim())" :before-generate="flushBeforeAi"
+            @close="showAiPanel = false" @insert="handleAiInsert" @replace="handleAiReplace" />
 
         <ConfirmModal :is-open="confirmState.isOpen" :title="confirmState.title" :message="confirmState.message"
             :confirm-text="confirmState.confirmText" :is-dangerous="confirmState.isDangerous"
@@ -666,9 +738,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, type WatchStopHandle } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, inject, type WatchStopHandle } from 'vue'
+import { onBeforeRouteLeave, routerViewLocationKey } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAutoSave, type AutoSaveErrorContext } from '@/composables/useAutoSave'
+import { classifyDraftRecovery, mergeDraftOntoServer, useReportLocalDraft, type DraftRecoveryAction } from '@/composables/useReportLocalDraft'
+import type { LocalReportDraft } from '@/services/report/LocalDraftStore'
+import { isBrowserOffline, isNetworkError } from '@/utils/networkErrors'
+import { DateUtils } from '@/utils/DateUtils'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { useAuthStore } from '@/stores/useAuthStore'
 import RatingInput from '@/components/common/RatingInput.vue'
@@ -682,11 +759,14 @@ import { createEditorNotifier, type EditorNotification } from '@/components/comm
 import { DEFAULT_EDITOR_USER_SETTINGS, normalizeEditorUserSettings, type EditorUserSettings } from '@/components/common/text-editor/settings'
 import CopyTemplateEditorModal from '@/components/common/CopyTemplateEditorModal.vue'
 import ReportReferencePanel from '@/components/ReportReferencePanel.vue'
+import AiReportPanel from '@/components/report-ai/AiReportPanel.vue'
 import ReportVersionHistoryModal from '@/components/ReportVersionHistoryModal.vue'
 import { ReportTemplateService } from '@/services/report/ReportTemplateService'
 import { CopyTemplateService, type CopyTemplateLoadOption } from '@/services/copy_template/CopyTemplateService'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
+import { usePanelUiState, type PanelToolbar } from '@/composables/usePanelUiState'
 import { useToast } from 'vue-toastification'
+import { useFeedback } from '@/composables/useFeedback'
 import { useReportCollab } from '@/composables/useReportCollab'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import type {
@@ -704,6 +784,8 @@ import {
 import { copyRichTextToClipboard } from '@/utils/clipboard'
 import { formatNumber } from '@/utils/numberFormatting'
 import { safeExternalHref } from '@/utils/safeExternalHref'
+import type { SourceReportIdentity } from '@/utils/sourceReportLink'
+import SourceReportLink from '@/components/reports/SourceReportLink.vue'
 import { normalizeAbsenceReasonCode } from '@/utils/absenceReason'
 import { mergeReportConflict } from '@/services/report/ReportConflictMerge'
 import { findCourseProgressGaps } from '@/utils/courseProgressGaps'
@@ -750,8 +832,9 @@ interface Props {
     collaborationEnabled?: boolean
     notificationsEnabled?: boolean
     initialEnrollmentExternalLink?: string // 課程外部連結
+    sourceIdentity?: SourceReportIdentity | null // 匯入報告的原站身分
     initialCreatedAt?: string // 建立時間
-    compact?: boolean // 是否為緊湊模式 (for split view)
+    compact?: boolean // 緊湊模式：擴充功能側邊欄中只保留要填寫的內容
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -791,6 +874,7 @@ const props = withDefaults(defineProps<Props>(), {
     collaborationEnabled: undefined,
     notificationsEnabled: undefined,
     initialEnrollmentExternalLink: '',
+    sourceIdentity: null,
     initialCreatedAt: '',
     compact: false,
 })
@@ -861,7 +945,11 @@ const selectedReportTemplateModes = ref<Record<string, string>>({
 })
 
 const preferences = usePreferencesStore()
+// Compact mode keeps each formatting toolbar behind its own 格式 toggle, remembered in this browser.
+const panelUi = usePanelUiState()
+const toolbarVisible = (field: PanelToolbar) => props.compact ? panelUi.toolbars[field] : preferences.editorSettings.toolbarVisible
 const toast = useToast()
+const { errorKey, reportError } = useFeedback()
 const effectiveAutoSaveEnabled = computed(() => props.autoSaveEnabled ?? preferences.editorSettings.autoSave.enabled)
 const effectiveCollaborationEnabled = computed(() => props.collaborationEnabled ?? preferences.editorSettings.collaboration.enabled)
 const effectiveNotificationsEnabled = computed(() => props.notificationsEnabled ?? preferences.editorSettings.notificationsEnabled)
@@ -917,6 +1005,45 @@ const handleCopyContent = (text: string) => {
         localContent.value = current + (current ? '\n\n' : '') + text
         handleInput()
     }
+}
+
+const showAiPanel = ref(false)
+const aiInsertFlash = ref(false)
+let aiFlashTimer: ReturnType<typeof setTimeout> | undefined
+
+/** Brief visual cue that AI text landed in the report; nothing is stored in the document. */
+function flashAiInsert() {
+    aiInsertFlash.value = true
+    clearTimeout(aiFlashTimer)
+    aiFlashTimer = setTimeout(() => { aiInsertFlash.value = false }, 1000)
+}
+
+/** Insert AI text at the cursor (or append when the rich editor is not ready). */
+function handleAiInsert(text: string) {
+    if (!text) return
+    if (isTextEditorHandle(contentEditorRef.value)) {
+        const editor = contentEditorRef.value
+        editor.insertText((editor.getText() ? '\n\n' : '') + text)
+    } else {
+        handleCopyContent(text)
+    }
+    flashAiInsert()
+}
+
+function handleAiReplace(text: string) {
+    if (isTextEditorHandle(contentEditorRef.value)) {
+        contentEditorRef.value.replaceText(text, { emitChange: true })
+    } else {
+        localContent.value = text
+        handleInput()
+    }
+    flashAiInsert()
+}
+
+/** The server reads notes from the database, so unsaved edits are saved first. */
+async function flushBeforeAi(): Promise<boolean> {
+    if (!hasUnsavedChanges.value) return true
+    return saveNow({ reason: 'manual' })
 }
 
 async function loadTemplates() {
@@ -1313,12 +1440,12 @@ function copyCourseInfo() {
                 justCopiedCourse.value = true
                 setTimeout(() => { justCopiedCourse.value = false }, 2000)
             } else {
-                toast.error(t('report.editor.copy_course_template_copy_failed'))
+                errorKey('report.editor.copy_course_template_copy_failed')
             }
         })
         .catch(error => {
             console.error('Failed to copy course info', error)
-            toast.error(t('report.editor.copy_course_template_copy_failed'))
+            reportError(error, 'report.editor.copy_course_template_copy_failed')
         })
 }
 
@@ -1356,7 +1483,7 @@ async function openCourseCopyTemplateModal() {
         courseCopyTemplateDocument.value = loaded?.templateDocument || createTextEditorContent(courseCopyTemplateText.value, { templateVariables: true }).richText
     } catch (error) {
         console.error('Failed to load course copy template', error)
-        toast.error(t('report.editor.copy_course_template_load_failed'))
+        reportError(error, 'report.editor.copy_course_template_load_failed')
     } finally {
         if (requestGeneration === courseTemplateRequestGeneration) isLoadingCourseCopyTemplate.value = false
     }
@@ -1377,7 +1504,7 @@ function loadSelectedCourseTemplate() {
 async function saveCourseCopyTemplate() {
     const templateText = courseCopyTemplateText.value.trim()
     if (!templateText) {
-        toast.error(t('report.editor.copy_course_template_empty_error'))
+        errorKey('report.editor.copy_course_template_empty_error')
         return
     }
 
@@ -1388,7 +1515,7 @@ async function saveCourseCopyTemplate() {
         showCourseCopyTemplateModal.value = false
     } catch (error) {
         console.error('Failed to save course copy template', error)
-        toast.error(t('report.editor.copy_course_template_save_failed'))
+        reportError(error, 'report.editor.copy_course_template_save_failed')
     } finally {
         isSavingCourseCopyTemplate.value = false
     }
@@ -1501,7 +1628,7 @@ async function openReportTemplateManagerModal() {
 async function saveTemplateDraft() {
     if (!authStore.user?.id) return
     if (!templateDraftName.value.trim()) {
-        toast.error(t('report.editor.template_name_required'))
+        errorKey('report.editor.template_name_required')
         return
     }
 
@@ -1525,7 +1652,7 @@ async function saveTemplateDraft() {
         toast.success(t('report.editor.template_saved'))
     } catch (error) {
         console.error('Failed to save template draft', error)
-        toast.error(t('report.editor.template_load_error'))
+        reportError(error, 'report.editor.template_load_error')
     } finally {
         isSavingTemplate.value = false
     }
@@ -1536,7 +1663,7 @@ async function applyTemplateDraftToReport() {
         try {
             const serverReport = await OccurrenceReportService.getReportById(props.reportId)
             if (serverReport.version !== version.value) {
-                toast.error(t('report.editor.restore_conflict_error'))
+                errorKey('report.editor.restore_conflict_error')
                 return
             }
         } catch (e) {
@@ -2045,6 +2172,19 @@ const previousProgressReport = computed(() => {
     const lesson = props.availableLessons?.find((item) => item.id === report.lesson_id)
     return lesson ? { report, lesson } : null
 })
+// Compact (side panel): the progress notes collapse into this one line.
+const progressSummary = computed(() => {
+    if (progressContextLoading.value) return t('report.editor.progress_check.loading')
+    if (progressContextError.value) return t('report.editor.progress_check.load_error')
+    const parts: string[] = []
+    if (progressGaps.value.length) parts.push(t('report.editor.progress_check.summary_gaps', { count: progressGaps.value.length }))
+    const previous = previousProgressReport.value
+    if (previous) {
+        const lesson = [t('report.editor.progress_check.lesson_short', { sequence: previous.lesson.sequence }), previous.report.progress_letter].filter(Boolean).join(' ')
+        parts.push(t('report.editor.progress_check.summary_previous', { lesson }))
+    }
+    return parts.join(' · ') || t('report.editor.progress_check.summary_none')
+})
 
 async function loadProgressContext() {
     const requestId = ++progressContextRequest
@@ -2345,7 +2485,7 @@ const canSave = computed(() => {
     return true
 })
 
-function snapshotToLocalReport(snapshot: ReportDraftSnapshot): OccurrenceReportDTO {
+function snapshotToLocalReport(snapshot: ReportDraftSnapshot, reportVersion = version.value): OccurrenceReportDTO {
     return {
         id: props.reportId,
         enrollment_id: props.enrollmentId || '',
@@ -2364,7 +2504,7 @@ function snapshotToLocalReport(snapshot: ReportDraftSnapshot): OccurrenceReportD
         class_notes: snapshot.classNotes,
         class_notes_document: snapshot.classNotesDocument,
         external_link: snapshot.externalLink,
-        version: version.value,
+        version: reportVersion,
         last_edited_at: new Date().toISOString(),
         last_edited_by: authStore.user?.id,
         created_at: props.initialCreatedAt,
@@ -2386,7 +2526,9 @@ const {
     retry: retrySave,
     drain,
     getLastSavedString,
-    reset
+    reset,
+    errorKind: saveErrorKind,
+    isOnline
 } = useAutoSave<ReportDraftSnapshot, SaveReportResult>({
     enabled: effectiveAutoSaveEnabled,
     debounceMs: computed(() => props.debounceMs ?? preferences.editorSettings.autoSave.debounceMs),
@@ -2461,6 +2603,14 @@ const {
             return result
         } catch (error: any) {
             const message = error.message || 'Failed to save report'
+            if (isNetworkError(error) || isBrowserOffline()) {
+                return {
+                    success: false,
+                    message,
+                    errorCode: 'network_error',
+                    messageKey: isBrowserOffline() ? 'report.editor.save_failed_offline' : 'report.editor.save_failed_network'
+                }
+            }
             return { success: false, message, messageKey: 'errors.unknown' }
         }
     },
@@ -2498,13 +2648,17 @@ const {
         if (updatedReport) {
             emit('save-success', updatedReport)
         }
+        networkFailureNotified = false
+        saveErrorMessage.value = ''
         editorNotifier.notify({ code: 'save-succeeded', level: 'success', message: t('report.save_success'), toast: false })
     },
     onError: (message, result, context?: AutoSaveErrorContext) => {
         emit('save-error', message)
         const errorCode = result?.errorCode
+        const networkFailure = errorCode === 'network_error' || (!result && (isNetworkError(message) || isBrowserOffline()))
         const messageKey = result?.messageKey
-            || (errorCode === 'request_timeout' ? 'errors.request_timeout'
+            || (networkFailure ? (isBrowserOffline() ? 'report.editor.save_failed_offline' : 'report.editor.save_failed_network')
+                : errorCode === 'request_timeout' ? 'errors.request_timeout'
                 : errorCode === 'save_outcome_unknown' ? 'errors.save_outcome_unknown'
                     : errorCode === 'permission_denied' ? 'errors.permission_denied'
                 : errorCode === 'validation_error' ? 'errors.validation_failed'
@@ -2512,6 +2666,13 @@ const {
                             : errorCode === 'conflict' ? 'errors.conflict'
                                 : 'errors.unknown')
         const translated = t(messageKey)
+        saveErrorMessage.value = translated
+        // Network failures retry on their own every few seconds; an error
+        // toast (which never auto-dismisses) per attempt would pile up, so
+        // only the first failure of a streak raises one.
+        const retrying = networkFailure || errorCode === 'request_timeout' || errorCode === 'save_outcome_unknown'
+        const showToast = !(retrying && networkFailureNotified)
+        if (retrying) networkFailureNotified = true
         console.error('Report editor save failed:', {
             reportId: props.reportId,
             revision: context?.revision,
@@ -2525,7 +2686,7 @@ const {
             message: translated,
             dedupeKey: `${props.reportId || 'new'}:${context?.revision ?? 'unknown'}:${errorCode || messageKey}`,
             context: { reportId: props.reportId, revision: context?.revision, errorCode: errorCode || messageKey },
-            toast: true
+            toast: showToast
         })
     }
 
@@ -2696,6 +2857,154 @@ watch(() => props.loading, (newLoading) => {
     }
 })
 
+// Device-local draft: unsaved edits survive a lost connection, a closed tab or
+// a crash. It is deleted as soon as the server has the same content.
+const localDraft = useReportLocalDraft({ userId: () => authStore.user?.id })
+const saveErrorMessage = ref('')
+let networkFailureNotified = false
+type PendingDraftRecovery = { reportId: string; draft: LocalReportDraft; action: Extract<DraftRecoveryAction, 'restore' | 'merge'> }
+const pendingDraftRecovery = ref<PendingDraftRecovery | null>(null)
+const draftRecoveryTime = computed(() => pendingDraftRecovery.value
+    ? DateUtils.displayDateTime(new Date(pendingDraftRecovery.value.draft.updatedAt))
+    : '')
+
+const saveProblemStatus = computed<{ text: string; className: string } | null>(() => {
+    if (!props.reportId) return null
+    if (!isOnline.value && hasUnsavedChanges.value) {
+        return {
+            text: t(localDraft.persisted.value ? 'report.editor.offline_saved_locally' : 'report.editor.offline_unsaved'),
+            className: 'text-amber-600'
+        }
+    }
+    if (saveError.value && saveErrorKind.value === 'network') return { text: t('report.editor.save_failed_retrying'), className: 'text-amber-600' }
+    if (saveError.value) return { text: t('report.editor.save_failed'), className: 'text-red-600' }
+    return null
+})
+
+function persistLocalDraft(snapshot: ReportDraftSnapshot) {
+    if (!props.reportId) return
+    localDraft.schedule(props.reportId, {
+        baseVersion: version.value ?? 0,
+        baseSnapshot: savedReportSnapshot.value,
+        snapshot
+    })
+}
+
+watch(autoSaveStatus, (status) => {
+    if (status === 'saved') void localDraft.discard(props.reportId)
+})
+
+function waitForCollaborationToSettle(timeoutMs = 3000): Promise<void> {
+    if (!effectiveCollaborationEnabled.value || ready.value || isBrowserOffline()) return Promise.resolve()
+    return new Promise((resolve) => {
+        const timer = setTimeout(done, timeoutMs)
+        const stop = watch(ready, (isReady) => { if (isReady) done() })
+        function done() {
+            clearTimeout(timer)
+            stop()
+            // Let the collab seeding and recovered-draft queueing settle first.
+            setTimeout(resolve, 300)
+        }
+    })
+}
+
+let draftCheckedReportId: string | null = null
+async function checkLocalDraft() {
+    const reportId = props.reportId
+    if (!reportId || props.loading || isInitializing.value || draftCheckedReportId === reportId) return
+    draftCheckedReportId = reportId
+    pendingDraftRecovery.value = null
+    const draft = await localDraft.load(reportId)
+    if (!draft || props.reportId !== reportId || reportEditorUnmounted) return
+    await waitForCollaborationToSettle()
+    if (props.reportId !== reportId || reportEditorUnmounted) return
+    syncTextRefsFromEditors()
+    const action = classifyDraftRecovery(
+        draft,
+        { version: version.value ?? 0, snapshot: savedReportSnapshot.value },
+        buildCurrentSnapshot()
+    )
+    if (action === 'discard') {
+        void localDraft.discard(reportId)
+        return
+    }
+    if (action === 'none') return
+    pendingDraftRecovery.value = { reportId, draft, action }
+}
+
+watch([() => props.reportId, () => props.loading, () => isInitializing.value], ([reportId]) => {
+    if (reportId !== draftCheckedReportId) pendingDraftRecovery.value = null
+    if (draftCheckedReportId && reportId !== draftCheckedReportId) draftCheckedReportId = null
+    void checkLocalDraft()
+}, { immediate: true })
+
+function applyDraftSnapshot(snapshot: ReportDraftSnapshot) {
+    const [start = '', end = ''] = (snapshot.progressLetter || '').split('-')
+    selectedLessonId.value = snapshot.lessonId || ''
+    isCompleted.value = snapshot.isCompleted
+    progressStart.value = start
+    progressEnd.value = end
+    if (!canonicalSystemManagedReason()) {
+        attendanceStatus.value = snapshot.attendanceStatus
+        absenceReason.value = normalizeAbsenceReasonCode(snapshot.absenceReason)
+    }
+    classParticipation.value = snapshot.classParticipation
+    classroomBehavior.value = snapshot.classroomBehavior
+    reportExternalLink.value = safeExternalHref(snapshot.externalLink) || ''
+
+    const main = createTextEditorContent(snapshot.contentDocument || snapshot.content || '')
+    const contact = createTextEditorContent(snapshot.contactNotesDocument || snapshot.contactNotes || '')
+    const classNotesContent = createTextEditorContent(snapshot.classNotesDocument || snapshot.classNotes || '')
+    localContent.value = main.plainText
+    contentDocument.value = main.richText
+    contactNotes.value = contact.plainText
+    contactNotesDocument.value = contact.richText
+    classNotes.value = classNotesContent.plainText
+    classNotesDocument.value = classNotesContent.richText
+    setEditorContentSilently(contentEditorRef, main)
+    setEditorContentSilently(contactNotesEditorRef, contact)
+    setEditorContentSilently(classNotesEditorRef, classNotesContent)
+}
+
+function restoreLocalDraft() {
+    const recovery = pendingDraftRecovery.value
+    if (!recovery || recovery.reportId !== props.reportId) return
+    pendingDraftRecovery.value = null
+    const { draft } = recovery
+
+    if (recovery.action === 'restore') {
+        applyDraftSnapshot(draft.snapshot)
+        handleInput()
+        editorNotifier.notify({ code: 'draft-recovered', level: 'success', message: t('report.editor.draft_recovery.restored'), toast: true })
+        return
+    }
+
+    // Someone saved the report after this draft was written: three-way merge
+    // against the draft's own base, and let the user settle real conflicts in
+    // the same ConflictModal used for save conflicts.
+    const serverSnapshot = savedReportSnapshot.value
+    const serverReport: OccurrenceReportDTO = {
+        ...snapshotToLocalReport(serverSnapshot, version.value),
+        last_edited_by: undefined,
+        last_edited_at: undefined
+    }
+    const merge = mergeReportConflict(draft.baseSnapshot, draft.snapshot, serverReport, false)
+    const merged = mergeDraftOntoServer(draft, serverSnapshot)
+    if (merge.conflictFields.length === 0) {
+        applyDraftSnapshot(merged)
+        handleInput()
+        editorNotifier.notify({ code: 'draft-recovered', level: 'success', message: t('report.editor.draft_recovery.merged'), toast: true })
+        return
+    }
+    emit('conflict', serverReport, snapshotToLocalReport(merged, draft.baseVersion))
+}
+
+function discardLocalDraft() {
+    const recovery = pendingDraftRecovery.value
+    pendingDraftRecovery.value = null
+    if (recovery) void localDraft.discard(recovery.reportId)
+}
+
 function handleInput() {
     if (isInitializing.value || isApplyingRemoteCollab) {
         // 如果正在初始化（從 props 同步中），我們不觸發自動儲存
@@ -2707,7 +3016,9 @@ function handleInput() {
     emit('update:report-external-link', reportExternalLink.value)
 
     if (props.reportId) {
-        triggerAutoSave(buildCurrentSnapshot())
+        const snapshot = buildCurrentSnapshot()
+        triggerAutoSave(snapshot)
+        persistLocalDraft(snapshot)
     }
 }
 
@@ -2759,6 +3070,7 @@ function queueRecoveredDraftWhenReady(attempt = 0) {
     if (buildDirtyPayload(recoveredSnapshot).keys.length > 0) {
         emit('update:content', recoveredSnapshot.content)
         triggerAutoSave(recoveredSnapshot)
+        persistLocalDraft(recoveredSnapshot)
     }
 }
 
@@ -2813,6 +3125,11 @@ function replaceWithCanonicalReport(report: OccurrenceReportDTO, notifyParent = 
     if (notifyParent) {
         emit('restored', report)
     }
+
+    // The server copy is now authoritative (conflict resolved or version
+    // restored), so the device-local draft is no longer needed.
+    void localDraft.discard(props.reportId)
+    pendingDraftRecovery.value = null
 
     // Clear unsaved changes flag
     reset()
@@ -2870,8 +3187,30 @@ defineExpose({
 // would otherwise be silently lost. visibilitychange also covers mobile
 // Safari, which does not reliably fire pagehide/beforeunload.
 function flushOnPageHide() {
-    if (hasUnsavedChanges.value) void saveNow()
+    if (hasUnsavedChanges.value) {
+        void localDraft.flush()
+        void saveNow()
+    }
     void saveSnapshot()
+}
+
+// The browser's own "leave site?" prompt while edits are not on the server.
+function warnBeforeUnload(event: BeforeUnloadEvent) {
+    if (!hasUnsavedChanges.value && !isSaving.value) return
+    void localDraft.flush()
+    event.preventDefault()
+    event.returnValue = ''
+}
+
+// In-app navigation: try to save first, then ask before leaving unsaved work.
+// Only registered when the editor sits inside a <router-view>.
+if (inject(routerViewLocationKey, null)) {
+    onBeforeRouteLeave(async () => {
+        if (!hasUnsavedChanges.value) return true
+        if (await saveNow()) return true
+        await localDraft.flush()
+        return window.confirm(t('report.editor.leave_unsaved_confirm'))
+    })
 }
 function handleVisibilityChange() {
     if (document.visibilityState === 'hidden') flushOnPageHide()
@@ -2879,14 +3218,15 @@ function handleVisibilityChange() {
 
 onMounted(() => {
     window.addEventListener('pagehide', flushOnPageHide)
+    window.addEventListener('beforeunload', warnBeforeUnload)
     document.addEventListener('visibilitychange', handleVisibilityChange)
 })
 
-// Warn before leaving with unsaved changes
 onBeforeUnmount(async () => {
     reportEditorUnmounted = true
     collabEditorGeneration++
     window.removeEventListener('pagehide', flushOnPageHide)
+    window.removeEventListener('beforeunload', warnBeforeUnload)
     document.removeEventListener('visibilitychange', handleVisibilityChange)
     cleanupReportCollabBindings()
     if (preferences.editorSettings.autoSave.saveOnUnmount) await saveNow()

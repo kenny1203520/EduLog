@@ -38,6 +38,7 @@ import ConfirmModal from '../components/common/ConfirmModal.vue'
 
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
 import BasePageHeader from '@/components/common/BasePageHeader.vue'
+import BaseSkeletonCard from '@/components/common/BaseSkeletonCard.vue'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -103,7 +104,16 @@ async function handleGenericConfirm() {
 const classrooms = ref<Classroom[]>([])
 const sessions = ref<ClassSessionDTO[]>([])
 const courses = ref<Course[]>([])
-const loading = ref(true)
+// Each tab tracks its own request so "not loaded yet" never renders as the
+// empty state, and a slower stale response cannot overwrite a newer one.
+const roomsLoading = ref(true)
+const roomsLoaded = ref(false)
+const sessionsLoading = ref(false)
+const sessionsLoaded = ref(false)
+let roomsRequestSequence = 0
+let sessionsRequestSequence = 0
+const showRoomsSkeleton = computed(() => roomsLoading.value && (!roomsLoaded.value || classrooms.value.length === 0))
+const showSessionsSkeleton = computed(() => sessionsLoading.value && (!sessionsLoaded.value || sessions.value.length === 0))
 const searchQuery = ref('')
 const allClassrooms = ref<Classroom[]>([]) // For Dropdown
 const hiddenClassroomIds = ref<Set<string>>(new Set())
@@ -273,24 +283,15 @@ const dayOptions = computed(() => days.map(d => ({
 })))
 
 onMounted(async () => {
-    await loadData()
+    // The room list is the visible initial tab.  Editor dependencies and
+    // session data are loaded only when the user opens that UI, rather
+    // than turning one page render into seven unrelated requests.
+    await loadRooms()
 })
 
-async function loadData() {
-    try {
-        loading.value = true
-        // The room list is the visible initial tab.  Editor dependencies and
-        // session data are loaded only when the user opens that UI, rather
-        // than turning one page render into seven unrelated requests.
-        await loadRooms()
-    } catch (e) {
-        console.error(e)
-    } finally {
-        loading.value = false
-    }
-}
-
 async function loadRooms() {
+    const sequence = ++roomsRequestSequence
+    roomsLoading.value = true
     try {
         const agg = await AggregateService.getClassroomSessionManagerAggregate(
             roomsPagination.value.page,
@@ -298,6 +299,7 @@ async function loadRooms() {
             searchQuery.value,
             displayMode.value
         )
+        if (sequence !== roomsRequestSequence) return
         classrooms.value = (agg.classrooms || []).map((d: any) => new Classroom(d))
         allClassrooms.value = classrooms.value
         roomsPagination.value.total = agg.count || 0
@@ -313,9 +315,13 @@ async function loadRooms() {
             visible: Number(agg.visibleSessionCount ?? Math.max(0, Number(agg.sessionCount ?? 0) - hiddenSessionIds.value.size)),
             hidden: Number(agg.hiddenSessionCount ?? hiddenSessionIds.value.size),
         }
-        return
     } catch (e) {
-        reportError(e)
+        if (sequence === roomsRequestSequence) reportError(e)
+    } finally {
+        if (sequence === roomsRequestSequence) {
+            roomsLoading.value = false
+            roomsLoaded.value = true
+        }
     }
 }
 
@@ -392,20 +398,30 @@ watch(() => [isCreateSessionModalOpen.value, editingSession.value?.id, newSessio
 }, { immediate: true })
 
 async function loadSessions() {
-    const res = await AggregateService.getClassSessionsOverview(
-        sessionsPagination.value.page,
-        sessionsPagination.value.perPage,
-        searchQuery.value,
-        selectedSessionClassroomFilter.value || null,
-        displayMode.value
-    )
-    sessions.value = res.data as any[]
-    sessionsPagination.value.total = res.count
-    hiddenSessionIds.value = new Set(res.hiddenSessionIds)
-    sessionOverviewCounts.value = {
-        total: Number((res as any).sessionTotal ?? res.count ?? 0),
-        visible: Number((res as any).visibleSessionCount ?? Math.max(0, Number(res.count ?? 0) - hiddenSessionIds.value.size)),
-        hidden: Number((res as any).hiddenSessionCount ?? hiddenSessionIds.value.size),
+    const sequence = ++sessionsRequestSequence
+    sessionsLoading.value = true
+    try {
+        const res = await AggregateService.getClassSessionsOverview(
+            sessionsPagination.value.page,
+            sessionsPagination.value.perPage,
+            searchQuery.value,
+            selectedSessionClassroomFilter.value || null,
+            displayMode.value
+        )
+        if (sequence !== sessionsRequestSequence) return
+        sessions.value = res.data as any[]
+        sessionsPagination.value.total = res.count
+        hiddenSessionIds.value = new Set(res.hiddenSessionIds)
+        sessionOverviewCounts.value = {
+            total: Number((res as any).sessionTotal ?? res.count ?? 0),
+            visible: Number((res as any).visibleSessionCount ?? Math.max(0, Number(res.count ?? 0) - hiddenSessionIds.value.size)),
+            hidden: Number((res as any).hiddenSessionCount ?? hiddenSessionIds.value.size),
+        }
+    } finally {
+        if (sequence === sessionsRequestSequence) {
+            sessionsLoading.value = false
+            sessionsLoaded.value = true
+        }
     }
 }
 
@@ -585,7 +601,7 @@ async function saveClassroom() {
         closeRoomModal()
         toast.success(t('classroom.room_save_success') || 'Room saved successfully')
     } catch (e: any) {
-        toast.error(e.message || String(e))
+        reportError(e)
     } finally {
         isSavingRoom.value = false
     }
@@ -745,7 +761,7 @@ async function saveSession() {
         toast.success(t('classroom.session_save_success') || 'Session saved successfully')
         if (reconciliation.preserved > 0) toast.info(t('classroom.schedule_preserved_notice', { count: reconciliation.preserved }))
     } catch (e: any) {
-        toast.error(e.message || String(e))
+        reportError(e)
     } finally {
         isSavingSession.value = false
     }
@@ -1004,21 +1020,17 @@ function clearTeacherSelection() {
             </div>
         </div>
 
-        <div v-if="loading" class="text-center text-gray-500 py-10">
-            <svg class="animate-spin h-8 w-8 mx-auto mb-3 text-emerald-500" xmlns="http://www.w3.org/2000/svg"
-                fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-                </path>
-            </svg>
-            {{ $t('student.loading') }}
-        </div>
-
         <!-- ROOMS TAB -->
-        <div v-if="!loading && activeTab === 'rooms'">
+        <div v-if="activeTab === 'rooms'" :aria-busy="roomsLoading">
 
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div v-if="showRoomsSkeleton" data-test="rooms-skeleton" role="status" aria-live="polite"
+                class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <span class="sr-only">{{ $t('common.loading') }}</span>
+                <BaseSkeletonCard v-for="n in 6" :key="n" variant="room" />
+            </div>
+
+            <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 transition-opacity duration-200"
+                :class="{ 'opacity-60': roomsLoading }">
                 <div v-for="room in classrooms" :key="room.id"
                     class="bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 group overflow-hidden flex flex-col h-full">
 
@@ -1133,7 +1145,7 @@ function clearTeacherSelection() {
                     </div>
                 </div>
 
-                <div v-if="classrooms.length === 0"
+                <div v-if="classrooms.length === 0" data-test="rooms-empty"
                     class="col-span-full text-center py-16 bg-white rounded-xl border border-dashed border-gray-300 text-gray-400">
                     {{ $t('classroom.no_rooms') }} <span v-if="searchQuery">{{ $t('common.matching') }} "{{ searchQuery
                     }}"</span>
@@ -1154,9 +1166,16 @@ function clearTeacherSelection() {
         </div>
 
         <!-- SESSIONS TAB -->
-        <div v-else-if="!loading && activeTab === 'sessions'">
+        <div v-else-if="activeTab === 'sessions'" :aria-busy="sessionsLoading">
 
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div v-if="showSessionsSkeleton" data-test="sessions-skeleton" role="status" aria-live="polite"
+                class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <span class="sr-only">{{ $t('common.loading') }}</span>
+                <BaseSkeletonCard v-for="n in 6" :key="n" variant="session" />
+            </div>
+
+            <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 transition-opacity duration-200"
+                :class="{ 'opacity-60': sessionsLoading }">
                 <div v-for="session in sortedSessions" :key="session.id"
                     class="session-card group min-w-0 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg">
 
@@ -1267,7 +1286,7 @@ function clearTeacherSelection() {
                     </div>
                 </div>
 
-                <div v-if="sortedSessions.length === 0"
+                <div v-if="sortedSessions.length === 0" data-test="sessions-empty"
                     class="col-span-full text-center py-16 bg-white rounded-xl border border-dashed border-gray-300 text-gray-400">
                     {{ $t('classroom.no_sessions') }}
                     <template v-if="displayMode === 'visible' && sessionOverviewCounts.hidden > 0">

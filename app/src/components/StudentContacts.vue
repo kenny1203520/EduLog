@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
+import { useFeedback } from '@/composables/useFeedback'
 import { StudentService } from '@/services/student/StudentService'
 import { useStudentStore } from '@/stores/useStudentStore'
 import { useEmailValidation } from '@/composables/useEmailValidation'
@@ -15,6 +16,7 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const toast = useToast()
+const { errorKey, reportError } = useFeedback()
 const studentStore = useStudentStore()
 const { validateEmail, getEmailError } = useEmailValidation()
 
@@ -46,7 +48,7 @@ async function addContact() {
 
     if (newContact.value.email && !validateEmail(newContact.value.email)) {
         contactEmailTouched.value = true
-        toast.error(t('student.errors.email_invalid'))
+        errorKey('student.errors.email_invalid')
         return
     }
 
@@ -58,7 +60,7 @@ async function addContact() {
         toast.success(t('student.contacts.add_btn') + ' ' + t('common.success'))
     } catch (e: any) {
         console.error(e)
-        toast.error(e.message || t('student.errors.add_contact_failed'))
+        reportError(e, 'student.errors.add_contact_failed')
     } finally {
         isModifying.value = false
     }
@@ -84,7 +86,7 @@ async function saveContact() {
         toast.success(t('common.save_success'))
     } catch (e) {
         console.error(e)
-        toast.error(t('student.errors.update_contact_failed'))
+        reportError(e, 'student.errors.update_contact_failed')
     } finally {
         isModifying.value = false
     }
@@ -104,7 +106,7 @@ async function handleDeleteContact() {
         toast.success(t('common.deleted'))
     } catch (e: any) {
         console.error(e)
-        toast.error(e.message || t('student.errors.delete_contact_failed'))
+        reportError(e, 'student.errors.delete_contact_failed')
     } finally {
         isModifying.value = false
         showDeleteConfirm.value = false
@@ -118,7 +120,7 @@ async function copyToClipboard(text: string) {
     if (success) {
         toast.success(t('common.copy_success'))
     } else {
-        toast.error(t('common.copy_error', 'Failed to copy to clipboard'))
+        errorKey('common.copy_error')
     }
 }
 </script>

@@ -1,8 +1,9 @@
 <template>
-    <div class="student-reports-view p-6 max-w-7xl mx-auto">
-        <EnrollmentHistoryPanel v-if="route.params.enrollmentId" :enrollment-id="String(route.params.enrollmentId)" />
+    <div class="student-reports-view max-w-7xl mx-auto" :class="panel ? 'p-3' : 'p-6'">
+        <!-- In the extension side panel only the lesson switcher and the editor are shown. -->
+        <EnrollmentHistoryPanel v-if="route.params.enrollmentId && !panel" :enrollment-id="String(route.params.enrollmentId)" />
         <!-- Header with Back Button and Actions -->
-        <div class="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div v-if="!panel" class="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
                 <button @click="router.back()"
                     class="mb-4 text-gray-600 hover:text-emerald-600 font-medium flex items-center gap-2 transition cursor-pointer">
@@ -32,7 +33,7 @@
         </div>
 
         <!-- Incomplete Reports Module -->
-        <div v-if="incompleteReports.length > 0 && !loading"
+        <div v-if="incompleteReports.length > 0 && !loading && !panel"
             class="mb-6 bg-amber-50 border border-amber-200 rounded-2xl overflow-hidden shadow-sm animate-in fade-in slide-in-from-top-4 duration-500">
             <button @click="showIncompleteModule = !showIncompleteModule"
                 class="w-full flex items-center justify-between p-4 bg-amber-100/50 hover:bg-amber-100 transition cursor-pointer">
@@ -115,7 +116,7 @@
                 </div>
             </div>
         </div>
-        <div class="flex justify-between items-end mb-4">
+        <div v-if="!panel" class="flex justify-between items-end mb-4">
             <!-- Sort Control (List View Only) -->
             <div v-if="viewMode === 'list'" class="mb-1 flex flex-wrap items-center gap-2">
                 <button @click="toggleSort"
@@ -193,7 +194,7 @@
         </div>
 
         <!-- LIST VIEW -->
-        <div v-else-if="viewMode === 'list'"
+        <div v-else-if="viewMode === 'list' && !panel"
             class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
             <div v-if="listLoading" class="p-12 flex justify-center">
                 <svg class="animate-spin h-8 w-8 text-emerald-500" fill="none" viewBox="0 0 24 24">
@@ -259,6 +260,9 @@
                                     class="text-xs font-mono bg-gray-100 px-2 py-0.5 rounded text-gray-600">
                                     {{ displayReport.progressDisplay }}
                                 </span>
+                                <PlacementBadge v-if="displayReport.id && reportPlacements.get(displayReport.id)"
+                                    :placement="reportPlacements.get(displayReport.id)!.placement"
+                                    :class-name="reportPlacements.get(displayReport.id)!.class_session_name" />
                             </div>
                             <div class="text-xs text-gray-400 font-mono">{{ $t('common.version') }}: {{ displayReport.version }}</div>
                         </div>
@@ -273,6 +277,7 @@
                             class="inline-flex w-fit items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-700">
                             {{ $t('report.editor.view_report_link') }}
                         </a>
+                        <SourceReportLink :identity="displayReport.sourceIdentity" />
 
                         <!-- Notes Summary -->
                         <div v-if="displayReport.classNotes"
@@ -318,9 +323,9 @@
             </div>
         </div>
 
-        <div v-else-if="viewMode === 'calendar'" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div v-else-if="viewMode === 'calendar' || panel" class="grid grid-cols-1 gap-6" :class="{ 'lg:grid-cols-2': !panel }">
             <!-- Calendar Section -->
-            <div class="lg:col-span-1">
+            <div v-if="!panel" class="lg:col-span-1">
                 <OccurrenceCalendar :occurrences="occurrences" :existing-report-ids="existingReportIds"
                     :occurrence-statuses="occurrenceStatuses"
                     :model-value="selectedOccurrence?.occurrenceDate || null" @select-occurrence="selectOccurrence" />
@@ -381,10 +386,18 @@
             </div>
 
             <!-- Editor Section -->
-            <div class="lg:col-span-1">
-                <div v-if="selectedOccurrence && selectedReport">
+            <div :class="{ 'lg:col-span-1': !panel }">
+                <PanelOccurrenceBar v-if="panel" :occurrences="occurrences" :selected="selectedOccurrence"
+                    v-model:calendar-open="panelUi.calendarOpen" :existing-report-ids="existingReportIds"
+                    :occurrence-statuses="occurrenceStatuses" @select-occurrence="selectOccurrence"
+                    @koding-check="showKodingCheckModal = true" />
+                <p v-if="requestedDateMissing" role="status" data-testid="requested-date-missing"
+                    class="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                    {{ $t('report.source_fill.date_missing', { date: requestedDate }) }}
+                </p>
+                <div v-if="selectedOccurrence && selectedReport" ref="editorAnchor" class="scroll-mt-3">
                     <!-- Occurrence Info Card -->
-                    <div
+                    <div v-if="!panel"
                         class="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl p-5 mb-6 border border-emerald-100 shadow-sm">
                         <div class="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <h2 class="font-bold text-gray-900 text-lg flex items-center gap-2">
@@ -446,9 +459,21 @@
                         </div>
                     </div>
 
+                    <!-- 回填: opened beside a teaching-site report form by the EduLog extension -->
+                    <div v-if="sourceFillAvailable && !panel" data-testid="source-fill"
+                        class="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-emerald-200 bg-white p-4 shadow-sm">
+                        <div class="min-w-0 flex-1">
+                            <p class="text-sm font-semibold text-gray-900">{{ $t('report.source_fill.title') }}</p>
+                            <p class="text-xs text-gray-600" role="status" aria-live="polite">{{ sourceFillStatus('hint') }}</p>
+                        </div>
+                        <button type="button" @click="fillSource" :disabled="sourceFill.state.value === 'sending'"
+                            class="min-h-[44px] cursor-pointer rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors duration-200 hover:bg-emerald-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-not-allowed disabled:opacity-60">
+                            {{ $t('report.source_fill.action') }}
+                        </button>
+                    </div>
                     <!-- Report Editor -->
                     <ReportEditor ref="reportEditorRef" :key="selectedReport.id" :report-id="selectedReport.id"
-                        :initial-version="selectedReport.version" :loading="reportLoading" :show-manual-save="true"
+                        :initial-version="selectedReport.version" :loading="reportLoading" :show-manual-save="!panel" :compact="panel"
                         :enrollment-id="enrollmentInfo?.id" :class-occurrence-id="selectedOccurrence.id"
                         :title="$t('report.report_for_date', { date: formatOccurrenceDateTime(selectedOccurrence) })"
                         :course-name="enrollmentInfo?.courseName || undefined"
@@ -457,6 +482,7 @@
                         :initial-student-name="enrollmentInfo?.studentName"
                         :initial-student-id="enrollmentInfo?.studentId" :initial-lesson-id="selectedReport.lessonId"
                         :available-lessons="courseLessons" :initial-report-external-link="selectedReport.externalLink"
+                        :source-identity="selectedReport"
                         :initial-is-completed="selectedReport.isCompleted"
                         :initial-progress-start="selectedReport.progressStart"
                         :initial-progress-end="selectedReport.progressEnd"
@@ -473,6 +499,15 @@
                         :initial-enrollment-external-link="enrollmentInfo?.externalLink"
                         @save-success="handleSaveSuccess" @save-error="handleSaveError" @conflict="handleConflict"
                         @restored="handleReportRestored" @deleted="handleDeleted" />
+                    <!-- Side panel: 回填 stays reachable at the bottom while the report scrolls. -->
+                    <div v-if="sourceFillAvailable && panel" data-testid="source-fill"
+                        class="sticky bottom-0 z-10 -mx-3 mt-3 flex items-center gap-3 border-t border-emerald-200 bg-white/95 px-3 py-2 shadow-[0_-4px_12px_rgba(15,23,42,0.06)] backdrop-blur">
+                        <p class="min-w-0 flex-1 text-xs leading-snug text-gray-700" role="status" aria-live="polite">{{ sourceFillStatus('hint_short') }}</p>
+                        <button type="button" @click="fillSource" :disabled="sourceFill.state.value === 'sending'"
+                            class="min-h-[44px] shrink-0 cursor-pointer rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors duration-200 hover:bg-emerald-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-not-allowed disabled:opacity-60">
+                            {{ $t('report.source_fill.action') }}
+                        </button>
+                    </div>
                 </div>
 
                 <div v-else-if="selectedOccurrence && isMissingTransferredOccurrence(selectedOccurrence.id)"
@@ -530,7 +565,7 @@
 
 <script setup lang="ts">
 import EnrollmentHistoryPanel from '@/components/reports/EnrollmentHistoryPanel.vue'
-import { computed, ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/useAuthStore'
@@ -550,10 +585,19 @@ import { SuspensionService } from '@/services/suspension/SuspensionService'
 import { Suspension } from '@/models/Suspension'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import { useToast } from 'vue-toastification'
+import { useFeedback } from '@/composables/useFeedback'
 import { DateUtils } from '@/utils/DateUtils'
 import { isAttendanceReportStatus } from '@/utils/reportListFilter'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { safeExternalHref } from '@/utils/safeExternalHref'
+import { sourceIdentityFromRow } from '@/utils/sourceReportLink'
+import SourceReportLink from '@/components/reports/SourceReportLink.vue'
+import PlacementBadge from '@/components/enrollment/PlacementBadge.vue'
+import type { ClassTimelineReport } from '@/models/ClassTimeline'
+import { sourceFillChannel, useSourceFill } from '@/composables/useSourceFill'
+import { inExtensionPanel } from '@/composables/useExtensionPanel'
+import { usePanelUiState } from '@/composables/usePanelUiState'
+import PanelOccurrenceBar from '@/components/reports/PanelOccurrenceBar.vue'
 
 type ReportEditorExpose = {
     saveNow: (options?: { reason?: 'manual' | 'switch' }) => Promise<boolean>
@@ -565,6 +609,7 @@ const router = useRouter()
 const { t, locale } = useI18n()
 const authStore = useAuthStore()
 const toast = useToast()
+const { errorKey, reportError } = useFeedback()
 const preferences = usePreferencesStore()
 
 const loading = ref(true)
@@ -595,6 +640,45 @@ const enrollmentInfo = ref<{
     kodingAdmissionId?: string
 } | null>(null)
 const isEnrollmentActive = ref(false)
+// Opened from the teaching site by the extension: ?date= picks that lesson, ?source_fill= enables 回填.
+const requestedDate = computed(() => {
+    const value = Array.isArray(route.query.date) ? route.query.date[0] : route.query.date
+    return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null
+})
+const requestedDateMissing = ref(false)
+const sourceFill = useSourceFill(computed(() => sourceFillChannel(route.query.source_fill)))
+const sourceFillAvailable = computed(() => Boolean(sourceFillChannel(route.query.source_fill)) && sourceFill.bridgeReady.value)
+// In the extension side panel the page shows only the lesson switcher and the editor, and opens
+// scrolled to the editor; what the panel keeps open is remembered in this browser.
+const panel = inExtensionPanel()
+const panelUi = usePanelUiState()
+const editorAnchor = ref<HTMLElement | null>(null)
+watch(() => [loading.value, selectedReport.value?.id] as const, async ([isLoading, reportId]) => {
+    if (!panel || isLoading || !reportId) return
+    await nextTick()
+    const reduced = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    editorAnchor.value?.scrollIntoView?.({ block: 'start', behavior: reduced ? 'auto' : 'smooth' })
+})
+// The 回填 bar's status line: what was filled into the teaching-site form, or the idle hint.
+function sourceFillStatus(hintKey: 'hint' | 'hint_short') {
+    const state = sourceFill.state.value, result = sourceFill.result.value
+    if (state === 'sending') return t('report.source_fill.sending')
+    if (state === 'failed') return t('report.source_fill.failed', { reason: sourceFill.reason.value })
+    if (state !== 'sent') return t(`report.source_fill.${hintKey}`)
+    if (result?.review) return t('report.source_fill.sent_review')
+    if (!result?.applied && !result?.skipped) return t('report.source_fill.sent_same')
+    return result.skipped
+        ? t('report.source_fill.sent_skipped', { count: result.applied, skipped: result.skipped })
+        : t('report.source_fill.sent', { count: result.applied })
+}
+async function fillSource() {
+    const reportId = selectedReport.value?.id
+    if (!reportId) return
+    sourceFill.reset()
+    const saved = await reportEditorRef.value?.saveNow({ reason: 'manual' })
+    if (saved === false) return
+    sourceFill.send(reportId)
+}
 const effectiveTransferTargets = ref<Array<{
     transfer_id: string
     source_occurrence_id: string
@@ -673,8 +757,7 @@ async function handleConfirmCreate() {
         showCreateConfirm.value = false
     } catch (e) {
         console.error('Failed to create report', e)
-        const publicMessageKey = (e as any)?.i18nKey || 'report.create_error'
-        toast.error(t(publicMessageKey) || t('report.create_error') || 'Failed to create report')
+        reportError(e, 'report.create_error')
     } finally {
         isCreatingReport.value = false
     }
@@ -703,7 +786,7 @@ async function repairMissingTransferredReport() {
             return
         }
         console.error('Failed to repair transferred report:', error)
-        toast.error(t('report.repair_error') || 'Failed to regenerate report')
+        errorKey('report.repair_error')
     } finally {
         isCreatingReport.value = false
     }
@@ -792,6 +875,7 @@ const allReportDisplay = computed(() => {
                 classParticipation: r.class_participation,
                 classroomBehavior: r.classroom_behavior,
                 externalLink: r.external_link,
+                sourceIdentity: sourceIdentityFromRow(r),
                 isCompleted: r.is_completed,
                 contactNotes: r.contact_notes,
                 progressDisplay: r.progress_letter
@@ -818,6 +902,7 @@ const allReportDisplay = computed(() => {
                 classParticipation: null,
                 classroomBehavior: null,
                 externalLink: null,
+                sourceIdentity: null,
                 isCompleted: false,
                 contactNotes: '',
                 progressDisplay: '',
@@ -850,6 +935,7 @@ const allReportDisplay = computed(() => {
                 classParticipation: r.class_participation,
                 classroomBehavior: r.classroom_behavior,
                 externalLink: r.external_link,
+                sourceIdentity: sourceIdentityFromRow(r),
                 isCompleted: r.is_completed,
                 contactNotes: r.contact_notes,
                 progressDisplay: r.progress_letter
@@ -1006,12 +1092,26 @@ function getStatusColor(status: string) {
     }
 }
 
+// Which class each report was written in (own class, make-up, kept after a transfer).
+const reportPlacements = ref<Map<string, ClassTimelineReport>>(new Map())
+
+async function loadReportPlacements(enrollmentId: string) {
+    try {
+        const timeline = await EnrollmentService.getClassTimeline(enrollmentId)
+        reportPlacements.value = new Map(timeline.reports.map(report => [report.id, report]))
+    } catch (error) {
+        // The placement labels are informational; the list works without them.
+        console.error('Failed to load report placements', error)
+    }
+}
+
 async function switchToListView() {
     viewMode.value = 'list'
     const enrollmentId = route.params.enrollmentId as string
     if (!enrollmentId) return
 
     listLoading.value = true
+    void loadReportPlacements(enrollmentId)
     try {
         // Refresh markers
         allReports.value = await OccurrenceReportService.getReportsWithDetails(enrollmentId)
@@ -1284,8 +1384,12 @@ async function loadOccurrences() {
 
         occurrences.value = merged
 
-        // 6. Auto-select nearest occurrence (User Request)
-        if (merged.length > 0) {
+        // 6. A lesson date requested by the extension wins; otherwise auto-select the nearest occurrence.
+        const requested = requestedDate.value ? merged.find(occ => DateUtils.formatLocalDate(occ.occurrenceDate) === requestedDate.value) : undefined
+        requestedDateMissing.value = Boolean(requestedDate.value && !requested)
+        if (requested) {
+            await selectOccurrence(requested, { allowCreatePrompt: isEnrollmentActive.value })
+        } else if (merged.length > 0) {
 
             // Find the occurrence with the smallest absolute difference from today (Date + Time)
             const now = new Date()
@@ -1451,7 +1555,7 @@ async function resolveConflict(resolvedContent: OccurrenceReportDTO) {
         toast.success(t('report.save_success'))
     } catch (error) {
         console.error('Failed to resolve conflict:', error)
-        toast.error(t('report.resolve_conflict_error') || 'Failed to resolve conflict')
+        reportError(error, 'report.resolve_conflict_error')
     } finally {
         reportLoading.value = false
     }

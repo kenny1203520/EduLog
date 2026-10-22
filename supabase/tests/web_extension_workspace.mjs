@@ -697,6 +697,14 @@ try {
   await db.exec("SET ROLE authenticated; SELECT set_config('request.jwt.claim.role','authenticated',false)")
   await assert.rejects(db.query('SELECT public.web_extension_workspace($1,$2,$3,$4)',[token,'a'.repeat(64),'context','{}']),/permission denied/)
   await assert.rejects(db.query('SELECT public.web_extension_field_mappings($1,$2,$3,$4)',[token,'a'.repeat(64),'resolve','{}']),/permission denied/)
+  // Upgrade this populated contract database to the source report identity
+  // backbone: evidence-only history is archived, never deleted.
+  await db.exec("RESET ROLE; SELECT set_config('request.jwt.claim.role','service_role',false)")
+  const historyRows=(await db.query('SELECT count(*)::int AS n FROM public.enrollment_history_reports')).rows[0].n
+  await db.exec(read('1000148_source_report_identity.sql'))
+  assert.equal((await db.query('SELECT count(*)::int AS n FROM public.enrollment_history_reports')).rows[0].n,historyRows)
+  assert.equal((await db.query("SELECT count(*)::int AS n FROM public.enrollment_history_reports WHERE identity_status='evidence_only' AND retired_as IS NULL")).rows[0].n,0)
+  console.log('PASS: 1000148 upgrades the populated contract database without deleting history')
   console.log('PASS: workspace/catalog migrations; scoped keyset reads; resolve authorization; actor boundary; create/replay/conflict/versions; atomic rollback; pending pushes; private projections; paused/revoked/restricted roles')
 } catch (error) { console.error(error.stack, error.detail || '', error.where || '', error.position || ''); process.exitCode = 1 }
 finally { await db.close() }

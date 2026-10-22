@@ -392,7 +392,8 @@
         "transferred_out": "(transferred to {date} {session} {time})",
         "transferred_in": "From the {date} {time} class",
         "open_target": "Open",
-        "cancel_confirm_message": "{student}'s report moves from {target} back to this lesson."
+        "cancel_confirm_message": "{student}'s report moves from {target} back to this lesson.",
+        "class_transferred_in": "Transfers in today"
     },
     "calendar": {
         "legend": "Calendar legend",
@@ -402,6 +403,9 @@
         "completion": "Report progress",
         "completion_complete": "All reports complete",
         "completion_partial": "Some reports complete",
-        "completion_none": "No reports complete"
+        "completion_none": "No reports complete",
+        "joined": "Students joining by make-up or transfer",
+        "joined_makeup": "{count} joining for a make-up",
+        "joined_transfer": "{count} transferring in"
     }
 }

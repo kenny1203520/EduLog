@@ -1,0 +1,202 @@
+name: Extension CI and release
+
+on:
+  pull_request:
+    branches: [develop, master]
+    paths: ['extension/**', 'scripts/extension/**', 'server/**', 'supabase/**', 'app/package*.json', 'package*.json', '.github/workflows/extension-*.yml', 'docs/deployment/extension-*.md', 'CHROMEWEBSTORE.md']
+  push:
+    branches: [develop]
+    tags: ['extension/beta/v*', 'extension/stable/v*']
+    paths: ['extension/**', 'scripts/extension/**', 'server/**', 'supabase/**', 'app/package*.json', 'package*.json', '.github/workflows/extension-*.yml', 'docs/deployment/extension-*.md', 'CHROMEWEBSTORE.md']
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      channel: ${{ steps.release.outputs.channel }}
+      version: ${{ steps.release.outputs.version }}
+      distribution: ${{ steps.release.outputs.distribution }}
+      item: ${{ steps.release.outputs.item }}
+      public_key: ${{ steps.release.outputs.public_key }}
+      tagged: ${{ steps.release.outputs.tagged }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 26
+      - id: release
+        name: Validate tag ancestry, version and channel
+        env:
+          BETA_DISTRIBUTION: ${{ vars.EXTENSION_BETA_DISTRIBUTION || 'zip' }}
+          STABLE_ENABLED: ${{ vars.EXTENSION_STABLE_ENABLED }}
+          BETA_PUBLIC_KEY: ${{ vars.CWS_BETA_PUBLIC_KEY }}
+          BETA_ITEM: ${{ vars.CWS_BETA_EXTENSION_ID }}
+          STABLE_PUBLIC_KEY: ${{ vars.CWS_STABLE_PUBLIC_KEY }}
+          STABLE_ITEM: ${{ vars.CWS_STABLE_EXTENSION_ID }}
+        run: node scripts/extension/workflow.mjs
+
+  quality:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            app/package-lock.json
+            server/package-lock.json
+      - run: npm --prefix extension run scan-secrets
+      - run: npm ci
+      - run: npm ci --prefix app
+      - run: npm ci --prefix server
+      - run: npm --prefix extension test
+      - run: npm --prefix extension run test:release
+      - run: npm --prefix server run typecheck
+      - run: npm --prefix server test -- src/routes/extension
+      - run: npm --prefix server run test:extension-db
+      - name: Build and verify the release archive once
+        env:
+          CHANNEL: ${{ needs.prepare.outputs.channel }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          DISTRIBUTION: ${{ needs.prepare.outputs.distribution }}
+          CWS_PUBLIC_KEY: ${{ needs.prepare.outputs.public_key }}
+        run: npm --prefix extension run package -- --channel "$CHANNEL" --version "$VERSION" --distribution "$DISTRIBUTION" --out "$GITHUB_WORKSPACE/extension/dist/release"
+      - run: npx playwright install --with-deps chromium
+      - name: Verify ZIP with the system extractor
+        run: unzip -t extension/dist/release/*.zip
+      - name: Load the packaged MV3 extension in persistent Chromium
+        env:
+          EXTENSION_PACKAGE_DIR: ${{ github.workspace }}/extension/dist/release
+        run: npm --prefix extension run test:installed
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: extension-package
+          path: extension/dist/release/
+          if-no-files-found: error
+          retention-days: 30
+
+  browsers:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chrome, msedge]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      # Chromium too: the side-panel check loads the unpacked extension, which branded Chrome refuses.
+      - name: Install branded browser, Chromium and video runtime
+        env:
+          BROWSER: ${{ matrix.browser }}
+        run: npx playwright install --with-deps "$BROWSER" chromium ffmpeg
+      - name: Run synthetic page suites without live site access
+        env:
+          EXTENSION_BROWSERS: ${{ matrix.browser }}
+        run: node scripts/extension/browser-tests.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: ${{ !cancelled() }}
+        with:
+          name: extension-browser-${{ matrix.browser }}
+          path: extension/tests/artifacts/
+          retention-days: 14
+
+  release:
+    if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/extension/') && needs.prepare.outputs.tagged == 'true'
+    needs: [prepare, quality, browsers]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: extension-${{ needs.prepare.outputs.channel }}
+    # Shared with the monitor so receipt updates and item mutations cannot race.
+    concurrency:
+      group: extension-store
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 26
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: extension-package
+          path: extension/dist/release
+      - name: Validate deployed test/production API and exact extension origin
+        env:
+          EXTENSION_API_URL: ${{ vars.EXTENSION_API_URL }}
+          EXTENSION_API_TOKEN: ${{ secrets.EXTENSION_API_TOKEN }}
+        run: node scripts/extension/preflight.mjs extension/dist/release/release.json
+      - name: Create release and verify immutable download assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: node scripts/extension/github-release.mjs extension/dist/release/release.json
+
+  store:
+    if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/extension/') && needs.prepare.outputs.tagged == 'true' && needs.prepare.outputs.distribution == 'store'
+    needs: [prepare, release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: extension-${{ needs.prepare.outputs.channel }}
+    concurrency:
+      group: extension-store
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 26
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: extension-package
+          path: extension/dist/release
+      - name: Validate store authentication settings
+        env:
+          PROVIDER: ${{ vars.CWS_WORKLOAD_IDENTITY_PROVIDER }}
+          ACCOUNT: ${{ vars.CWS_SERVICE_ACCOUNT }}
+          PUBLISHER: ${{ vars.CWS_PUBLISHER_ID }}
+        run: node -e "for (const k of ['PROVIDER','ACCOUNT','PUBLISHER']) if (!process.env[k]) throw new Error('Missing store setting '+k)"
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        id: auth
+        with:
+          workload_identity_provider: ${{ vars.CWS_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.CWS_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/chromewebstore
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: Upload and submit; approval publishes automatically
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          CWS_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
+          CWS_EXTENSION_ID: ${{ needs.prepare.outputs.item }}
+        run: node scripts/extension/store.mjs extension/dist/release/release.json

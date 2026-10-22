@@ -1,0 +1,16 @@
+/* EduLog report assistant: a card above the native report form. The site's form keeps its own
+   width and flow; only the dialog is given room to scroll on small screens. */
+.modal[data-edulog-prefill] .modal-dialog{max-width:min(960px,calc(100% - 32px))}
+.modal[data-edulog-prefill] .modal-header{gap:8px 12px;flex-wrap:wrap}
+.modal[data-edulog-prefill] .modal-header button{min-width:44px;min-height:44px}
+.modal[data-edulog-prefill] .modal-title{float:none!important;min-width:0;flex:1;margin:0}
+.modal[data-edulog-prefill] .modal-header .close{float:none!important;position:static!important;flex:none;margin:0}
+.edulog-editor-assistant{display:block;margin:0 0 16px;scroll-margin-block:16px}
+/* Fields the assistant just filled stay marked until the next fill or the dialog closes. */
+[data-edulog-filled]{outline:2px solid var(--edulog-status-ok,#15803d);outline-offset:4px;border-radius:var(--edulog-radius-sm,6px);transition:outline-color var(--edulog-duration,.15s)}
+[data-edulog-filled=check]{outline-color:var(--edulog-status-warn,#b45309)}
+@media(max-width:575px){
+ .modal[data-edulog-prefill] .modal-dialog{max-width:100%;margin:0}
+ .modal[data-edulog-prefill] .modal-content{min-height:100dvh;border-radius:0}
+}
+@media(prefers-reduced-motion:reduce){[data-edulog-filled]{transition:none}}

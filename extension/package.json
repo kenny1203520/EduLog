@@ -2,5 +2,13 @@
   "name": "edulog-teaching-tools",
   "private": true,
   "type": "module",
-  "scripts": { "test": "node --test tests/*.test.mjs" }
+  "engines": { "node": ">=26" },
+  "scripts": {
+    "test": "node --test tests/unit/*.test.mjs",
+    "package": "node ../scripts/extension/package.mjs",
+    "verify-package": "node ../scripts/extension/package.mjs --verify",
+    "scan-secrets": "node ../scripts/extension/secrets.mjs",
+    "test:release": "node --test ../scripts/extension/tests/*.test.mjs",
+    "test:installed": "node tests/browser/installed-browser-check.mjs"
+  }
 }

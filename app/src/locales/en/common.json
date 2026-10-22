@@ -117,5 +117,6 @@
     "update_available_title": "Update Available",
     "update_available_message": "A new version of EduLog is ready. Reload now to get the latest features and fixes.",
     "reload": "Reload",
-    "later": "Later"
+    "later": "Later",
+    "copy_error": "Could not copy to the clipboard"
 }

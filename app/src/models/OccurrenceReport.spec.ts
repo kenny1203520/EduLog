@@ -46,3 +46,21 @@ describe('OccurrenceReport.applyDTO', () => {
         expect(report.updatedAt?.toISOString()).toBe('2026-07-17T08:00:00.000Z')
     })
 })
+
+describe('OccurrenceReport source identity', () => {
+    it('keeps the read-only source identity through a DTO round trip', () => {
+        const report = new OccurrenceReport({
+            enrollment_id: 'e1', class_occurrence_id: 'o1', content: '', version: 1,
+            source_origin: 'https://corp.orangeapple.co', source_admission_id: '123', source_report_id: '456',
+        })
+        const copy = new OccurrenceReport(report.toDTO())
+        expect(copy.sourceOrigin).toBe('https://corp.orangeapple.co')
+        expect(copy.sourceAdmissionId).toBe('123')
+        expect(copy.sourceReportId).toBe('456')
+    })
+
+    it('defaults to no source identity for reports created in EduLog', () => {
+        const report = new OccurrenceReport({ enrollment_id: 'e1', class_occurrence_id: 'o1', content: '', version: 1 })
+        expect(report.sourceReportId).toBeNull()
+    })
+})

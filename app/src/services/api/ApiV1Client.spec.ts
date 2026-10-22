@@ -24,6 +24,38 @@ describe('ApiV1Client', () => {
     expect(headers.get('idempotency-key')).toBe('repeatable-key')
   })
 
+  it('in the extension side panel, reads the CSRF token from /auth/csrf and reads it again once after rotation', async () => {
+    // A frame of an extension page sends its cookies but cannot read them from script.
+    vi.spyOn(window, 'top', 'get').mockReturnValue({} as Window)
+    const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(json({ data: { csrf_token: 'old' }, request_id: 'r', trace_id: 't' }))
+      .mockResolvedValueOnce(json({ data: { id: '1' }, request_id: 'r', trace_id: 't' }, 201))
+      .mockResolvedValueOnce(json({ data: { id: '2' }, request_id: 'r', trace_id: 't' }, 201))
+      .mockResolvedValueOnce(json({ error: { code: 'CSRF_INVALID', message: 'x', request_id: 'r', trace_id: 't' } }, 403))
+      .mockResolvedValueOnce(json({ data: { csrf_token: 'new' }, request_id: 'r', trace_id: 't' }))
+      .mockResolvedValueOnce(json({ data: { id: '3' }, request_id: 'r', trace_id: 't' }, 201))
+    const client = new ApiV1Client('/api')
+    await client.post('/teachings', { name: 'A' })
+    await client.post('/teachings', { name: 'B' })
+    await client.post('/teachings', { name: 'C' })
+    const calls = fetchMock.mock.calls.map(([url, init]) => [String(url), new Headers((init as RequestInit).headers).get('x-csrf-token')])
+    expect(calls).toEqual([
+      ['/api/auth/csrf', null], ['/api/teachings', 'old'], ['/api/teachings', 'old'],
+      ['/api/teachings', 'old'], ['/api/auth/csrf', null], ['/api/teachings', 'new'],
+    ])
+  })
+
+  it('announces data changes after a mutation unless the request changes no page data', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ data: {}, request_id: 'r', trace_id: 't' }), { status: 200 }))
+    const changed = vi.fn()
+    window.addEventListener('edulog:api-mutation', changed)
+    await new ApiV1Client('/api').post('/teachings', { name: 'A' })
+    await new ApiV1Client('/api').post('/realtime/ticket', { room: 'r' }, { changesData: false })
+    window.removeEventListener('edulog:api-mutation', changed)
+    expect(changed).toHaveBeenCalledTimes(1)
+  })
+
   it('announces pending API activity and ends it after the response', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ data: [], request_id: 'r', trace_id: 't' }), { status: 200 }))
     const started = vi.fn()

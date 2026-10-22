@@ -39,7 +39,8 @@ const DOMAIN_ERROR_KEYS: Record<string, string> = {
     ORIGINAL_REPORT_NOT_FOUND: 'errors.domain.ORIGINAL_REPORT_NOT_FOUND',
     SOURCE_REPORT_HAS_CONTENT: 'errors.domain.SOURCE_REPORT_HAS_CONTENT',
     TRANSFER_CHAIN_HAS_MERGED_REPORT: 'errors.domain.TRANSFER_CHAIN_HAS_MERGED_REPORT',
-    REPORT_ALREADY_EXISTS: 'errors.domain.REPORT_ALREADY_EXISTS'
+    REPORT_ALREADY_EXISTS: 'errors.domain.REPORT_ALREADY_EXISTS',
+    TRANSFER_NOTE_TOO_LONG: 'errors.domain.TRANSFER_NOTE_TOO_LONG'
 }
 
 /** Returns the matching translated key for a message containing a known sentinel code, or null. */

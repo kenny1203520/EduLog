@@ -105,6 +105,8 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
     'select-date': [date: Date]
     'update:modelValue': [date: string]
+    /** The first and last date (YYYY-MM-DD) of the visible six-week grid; emitted on mount and on every month change. */
+    'range-change': [range: { start: string; end: string }]
 }>()
 
 const { locale } = useI18n()
@@ -261,6 +263,16 @@ function getDayClasses(day: BaseCalendarDay) {
     }
     return 'bg-white border-gray-100 hover:border-emerald-200 hover:bg-gray-50'
 }
+
+const visibleRange = computed(() => ({
+    start: DateUtils.formatLocalDate(calendarDays.value[0]!.date),
+    end: DateUtils.formatLocalDate(calendarDays.value[calendarDays.value.length - 1]!.date)
+}))
+
+watch(visibleRange, (range, previous) => {
+    if (range.start === previous?.start && range.end === previous?.end) return
+    emit('range-change', range)
+}, { immediate: true })
 
 watch(() => props.modelValue, value => {
     const nextDate = normalizeDate(value)

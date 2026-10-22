@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifyClassDay, reportCompletionLevel } from './ClassCalendarDay'
+import { calendarGridRange, classifyClassDay, reportCompletionLevel, withoutRange } from './ClassCalendarDay'
 import type { ClassOccurrence } from './ClassOccurrence'
 
 const occurrence = (status: ClassOccurrence['status'], isConducted = true) => ({ status, isConducted }) as ClassOccurrence
@@ -31,5 +31,19 @@ describe('reportCompletionLevel', () => {
         expect(reportCompletionLevel({ total: 3, completed: 3 })).toBe('complete')
         expect(reportCompletionLevel({ total: 3, completed: 1 })).toBe('partial')
         expect(reportCompletionLevel({ total: 3, completed: 0 })).toBe('none')
+    })
+})
+
+describe('calendarGridRange', () => {
+    it('covers the six-week grid around a month, Sunday first', () => {
+        // October 2026 starts on a Thursday.
+        expect(calendarGridRange(new Date(2026, 9, 21))).toEqual({ start: '2026-09-27', end: '2026-11-07' })
+        // February 2026 starts on a Sunday.
+        expect(calendarGridRange(new Date(2026, 1, 10))).toEqual({ start: '2026-02-01', end: '2026-03-14' })
+    })
+
+    it('drops only the dates inside a reloaded range', () => {
+        expect(withoutRange({ '2026-09-30': 1, '2026-10-01': 2, '2026-10-02': 3 }, { start: '2026-10-01', end: '2026-10-01' }))
+            .toEqual({ '2026-09-30': 1, '2026-10-02': 3 })
     })
 })

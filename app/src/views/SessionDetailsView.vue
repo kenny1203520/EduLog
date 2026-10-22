@@ -5,6 +5,8 @@ import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { PageApiService } from '@/services/api/PageApiService'
 import { SessionService } from '@/services/session/SessionService'
 import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
+import { calendarGridRange, withoutRange, type CalendarDateRange } from '@/models/ClassCalendarDay'
+import { countJoinFlagsByDate, type RosterFlag } from '@/models/ClassTimeline'
 import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
 import { ClassSessionFactory } from '@/models/ClassSession'
 import { invalidationAffectsDate, parseClassSessionDate } from '@/services/session/ClassSessionInvalidation'
@@ -83,6 +85,11 @@ const todayOccurrence = ref<any>(null)
 const selectedDateKey = ref<string | null>(parseClassSessionDate(route.query.date) || null)
 const sessionOccurrences = ref<ClassOccurrence[]>([])
 const reportCompletionByDate = ref<Record<string, { total: number; completed: number }>>({})
+const rosterFlagsByDate = ref<Record<string, RosterFlag[]>>({})
+const joinFlagsByDate = computed(() => countJoinFlagsByDate(Object.values(rosterFlagsByDate.value).flat()))
+// The month grid the calendar shows; occurrences load per grid, not per year.
+const visibleCalendarRange = ref<CalendarDateRange | null>(null)
+const loadedOccurrenceRanges = new Map<string, Promise<void>>()
 const sessionTeachers = ref<SessionTeacherAssignmentDTO[]>([])
 const weekAnchorDate = ref(DateUtils.todayDate(preferences.timeZone))
 const isCalendarExpanded = ref(false)
@@ -98,7 +105,6 @@ const occurrenceLoadError = ref<string | null>(null)
 const previousOccurrence = ref<ClassOccurrence | null>(null)
 const nextOccurrence = ref<ClassOccurrence | null>(null)
 let occurrenceLoadToken = 0
-let occurrenceListRequest = 0
 let reportLoadRequest = 0
 let editorSelectionRequest = 0
 let reportProvisionRequests = new Map<string, Promise<OccurrenceReport[]>>()
@@ -692,28 +698,79 @@ function findOccurrenceByDate(date: Date): ClassOccurrence | undefined {
     return sessionOccurrences.value.find(occ => DateUtils.formatLocalDate(occ.occurrenceDate) === target)
 }
 
-async function loadSessionOccurrences(anchorDate: Date): Promise<void> {
-    const rangeStart = new Date(anchorDate)
-    rangeStart.setFullYear(rangeStart.getFullYear() - 1)
-    const rangeEnd = new Date(anchorDate)
-    rangeEnd.setFullYear(rangeEnd.getFullYear() + 1)
-    const request = ++occurrenceListRequest
-    const occurrences = await OccurrenceService.getOccurrencesByDateRange(rangeStart, rangeEnd, [sessionId])
-    if (request === occurrenceListRequest) sessionOccurrences.value = occurrences
-    void loadReportCompletion(rangeStart, rangeEnd, request)
+/**
+ * Loads one date range of the class's lessons and replaces that range in
+ * sessionOccurrences, then refreshes the report-completion dots and roster
+ * flags for it. A range already loaded is reused unless `force` is set.
+ */
+function loadOccurrenceRange(range: CalendarDateRange, force = false): Promise<void> {
+    const key = `${range.start}|${range.end}`
+    const cached = loadedOccurrenceRanges.get(key)
+    if (cached && !force) return cached
+    const task = (async () => {
+        const occurrences = await OccurrenceService.getOccurrencesByDateRange(
+            DateUtils.parseLocalDate(range.start)!, DateUtils.parseLocalDate(range.end)!, [sessionId]
+        )
+        const outside = sessionOccurrences.value.filter(occurrence => {
+            const date = DateUtils.formatLocalDate(occurrence.occurrenceDate)
+            return date < range.start || date > range.end
+        })
+        sessionOccurrences.value = [...outside, ...occurrences]
+            .sort((a, b) => a.occurrenceDate.getTime() - b.occurrenceDate.getTime())
+        void loadReportCompletion(range)
+        void loadRosterFlags(range)
+    })()
+    loadedOccurrenceRanges.set(key, task)
+    task.catch(() => {
+        if (loadedOccurrenceRanges.get(key) === task) loadedOccurrenceRanges.delete(key)
+    })
+    return task
 }
 
-async function loadReportCompletion(rangeStart: Date, rangeEnd: Date, request: number) {
+/** Reloads the month grid around `anchorDate` and the grid the calendar shows. */
+async function loadSessionOccurrences(anchorDate: Date): Promise<void> {
+    const anchorRange = calendarGridRange(anchorDate)
+    const visible = visibleCalendarRange.value
+    await Promise.all([
+        loadOccurrenceRange(anchorRange, true),
+        ...(visible && (visible.start !== anchorRange.start || visible.end !== anchorRange.end) ? [loadOccurrenceRange(visible, true)] : []),
+    ])
+}
+
+function handleCalendarRangeChange(range: CalendarDateRange) {
+    visibleCalendarRange.value = range
+    loadOccurrenceRange(range).catch(error => {
+        console.error('Failed to load class calendar range:', error)
+        reportError(error)
+    })
+}
+
+async function loadReportCompletion(range: CalendarDateRange) {
     try {
-        const completion = await OccurrenceService.getReportCompletionByDate(
-            sessionId, DateUtils.formatLocalDate(rangeStart), DateUtils.formatLocalDate(rangeEnd)
-        )
-        if (request === occurrenceListRequest) reportCompletionByDate.value = completion
+        const completion = await OccurrenceService.getReportCompletionByDate(sessionId, range.start, range.end)
+        reportCompletionByDate.value = { ...withoutRange(reportCompletionByDate.value, range), ...completion }
     } catch (error) {
         // The completion dot is a hint; the calendar works without it.
         console.error('Failed to load report completion:', error)
     }
 }
+
+async function loadRosterFlags(range: CalendarDateRange) {
+    try {
+        const flags = await EnrollmentService.getClassRosterFlags(sessionId, range.start, range.end)
+        const byDate: Record<string, RosterFlag[]> = {}
+        for (const flag of flags) (byDate[flag.date] ??= []).push(flag)
+        rosterFlagsByDate.value = { ...withoutRange(rosterFlagsByDate.value, range), ...byDate }
+    } catch (error) {
+        // The transfer badges are informational; the calendar works without them.
+        console.error('Failed to load roster flags:', error)
+    }
+}
+
+/** Students whose class transfer into this class takes effect on the selected date. */
+const classTransferInIds = computed(() => new Set((rosterFlagsByDate.value[selectedDateKey.value || ''] ?? [])
+    .filter(flag => flag.flag === 'transfer_in')
+    .map(flag => flag.enrollment_id)))
 
 const sessionSchedule = computed(() => {
     if (!session.value) return null
@@ -1401,7 +1458,7 @@ onBeforeUnmount(() => {
 // Attendance & Rating Handlers
 async function setAttendance(enrId: string, status: QuickAttendanceStatus) {
     if (isOccurrenceInHoliday.value) {
-        toast.error(t('report.error.cannot_set_conducted_during_holiday'))
+        errorKey('report.error.cannot_set_conducted_during_holiday')
         return
     }
     const report = reportMap.value.get(enrId)
@@ -1427,7 +1484,7 @@ async function setAttendance(enrId: string, status: QuickAttendanceStatus) {
         reportMap.value = new Map(reportMap.value).set(enrId, updatedReport)
     } catch (error) {
         console.error('Failed to set attendance:', error)
-        toast.error(t('common.save_error'))
+        reportError(error, 'common.save_error')
     } finally {
         savingMap.value.delete(enrId)
     }
@@ -1435,7 +1492,7 @@ async function setAttendance(enrId: string, status: QuickAttendanceStatus) {
 
 async function batchSetAttendance(status: QuickAttendanceStatus) {
     if (isOccurrenceInHoliday.value) {
-        toast.error(t('report.error.cannot_set_conducted_during_holiday'))
+        errorKey('report.error.cannot_set_conducted_during_holiday')
         return
     }
     const visibleIds = new Set(filteredEnrollments.value.map(enrollment => enrollment.id))
@@ -1490,6 +1547,7 @@ const studentRosterItems = computed<StudentRosterItem[]>(() => filteredEnrollmen
         enrollmentTone: enrollment.status === 'regular' ? 'regular' : enrollment.status === 'trial' ? 'trial' : 'inactive',
         isGuest: Boolean((enrollment as any).isGuest),
         transferInLabel: transferInLabels.value.get(enrollment.id!) ?? null,
+        classTransferInLabel: classTransferInIds.value.has(enrollment.id!) ? t('classroom.lesson_transfer.class_transferred_in') : null,
         attendanceStatus,
         attendanceLabel: t('attendance.' + attendanceStatus),
         absenceReason,
@@ -1778,7 +1836,7 @@ async function openAttendanceTemplateModal() {
         ).richText
     } catch (error) {
         console.error('Failed to load attendance copy template', error)
-        toast.error(t('classroom.copy_template_load_failed'))
+        reportError(error, 'classroom.copy_template_load_failed')
     } finally {
         if (requestGeneration === attendanceTemplateRequestGeneration) isLoadingAttendanceTemplate.value = false
     }
@@ -1789,7 +1847,7 @@ watch(showAttendanceTemplateModal, value => { if (!value) attendanceTemplateRequ
 async function saveAttendanceTemplate() {
     const content = createTextEditorContent(attendanceTemplateDocument.value, { templateVariables: true })
     if (!content.plainText.trim()) {
-        toast.error(t('classroom.copy_template_empty_error'))
+        errorKey('classroom.copy_template_empty_error')
         return
     }
 
@@ -1806,7 +1864,7 @@ async function saveAttendanceTemplate() {
         showAttendanceTemplateModal.value = false
     } catch (error) {
         console.error('Failed to save attendance copy template', error)
-        toast.error(t('classroom.copy_template_save_failed'))
+        reportError(error, 'classroom.copy_template_save_failed')
     } finally {
         isSavingAttendanceTemplate.value = false
     }
@@ -1872,7 +1930,7 @@ function copyAttendanceInfo() {
         }
     }).catch(err => {
         console.error('Failed to copy: ', err)
-        errorKey('classroom.copy_error')
+        reportError(err, 'classroom.copy_error')
     })
 }
 
@@ -1893,7 +1951,7 @@ async function handleConfirmRefresh() {
     } catch (e) {
         console.error(e)
         // @ts-ignore
-        toast.error(t('classroom.refresh_failed'))
+        reportError(e, 'classroom.refresh_failed')
         showRefreshConfirm.value = false
     } finally {
         isRefreshing.value = false
@@ -1907,7 +1965,7 @@ async function toggleIsConducted(event: any) {
     // Guard: check if occurrence is in a holiday period
     if (isOccurrenceInHoliday.value && isHeld) {
         event.target.checked = false
-        toast.error(t('report.error.cannot_set_conducted_during_holiday'))
+        errorKey('report.error.cannot_set_conducted_during_holiday')
         return
     }
 
@@ -1922,9 +1980,9 @@ async function toggleIsConducted(event: any) {
         event.target.checked = !isHeld
         const msg = e.message || ''
         if (msg.includes('Cannot set is_conducted=true')) {
-            toast.error(t('report.error.cannot_set_conducted_during_holiday'))
+            errorKey('report.error.cannot_set_conducted_during_holiday')
         } else {
-            toast.error(t('common.save_error'))
+            errorKey('common.save_error')
         }
     }
 }
@@ -1946,7 +2004,7 @@ async function toggleTeacherAttendance(teacherId: string | undefined, event: any
     // Guard: check if occurrence is in a holiday period
     if (isOccurrenceInHoliday.value && isPresent) {
         event.target.checked = false
-        toast.error(t('report.error.cannot_set_teacher_present_during_holiday'))
+        errorKey('report.error.cannot_set_teacher_present_during_holiday')
         return
     }
 
@@ -1964,11 +2022,11 @@ async function toggleTeacherAttendance(teacherId: string | undefined, event: any
         event.target.checked = !isPresent
         const msg = e.message || ''
         if (msg.includes('while the teacher is on leave')) {
-            toast.error(t('report.error.cannot_set_teacher_present_during_leave'))
+            errorKey('report.error.cannot_set_teacher_present_during_leave')
         } else if (msg.includes('Cannot set teacher attendance to present')) {
-            toast.error(t('report.error.cannot_set_teacher_present_during_holiday'))
+            errorKey('report.error.cannot_set_teacher_present_during_holiday')
         } else {
-            toast.error(t('common.save_error'))
+            errorKey('common.save_error')
         }
     }
 }
@@ -2071,7 +2129,7 @@ async function openAddStudentModal() {
         isAddingStudent.value = true
         makeupCandidates.value = await EnrollmentService.getActiveEnrollmentCandidates()
     } catch (error: any) {
-        toast.error(error?.message || t('classroom.add_student_load_failed'))
+        reportError(error, 'classroom.add_student_load_failed')
         showAddStudentModal.value = false
     } finally {
         isAddingStudent.value = false
@@ -2084,7 +2142,7 @@ function closeAddStudentModal() {
 
 async function submitAddStudentToClass() {
     if (!selectedMakeupStudentId.value || !selectedMakeupEnrollmentId.value || !makeupJoinDate.value) {
-        toast.error(t('classroom.add_student_required_fields'))
+        errorKey('classroom.add_student_required_fields')
         return
     }
 
@@ -2093,12 +2151,12 @@ async function submitAddStudentToClass() {
 
     const selected = selectedMakeupEnrollment.value
     if (!selected) {
-        toast.error(t('classroom.add_student_enrollment_not_found'))
+        errorKey('classroom.add_student_enrollment_not_found')
         return
     }
 
     if (selected.status !== 'regular' && normalizedJoinDate >= DateUtils.todayString(preferences.timeZone)) {
-        toast.error(t('classroom.add_student_active_only_for_future'))
+        errorKey('classroom.add_student_active_only_for_future')
         return
     }
 
@@ -2265,7 +2323,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
         toast.success(t('report.save_success'))
     } catch (error) {
         console.error('Failed to resolve conflict:', error)
-        toast.error(t('report.resolve_conflict_error'))
+        reportError(error, 'report.resolve_conflict_error')
     }
 }
 
@@ -2296,7 +2354,7 @@ async function addTeacherForToday(teacher: TeacherOverviewDTO) {
         toast.success(t('common.save_success'))
     } catch (e) {
         console.error('Failed to add teacher for today:', e)
-        toast.error(t('common.save_error'))
+        reportError(e, 'common.save_error')
     } finally {
         isSavingTeachers.value = false
     }
@@ -2314,7 +2372,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
         toast.success(t('common.save_success'))
     } catch (e) {
         console.error('Failed to remove assignment:', e)
-        toast.error(t('common.save_error'))
+        reportError(e, 'common.save_error')
     } finally {
         isSavingTeachers.value = false
     }
@@ -2492,9 +2550,11 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                     mark-class-days
                                     :is-planned-date="isPlannedClassDate"
                                     :report-completion="reportCompletionByDate"
+                                    :join-flags="joinFlagsByDate"
                                     :today="calendarToday"
                                     :model-value="selectedDateKey || null"
-                                    @select-date="handleCalendarDateSelect" />
+                                    @select-date="handleCalendarDateSelect"
+                                    @range-change="handleCalendarRangeChange" />
                             </div>
                         </Transition>
                     </div>
@@ -2770,6 +2830,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                 :initial-lesson-id="selectedEditorReport?.lessonId"
                                 :available-lessons="courseLessons"
                                 :initial-report-external-link="selectedEditorReport?.externalLink"
+                                :source-identity="selectedEditorReport"
                                 :initial-is-completed="selectedEditorReport?.isCompleted"
                                 :initial-progress-start="selectedEditorReport?.progressStart"
                                 :initial-progress-end="selectedEditorReport?.progressEnd"

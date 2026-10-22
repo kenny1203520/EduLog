@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
+import { useFeedback } from '@/composables/useFeedback'
 import Pagination from '@/components/common/Pagination.vue'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import TeacherAccountLinkDialog from '@/components/teacher/TeacherAccountLinkDialog.vue'
@@ -28,6 +29,7 @@ import { isKodingPlatform, KODING_PLATFORM } from '@/utils/koding'
 
 const { t } = useI18n()
 const toast = useToast()
+const { errorKey, reportError } = useFeedback()
 
 const teachers = ref<TeacherOverviewDTO[]>([])
 const statistics = ref<TeacherStatisticsDTO>({ totalTeachers: 0, linkedAccounts: 0, unlinkedAccounts: 0, completeProfiles: 0, teachersWithBirthday: 0, teachersWithGovId: 0 })
@@ -133,7 +135,7 @@ async function loadTeachers() {
         selectedTeacherIds.value = new Set()
     } catch (error) {
         console.error(error)
-        toast.error(t('teacher.load_failed'))
+        reportError(error, 'teacher.load_failed')
     } finally {
         loading.value = false
     }
@@ -186,7 +188,7 @@ async function openEditModal(teacher: TeacherOverviewDTO) {
     isModalOpen.value = true
     } catch (error) {
         console.error(error)
-        toast.error(t('teacher.load_failed'))
+        reportError(error, 'teacher.load_failed')
     }
 }
 
@@ -272,22 +274,22 @@ async function saveTeacher() {
     const payload = preparePayload()
 
     if (!payload.name) {
-        toast.error(t('teacher.validation_required'))
+        errorKey('teacher.validation_required')
         return
     }
 
     if (payload.email && !isValidEmail(payload.email)) {
-        toast.error(t('teacher.validation_email'))
+        errorKey('teacher.validation_email')
         return
     }
 
     if (payload.user_id && !isValidUuid(payload.user_id)) {
-        toast.error(t('teacher.validation_user_id'))
+        errorKey('teacher.validation_user_id')
         return
     }
 
     if (payload.gov_id && payload.gov_id.length > 20) {
-        toast.error(t('teacher.validation_gov_id'))
+        errorKey('teacher.validation_gov_id')
         return
     }
 
@@ -307,13 +309,8 @@ async function saveTeacher() {
         closeModal()
     } catch (error: any) {
         console.error(error)
-        let message = error.message || t('teacher.save_failed')
-
-        if (message.includes('teachers_user_id_key')) {
-            message = t('teacher.error_duplicate_user')
-        }
-
-        toast.error(message)
+        if (String(error?.message ?? '').includes('teachers_user_id_key')) errorKey('teacher.error_duplicate_user')
+        else reportError(error, 'teacher.save_failed')
     } finally {
         isSaving.value = false
     }
@@ -371,7 +368,7 @@ async function handleConfirm() {
         pendingDeleteCount.value = 0
     } catch (error) {
         console.error(error)
-        toast.error((error as Error).message || t('teacher.delete_failed'))
+        reportError(error, 'teacher.delete_failed')
     } finally {
         confirmModal.value.isLoading = false
     }
@@ -445,7 +442,7 @@ function resolvePlatform(platformSelection: string, customPlatform: string) {
 
 function validateCredentialInput(platform: string, username: string, password: string) {
     if (!platform || !username || (!isKodingPlatform(platform) && !password)) {
-        toast.error(t('teacher.credentials_platform_required'))
+        errorKey('teacher.credentials_platform_required')
         return false
     }
 
@@ -461,7 +458,7 @@ async function refreshEditingTeacher() {
 
 async function addTeacherCredential() {
     if (!editingTeacher.value?.id) {
-        toast.error(t('teacher.credentials_save_teacher_first'))
+        errorKey('teacher.credentials_save_teacher_first')
         return
     }
 
@@ -488,7 +485,7 @@ async function addTeacherCredential() {
         toast.success(t('teacher.credentials_add_success'))
     } catch (error: any) {
         console.error(error)
-        toast.error(error.message || t('teacher.credentials_save_failed'))
+        reportError(error, 'teacher.credentials_save_failed')
     } finally {
         isCredentialSaving.value = false
     }
@@ -517,7 +514,7 @@ async function updateTeacherCredential(credential: EditableTeacherCredential) {
         toast.success(t('teacher.credentials_update_success'))
     } catch (error: any) {
         console.error(error)
-        toast.error(error.message || t('teacher.credentials_save_failed'))
+        reportError(error, 'teacher.credentials_save_failed')
     } finally {
         isCredentialSaving.value = false
     }
@@ -534,7 +531,7 @@ async function deleteTeacherCredential(credential: TeacherCredentialDTO) {
         toast.success(t('teacher.credentials_delete_success'))
     } catch (error: any) {
         console.error(error)
-        toast.error(error.message || t('teacher.credentials_save_failed'))
+        reportError(error, 'teacher.credentials_save_failed')
     } finally {
         isCredentialSaving.value = false
     }

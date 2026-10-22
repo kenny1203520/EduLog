@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
+import { useFeedback } from '@/composables/useFeedback'
 import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
 import { SessionService } from '@/services/session/SessionService'
 import { ClassroomService } from '@/services/classroom/ClassroomService'
@@ -22,6 +23,7 @@ const emit = defineEmits(['close', 'success'])
 
 const { t } = useI18n()
 const toast = useToast()
+const { errorKey, reportError } = useFeedback()
 const preferences = usePreferencesStore()
 
 const isSubmitting = ref(false)
@@ -143,7 +145,7 @@ watch(() => activateTrialForm.value.class_session_id, sessionId => {
 
 async function submitActivateTrial() {
     if (!props.fromEnrollmentId || !activateTrialForm.value.class_session_id || !activateTrialForm.value.effective_date) {
-        toast.error(t('student.management.required_fields', 'Missing required fields'))
+        errorKey('student.management.required_fields')
         return
     }
 
@@ -163,9 +165,8 @@ async function submitActivateTrial() {
         emit('close')
     } catch (e: any) {
         console.error(e)
-        toast.error(e.message?.includes('TARGET_SESSION_COURSE_MISMATCH')
-            ? t('student.errors.session_course_mismatch')
-            : (e.message || 'Failed to activate trial'))
+        if (e.message?.includes('TARGET_SESSION_COURSE_MISMATCH')) errorKey('student.errors.session_course_mismatch')
+        else reportError(e, 'student.errors.activate_trial_failed')
     } finally {
         isSubmitting.value = false
     }

@@ -3,7 +3,8 @@
         <BaseCalendar :compact="props.compact" :model-value="props.modelValue"
             :is-date-disabled="props.markClassDays ? isNonClassDay : null"
             :get-day-tone="props.markClassDays ? classDayTone : null"
-            @select-date="handleSelectDate">
+            @select-date="handleSelectDate"
+            @range-change="emit('range-change', $event)">
             <template #day="{ day }">
                 <!-- Class-day mode: one corner dot for report completion -->
                 <template v-if="props.markClassDays">
@@ -11,6 +12,16 @@
                         :class="completionDotClass(completionFor(day.date)!)"
                         :title="$t(`classroom.calendar.completion_${completionFor(day.date)}`)">
                         <span class="sr-only">{{ $t(`classroom.calendar.completion_${completionFor(day.date)}`) }}</span>
+                    </span>
+                    <!-- Students who joined by a make-up or a class transfer -->
+                    <span v-if="joinCountFor(day.date)"
+                        class="absolute left-0.5 bottom-0.5 inline-flex items-center gap-0.5 rounded-md bg-purple-100 px-1 text-[9px] font-black leading-4 text-purple-800"
+                        :title="joinLabelFor(day.date)">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-2.5 w-2.5" aria-hidden="true">
+                            <path d="M10 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM3.465 14.493a1.23 1.23 0 0 0 .41 1.412A9.957 9.957 0 0 0 10 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 0 0-13.074.003Z" />
+                        </svg>
+                        <span aria-hidden="true">{{ joinCountFor(day.date) }}</span>
+                        <span class="sr-only">{{ joinLabelFor(day.date) }}</span>
                     </span>
                 </template>
                 <!-- Occurrence Indicators -->
@@ -70,6 +81,7 @@
             <li class="flex items-center gap-1.5"><span class="h-3 w-3 rounded border border-sky-400 bg-sky-50" aria-hidden="true" />{{ $t('classroom.calendar.upcoming') }}</li>
             <li class="flex items-center gap-1.5"><span class="h-3 w-3 rounded border border-gray-200 bg-gray-100" aria-hidden="true" />{{ $t('classroom.calendar.cancelled') }}</li>
             <li class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true" /><span class="h-2 w-2 rounded-full bg-amber-500" aria-hidden="true" /><span class="h-2 w-2 rounded-full bg-red-500" aria-hidden="true" />{{ $t('classroom.calendar.completion') }}</li>
+            <li class="flex items-center gap-1.5"><span class="inline-flex h-3 items-center rounded bg-purple-100 px-1 text-[9px] font-black text-purple-800" aria-hidden="true">1</span>{{ $t('classroom.calendar.joined') }}</li>
         </ul>
     </div>
 </template>
@@ -80,6 +92,7 @@ import type { ClassOccurrence } from '@/models/ClassOccurrence'
 import { DateUtils } from '@/utils/DateUtils'
 import BaseCalendar from './common/BaseCalendar.vue'
 import { classifyClassDay, reportCompletionLevel, type ClassDayKind, type ReportCompletionLevel } from '@/models/ClassCalendarDay'
+import type { RosterFlagCount } from '@/models/ClassTimeline'
 
 interface Props {
     occurrences?: ClassOccurrence[]
@@ -95,6 +108,8 @@ interface Props {
     reportCompletion?: Record<string, { total: number; completed: number }>
     /** Today in the class time zone (YYYY-MM-DD). */
     today?: string | null
+    /** Students who joined by a make-up or a class transfer, per date (YYYY-MM-DD). */
+    joinFlags?: Record<string, RosterFlagCount>
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -106,15 +121,17 @@ const props = withDefaults(defineProps<Props>(), {
     markClassDays: false,
     isPlannedDate: null,
     reportCompletion: () => ({}),
-    today: null
+    today: null,
+    joinFlags: () => ({})
 })
 
 const emit = defineEmits<{
     'select-date': [date: Date]
     'select-occurrence': [occurrence: ClassOccurrence]
+    'range-change': [range: { start: string; end: string }]
 }>()
 
-const { locale } = useI18n()
+const { locale, t } = useI18n()
 
 // Methods
 function getOccurrencesForDate(date: Date): ClassOccurrence[] {
@@ -144,6 +161,20 @@ function classDayTone(date: Date): string | null {
 
 function completionFor(date: Date): ReportCompletionLevel | null {
     return reportCompletionLevel(props.reportCompletion[DateUtils.formatLocalDate(date)])
+}
+
+function joinCountFor(date: Date): number {
+    const entry = props.joinFlags[DateUtils.formatLocalDate(date)]
+    return entry ? entry.makeupIn + entry.transferIn : 0
+}
+
+function joinLabelFor(date: Date): string {
+    const entry = props.joinFlags[DateUtils.formatLocalDate(date)]
+    if (!entry) return ''
+    return [
+        entry.makeupIn ? t('classroom.calendar.joined_makeup', { count: entry.makeupIn }) : '',
+        entry.transferIn ? t('classroom.calendar.joined_transfer', { count: entry.transferIn }) : '',
+    ].filter(Boolean).join(' / ')
 }
 
 function completionDotClass(level: ReportCompletionLevel) {

@@ -14,6 +14,7 @@ import { safeExternalHref } from '@/utils/safeExternalHref'
 import { AuthorizationError } from '@/services/errors/AppError'
 import { ApiV1Error, apiV1Client } from '@/services/api/ApiV1Client'
 import { getApiV1Mode } from '@/services/api/ApiModeClient'
+import { isBrowserOffline, isNetworkError } from '@/utils/networkErrors'
 
 function assignRichTextPair(
     target: Record<string, unknown>,
@@ -201,9 +202,40 @@ function timeoutResult(message = 'Report save request timed out'): SaveReportRes
     return { success: false, conflict: false, errorCode: 'request_timeout', message, messageKey: 'errors.request_timeout' }
 }
 
+/** Report fields the v1 API accepts in a patch (server `reportPatch`, which rejects any other key). */
+const REPORT_PATCH_FIELDS = [
+    'lesson_id', 'is_completed', 'progress_letter', 'attendance_status', 'absence_reason',
+    'class_participation', 'classroom_behavior', 'contact_notes', 'contact_notes_document',
+    'class_notes', 'class_notes_document', 'content', 'content_document', 'external_link'
+] as const
+
+/** The editable part of a report; ids, version and timestamps are owned by the server. */
+export function toReportPatch(report: OccurrenceReportDTO): Record<string, unknown> {
+    const patch: Record<string, unknown> = {}
+    for (const field of REPORT_PATCH_FIELDS) {
+        const value = (report as unknown as Record<string, unknown>)[field]
+        if (value !== undefined) patch[field] = value
+    }
+    return patch
+}
+
 function unknownOutcomeResult(): SaveReportResult {
     return { success: false, conflict: false, errorCode: 'save_outcome_unknown', message: 'The report save outcome could not be confirmed', messageKey: 'errors.save_outcome_unknown' }
 }
+/** Generic save failure; connection problems get a retryable `network_error` code. */
+function saveFailure(error: unknown, message: string): SaveReportResult {
+    if (isNetworkError(error) || isBrowserOffline()) {
+        return {
+            success: false,
+            conflict: false,
+            errorCode: 'network_error',
+            message,
+            messageKey: isBrowserOffline() ? 'report.editor.save_failed_offline' : 'report.editor.save_failed_network'
+        }
+    }
+    return { success: false, conflict: false, message, messageKey: 'errors.unknown' }
+}
+
 function classifiedSaveError(error: any, fallback: string): SaveReportResult {
     const code = error?.code
     const status = error?.status || error?.statusCode
@@ -214,7 +246,7 @@ function classifiedSaveError(error: any, fallback: string): SaveReportResult {
     if (code === '23514' || code === '22001' || code === '22P02') {
         return { success: false, conflict: false, errorCode: 'validation_error', message: fallback, messageKey: 'errors.validation_failed' }
     }
-    return { success: false, conflict: false, message: fallback, messageKey: 'errors.unknown' }
+    return saveFailure(error, fallback)
 }
 async function loadCanonicalReport(reportId: string): Promise<{ data: OccurrenceReportDTO | null, error: any }> {
     return runReportRequest(() => apiDataClient
@@ -350,7 +382,7 @@ export class ReportCommandService {
             } catch (error) {
                 if (error instanceof ApiV1Error && error.status === 409) return { success: false, conflict: true, errorCode: 'conflict', message: error.message, messageKey: 'errors.conflict' }
                 if (isSystemManagedApiError(error)) return reconcileV1SystemManagedSave(reportId, detailedData, error.message)
-                return { success: false, conflict: false, message: error instanceof Error ? error.message : 'Failed to save report', messageKey: 'errors.unknown' }
+                return saveFailure(error, error instanceof Error ? error.message : 'Failed to save report')
             }
         }
         // Narrow pre-fetch: the CAS check and the system-managed guard below
@@ -368,11 +400,11 @@ export class ReportCommandService {
         } catch (error: any) {
             return error instanceof ReportRequestTimeoutError
                 ? timeoutResult('Report preflight request timed out')
-                : { success: false, conflict: false, message: 'Failed to fetch report: ' + (error?.message || 'Unknown error'), messageKey: 'errors.unknown' }
+                : saveFailure(error, 'Failed to fetch report: ' + (error?.message || 'Unknown error'))
         }
         const { data: serverReport, error: fetchError } = preflight
         if (fetchError || !serverReport) {
-            return { success: false, conflict: false, message: 'Failed to fetch report: ' + (fetchError?.message || 'Report not found'), messageKey: 'errors.unknown' }
+            return saveFailure(fetchError, 'Failed to fetch report: ' + (fetchError?.message || 'Report not found'))
         }
 
         if (serverReport.version !== currentVersion) {
@@ -471,7 +503,7 @@ export class ReportCommandService {
                 .single())
         } catch (error: any) {
             if (error instanceof ReportRequestTimeoutError) return reconcileTimedOutSave(reportId, currentVersion, newVersion, updateData)
-            return { success: false, conflict: false, message: 'Failed to save report: ' + (error?.message || 'Unknown error'), messageKey: 'errors.unknown' }
+            return saveFailure(error, 'Failed to save report: ' + (error?.message || 'Unknown error'))
         }
         const { data: updated, error: updateError } = updateResponse
         if (updateError || !updated) {
@@ -511,7 +543,7 @@ export class ReportCommandService {
             } catch (error) {
                 if (error instanceof ApiV1Error && error.status === 409) return { success: false, conflict: true, errorCode: 'conflict', message: error.message, messageKey: 'errors.conflict' }
                 if (isSystemManagedApiError(error)) return reconcileV1SystemManagedAttendance(reportId, error.message)
-                return { success: false, conflict: false, message: error instanceof Error ? error.message : 'Failed to save attendance', messageKey: 'errors.unknown' }
+                return saveFailure(error, error instanceof Error ? error.message : 'Failed to save attendance')
             }
         }
         let preflight: any
@@ -524,11 +556,11 @@ export class ReportCommandService {
         } catch (error: any) {
             return error instanceof ReportRequestTimeoutError
                 ? timeoutResult('Report preflight request timed out')
-                : { success: false, conflict: false, message: 'Failed to fetch report: ' + (error?.message || 'Unknown error'), messageKey: 'errors.unknown' }
+                : saveFailure(error, 'Failed to fetch report: ' + (error?.message || 'Unknown error'))
         }
         const { data: serverReport, error: fetchError } = preflight
         if (fetchError || !serverReport) {
-            return { success: false, conflict: false, message: 'Failed to fetch report: ' + (fetchError?.message || 'Report not found'), messageKey: 'errors.unknown' }
+            return saveFailure(fetchError, 'Failed to fetch report: ' + (fetchError?.message || 'Report not found'))
         }
 
         if (serverReport.version !== currentVersion) {
@@ -591,7 +623,7 @@ export class ReportCommandService {
                 .single())
         } catch (error: any) {
             if (error instanceof ReportRequestTimeoutError) return reconcileTimedOutSave(reportId, currentVersion, newVersion, updateData)
-            return { success: false, conflict: false, message: 'Failed to save attendance: ' + (error?.message || 'Unknown error'), messageKey: 'errors.unknown' }
+            return saveFailure(error, 'Failed to save attendance: ' + (error?.message || 'Unknown error'))
         }
         const { data: updated, error: updateError } = updateResponse
         if (updateError || !updated) {
@@ -707,7 +739,7 @@ export class ReportCommandService {
     ): Promise<OccurrenceReport> {
         if (expectedVersion === undefined) throw new Error('expectedVersion is required to resolve a report conflict')
         if (getApiV1Mode() === 'v1') {
-            const response = await apiV1Client.post<any>(`/reports/${encodeURIComponent(reportId)}/conflicts/resolve`, { expected_version: expectedVersion, report: resolvedReport })
+            const response = await apiV1Client.post<any>(`/reports/${encodeURIComponent(reportId)}/conflicts/resolve`, { expected_version: expectedVersion, report: toReportPatch(resolvedReport) })
             return new OccurrenceReport(response.data)
         }
         const { data: current, error: fetchError } = await apiDataClient

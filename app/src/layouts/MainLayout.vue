@@ -6,6 +6,7 @@ import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
 import { useFeedback } from '@/composables/useFeedback'
 import { useAccountIdentity } from '@/composables/useAccountIdentity'
+import { inExtensionPanel } from '@/composables/useExtensionPanel'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -18,6 +19,8 @@ const logoutBusy = ref(false)
 const isOnline = ref(typeof navigator === 'undefined' ? true : navigator.onLine)
 const pendingRequests = ref(0)
 const { accountDisplayName, accountInitial } = useAccountIdentity()
+// In the extension side panel the panel page supplies its own header; only the content is shown.
+const panel = inExtensionPanel()
 
 function onOnline() { isOnline.value = true }
 function onOffline() { isOnline.value = false }
@@ -65,7 +68,7 @@ async function handleLogout() {
 <template>
     <div class="flex h-dvh min-h-dvh overflow-hidden bg-gray-50">
         <!-- Mobile Header -->
-        <div
+        <div v-if="!panel"
             class="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-100 z-30 flex items-center px-4 justify-between shadow-sm">
             <div class="flex items-center gap-3">
                 <button @click="isSidebarOpen = !isSidebarOpen"
@@ -86,11 +89,11 @@ async function handleLogout() {
         </div>
 
         <!-- Sidebar Overlay (Mobile) -->
-        <div v-if="isSidebarOpen" @click="isSidebarOpen = false; accountMenuOpen = false"
+        <div v-if="isSidebarOpen && !panel" @click="isSidebarOpen = false; accountMenuOpen = false"
             class="lg:hidden fixed inset-0 bg-black/50 z-40 transition-opacity"></div>
 
         <!-- Sidebar -->
-        <aside
+        <aside v-if="!panel"
             class="fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col transform border-r border-gray-100 bg-white transition-all duration-300 lg:static lg:max-w-none lg:transform-none"
             :class="[
                 isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
@@ -291,14 +294,14 @@ async function handleLogout() {
         </aside>
 
         <!-- Main Content -->
-        <main class="relative min-w-0 flex-1 overflow-auto bg-gray-50 pt-16 transition-all duration-300 lg:pt-0">
+        <main class="relative min-w-0 flex-1 overflow-auto bg-gray-50 transition-all duration-300 lg:pt-0" :class="panel ? 'pt-0' : 'pt-16'">
             <div v-if="!isOnline" class="sticky top-0 z-40 border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-sm font-bold text-amber-900" role="status" aria-live="polite">{{ $t('common.offline_notice') }}</div>
             <div v-else-if="pendingRequests > 0" class="fixed left-0 right-0 top-0 z-[70] h-1 bg-emerald-100 lg:left-64" role="status" aria-live="polite">
                 <div class="h-full w-1/3 motion-safe:animate-pulse rounded-full bg-emerald-600" aria-hidden="true"></div>
                 <span class="sr-only">{{ $t('common.processing') }}</span>
             </div>
             <!-- Desktop Toggle Bar (Sticky) -->
-            <div class="hidden lg:flex sticky top-0 z-20 px-8 py-4 bg-gray-50/90 backdrop-blur-sm items-center gap-2">
+            <div v-if="!panel" class="hidden lg:flex sticky top-0 z-20 px-8 py-4 bg-gray-50/90 backdrop-blur-sm items-center gap-2">
                 <button @click="isDesktopSidebarOpen = !isDesktopSidebarOpen"
                     class="min-h-11 min-w-11 p-2 -ml-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all flex items-center gap-2 group focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600"
                     :title="isDesktopSidebarOpen ? $t('nav.collapse') : $t('nav.expand')">
