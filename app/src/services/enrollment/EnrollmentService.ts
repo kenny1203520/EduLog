@@ -3,6 +3,7 @@ import { EnrollmentCommandService } from './EnrollmentCommandService'
 import { EnrollmentQueryService } from './EnrollmentQueryService'
 import type { SingleLessonTransferConflict, SingleLessonTransferResult } from './SingleLessonTransferConflictService'
 import type { TransferReportFieldSelections } from '@/services/report/ReportFieldConflictService'
+import type { ClassTimelineData, RosterFlag } from '@/models/ClassTimeline'
 import { EnrollmentTransferQueryService, type EffectiveSingleLessonTransferTarget, type OccurrenceLessonTransfer, type SingleLessonTransferHistoryItem } from './EnrollmentTransferQueryService'
 import type { ClassTransferResult, SingleLessonTransferCancelResult } from './EnrollmentTransferService'
 import type { EnrollmentStartDateImpact } from './EnrollmentCommandService'
@@ -22,6 +23,14 @@ type EnrollmentUpdateOptions = {
 export class EnrollmentService {
     static async getSingleLessonTransferHistory(enrollmentId: string): Promise<SingleLessonTransferHistoryItem[]> {
         return EnrollmentTransferQueryService.getSingleLessonTransferHistory(enrollmentId)
+    }
+
+    static async getClassTimeline(enrollmentId: string): Promise<ClassTimelineData> {
+        return EnrollmentTransferQueryService.getClassTimeline(enrollmentId)
+    }
+
+    static async getClassRosterFlags(sessionId: string, start: string, end: string): Promise<RosterFlag[]> {
+        return EnrollmentTransferQueryService.getClassRosterFlags(sessionId, start, end)
     }
 
     static async getOccurrenceLessonTransfers(occurrenceId: string): Promise<OccurrenceLessonTransfer[]> {
@@ -82,14 +91,14 @@ export class EnrollmentService {
     static async transferClass(
         enrollmentId: string,
         newSessionId: string,
-        originalLastDate: string,
-        transferDate: string
+        transferDate: string,
+        note?: string | null
     ): Promise<ClassTransferResult> {
         return EnrollmentCommandService.transferClass(
             enrollmentId,
             newSessionId,
-            originalLastDate,
-            transferDate
+            transferDate,
+            note
         )
     }
 

@@ -37,3 +37,26 @@ export function reportCompletionLevel(counts: { total: number; completed: number
     if (counts.completed >= counts.total) return 'complete'
     return counts.completed > 0 ? 'partial' : 'none'
 }
+
+/** A date range (YYYY-MM-DD, inclusive). */
+export interface CalendarDateRange {
+    start: string
+    end: string
+}
+
+function formatDate(date: Date): string {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+/** The six-week month grid BaseCalendar shows for the month of `date`: Sunday before the 1st, 42 days. */
+export function calendarGridRange(date: Date): CalendarDateRange {
+    const first = new Date(date.getFullYear(), date.getMonth(), 1)
+    const start = new Date(first.getFullYear(), first.getMonth(), 1 - first.getDay())
+    const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 41)
+    return { start: formatDate(start), end: formatDate(end) }
+}
+
+/** Entries of a date-keyed map outside `range`, so a reloaded range can replace its own dates. */
+export function withoutRange<T>(byDate: Record<string, T>, range: CalendarDateRange): Record<string, T> {
+    return Object.fromEntries(Object.entries(byDate).filter(([date]) => date < range.start || date > range.end))
+}

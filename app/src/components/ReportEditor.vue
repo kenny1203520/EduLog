@@ -738,6 +738,7 @@ import { ReportTemplateService } from '@/services/report/ReportTemplateService'
 import { CopyTemplateService, type CopyTemplateLoadOption } from '@/services/copy_template/CopyTemplateService'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { useToast } from 'vue-toastification'
+import { useFeedback } from '@/composables/useFeedback'
 import { useReportCollab } from '@/composables/useReportCollab'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import type {
@@ -917,6 +918,7 @@ const selectedReportTemplateModes = ref<Record<string, string>>({
 
 const preferences = usePreferencesStore()
 const toast = useToast()
+const { errorKey, reportError } = useFeedback()
 const effectiveAutoSaveEnabled = computed(() => props.autoSaveEnabled ?? preferences.editorSettings.autoSave.enabled)
 const effectiveCollaborationEnabled = computed(() => props.collaborationEnabled ?? preferences.editorSettings.collaboration.enabled)
 const effectiveNotificationsEnabled = computed(() => props.notificationsEnabled ?? preferences.editorSettings.notificationsEnabled)
@@ -1407,12 +1409,12 @@ function copyCourseInfo() {
                 justCopiedCourse.value = true
                 setTimeout(() => { justCopiedCourse.value = false }, 2000)
             } else {
-                toast.error(t('report.editor.copy_course_template_copy_failed'))
+                errorKey('report.editor.copy_course_template_copy_failed')
             }
         })
         .catch(error => {
             console.error('Failed to copy course info', error)
-            toast.error(t('report.editor.copy_course_template_copy_failed'))
+            reportError(error, 'report.editor.copy_course_template_copy_failed')
         })
 }
 
@@ -1450,7 +1452,7 @@ async function openCourseCopyTemplateModal() {
         courseCopyTemplateDocument.value = loaded?.templateDocument || createTextEditorContent(courseCopyTemplateText.value, { templateVariables: true }).richText
     } catch (error) {
         console.error('Failed to load course copy template', error)
-        toast.error(t('report.editor.copy_course_template_load_failed'))
+        reportError(error, 'report.editor.copy_course_template_load_failed')
     } finally {
         if (requestGeneration === courseTemplateRequestGeneration) isLoadingCourseCopyTemplate.value = false
     }
@@ -1471,7 +1473,7 @@ function loadSelectedCourseTemplate() {
 async function saveCourseCopyTemplate() {
     const templateText = courseCopyTemplateText.value.trim()
     if (!templateText) {
-        toast.error(t('report.editor.copy_course_template_empty_error'))
+        errorKey('report.editor.copy_course_template_empty_error')
         return
     }
 
@@ -1482,7 +1484,7 @@ async function saveCourseCopyTemplate() {
         showCourseCopyTemplateModal.value = false
     } catch (error) {
         console.error('Failed to save course copy template', error)
-        toast.error(t('report.editor.copy_course_template_save_failed'))
+        reportError(error, 'report.editor.copy_course_template_save_failed')
     } finally {
         isSavingCourseCopyTemplate.value = false
     }
@@ -1595,7 +1597,7 @@ async function openReportTemplateManagerModal() {
 async function saveTemplateDraft() {
     if (!authStore.user?.id) return
     if (!templateDraftName.value.trim()) {
-        toast.error(t('report.editor.template_name_required'))
+        errorKey('report.editor.template_name_required')
         return
     }
 
@@ -1619,7 +1621,7 @@ async function saveTemplateDraft() {
         toast.success(t('report.editor.template_saved'))
     } catch (error) {
         console.error('Failed to save template draft', error)
-        toast.error(t('report.editor.template_load_error'))
+        reportError(error, 'report.editor.template_load_error')
     } finally {
         isSavingTemplate.value = false
     }
@@ -1630,7 +1632,7 @@ async function applyTemplateDraftToReport() {
         try {
             const serverReport = await OccurrenceReportService.getReportById(props.reportId)
             if (serverReport.version !== version.value) {
-                toast.error(t('report.editor.restore_conflict_error'))
+                errorKey('report.editor.restore_conflict_error')
                 return
             }
         } catch (e) {

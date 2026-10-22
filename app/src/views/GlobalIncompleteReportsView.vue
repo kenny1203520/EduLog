@@ -417,6 +417,7 @@ import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import BasePageHeader from '@/components/common/BasePageHeader.vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
+import { useFeedback } from '@/composables/useFeedback'
 import { apiResourceClient } from '@/services/api/ApiResourceClient'
 import { DateUtils } from '@/utils/DateUtils'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
@@ -428,6 +429,7 @@ const LIST_ALL_REPORTS_PERMISSION = 'teaching.reports.list'
 
 const { locale, t } = useI18n()
 const toast = useToast()
+const { reportError } = useFeedback()
 const preferences = usePreferencesStore()
 const route = useRoute()
 const router = useRouter()
@@ -552,7 +554,7 @@ async function loadReports(refreshEditor = true) {
         console.error(err)
         incompleteReports.value = []
         selectedReport.value = null
-        toast.error(t('report.load_error'))
+        reportError(err, 'report.load_error')
     } finally {
         loading.value = false
         isRefreshing.value = false

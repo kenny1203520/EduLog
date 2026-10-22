@@ -84,7 +84,10 @@
         "senior_high": "高中",
         "junior_high": "國中",
         "elementary": "國小",
-        "other": "其他"
+        "other": "其他",
+        "status_required": "請選擇狀態。",
+        "start_date_required": "狀態為在學時，必須填寫開始日期。",
+        "dates_required": "請填寫開始日期與結束日期。"
     },
     "management": {
         "title": "學員管理中心",
@@ -207,19 +210,27 @@
         "classroom_filter": "教室篩選",
         "effective_date": "生效日期",
         "target_date": "補課日期",
-        "note": "系統會保留同一份報名記錄。既有上課報告會留在原班級，只有生效日後的空白占位報告會移到目標班級。",
+        "note": "系統會保留同一份報名記錄，生效日（含當天）起學生只屬於目標班級。已寫了內容的報告留在原處；空白報告依日期移到目標班級，報告總數維持不變。",
         "single_note": "系統會移動同一份報告到目標班級日期，不會建立新的報名記錄。",
         "load_reports_failed": "載入既有報告失敗",
         "target_date_not_class_day": "目標日期不是該班級的授課日，請改選授課日。",
         "target_report_exists": "此學生課程在目標日期已經有報告，無法重複調課。",
         "same_session_error": "目標班級不可與目前班級相同。",
-        "retained_title": "轉班完成，部分報告保留在原班",
         "retained_body": "生效日以後有 {count} 份已經寫了內容的報告，仍留在原班的課次。請確認是否需要另外處理。",
         "retained_open": "查看報告",
         "retained_done": "完成",
         "original_report_not_found": "找不到原定上課報告。",
         "original_report_ambiguous": "同一天有多筆報告，請改用報告選單指定單一報告。",
-        "original_date_not_class_day": "原定日期不是目前班級的授課日，請改選原班級上課日。"
+        "original_date_not_class_day": "原定日期不是目前班級的授課日，請改選原班級上課日。",
+        "note_label": "轉班備註（選填）",
+        "note_placeholder": "例如：家長要求改到週六上課",
+        "summary_title": "轉班完成",
+        "summary_effective": "自 {date} 起生效。以下是這次轉班對報告的處理結果：",
+        "summary_moved": "移到新班",
+        "summary_created": "新建",
+        "summary_retained": "保留在原班",
+        "summary_removed": "刪除的空白報告",
+        "summary_missing": "目標班級的課堂不足，還差 {count} 份報告無法安排。請延長班級的上課期間或新增課堂後，再到報名資料調整。"
     },
     "transfer_conflict": {
         "title": "報告衝突管理",
@@ -341,11 +352,35 @@
         "platform_required": "平台為必填",
         "credential_value_required": "帳號、密碼或連結至少需填寫一項",
         "session_full": "所選時段在該區間已滿額",
-        "session_course_mismatch": "所選班級無法教授這門課程"
+        "session_course_mismatch": "所選班級無法教授這門課程",
+        "activate_trial_failed": "無法轉為正式學員",
+        "enroll_failed": "無法新增課程報名"
     },
     "start_date_impact": {
         "title": "部分報告會留在新開始日之前",
         "message": "{dates} 的報告已有內容（含出缺席紀錄），或是調課、補課產生的報告，會保留在原日期，不會被刪除或移動。其他空白報告會依新的開始日期重新排列。要繼續儲存嗎？",
         "confirm": "仍要儲存"
+    },
+    "class_timeline": {
+        "title": "班級時間軸",
+        "empty": "還沒有班級紀錄。",
+        "load_failed": "無法載入班級時間軸",
+        "unknown_class": "未知班級",
+        "ongoing": "至今",
+        "reports": "報告",
+        "legend": "圖例",
+        "transfer_marker": "轉班生效日",
+        "blank_report": "尚未撰寫",
+        "select_hint": "點選時間軸上的報告，查看它是在哪個班級完成的。",
+        "open_reports": "開啟報告",
+        "transfer_log": "轉班紀錄",
+        "to": "轉到",
+        "migrated": "系統遷移，細節不明",
+        "change_summary": "移動 {moved}、保留 {retained}、新建 {created}、刪除 {deleted}",
+        "recorded_at": "紀錄時間：{time}",
+        "placement_regular": "本班",
+        "placement_makeup_in": "補課／調課",
+        "placement_retained_after_transfer": "轉班前保留",
+        "placement_outside": "班級外"
     }
 }

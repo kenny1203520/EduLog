@@ -55,6 +55,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/tests/single_lesson_transfer_cancel_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/enrollment_class_history_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/enrollment_report_sync_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/enrollment_transfer_log_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/single_lesson_transfer_permission_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/dashboard_schedule_visibility_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/ai_report_assist_integration.sql

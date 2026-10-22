@@ -287,14 +287,14 @@ export class EnrollmentCommandService {
     static async transferClass(
         enrollmentId: string,
         newSessionId: string,
-        originalLastDate: string,
-        transferDate: string
+        transferDate: string,
+        note?: string | null
     ): Promise<ClassTransferResult> {
         return EnrollmentTransferService.transferClass(
             enrollmentId,
             newSessionId,
-            originalLastDate,
-            transferDate
+            transferDate,
+            note
         )
     }
 

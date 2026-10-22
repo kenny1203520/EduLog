@@ -31,7 +31,7 @@ interface TeacherLeaveGroup {
 
 const { t } = useI18n()
 const toast = useToast()
-const { reportError } = useFeedback()
+const { reportError, errorKey } = useFeedback()
 const preferences = usePreferencesStore()
 const holidays = ref<Holiday[]>([])
 const classrooms = ref<ClassroomDTO[]>([])
@@ -368,7 +368,7 @@ async function handleSaveHoliday() {
         }
 
         if (payload.kind === 'teacher_leave' && payload.teacher_ids.length === 0) {
-            toast.error(t('holiday.teacher_required'))
+            errorKey('holiday.teacher_required')
             return
         }
 

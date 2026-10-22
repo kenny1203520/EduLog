@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
+import { useFeedback } from '@/composables/useFeedback'
 import { StudentService } from '@/services/student/StudentService'
 import type { StudentSchoolDTO } from '@/models/Student'
 import { useStudentStore } from '@/stores/useStudentStore'
@@ -19,6 +20,7 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const toast = useToast()
+const { errorKey, reportError } = useFeedback()
 const studentStore = useStudentStore()
 const preferences = usePreferencesStore()
 
@@ -50,22 +52,22 @@ function closeAddSchoolForm() {
 
 async function addSchool() {
     if (!newSchool.value.status) {
-        toast.error(t('student.schools.status') + ' is required')
+        errorKey('student.schools.status_required')
         return
     }
 
     if (newSchool.value.status === 'enrolled') {
         if (!newSchool.value.grade) {
-            toast.error(t('student.schools.grade_required'))
+            errorKey('student.schools.grade_required')
             return
         }
         if (!newSchool.value.start_date) {
-            toast.error(t('student.schools.start_date') + ' is required for Enrolled status')
+            errorKey('student.schools.start_date_required')
             return
         }
     } else {
         if (!newSchool.value.start_date || !newSchool.value.end_date) {
-            toast.error(t('student.schools.start_date') + ' and ' + t('student.schools.end_date') + ' are required')
+            errorKey('student.schools.dates_required')
             return
         }
     }
@@ -78,7 +80,7 @@ async function addSchool() {
         toast.success(t('student.schools.add_btn') + ' ' + t('common.success'))
     } catch (e: any) {
         console.error(e)
-        toast.error(e.message || t('student.schools.add_failed', 'Failed to add school'))
+        reportError(e, 'student.schools.add_failed')
     } finally {
         isModifying.value = false
     }
@@ -108,21 +110,21 @@ async function saveSchool() {
     if (!editingSchoolId.value) return
 
     if (!editSchoolForm.value.status) {
-        toast.error(t('student.schools.status') + ' is required')
+        errorKey('student.schools.status_required')
         return
     }
     if (editSchoolForm.value.status === 'enrolled') {
         if (!editSchoolForm.value.grade) {
-            toast.error(t('student.schools.grade_required'))
+            errorKey('student.schools.grade_required')
             return
         }
         if (!editSchoolForm.value.start_date) {
-            toast.error(t('student.schools.start_date') + ' is required for Enrolled status')
+            errorKey('student.schools.start_date_required')
             return
         }
     } else {
         if (!editSchoolForm.value.start_date || !editSchoolForm.value.end_date) {
-            toast.error(t('student.schools.start_date') + ' and ' + t('student.schools.end_date') + ' are required')
+            errorKey('student.schools.dates_required')
             return
         }
     }
@@ -135,7 +137,7 @@ async function saveSchool() {
         toast.success(t('common.save_success'))
     } catch (e) {
         console.error(e)
-        toast.error(t('student.schools.update_failed', 'Failed to update school'))
+        reportError(e, 'student.schools.update_failed')
     } finally {
         isModifying.value = false
     }
@@ -155,7 +157,7 @@ async function handleDeleteSchool() {
         toast.success(t('common.deleted'))
     } catch (e: any) {
         console.error(e)
-        toast.error(e.message || t('student.schools.delete_failed', 'Failed to delete school'))
+        reportError(e, 'student.schools.delete_failed')
     } finally {
         isModifying.value = false
         showDeleteConfirm.value = false
@@ -169,7 +171,7 @@ async function copyToClipboard(text: string) {
     if (success) {
         toast.success(t('common.copy_success'))
     } else {
-        toast.error(t('common.copy_error', 'Failed to copy to clipboard'))
+        errorKey('common.copy_error')
     }
 }
 

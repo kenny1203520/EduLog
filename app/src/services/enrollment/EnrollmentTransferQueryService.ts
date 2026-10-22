@@ -5,6 +5,7 @@ import { apiV1Client } from '@/services/api/ApiV1Client'
 import { apiResourceClient } from '@/services/api/ApiResourceClient'
 import { getApiV1Mode } from '@/services/api/ApiModeClient'
 import { normalizeEnrollmentReportRelations } from '@/services/report/ReportQueryService'
+import type { ClassTimelineData, RosterFlag } from '@/models/ClassTimeline'
 
 export interface TransferConflictDisplayContext {
     occurrenceId: string
@@ -19,29 +20,6 @@ export interface TransferConflictDisplayContext {
     lessonId?: string | null
     lessonSequence?: number | null
     lessonTitle?: string | null
-}
-
-export type TransferMigrationRow = {
-    id: string
-    enrollment_id: string
-    class_occurrence_id: string
-    version?: number
-    content?: string | null
-    lesson_id?: string | null
-    is_completed?: boolean | null
-    progress_letter?: string | null
-    attendance_status?: string | null
-    absence_reason?: string | null
-    class_participation?: number | null
-    classroom_behavior?: number | null
-    contact_notes?: string | null
-    class_notes?: string | null
-    external_link?: string | null
-    class_occurrence: Array<{
-        id?: string
-        occurrence_date: string
-        class_session_id: string
-    }>
 }
 
 export type SingleLessonTransferReportRow = {
@@ -112,6 +90,19 @@ export class EnrollmentTransferQueryService {
     }
 
     /** Lists the active transfers into and out of one class occurrence. */
+    /** Class history, transfer log, make-ups and report placements for one enrollment. */
+    static async getClassTimeline(enrollmentId: string): Promise<ClassTimelineData> {
+        const response = await apiV1Client.get<ClassTimelineData>('/enrollments/' + encodeURIComponent(enrollmentId) + '/class-timeline')
+        return response.data
+    }
+
+    /** Students who joined or left a class by transfer on each date of a range (at most 120 days). */
+    static async getClassRosterFlags(sessionId: string, start: string, end: string): Promise<RosterFlag[]> {
+        const params = new URLSearchParams({ start, end })
+        const response = await apiV1Client.get<RosterFlag[]>('/class-sessions/' + encodeURIComponent(sessionId) + '/roster-flags?' + params)
+        return response.data || []
+    }
+
     static async getOccurrenceLessonTransfers(occurrenceId: string): Promise<OccurrenceLessonTransfer[]> {
         const response = await apiV1Client.get<OccurrenceLessonTransfer[]>('/occurrences/' + encodeURIComponent(occurrenceId) + '/lesson-transfers')
         return response.data || []
@@ -158,52 +149,6 @@ export class EnrollmentTransferQueryService {
         }
 
         return data
-    }
-
-    static async getReportsToMigrate(
-        enrollmentId: string,
-        oldSessionId: string | null,
-        transferDate: string
-    ): Promise<TransferMigrationRow[]> {
-        if (getApiV1Mode() === 'v1') {
-            const filters: Array<{ field: string; operator: 'eq' | 'gte'; value: unknown }> = [
-                { field: 'enrollment_id', operator: 'eq', value: enrollmentId },
-                { field: 'class_occurrences.occurrence_date', operator: 'gte', value: transferDate },
-            ]
-            if (oldSessionId) filters.push({ field: 'class_occurrences.class_session_id', operator: 'eq', value: oldSessionId })
-            const response = await apiResourceClient.list<TransferMigrationRow>('reports', { filters, perPage: 100, sort: 'class_occurrences(occurrence_date)', mode: 'v1' })
-            return response.data || []
-        }
-        const { data, error } = await apiDataClient
-            .from('occurrence_reports')
-            .select(`
-                id,
-                enrollment_id,
-                class_occurrence_id,
-                version,
-                content,
-                lesson_id,
-                is_completed,
-                progress_letter,
-                attendance_status,
-                absence_reason,
-                class_participation,
-                classroom_behavior,
-                contact_notes,
-                class_notes,
-                external_link,
-                class_occurrence:class_occurrences!inner(id, occurrence_date, class_session_id)
-            `)
-            .eq('enrollment_id', enrollmentId)
-            .eq('class_occurrence.class_session_id', oldSessionId)
-            .gte('class_occurrence.occurrence_date', transferDate)
-            .order('occurrence_date', { foreignTable: 'class_occurrences', ascending: true })
-
-        if (error) {
-            throw new Error(`Failed to fetch reports for migration: ${error.message}`)
-        }
-
-        return (data || []) as TransferMigrationRow[]
     }
 
     static async getSingleLessonReportCandidates(
@@ -297,39 +242,6 @@ export class EnrollmentTransferQueryService {
             ...(data as any),
             schedule_rules: (data as any).class_session_schedule_rules || []
         }).isScheduledOn(date)
-    }
-
-    static async getLessonCount(courseId: string, fallbackCount: number): Promise<number> {
-        if (getApiV1Mode() === 'v1') {
-            const response = await apiResourceClient.list<{ id: string }>('lessons', { filters: [{ field: 'course_id', operator: 'eq', value: courseId }], perPage: 100, mode: 'v1' })
-            return response.data?.length || fallbackCount
-        }
-        const { data: lessons } = await apiDataClient
-            .from('lessons')
-            .select('id')
-            .eq('course_id', courseId)
-
-        return (lessons && lessons.length > 0) ? lessons.length : fallbackCount
-    }
-
-    static async getTargetOccurrences(sessionId: string, targetDate: string): Promise<Array<{ id: string }>> {
-        if (getApiV1Mode() === 'v1') {
-            const params = new URLSearchParams({ class_session_id: sessionId, start: targetDate, limit: '100', sort: 'occurrence_date' })
-            const response = await apiV1Client.get<Array<{ id: string }>>(`/occurrences?${params}`)
-            return response.data || []
-        }
-        const { data, error } = await apiDataClient
-            .from('class_occurrences')
-            .select('id')
-            .eq('class_session_id', sessionId)
-            .gte('occurrence_date', targetDate)
-            .order('occurrence_date', { ascending: true })
-
-        if (error) {
-            throw new Error(`Failed to fetch target occurrences: ${error.message}`)
-        }
-
-        return (data || []) as Array<{ id: string }>
     }
 
     static async getExistingReportForOccurrence(
