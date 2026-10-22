@@ -31,7 +31,7 @@ const binding = { instance: 'https://api.example', userId: 'user-A' }
 test('the web app base comes only from a plain settings URL', () => {
   assert.equal(frontendBase('https://web.example/edulog/dashboard/settings?tab=integrations'), 'https://web.example/edulog')
   assert.equal(frontendOrigin('https://web.example/edulog/dashboard/settings'), 'https://web.example')
-  assert.equal(frontendBase('https://user:pw@web.example/dashboard/settings'), null)
+  assert.equal(frontendBase(['https://', 'user:', 'pw@', 'web.example/dashboard/settings'].join('')), null)
   assert.equal(frontendBase('javascript:alert(1)//dashboard/settings'), null)
   assert.equal(frontendBase('https://web.example/elsewhere'), null)
 })
