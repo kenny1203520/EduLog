@@ -103,8 +103,15 @@
             "previous_title": "上次出席進度",
             "completed": "已完成",
             "incomplete": "尚未完成",
-            "view_report": "檢視完整報告"
+            "view_report": "檢視完整報告",
+            "lesson_short": "第 {sequence} 課",
+            "summary_title": "進度提示",
+            "summary_gaps": "缺 {count} 課",
+            "summary_previous": "上次 {lesson}",
+            "summary_none": "沒有需要注意的進度"
         },
+        "formatting_toggle": "格式",
+        "formatting_toggle_label": "顯示或隱藏 {field} 的格式工具列",
         "lesson_selector_label": "課次",
         "select_lesson": "請選擇課程",
         "lesson_completed": "課程已完成",
@@ -374,6 +381,13 @@
         "sending": "正在儲存並送回教學網站…",
         "sent": "已送回教學網站。請在左邊的報告確認要填入的欄位，原站仍需你自己送出。",
         "failed": "無法送回教學網站（{reason}）。請確認左邊的報告仍開著，再試一次。",
-        "date_missing": "這位學生在 {date} 沒有課堂；已改為顯示最近一堂。"
+        "date_missing": "這位學生在 {date} 沒有課堂；已改為顯示最近一堂。",
+        "hint_short": "先儲存，再送回左邊的教學網站"
+    },
+    "panel": {
+        "previous": "上一堂",
+        "next": "下一堂",
+        "calendar": "選擇其他日期",
+        "koding_check": "作業檢查"
     }
 }

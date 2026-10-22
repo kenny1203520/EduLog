@@ -5,6 +5,8 @@ import { describe, expect, it, vi } from 'vitest'
 import StudentReportsView from './StudentReportsView.vue'
 
 const source = readFileSync(resolve(process.cwd(), 'src/views/StudentReportsView.vue'), 'utf8')
+const panel = vi.hoisted(() => ({ value: false }))
+vi.mock('@/composables/useExtensionPanel', () => ({ inExtensionPanel: () => panel.value, extensionPanelOrigin: () => null }))
 
 vi.mock('vue-router', () => ({
     useRoute: () => ({ params: {}, query: {} }),
@@ -134,6 +136,35 @@ describe('StudentReportsView scheduled report filter', () => {
         expect(allReportDisplayBody).toContain('mergedOccurrenceIds.has(r.class_occurrence_id)')
         expect(allReportDisplayBody).toContain('const orphanReports = allReports.value')
         expect(allReportDisplayBody).toContain('[...mergedList, ...orphanReports]')
+    })
+
+    it('in the extension side panel shows only the lesson switcher and the editor area', async () => {
+        panel.value = true
+        try {
+            const wrapper = mount(StudentReportsView, {
+                global: {
+                    mocks: { $t: (key: string) => key },
+                    stubs: { OccurrenceCalendar: true, ReportEditor: true, ConflictModal: true, ConfirmModal: true, KodingCodeCheckModal: true, EnrollmentHistoryPanel: true, PanelOccurrenceBar: true }
+                }
+            })
+            await flushPromises()
+            expect(wrapper.find('panel-occurrence-bar-stub').exists()).toBe(true)
+            expect(wrapper.findAll('button').some(button => button.text().includes('common.list'))).toBe(false)
+            expect(wrapper.findAll('button').some(button => button.text().includes('common.back'))).toBe(false)
+            expect(wrapper.find('occurrence-calendar-stub').exists()).toBe(false)
+            expect(wrapper.classes()).toContain('p-3')
+            wrapper.unmount()
+        } finally { panel.value = false }
+    })
+
+    it('in the side panel opens scrolled to the editor, keeps 回填 at the bottom and passes compact to the editor', () => {
+        expect(source).toContain("watch(() => [loading.value, selectedReport.value?.id] as const")
+        expect(source).toContain("editorAnchor.value?.scrollIntoView?.({ block: 'start'")
+        expect(source).toContain('v-if="sourceFillAvailable && panel" data-testid="source-fill"')
+        expect(source).toContain('sticky bottom-0')
+        expect(source).toContain(':show-manual-save="!panel" :compact="panel"')
+        // The occurrence info card and the source history stay out of the panel.
+        expect(source).toContain('<EnrollmentHistoryPanel v-if="route.params.enrollmentId && !panel"')
     })
 
     it('guards the historical class_session lookup against a missing joined session', () => {

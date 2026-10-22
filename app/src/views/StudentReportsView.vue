@@ -1,8 +1,9 @@
 <template>
-    <div class="student-reports-view p-6 max-w-7xl mx-auto">
-        <EnrollmentHistoryPanel v-if="route.params.enrollmentId" :enrollment-id="String(route.params.enrollmentId)" />
+    <div class="student-reports-view max-w-7xl mx-auto" :class="panel ? 'p-3' : 'p-6'">
+        <!-- In the extension side panel only the lesson switcher and the editor are shown. -->
+        <EnrollmentHistoryPanel v-if="route.params.enrollmentId && !panel" :enrollment-id="String(route.params.enrollmentId)" />
         <!-- Header with Back Button and Actions -->
-        <div class="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div v-if="!panel" class="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
                 <button @click="router.back()"
                     class="mb-4 text-gray-600 hover:text-emerald-600 font-medium flex items-center gap-2 transition cursor-pointer">
@@ -32,7 +33,7 @@
         </div>
 
         <!-- Incomplete Reports Module -->
-        <div v-if="incompleteReports.length > 0 && !loading"
+        <div v-if="incompleteReports.length > 0 && !loading && !panel"
             class="mb-6 bg-amber-50 border border-amber-200 rounded-2xl overflow-hidden shadow-sm animate-in fade-in slide-in-from-top-4 duration-500">
             <button @click="showIncompleteModule = !showIncompleteModule"
                 class="w-full flex items-center justify-between p-4 bg-amber-100/50 hover:bg-amber-100 transition cursor-pointer">
@@ -115,7 +116,7 @@
                 </div>
             </div>
         </div>
-        <div class="flex justify-between items-end mb-4">
+        <div v-if="!panel" class="flex justify-between items-end mb-4">
             <!-- Sort Control (List View Only) -->
             <div v-if="viewMode === 'list'" class="mb-1 flex flex-wrap items-center gap-2">
                 <button @click="toggleSort"
@@ -193,7 +194,7 @@
         </div>
 
         <!-- LIST VIEW -->
-        <div v-else-if="viewMode === 'list'"
+        <div v-else-if="viewMode === 'list' && !panel"
             class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
             <div v-if="listLoading" class="p-12 flex justify-center">
                 <svg class="animate-spin h-8 w-8 text-emerald-500" fill="none" viewBox="0 0 24 24">
@@ -322,9 +323,9 @@
             </div>
         </div>
 
-        <div v-else-if="viewMode === 'calendar'" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div v-else-if="viewMode === 'calendar' || panel" class="grid grid-cols-1 gap-6" :class="{ 'lg:grid-cols-2': !panel }">
             <!-- Calendar Section -->
-            <div class="lg:col-span-1">
+            <div v-if="!panel" class="lg:col-span-1">
                 <OccurrenceCalendar :occurrences="occurrences" :existing-report-ids="existingReportIds"
                     :occurrence-statuses="occurrenceStatuses"
                     :model-value="selectedOccurrence?.occurrenceDate || null" @select-occurrence="selectOccurrence" />
@@ -385,14 +386,18 @@
             </div>
 
             <!-- Editor Section -->
-            <div class="lg:col-span-1">
+            <div :class="{ 'lg:col-span-1': !panel }">
+                <PanelOccurrenceBar v-if="panel" :occurrences="occurrences" :selected="selectedOccurrence"
+                    v-model:calendar-open="panelUi.calendarOpen" :existing-report-ids="existingReportIds"
+                    :occurrence-statuses="occurrenceStatuses" @select-occurrence="selectOccurrence"
+                    @koding-check="showKodingCheckModal = true" />
                 <p v-if="requestedDateMissing" role="status" data-testid="requested-date-missing"
                     class="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
                     {{ $t('report.source_fill.date_missing', { date: requestedDate }) }}
                 </p>
-                <div v-if="selectedOccurrence && selectedReport">
+                <div v-if="selectedOccurrence && selectedReport" ref="editorAnchor" class="scroll-mt-3">
                     <!-- Occurrence Info Card -->
-                    <div
+                    <div v-if="!panel"
                         class="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl p-5 mb-6 border border-emerald-100 shadow-sm">
                         <div class="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <h2 class="font-bold text-gray-900 text-lg flex items-center gap-2">
@@ -455,7 +460,7 @@
                     </div>
 
                     <!-- 回填: opened beside a teaching-site report form by the EduLog extension -->
-                    <div v-if="sourceFillAvailable" data-testid="source-fill"
+                    <div v-if="sourceFillAvailable && !panel" data-testid="source-fill"
                         class="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-emerald-200 bg-white p-4 shadow-sm">
                         <div class="min-w-0 flex-1">
                             <p class="text-sm font-semibold text-gray-900">{{ $t('report.source_fill.title') }}</p>
@@ -468,7 +473,7 @@
                     </div>
                     <!-- Report Editor -->
                     <ReportEditor ref="reportEditorRef" :key="selectedReport.id" :report-id="selectedReport.id"
-                        :initial-version="selectedReport.version" :loading="reportLoading" :show-manual-save="true"
+                        :initial-version="selectedReport.version" :loading="reportLoading" :show-manual-save="!panel" :compact="panel"
                         :enrollment-id="enrollmentInfo?.id" :class-occurrence-id="selectedOccurrence.id"
                         :title="$t('report.report_for_date', { date: formatOccurrenceDateTime(selectedOccurrence) })"
                         :course-name="enrollmentInfo?.courseName || undefined"
@@ -494,6 +499,15 @@
                         :initial-enrollment-external-link="enrollmentInfo?.externalLink"
                         @save-success="handleSaveSuccess" @save-error="handleSaveError" @conflict="handleConflict"
                         @restored="handleReportRestored" @deleted="handleDeleted" />
+                    <!-- Side panel: 回填 stays reachable at the bottom while the report scrolls. -->
+                    <div v-if="sourceFillAvailable && panel" data-testid="source-fill"
+                        class="sticky bottom-0 z-10 -mx-3 mt-3 flex items-center gap-3 border-t border-emerald-200 bg-white/95 px-3 py-2 shadow-[0_-4px_12px_rgba(15,23,42,0.06)] backdrop-blur">
+                        <p class="min-w-0 flex-1 text-xs leading-snug text-gray-700" role="status" aria-live="polite">{{ sourceFill.state.value === 'sending' ? $t('report.source_fill.sending') : sourceFill.state.value === 'sent' ? $t('report.source_fill.sent') : sourceFill.state.value === 'failed' ? $t('report.source_fill.failed', { reason: sourceFill.reason.value }) : $t('report.source_fill.hint_short') }}</p>
+                        <button type="button" @click="fillSource" :disabled="sourceFill.state.value === 'sending'"
+                            class="min-h-[44px] shrink-0 cursor-pointer rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors duration-200 hover:bg-emerald-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-not-allowed disabled:opacity-60">
+                            {{ $t('report.source_fill.action') }}
+                        </button>
+                    </div>
                 </div>
 
                 <div v-else-if="selectedOccurrence && isMissingTransferredOccurrence(selectedOccurrence.id)"
@@ -551,7 +565,7 @@
 
 <script setup lang="ts">
 import EnrollmentHistoryPanel from '@/components/reports/EnrollmentHistoryPanel.vue'
-import { computed, ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/useAuthStore'
@@ -581,6 +595,9 @@ import SourceReportLink from '@/components/reports/SourceReportLink.vue'
 import PlacementBadge from '@/components/enrollment/PlacementBadge.vue'
 import type { ClassTimelineReport } from '@/models/ClassTimeline'
 import { sourceFillChannel, useSourceFill } from '@/composables/useSourceFill'
+import { inExtensionPanel } from '@/composables/useExtensionPanel'
+import { usePanelUiState } from '@/composables/usePanelUiState'
+import PanelOccurrenceBar from '@/components/reports/PanelOccurrenceBar.vue'
 
 type ReportEditorExpose = {
     saveNow: (options?: { reason?: 'manual' | 'switch' }) => Promise<boolean>
@@ -631,6 +648,17 @@ const requestedDate = computed(() => {
 const requestedDateMissing = ref(false)
 const sourceFill = useSourceFill(computed(() => sourceFillChannel(route.query.source_fill)))
 const sourceFillAvailable = computed(() => Boolean(sourceFillChannel(route.query.source_fill)) && sourceFill.bridgeReady.value)
+// In the extension side panel the page shows only the lesson switcher and the editor, and opens
+// scrolled to the editor; what the panel keeps open is remembered in this browser.
+const panel = inExtensionPanel()
+const panelUi = usePanelUiState()
+const editorAnchor = ref<HTMLElement | null>(null)
+watch(() => [loading.value, selectedReport.value?.id] as const, async ([isLoading, reportId]) => {
+    if (!panel || isLoading || !reportId) return
+    await nextTick()
+    const reduced = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    editorAnchor.value?.scrollIntoView?.({ block: 'start', behavior: reduced ? 'auto' : 'smooth' })
+})
 async function fillSource() {
     const reportId = selectedReport.value?.id
     if (!reportId) return

@@ -103,8 +103,15 @@
             "previous_title": "Most recent attended progress",
             "completed": "Completed",
             "incomplete": "Not completed",
-            "view_report": "View full report"
+            "view_report": "View full report",
+            "lesson_short": "Lesson {sequence}",
+            "summary_title": "Progress notes",
+            "summary_gaps": "{count} lessons missing",
+            "summary_previous": "last {lesson}",
+            "summary_none": "Nothing to check"
         },
+        "formatting_toggle": "Format",
+        "formatting_toggle_label": "Show or hide the formatting toolbar for {field}",
         "lesson_selector_label": "Lesson",
         "select_lesson": "Select a lesson",
         "lesson_completed": "Lesson Completed",
@@ -374,6 +381,13 @@
         "sending": "Saving and sending to the teaching site…",
         "sent": "Sent to the teaching site. Confirm the fields to fill in on the report to the left; you still submit it there yourself.",
         "failed": "Couldn't send to the teaching site ({reason}). Make sure the report on the left is still open, then try again.",
-        "date_missing": "This student has no lesson on {date}; showing the nearest one instead."
+        "date_missing": "This student has no lesson on {date}; showing the nearest one instead.",
+        "hint_short": "Saves, then sends back to the teaching site on the left"
+    },
+    "panel": {
+        "previous": "Previous lesson",
+        "next": "Next lesson",
+        "calendar": "Choose another date",
+        "koding_check": "Homework check"
     }
 }

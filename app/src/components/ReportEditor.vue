@@ -1,5 +1,5 @@
 <template>
-    <div class="report-editor bg-white rounded-lg shadow-sm p-4 sm:p-6 relative min-h-[400px]" @focusin="handleEditorFieldFocus" @focusout="handleEditorFieldBlur">
+    <div class="report-editor bg-white rounded-lg shadow-sm relative min-h-[400px]" :class="props.compact ? 'p-3' : 'p-4 sm:p-6'" @focusin="handleEditorFieldFocus" @focusout="handleEditorFieldBlur">
         <!-- Loading Overlay -->
         <div v-if="props.loading"
             class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/60 backdrop-blur-[2px] rounded-lg transition-all duration-300">
@@ -11,9 +11,10 @@
             <span class="text-sm font-bold text-gray-500">{{ $t('report.loading_full') }}</span>
         </div>
 
-        <!-- Header -->
+        <!-- Header (compact: title dropped, status and tools share one row) -->
+        <div :class="props.compact ? 'mb-3 flex flex-wrap items-center gap-x-3 gap-y-1' : 'contents'" data-testid="report-editor-header">
         <div class="flex items-center justify-between gap-3">
-            <h3 class="text-lg font-semibold text-gray-800">
+            <h3 v-if="!props.compact" class="text-lg font-semibold text-gray-800">
                 {{ props.title || $t('report.editor.title') }}
             </h3>
             <div class="flex min-w-0 flex-wrap items-center justify-end gap-2">
@@ -97,8 +98,8 @@
                 </span>
             </div>
 
-            <!-- Delete Button -->
-            <button v-if="props.reportId" @click="handleDeleteReport"
+            <!-- Delete Button (not in the side panel: too easy to hit by mistake there) -->
+            <button v-if="props.reportId && !props.compact" @click="handleDeleteReport" data-testid="report-delete"
                 class="text-sm font-medium text-red-500 hover:text-red-700 flex items-center gap-1 focus:outline-none"
                 :title="$t('report.editor.delete_report')">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
@@ -108,6 +109,7 @@
                 </svg>
                 <span class="hidden sm:inline">{{ $t('report.editor.delete_report') }}</span>
             </button>
+        </div>
         </div>
 
         <!-- Unsaved draft kept on this device -->
@@ -131,7 +133,7 @@
         <!-- Lesson Selection & Completion  -->
         <div class="grid grid-cols-1">
             <!-- Lesson Selection -->
-            <div class="mb-6">
+            <div :class="props.compact ? 'mb-4' : 'mb-6'">
                 <div class="flex items-center justify-between mb-2">
                     <div class="flex items-center gap-2">
                         <label class="block text-sm font-medium text-gray-700">
@@ -160,13 +162,14 @@
                     </div>
                     <!-- Enrollment External Link Button -->
                     <a v-if="safeExternalHref(initialEnrollmentExternalLink)" :href="safeExternalHref(initialEnrollmentExternalLink) || undefined" target="_blank" rel="noopener noreferrer"
+                        :title="$t('report.editor.view_external_report')" :aria-label="$t('report.editor.view_external_report')"
                         class="text-xs flex items-center gap-1 text-blue-600 hover:text-blue-800 font-bold bg-blue-50 px-2 py-1 rounded-lg border border-blue-100 hover:border-blue-300 transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                         </svg>
-                        {{ $t('report.editor.view_external_report') || $t('report.editor.course_folder') }}
+                        <span v-if="!props.compact">{{ $t('report.editor.view_external_report') || $t('report.editor.course_folder') }}</span>
                     </a>
                 </div>
                 <BaseDropdown data-collab-field="lesson" v-model="selectedLessonId" :options="lessonOptions" :disabled="disabled"
@@ -174,7 +177,15 @@
                 <section v-if="progressContextLoading || progressContextError || progressGaps.length || previousProgressReport"
                     class="mt-3 rounded-xl border px-3 py-3 sm:px-4"
                     :class="progressContextError ? 'border-rose-200 bg-rose-50' : 'border-amber-200 bg-amber-50'"
-                    :aria-busy="progressContextLoading" aria-live="polite" aria-atomic="true">
+                    :aria-busy="progressContextLoading" aria-live="polite" aria-atomic="true" data-testid="progress-context">
+                    <button v-if="props.compact" type="button" data-testid="progress-summary"
+                        class="flex min-h-[36px] w-full cursor-pointer items-center gap-2 text-left text-sm"
+                        :aria-expanded="panelUi.progressOpen" @click="panelUi.progressOpen = !panelUi.progressOpen">
+                        <svg class="h-4 w-4 shrink-0 transition-transform duration-200 motion-reduce:transition-none" :class="{ 'rotate-90': panelUi.progressOpen }" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                        <span class="font-bold text-amber-950">{{ $t('report.editor.progress_check.summary_title') }}</span>
+                        <span class="min-w-0 truncate text-slate-700">{{ progressSummary }}</span>
+                    </button>
+                    <div v-show="!props.compact || panelUi.progressOpen" :class="{ 'mt-2': props.compact }">
                     <p v-if="progressContextLoading" class="text-sm text-slate-600" role="status">{{ $t('report.editor.progress_check.loading') }}</p>
                     <div v-else-if="progressContextError" class="flex flex-wrap items-center justify-between gap-2 text-sm text-rose-800" role="status">
                         <span>{{ $t('report.editor.progress_check.load_error') }}</span>
@@ -202,14 +213,15 @@
                                 @click="viewPreviousProgressReport">{{ $t('report.editor.progress_check.view_report') }}</button>
                         </div>
                     </div>
+                    </div>
                 </section>
             </div>
 
             <!-- Source report (imported) -->
-            <SourceReportLink :identity="sourceIdentity" class="mb-4" />
+            <SourceReportLink v-if="!props.compact" :identity="sourceIdentity" class="mb-4" />
 
             <!-- Report External Link Input -->
-            <div class="mb-4">
+            <div v-if="!props.compact" class="mb-4">
                 <label class="block text-xs font-medium text-gray-600 mb-1">
                     {{ $t('report.editor.report_link_label') }}
                 </label>
@@ -358,7 +370,7 @@
         </div>
 
         <!-- Editor Font Size Stepper -->
-        <div class="flex items-center gap-4 mb-4 justify-end">
+        <div v-if="!props.compact" class="flex items-center gap-4 mb-4 justify-end">
             <div class="flex items-center gap-1 bg-gray-50 border border-gray-100 rounded-xl p-1 shadow-sm select-none touch-manipulation">
                 <button @click="preferences.adjustEditorScale(-preferences.STEP)"
                     class="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-500 hover:text-emerald-600 hover:border-emerald-200 hover:bg-emerald-50 transition-all font-bold text-xs shadow-sm">
@@ -382,6 +394,11 @@
                         d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
                 </svg>
                 {{ $t('report.editor.contact_notes_label') }}
+                <button v-if="props.compact && preferences.editorSettings.formattingEnabled" type="button" data-testid="format-toggle-contact"
+                    class="ml-auto inline-flex min-h-[36px] cursor-pointer items-center rounded-md px-2 text-xs font-semibold transition-colors duration-200"
+                    :class="panelUi.toolbars.contact ? 'bg-emerald-50 text-emerald-700' : 'text-gray-500 hover:bg-gray-100'"
+                    :aria-pressed="panelUi.toolbars.contact" :aria-label="$t('report.editor.formatting_toggle_label', { field: $t('report.editor.contact_notes_label') })"
+                    @click.prevent="panelUi.toolbars.contact = !panelUi.toolbars.contact">{{ $t('report.editor.formatting_toggle') }}</button>
             </label>
             <CollaborativeTextEditor
                 :key="'collab-contact-notes'"
@@ -393,7 +410,7 @@
                 :provider="awarenessProvider"
                 :disabled="props.disabled"
                 :formatting-enabled="preferences.editorSettings.formattingEnabled"
-                :toolbar-visible="preferences.editorSettings.toolbarVisible"
+                :toolbar-visible="toolbarVisible('contact')"
                 :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
                 preset="notes"
                 :font-scale="preferences.editorFontScale"
@@ -405,7 +422,7 @@
             <!-- Fallback standard editor if ydoc not ready -->
             <TextEditor v-else :key="'plain-contact-notes'" ref="contactNotesEditorRef" v-model="contactNotesEditorValue" preset="notes" :disabled="props.disabled"
                 :formatting-enabled="preferences.editorSettings.formattingEnabled"
-                :toolbar-visible="preferences.editorSettings.toolbarVisible"
+                :toolbar-visible="toolbarVisible('contact')"
                 :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
                 :font-scale="preferences.editorFontScale" :min-height="120"
                 :placeholder="$t('report.editor.contact_notes_placeholder')"
@@ -421,6 +438,11 @@
                 </svg>
                 {{ $t('report.editor.class_notes_label') }}
                 <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.class_notes_subtitle') }}</span>
+                <button v-if="props.compact && preferences.editorSettings.formattingEnabled" type="button" data-testid="format-toggle-class"
+                    class="ml-auto inline-flex min-h-[36px] cursor-pointer items-center rounded-md px-2 text-xs font-semibold transition-colors duration-200"
+                    :class="panelUi.toolbars.class ? 'bg-emerald-50 text-emerald-700' : 'text-gray-500 hover:bg-gray-100'"
+                    :aria-pressed="panelUi.toolbars.class" :aria-label="$t('report.editor.formatting_toggle_label', { field: $t('report.editor.class_notes_label') })"
+                    @click.prevent="panelUi.toolbars.class = !panelUi.toolbars.class">{{ $t('report.editor.formatting_toggle') }}</button>
             </label>
             <CollaborativeTextEditor
                 :key="'collab-class-notes'"
@@ -432,7 +454,7 @@
                 :provider="awarenessProvider"
                 :disabled="props.disabled"
                 :formatting-enabled="preferences.editorSettings.formattingEnabled"
-                :toolbar-visible="preferences.editorSettings.toolbarVisible"
+                :toolbar-visible="toolbarVisible('class')"
                 :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
                 preset="notes"
                 :font-scale="preferences.editorFontScale"
@@ -444,7 +466,7 @@
                 @activity="handleCollaborationActivity('classNotes', $event)" />
             <TextEditor v-else :key="'plain-class-notes'" ref="classNotesEditorRef" v-model="classNotesEditorValue" preset="notes" :disabled="props.disabled"
                 :formatting-enabled="preferences.editorSettings.formattingEnabled"
-                :toolbar-visible="preferences.editorSettings.toolbarVisible"
+                :toolbar-visible="toolbarVisible('class')"
                 :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
                 :font-scale="preferences.editorFontScale" :min-height="140" mono
                 :placeholder="$t('report.editor.class_notes_placeholder')"
@@ -464,6 +486,11 @@
                         }}</span>
                 </span>
                 <span class="flex items-center gap-3">
+                    <button v-if="props.compact && preferences.editorSettings.formattingEnabled" type="button" data-testid="format-toggle-learning"
+                    class="inline-flex min-h-[36px] cursor-pointer items-center rounded-md px-2 text-xs font-semibold transition-colors duration-200"
+                    :class="panelUi.toolbars.learning ? 'bg-emerald-50 text-emerald-700' : 'text-gray-500 hover:bg-gray-100'"
+                    :aria-pressed="panelUi.toolbars.learning" :aria-label="$t('report.editor.formatting_toggle_label', { field: $t('report.editor.learning_report_label') })"
+                    @click.prevent="panelUi.toolbars.learning = !panelUi.toolbars.learning">{{ $t('report.editor.formatting_toggle') }}</button>
                     <span v-if="wordCount > 0" class="text-xs text-gray-500">
                         {{ wordCount }} {{ $t('report.editor.word_count') }} · {{ characterCount }} {{
                             $t('report.editor.character_count') }}
@@ -493,7 +520,7 @@
                 :provider="awarenessProvider"
                 :disabled="props.disabled"
                 :formatting-enabled="preferences.editorSettings.formattingEnabled"
-                :toolbar-visible="preferences.editorSettings.toolbarVisible"
+                :toolbar-visible="toolbarVisible('learning')"
                 :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
                 preset="report"
                 :font-scale="preferences.editorFontScale"
@@ -507,7 +534,7 @@
                 :placeholder="props.placeholder || $t('report.editor.learning_report_placeholder')"
                 :disabled="props.disabled"
                 :formatting-enabled="preferences.editorSettings.formattingEnabled"
-                :toolbar-visible="preferences.editorSettings.toolbarVisible"
+                :toolbar-visible="toolbarVisible('learning')"
                 :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
                 :font-scale="preferences.editorFontScale" :min-height="300" mono
                 @change="handleTextEditorChange('content', $event)" />
@@ -737,6 +764,7 @@ import ReportVersionHistoryModal from '@/components/ReportVersionHistoryModal.vu
 import { ReportTemplateService } from '@/services/report/ReportTemplateService'
 import { CopyTemplateService, type CopyTemplateLoadOption } from '@/services/copy_template/CopyTemplateService'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
+import { usePanelUiState, type PanelToolbar } from '@/composables/usePanelUiState'
 import { useToast } from 'vue-toastification'
 import { useFeedback } from '@/composables/useFeedback'
 import { useReportCollab } from '@/composables/useReportCollab'
@@ -806,7 +834,7 @@ interface Props {
     initialEnrollmentExternalLink?: string // 課程外部連結
     sourceIdentity?: SourceReportIdentity | null // 匯入報告的原站身分
     initialCreatedAt?: string // 建立時間
-    compact?: boolean // 是否為緊湊模式 (for split view)
+    compact?: boolean // 緊湊模式：擴充功能側邊欄中只保留要填寫的內容
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -917,6 +945,9 @@ const selectedReportTemplateModes = ref<Record<string, string>>({
 })
 
 const preferences = usePreferencesStore()
+// Compact mode keeps each formatting toolbar behind its own 格式 toggle, remembered in this browser.
+const panelUi = usePanelUiState()
+const toolbarVisible = (field: PanelToolbar) => props.compact ? panelUi.toolbars[field] : preferences.editorSettings.toolbarVisible
 const toast = useToast()
 const { errorKey, reportError } = useFeedback()
 const effectiveAutoSaveEnabled = computed(() => props.autoSaveEnabled ?? preferences.editorSettings.autoSave.enabled)
@@ -2140,6 +2171,19 @@ const previousProgressReport = computed(() => {
     if (!report) return null
     const lesson = props.availableLessons?.find((item) => item.id === report.lesson_id)
     return lesson ? { report, lesson } : null
+})
+// Compact (side panel): the progress notes collapse into this one line.
+const progressSummary = computed(() => {
+    if (progressContextLoading.value) return t('report.editor.progress_check.loading')
+    if (progressContextError.value) return t('report.editor.progress_check.load_error')
+    const parts: string[] = []
+    if (progressGaps.value.length) parts.push(t('report.editor.progress_check.summary_gaps', { count: progressGaps.value.length }))
+    const previous = previousProgressReport.value
+    if (previous) {
+        const lesson = [t('report.editor.progress_check.lesson_short', { sequence: previous.lesson.sequence }), previous.report.progress_letter].filter(Boolean).join(' ')
+        parts.push(t('report.editor.progress_check.summary_previous', { lesson }))
+    }
+    return parts.join(' · ') || t('report.editor.progress_check.summary_none')
 })
 
 async function loadProgressContext() {
