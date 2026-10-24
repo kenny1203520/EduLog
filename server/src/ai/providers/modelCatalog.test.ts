@@ -40,12 +40,30 @@ describe('fetchModelCatalog', () => {
     expect(ids(catalog, true)).toEqual(['anthropic/claude-sonnet-5.5'])
   })
 
-  it('lists local Ollama models as free and uses the credential base URL', async () => {
+  it('lists Ollama models with full IDs, free prices, and the optional Bearer token', async () => {
     const fetchImpl = reply({ models: [{ name: 'qwen3.5:9b' }, { name: 'nomic-embed-text' }] })
-    const catalog = await fetchModelCatalog({ provider: 'ollama', authType: 'none', baseUrl: 'http://ollama:11434/' }, fetchImpl)
-    expect(fetchImpl.mock.calls[0][0]).toBe('http://ollama:11434/api/tags')
+    const catalog = await fetchModelCatalog({ provider: 'ollama', authType: 'api_key', apiKey: 'ollama-token', baseUrl: 'https://ollama.example.test/prefix/' }, fetchImpl)
+    expect(fetchImpl.mock.calls[0][0]).toBe('https://ollama.example.test/prefix/api/tags')
+    expect(fetchImpl.mock.calls[0][1].headers.authorization).toBe('Bearer ollama-token')
     expect(catalog.supported && catalog.models.find((m) => m.id === 'qwen3.5:9b')).toMatchObject({ textCapable: true, priceInputPerMtok: 0 })
     expect(ids(catalog, true)).toEqual(['qwen3.5:9b'])
+  })
+
+  it('does not send Authorization for tokenless Ollama and caps catalog responses', async () => {
+    const noTokenFetch = reply({ models: [{ name: 'qwen3:8b' }] })
+    await fetchModelCatalog({ provider: 'ollama', authType: 'none', baseUrl: 'http://ollama:11434' }, noTokenFetch)
+    expect(noTokenFetch.mock.calls[0][1].headers.authorization).toBeUndefined()
+
+    const largeFetch = vi.fn().mockResolvedValue(new Response('x'.repeat(2 * 1024 * 1024 + 1), { status: 200 }))
+    const result = await fetchModelCatalog({ provider: 'ollama', authType: 'none', baseUrl: 'http://ollama:11434' }, largeFetch)
+    expect(result).toEqual({ supported: false, reason: 'Model list response exceeds 2 MiB' })
+  })
+
+  it('returns safe manual-entry outcomes for TLS and timeout failures', async () => {
+    for (const message of ['certificate verify failed', 'request timed out']) {
+      const failedFetch = vi.fn().mockRejectedValue(new Error(message))
+      expect(await fetchModelCatalog({ provider: 'ollama', authType: 'none', baseUrl: 'https://ollama.example.com' }, failedFetch)).toEqual({ supported: false, reason: message })
+    }
   })
 
   it('falls back to manual entry for ChatGPT plans, missing keys and errors', async () => {

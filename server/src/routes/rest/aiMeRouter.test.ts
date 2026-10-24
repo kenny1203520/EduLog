@@ -44,7 +44,7 @@ function memoryDb(tables: Record<string, Row[]>) {
 
 const config = { AI_SECRET_KEY: Buffer.alloc(32, 3).toString('base64'), EDULOG_WEB_BASE_URL: 'https://edulog.example' } as ApiConfig
 
-function app(tables: Record<string, Row[]>, userId = 'u1', fetchImpl: typeof fetch = fetch, pending = new PendingPkceStore(), routerConfig: ApiConfig = config, chatgptPending = new PendingPkceStore()) {
+function app(tables: Record<string, Row[]>, userId = 'u1', fetchImpl: typeof fetch = fetch, pending = new PendingPkceStore(), routerConfig: ApiConfig = config, chatgptPending = new PendingPkceStore(), ollamaFetchFactory?: (baseUrl: string) => typeof fetch) {
   const instance = express()
   instance.use(express.json())
   instance.use((req, _res, next) => {
@@ -53,7 +53,7 @@ function app(tables: Record<string, Row[]>, userId = 'u1', fetchImpl: typeof fet
     req.auditContext = {} as never
     next()
   })
-  instance.use('/api', createAiMeRouter(routerConfig, pending, fetchImpl, chatgptPending))
+  instance.use('/api', createAiMeRouter(routerConfig, pending, fetchImpl, chatgptPending, undefined, ollamaFetchFactory))
   instance.use(errorHandler)
   return instance
 }
@@ -71,9 +71,65 @@ describe('personal AI credentials', () => {
     expect(JSON.stringify(listed.body)).not.toContain('secret_ciphertext')
   })
 
-  it('refuses personal Ollama or custom endpoints', async () => {
-    const response = await request(app({ ai_credentials: [] })).post('/api/ai/me/credentials').send({ provider: 'ollama', label: 'x', secret: 'y' })
-    expect(response.status).toBe(422)
+  it('stores personal Ollama endpoints and keeps auth type in sync when removing a token', async () => {
+    const tables: Record<string, Row[]> = { ai_credentials: [], ai_models: [] }
+    const created = await request(app(tables)).post('/api/ai/me/credentials').send({ provider: 'ollama', label: 'My Ollama', base_url: 'https://ollama.example.com/proxy', secret: 'bearer-secret' })
+    expect(created.status).toBe(201)
+    expect(created.body.data).toMatchObject({ provider: 'ollama', auth_type: 'api_key', base_url: 'https://ollama.example.com/proxy', secret_hint: 'bearer-…cret' })
+    expect(JSON.stringify(created.body)).not.toContain('bearer-secret')
+    expect(String(tables.ai_credentials[0].secret_ciphertext)).not.toContain('bearer-secret')
+
+    const id = String(tables.ai_credentials[0].id)
+    const oldCiphertext = tables.ai_credentials[0].secret_ciphertext
+    const endpoint = await request(app(tables)).patch(`/api/ai/me/credentials/${id}`).send({ base_url: 'https://models.example.com/ollama' })
+    expect(endpoint.status).toBe(200)
+    expect(tables.ai_credentials[0]).toMatchObject({ auth_type: 'api_key', secret_ciphertext: oldCiphertext, base_url: 'https://models.example.com/ollama' })
+
+    const removed = await request(app(tables)).patch(`/api/ai/me/credentials/${id}`).send({ secret: null })
+    expect(removed.status).toBe(200)
+    expect(tables.ai_credentials[0]).toMatchObject({ auth_type: 'none', secret_ciphertext: null, secret_hint: null })
+  })
+
+  it('allows a tokenless personal Ollama endpoint and adds a token later', async () => {
+    const tables: Record<string, Row[]> = { ai_credentials: [], ai_models: [] }
+    const created = await request(app(tables)).post('/api/ai/me/credentials').send({ provider: 'ollama', label: 'Public model', base_url: 'https://ollama.example.com' })
+    expect(created.status).toBe(201)
+    expect(created.body.data).toMatchObject({ provider: 'ollama', auth_type: 'none', secret_hint: null, base_url: 'https://ollama.example.com' })
+    expect(tables.ai_credentials[0].secret_ciphertext).toBeNull()
+
+    const id = String(tables.ai_credentials[0].id)
+    const updated = await request(app(tables)).patch(`/api/ai/me/credentials/${id}`).send({ secret: 'replacement-token' })
+    expect(updated.status).toBe(200)
+    expect(tables.ai_credentials[0].auth_type).toBe('api_key')
+    expect(tables.ai_credentials[0].secret_ciphertext).not.toBeNull()
+    expect(JSON.stringify(updated.body)).not.toContain('replacement-token')
+  })
+
+  it('rejects private, non-HTTPS and custom personal endpoints', async () => {
+    for (const base_url of ['http://ollama.example.com', 'https://127.0.0.1:11434', 'https://user:pass@ollama.example.com', 'https://ollama.example.com/?token=x']) {
+      const response = await request(app({ ai_credentials: [] })).post('/api/ai/me/credentials').send({ provider: 'ollama', label: 'x', base_url })
+      expect(response.status, base_url).toBe(422)
+    }
+    const custom = await request(app({ ai_credentials: [] })).post('/api/ai/me/credentials').send({ provider: 'anthropic', label: 'x', secret: 'key', base_url: 'https://other.example.com' })
+    expect(custom.status).toBe(422)
+  })
+
+  it('uses the saved token and reverse-proxy base URL for the personal Ollama catalog', async () => {
+    const tables: Record<string, Row[]> = { ai_credentials: [], ai_models: [] }
+    const calls: Array<{ url: string, authorization?: string }> = []
+    const response = await request(app(tables, 'u1', fetch, new PendingPkceStore(), config, new PendingPkceStore(), (baseUrl) => vi.fn(async (url, init) => {
+      calls.push({ url: String(url), authorization: new Headers(init?.headers).get('authorization') ?? undefined })
+      return new Response(JSON.stringify({ models: [{ name: 'qwen3:8b-instruct-q4_K_M' }] }), { status: 200 })
+    }))).post('/api/ai/me/credentials').send({ provider: 'ollama', label: 'Ollama', base_url: 'https://ollama.example.com/prefix/', secret: 'catalog-token' })
+    expect(response.status).toBe(201)
+    const id = String(response.body.data.id)
+    const catalog = await request(app(tables, 'u1', fetch, new PendingPkceStore(), config, new PendingPkceStore(), (baseUrl) => vi.fn(async (url, init) => {
+      calls.push({ url: String(url), authorization: new Headers(init?.headers).get('authorization') ?? undefined })
+      return new Response(JSON.stringify({ models: [{ name: 'qwen3:8b-instruct-q4_K_M' }] }), { status: 200 })
+    }))).get(`/api/ai/me/credentials/${id}/catalog?refresh=1`)
+    expect(catalog.status).toBe(200)
+    expect(catalog.body.data.models[0].id).toBe('qwen3:8b-instruct-q4_K_M')
+    expect(calls.at(-1)).toEqual({ url: 'https://ollama.example.com/prefix/api/tags', authorization: 'Bearer catalog-token' })
   })
 
   it('hides other users’ credentials', async () => {

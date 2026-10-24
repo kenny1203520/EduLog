@@ -4,6 +4,7 @@ import { createOpenAI } from '@ai-sdk/openai'
 import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 import type { LanguageModel } from 'ai'
 import { createOllama } from 'ai-sdk-ollama'
+import { createPublicOllamaFetch } from './publicOllamaTransport.js'
 
 export const AI_PROVIDERS = ['anthropic', 'openai', 'google', 'openrouter', 'ollama'] as const
 export type AiProvider = typeof AI_PROVIDERS[number]
@@ -16,6 +17,8 @@ export interface ModelTarget {
   apiKey?: string
   /** Optional override (proxy, self-hosted endpoint); required for Ollama outside localhost. */
   baseUrl?: string
+  /** Personal credentials are restricted to public HTTPS; site credentials retain administrator network access. */
+  credentialScope?: 'site' | 'user'
 }
 
 export class ModelTargetError extends Error {
@@ -44,6 +47,10 @@ export function createLanguageModel(target: ModelTarget): LanguageModel {
     case 'openrouter':
       return createOpenRouter({ apiKey, baseURL: baseUrl })(modelId)
     case 'ollama':
-      return createOllama({ baseURL: baseUrl ?? 'http://localhost:11434' })(modelId)
+      return createOllama({
+        baseURL: baseUrl ?? 'http://localhost:11434',
+        apiKey,
+        ...(target.credentialScope === 'user' && baseUrl ? { fetch: createPublicOllamaFetch(baseUrl) } : {}),
+      })(modelId)
   }
 }

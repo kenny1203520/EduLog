@@ -153,7 +153,7 @@ describe('ReportGenerationService', () => {
     const prepared = await svc.prepare(request)
     const outcome = await svc.run(prepared)
 
-    expect(targets).toEqual([{ provider: 'anthropic', modelId: 'claude-sonnet-5-5', apiKey: 'sk-ant-secret', baseUrl: undefined }])
+    expect(targets).toEqual([{ provider: 'anthropic', modelId: 'claude-sonnet-5-5', apiKey: 'sk-ant-secret', baseUrl: undefined, credentialScope: 'site' }])
     expect(capture.prompt).not.toMatch(/王小明|小明|陳大文|林雅婷/)
     expect(capture.prompt).toContain('多鼓勵[學生A]')
     expect(outcome.draft.sections[0].body).toBe('王小明完成迴圈，林雅婷很肯定。')
@@ -408,7 +408,7 @@ describe('ChatGPT plan credentials', () => {
       resolveToken: async (model) => model.authType === 'oauth' ? 'fresh-access-token' : undefined,
     })
     await svc.run(await svc.prepare(request))
-    expect(targets).toEqual([{ provider: 'openai', modelId: 'claude-sonnet-5-5', apiKey: 'fresh-access-token', baseUrl: undefined }])
+    expect(targets).toEqual([{ provider: 'openai', modelId: 'claude-sonnet-5-5', apiKey: 'fresh-access-token', baseUrl: undefined, credentialScope: 'user' }])
   })
 
   it('reports a 429 from the plan as the plan limit, without charging', async () => {
