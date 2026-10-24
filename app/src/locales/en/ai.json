@@ -127,11 +127,11 @@
     "openai": "OpenAI",
     "google": "Google Gemini",
     "openrouter": "OpenRouter",
-    "ollama": "Ollama (local models)"
+    "ollama": "Ollama"
   },
   "settings": {
     "personal_title": "My AI credentials",
-    "personal_description": "Add your own API key or sign in with OpenRouter to generate reports on your own quota instead of the site's. Content is still de-identified first.",
+    "personal_description": "Add your own API key, public Ollama server, or sign in with OpenRouter to generate reports on your own quota instead of the site's. Content is still de-identified first.",
     "storage_unavailable": "AI_SECRET_KEY is not configured on the server, so keys cannot be stored yet.",
     "openrouter_title": "Sign in with OpenRouter",
     "openrouter_description": "Creates a key that belongs to you; usage is billed to your OpenRouter credits and works with Claude, GPT, Gemini and more.",
@@ -143,6 +143,8 @@
     "label": "Name",
     "api_key": "API key",
     "api_key_optional": "API key (optional)",
+    "ollama_public_help": "Use a public HTTPS Ollama endpoint. Private network and localhost addresses are blocked; a reverse proxy may require a Bearer token.",
+    "remove_token": "Remove token",
     "key_storage_note": "Keys are stored encrypted; only the last four characters are shown afterwards.",
     "add_key": "Add",
     "no_credentials": "No credentials yet.",
@@ -282,6 +284,7 @@
     "picker_price": "in ${input} / out ${output} per million tokens",
     "picker_no_results": "Not in the list; choose Other to type it",
     "picker_refresh": "Reload the model list",
+    "picker_retry": "Retry model list",
     "picker_show_all": "Show all (including {n} non-text models)",
     "picker_manual_chatgpt": "ChatGPT plans don't publish a model list; type the model ID.",
     "picker_manual_unavailable": "The model list for this source isn't available right now; type the model ID.",

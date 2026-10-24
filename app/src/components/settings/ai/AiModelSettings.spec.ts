@@ -9,6 +9,7 @@ const service = vi.hoisted(() => ({
     catalog: vi.fn(),
     updateSiteModel: vi.fn(),
     updateMyModel: vi.fn(),
+    updateMyCredential: vi.fn(),
     addSiteModel: vi.fn(),
 }))
 vi.mock('@/services/ai/AiSettingsService', async (importOriginal) => ({
@@ -49,6 +50,22 @@ describe('ModelPicker', () => {
         expect(wrapper.text()).toContain('ChatGPT 方案沒有提供模型清單')
         await wrapper.find('input').setValue('gpt-5')
         expect(wrapper.emitted('pick')?.at(-1)).toEqual([{ id: 'gpt-5', name: 'gpt-5' }])
+        expect(wrapper.text()).toContain('重試載入模型')
+        service.catalog.mockResolvedValue({ supported: true, fetchedAt: 'new', models: [{ id: 'qwen3:8b-instruct-q4_K_M', name: 'qwen3:8b-instruct-q4_K_M', textCapable: true }] })
+        await wrapper.findAll('button').find((button) => button.text().includes('重試載入模型'))!.trigger('click')
+        await flushPromises()
+        expect(service.catalog).toHaveBeenLastCalledWith('personal', 'c2', true)
+    })
+
+    it('keeps manual entry available for an empty Ollama catalog and preserves full model IDs', async () => {
+        service.catalog.mockResolvedValue({ supported: true, fetchedAt: 'x', models: [] })
+        const wrapper = mount(ModelPicker, { props: { scope: 'personal', credentialId: 'ollama' }, global })
+        await flushPromises()
+        const select = wrapper.findComponent({ name: 'SearchableSelect' })
+        expect((select.props('options') as Array<{ value: string }>).map((option) => option.value)).toEqual(['__other__'])
+        await select.vm.$emit('update:modelValue', '__other__')
+        await wrapper.find('input').setValue('qwen3:8b-instruct-q4_K_M')
+        expect(wrapper.emitted('pick')?.at(-1)).toEqual([{ id: 'qwen3:8b-instruct-q4_K_M', name: 'qwen3:8b-instruct-q4_K_M' }])
     })
 })
 
@@ -95,5 +112,44 @@ describe('AiCredentialList model editing', () => {
         await flushPromises()
         await wrapper.findAll('button').find((b) => b.text() === '設為預設')!.trigger('click')
         expect(wrapper.emitted('set-default')).toEqual([['m1']])
+    })
+
+    it('updates a personal Ollama URL and token, clearing the pending picker choice and reloading the catalog', async () => {
+        const ollamaCredential: AiCredentialDTO = {
+            id: 'personal-ollama', scope: 'user', provider: 'ollama', auth_type: 'none', secret_hint: null,
+            base_url: 'https://old.example.com/ollama', label: 'My Ollama', status: 'active', last_verified_at: null, models: [],
+        }
+        service.catalog.mockResolvedValue({ supported: true, fetchedAt: 'x', models: [{ id: 'old-model', name: 'old-model', textCapable: true }] })
+        service.updateMyCredential.mockImplementation(async (_id: string, patch: Record<string, unknown>) => ({
+            ...ollamaCredential,
+            ...patch,
+            auth_type: patch.secret === null ? 'none' : patch.secret ? 'api_key' : ollamaCredential.auth_type,
+            models: [],
+        }))
+        const wrapper = mount(AiCredentialList, { props: { mode: 'personal', modelValue: [ollamaCredential] }, global })
+        await flushPromises()
+        const modelSelect = wrapper.findComponent({ name: 'SearchableSelect' })
+        await modelSelect.vm.$emit('update:modelValue', 'old-model')
+        expect(modelSelect.props('modelValue')).toBe('old-model')
+
+        const urlForm = wrapper.findAll('form').find((form) => form.find('input[type="url"]').exists())!
+        await urlForm.find('input[type="url"]').setValue('https://new.example.com/prefix')
+        await urlForm.trigger('submit')
+        await flushPromises()
+        expect(service.updateMyCredential).toHaveBeenCalledWith('personal-ollama', { base_url: 'https://new.example.com/prefix' })
+        expect(service.catalog).toHaveBeenLastCalledWith('personal', 'personal-ollama', true)
+        expect(modelSelect.props('modelValue')).toBe('')
+
+        const tokenForm = wrapper.findAll('form').find((form) => form.find('input[type="password"]').exists())!
+        await tokenForm.find('input[type="password"]').setValue('new-bearer-token')
+        await tokenForm.trigger('submit')
+        await flushPromises()
+        expect(service.updateMyCredential).toHaveBeenLastCalledWith('personal-ollama', { secret: 'new-bearer-token' })
+        expect(service.catalog).toHaveBeenLastCalledWith('personal', 'personal-ollama', true)
+
+        const removeToken = wrapper.findAll('button').find((button) => button.text().includes('移除 token'))!
+        await removeToken.trigger('click')
+        await flushPromises()
+        expect(service.updateMyCredential).toHaveBeenLastCalledWith('personal-ollama', { secret: null })
     })
 })

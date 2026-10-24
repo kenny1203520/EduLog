@@ -97,6 +97,19 @@ describe('MyAiCredentials', () => {
         expect((wrapper.find('input[type="password"]').element as HTMLInputElement).value).toBe('')
         expect(wrapper.text()).toContain('sk-…abcd')
     })
+
+    it('adds a public Ollama endpoint with no token when the optional token is blank', async () => {
+        service.addMyCredential.mockResolvedValue({ id: 'ollama-1', provider: 'ollama', base_url: 'https://ollama.example.com/prefix', auth_type: 'none', models: [] })
+        const wrapper = mount(MyAiCredentials, { global: { plugins: [i18n] } })
+        await flushPromises()
+        await wrapper.find('select').setValue('ollama')
+        await wrapper.find('input[type="url"]').setValue('https://ollama.example.com/prefix')
+        await wrapper.find('form').trigger('submit')
+        await flushPromises()
+
+        expect(service.addMyCredential).toHaveBeenCalledWith({ provider: 'ollama', label: 'Ollama', base_url: 'https://ollama.example.com/prefix' })
+        expect(wrapper.text()).toContain('Ollama')
+    })
 })
 
 describe('MyAiCredentials with ChatGPT', () => {

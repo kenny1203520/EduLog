@@ -20,6 +20,7 @@ const unsupportedReason = ref<string | null>(null)
 const showAll = ref(false)
 const selected = ref('')
 const manualId = ref('')
+let loadRevision = 0
 
 const visible = computed(() => models.value.filter((model) => showAll.value || model.textCapable))
 const hiddenCount = computed(() => models.value.length - models.value.filter((model) => model.textCapable).length)
@@ -41,9 +42,11 @@ function priceText(model: CatalogModel): string {
 }
 
 async function load(refresh = false) {
+    const revision = ++loadRevision
     loading.value = true
     try {
         const catalog = await AiSettingsService.catalog(props.scope, props.credentialId, refresh)
+        if (revision !== loadRevision) return
         if (catalog.supported) {
             models.value = catalog.models
             unsupportedReason.value = null
@@ -52,10 +55,11 @@ async function load(refresh = false) {
             unsupportedReason.value = catalog.reason
         }
     } catch {
+        if (revision !== loadRevision) return
         models.value = []
         unsupportedReason.value = 'request_failed'
     } finally {
-        loading.value = false
+        if (revision === loadRevision) loading.value = false
     }
 }
 
@@ -78,6 +82,7 @@ function typeManual(value: string) {
 function reset() {
     selected.value = ''
     manualId.value = ''
+    emit('pick', null)
 }
 defineExpose({ reset, reload: () => load(true) })
 
@@ -98,14 +103,18 @@ onMounted(() => load())
                 </svg>
             </button>
         </div>
+        <div v-else class="flex flex-wrap items-center gap-2">
+            <p class="min-w-0 flex-1 text-xs text-gray-600">
+                {{ unsupportedReason === 'chatgpt_plan' ? t('ai.settings.picker_manual_chatgpt') : t('ai.settings.picker_manual_unavailable') }}
+            </p>
+            <button type="button" class="min-h-11 rounded-xl border border-gray-200 px-3 text-sm font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                :disabled="loading" @click="load(true)">{{ loading ? t('common.loading') : t('ai.settings.picker_retry') }}</button>
+        </div>
         <label v-if="unsupportedReason === null && hiddenCount > 0" class="flex min-h-11 cursor-pointer items-center gap-2 text-xs font-bold text-gray-600">
             <input v-model="showAll" type="checkbox" class="h-4 w-4 accent-emerald-600" />
             {{ t('ai.settings.picker_show_all', { n: hiddenCount }) }}
         </label>
         <div v-if="manual">
-            <p v-if="unsupportedReason !== null" class="mb-1 text-xs text-gray-600">
-                {{ unsupportedReason === 'chatgpt_plan' ? t('ai.settings.picker_manual_chatgpt') : t('ai.settings.picker_manual_unavailable') }}
-            </p>
             <input :value="manualId" maxlength="200" class="min-h-11 w-full rounded-xl border border-gray-200 px-3 text-sm"
                 :placeholder="t('ai.settings.model_id_placeholder')" :aria-label="t('ai.settings.model_id')"
                 @input="typeManual(($event.target as HTMLInputElement).value)" />
