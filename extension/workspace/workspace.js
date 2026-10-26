@@ -39,7 +39,7 @@ let syncPreferences={fields:{},revision:null},syncDraftOverrides={}
 let frontendSettingsUrl = null
 let integrationCapabilities = {}
 let binding, context, tabs = [], work, classroomCursor = '', mappingCourseCursor = '', activeCourseRoom = '', mappingSearchTimer, busy = false, paused = false, cancelRequested = false, selectedPath = '', sourceContext = null, classSourceReady = false, generation = 0, previewResults = [], batchBytes = 180000, unsaved = false, editTimer, activeReadId = '', activeReadGeneration = 0, readFinished = Promise.resolve(), finishRead = () => {}
-let activeFlow = 'import', continuation = null, unsavedWorkId = '', workHistory = { local: [], remote: null, metadata: [] }, selectedWorkRecord = null, selectedWorkLoad = 0, syncing = false
+let activeFlow = 'import', continuation = null, unsavedWorkId = '', workHistory = { local: [], remote: null, localError: false, remoteError: false, metadata: [] }, selectedWorkRecord = null, selectedWorkLoad = 0, syncing = false
 const workDetailCache=new Map()
 const activeWorks = {import:null}, activeStages = {import:1}
 function currentWorkflow(view) { const identity=work?.type==='import'&&work.snapshot?work.snapshot.records.filter(row=>row.kind==='enrollment'&&!row.sourceSkipped&&!mappingController.validateRow(row,true)).length:0;return workflowState(view,{work:work?.type===view?work:activeWorks[view],previewCount:previewResults.length,unresolved:identity+historyPlan.filter(item=>item.category==='needs').length}) }
@@ -256,7 +256,7 @@ function flow(value) {
   if(value!=='work')work=activeWorks.import||null
   $('import-view').hidden=value!=='import';$('work-view').hidden=value!=='work'
   document.querySelectorAll('[data-flow]').forEach(button=>button.setAttribute('aria-selected',String(button.dataset.flow===value)))
-  if(value==='import'){closeDrawer($('work-detail'),{restoreFocus:false});restoreStage('import')}
+  if(value==='import'){closeDrawer($('work-detail'),{restoreFocus:false});restoreStage()}
   else{closeDrawer($('detail-drawer'),{restoreFocus:false});closeDrawer($('advanced-drawer'),{restoreFocus:false})}
   if(value==='work'&&binding)void runLatest(loadWork,{label:'正在更新工作紀錄'})
   taskStatus()
@@ -414,7 +414,7 @@ async function changeSource() {
   $('source-label').textContent = `${c.sourceOrigin} · ${c.title || c.sourcePath || selectedPath} · ${c.sourcePath || selectedPath}`
   notice('已辨識來源班級，可開始擷取。')
   for (const id of ['mapping','preview-section','import-progress']) $(id).hidden = true
-  restoreStage('import')
+  restoreStage()
   const saved=await send({type:'workspace-store',action:'list'});if(current!==generation)return
   continuation=(saved||[]).find(row=>row.type==='import'&&row.snapshot?.classId===c.classId&&row.sourcePath===(c.sourcePath||selectedPath)&&!['complete','cancelled'].includes(row.status))||null
   $('continue-work').hidden=!continuation;if(continuation)$('collect').disabled=true
@@ -437,9 +437,10 @@ const loadedLessonCourses=new Set(),lessonCatalogLoads=new Map()
 function sourceClassSessions(){const classId=work?.snapshot?.classId,session=$('class-session')?.value;if(!classId||!session)return new Map();return new Map([[String(classId),session==='new'?idFor('class_session',classId):session]])}
 function historyOptions(){return {dateFrom:work?.dateFrom,dateTo:work?.dateTo,includeInternal:$('include-internal-notes').checked,lessons:context?.lessons||[],syncFields:effectiveSyncFields(),sourceClassSessions:sourceClassSessions()}}
 function effectiveSyncFields(record){const base={lesson_id:true,is_completed:true,progress_letter:true,attendance_status:true,absence_reason:true,class_participation:true,classroom_behavior:true,content:true,contact_notes:true,class_notes:false,external_link:true};Object.assign(base,syncPreferences.fields||{},syncDraftOverrides,work?.syncFieldPreferences||{},work?.syncFieldOverrides||{});if(record)Object.assign(base,record.syncFieldOverrides||{});return base}
-function renderSyncFields(){const host=$('sync-field-options');if(!host)return;const current=effectiveSyncFields();for(const [key,label] of syncFields){let wrap=host.querySelector(`[data-sync-choice="${key}"]`),input=wrap?.querySelector('input');if(!wrap){wrap=node('label',undefined,'sync-field-choice');wrap.dataset.syncChoice=key;input=node('input');input.type='checkbox';input.dataset.syncField=key;wrap.append(input,node('span',label));host.append(wrap);input.addEventListener('change',()=>{syncDraftOverrides[key]=input.checked;if(key==='class_notes')$('include-internal-notes').checked=input.checked;if(work){if(key==='class_notes')work.includeInternalNotes=input.checked;work.syncFieldOverrides||={};work.syncFieldOverrides[key]=input.checked;work.syncPreferencesSnapshot={...effectiveSyncFields(),[key]:input.checked};historyWorkChanged();historyView.refreshEditor(historyPlan)}$('sync-preferences-status').textContent=`${work?'本次工作':'目前選擇'}：${label}${input.checked?'會同步':'不同步'}。尚未提交的差異已失效。`})}if(input!==document.activeElement)input.checked=current[key]!==false&&(key!=='class_notes'||$('include-internal-notes').checked)}}
+function refreshHistoryAfterWorkChange(){void historyWorkChanged().then(()=>historyView.refreshEditor(historyPlan)).catch(error=>notice(error.message,true))}
+function renderSyncFields(){const host=$('sync-field-options');if(!host)return;const current=effectiveSyncFields();for(const [key,label] of syncFields){let wrap=host.querySelector(`[data-sync-choice="${key}"]`),input=wrap?.querySelector('input');if(!wrap){wrap=node('label',undefined,'sync-field-choice');wrap.dataset.syncChoice=key;input=node('input');input.type='checkbox';input.dataset.syncField=key;wrap.append(input,node('span',label));host.append(wrap);input.addEventListener('change',()=>{syncDraftOverrides[key]=input.checked;if(key==='class_notes')$('include-internal-notes').checked=input.checked;if(work){if(key==='class_notes')work.includeInternalNotes=input.checked;work.syncFieldOverrides||={};work.syncFieldOverrides[key]=input.checked;work.syncPreferencesSnapshot={...effectiveSyncFields(),[key]:input.checked};refreshHistoryAfterWorkChange()}$('sync-preferences-status').textContent=`${work?'本次工作':'目前選擇'}：${label}${input.checked?'會同步':'不同步'}。尚未提交的差異已失效。`})}if(!input.matches(':focus'))input.checked=current[key]!==false&&(key!=='class_notes'||$('include-internal-notes').checked)}}
 async function loadSyncPreferences(){if(!integrationCapabilities.sync_field_preferences)return;const data=await api('sync-preferences-get',undefined,{query:{source_origin:'https://corp.orangeapple.co',adapter_version:'orange-apple-v1'}});syncPreferences={fields:data.fields||{},revision:data.revision||null};renderSyncFields()}
-async function saveSyncPreferences(){const fields=syncFields.map(([field_key])=>({field_key,enabled:$('sync-field-options').querySelector(`[data-sync-field="${field_key}"]`).checked}));const result=await api('sync-preferences-save',{source_origin:'https://corp.orangeapple.co',adapter_version:'orange-apple-v1',expected_revision:syncPreferences.revision,fields});syncPreferences={fields:result.fields||Object.fromEntries(fields.map(x=>[x.field_key,x.enabled])),revision:result.revision};syncDraftOverrides={};if(work){work.syncFieldPreferences={...syncPreferences.fields};work.syncPreferencesSnapshot={...syncPreferences.fields};work.syncFieldOverrides={};historyWorkChanged();historyView.refreshEditor(historyPlan)}$('sync-preferences-status').textContent='已記住同步欄位預設；可在本次工作或單份報告調整。';renderSyncFields()}
+async function saveSyncPreferences(){const fields=syncFields.map(([field_key])=>({field_key,enabled:$('sync-field-options').querySelector(`[data-sync-field="${field_key}"]`).checked}));const result=await api('sync-preferences-save',{source_origin:'https://corp.orangeapple.co',adapter_version:'orange-apple-v1',expected_revision:syncPreferences.revision,fields});syncPreferences={fields:result.fields||Object.fromEntries(fields.map(x=>[x.field_key,x.enabled])),revision:result.revision};syncDraftOverrides={};if(work){work.syncFieldPreferences={...syncPreferences.fields};work.syncPreferencesSnapshot={...syncPreferences.fields};work.syncFieldOverrides={};await historyWorkChanged();historyView.refreshEditor(historyPlan)}$('sync-preferences-status').textContent='已記住同步欄位預設；可在本次工作或單份報告調整。';renderSyncFields()}
 function updateHistoryPlanLocal(){if(!work?.snapshot)return;historyPlan=planHistory(work.snapshot.records,historyTargets(),historyArchives,historyRoutes,historyOptions());historyView.updateStatus(historyPlan);stage('import',['collect','preview','apply','resume'][activeStages.import-1])}
 function scheduleHistoryPlanForCurrentMapping(){
   if(!work?.snapshot)return
@@ -1372,7 +1373,7 @@ async function loadWork() {
   const tasks=[send({type:'workspace-store',action:'list'}),api('work')]
   if(integrationCapabilities.work_record_metadata)tasks.push((async()=>{let cursor,items=[];do{const page=await api('work-records',undefined,{query:{limit:50,cursor}});items.push(...page.items||[]);cursor=page.next_cursor}while(cursor);return items})())
   const [localResult,remoteResult,metadataResult]=await Promise.allSettled(tasks)
-  workHistory={local:localResult.status==='fulfilled'?localResult.value:null,remote:remoteResult.status==='fulfilled'?remoteResult.value:null,metadata:metadataResult?.status==='fulfilled'?metadataResult.value:[]}
+  workHistory={local:localResult.status==='fulfilled'?localResult.value:null,remote:remoteResult.status==='fulfilled'?remoteResult.value:null,localError:localResult.status==='rejected',remoteError:remoteResult.status==='rejected',metadata:metadataResult?.status==='fulfilled'?metadataResult.value:[]}
   workHistory.metadataError=metadataResult&&metadataResult.status==='rejected'?metadataResult.reason:null
   renderWorkRecords()
   const requested=params.get('work')||location.hash.match(/^#work=([a-f0-9-]{36})$/i)?.[1]
@@ -1419,8 +1420,8 @@ function renderWorkRecords() {
   renderWorkList($('work-list'),{groups:[{key:'open',items:open.map(toRow)},{key:'done',items:done.map(toRow)},{key:'archived',items:archived.map(toRow)}],onSelect:id=>{const item=find(id);if(item)selectWorkRecord(item)},onPrimary:id=>{const item=find(id);if(item)void run(()=>openWorkRecord(item),{label:'正在恢復所選工作'})}})
   const errors=$('work-errors');errors.replaceChildren()
   const errorCard=(key,retry)=>h('div',{class:'notice-card'},icon('circle-alert'),say(h('span'),key),h('button',{type:'button',class:'btn btn-ghost btn-sm',onclick:()=>void runLatest(retry,{label:'正在重試工作紀錄'})},say(h('span'),'ws.log.retry')))
-  if(local===null)errors.append(errorCard('ws.log.local',loadWork))
-  if(remote===null)errors.append(errorCard('ws.log.remote',loadWork))
+  if(workHistory.localError)errors.append(errorCard('ws.log.local',loadWork))
+  if(workHistory.remoteError)errors.append(errorCard('ws.log.remote',loadWork))
   if(workHistory.metadataError)errors.append(h('p',{class:'caption'},'跨裝置工作整理讀取失敗；已載入的本機與伺服器紀錄仍可使用。'))
   $('work-view').dataset.detailOpen=selectedWorkRecord?'true':'false'
   if(selectedWorkRecord){renderWorkDetail(selectedWorkRecord);openDrawer($('work-detail'),{scrim:$('work-scrim'),host:$('work-body'),onClose:()=>{selectedWorkLoad++;selectedWorkRecord=null;renderWorkRecords()}})}
@@ -1625,7 +1626,7 @@ $('open-connection').addEventListener('click', () => void run(async () => { awai
 const today = new Date(), yearAgo = new Date(today); yearAgo.setFullYear(today.getFullYear() - 1)
 $('date-from').value = yearAgo.toISOString().slice(0, 10); $('date-to').value = today.toISOString().slice(0, 10)
 $('all-history').addEventListener('change',()=>{for(const id of ['date-from','date-to'])$(id).disabled=$('all-history').checked})
-$('include-internal-notes').addEventListener('change',()=>{if(!work)return;work.includeInternalNotes=$('include-internal-notes').checked;historyWorkChanged()})
+$('include-internal-notes').addEventListener('change',()=>{if(!work)return;work.includeInternalNotes=$('include-internal-notes').checked;void historyWorkChanged().catch(error=>notice(error.message,true))})
 $('check-history').addEventListener('click',()=>void runLatest(async()=>{const state=historyView.capture();await refreshHistoryPlan();historyView.refreshEditor(historyPlan,state)},{label:'正在重新核對完整歷史'}))
 $('save-sync-preferences')?.addEventListener('click',()=>void run(saveSyncPreferences,{label:'正在保存同步欄位預設'}))
 bridge.onInvalidated(() => { paused = true; ++generation; notice('擴充套件已更新，請重新開啟工作分頁；已保存檢查點可續傳。', true) })

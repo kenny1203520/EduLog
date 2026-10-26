@@ -9,7 +9,7 @@ export function retryHistoryWork(previous) {
   return next
 }
 const rowIdentity = row => row.record?.kind && row.source_id != null ? `${row.record.kind}:${row.source_id}` : null
-const canonical = value => JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item) ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item)
+const canonical = value => JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item) ? Object.fromEntries(Object.keys(item).sort((left, right) => left < right ? -1 : left > right ? 1 : 0).map(key => [key, item[key]])) : item)
 function duplicateError(row) {
   const error = new Error(`${labels[row.record.kind] || row.record.kind}來源 ID ${row.source_id} 有不同內容，請補讀來源並核對此筆後重新產生差異。`)
   error.code = 'SOURCE_ID_CONFLICT'
