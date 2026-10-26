@@ -152,7 +152,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
-        run: node scripts/extension/github-release.mjs extension/dist/release/release.json
+        run: node scripts/extension/github-release.mjs
 
   store:
     if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/extension/') && needs.prepare.outputs.tagged == 'true' && needs.prepare.outputs.distribution == 'store'
