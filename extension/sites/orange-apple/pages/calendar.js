@@ -14,7 +14,7 @@
     description.textContent = tx('目前區域：{area} · 日期：{day}', { area: text(selected) || tx('尚未選擇'), day: text(day) || tx('請選擇日期') })
     const panels = [...(selectedPanel?.querySelectorAll('[id^=region-][id*=weekday-]:not([id$=-tab])') || [])]
     const active = day && selectedPanel?.querySelector(day.getAttribute('href'))
-    const links = active ? [...active.querySelectorAll('a[href]')].filter(classLink) : []
+    const links = active ? [...active.querySelectorAll('a[href]')].filter(link => classLink(link)) : []
     status.textContent = !selected ? tx('請選擇區域以載入課程。') : !panels.length ? tx('正在載入區域課表；若未載入，請重新選擇原站區域。') : !active ? tx('請選擇日期。') : links.length ? tx('目前日期已載入 {count} 個班級入口。', { count: links.length }) : tx('目前已載入的日期沒有課程。')
     for (const alert of content.querySelectorAll('.alert')) if (site.isTerm(text(alert), '請選擇區域')) mark(alert, 'data-edulog-stale-alert', selected ? '' : null)
     }
