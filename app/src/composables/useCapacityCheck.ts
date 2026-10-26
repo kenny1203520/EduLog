@@ -50,7 +50,7 @@ export function useCapacityCheck(sessionIdRef: { value: string }, startDateRef: 
     }
 
     watch([sessionIdRef, startDateRef, generateCountRef], () => {
-        check()
+        void check()
     }, { immediate: true })
 
     return {
