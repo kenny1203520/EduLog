@@ -84,7 +84,6 @@
     logout: 'a[data-method="delete"]',
     locales: '.locale-selector a[href]',
     // "樹林_非凡文理_201教室（菁英） - 週六 第 1 時段 (10:00 ~ 12:00)"
-    className: /^(.*?)\s*-\s*(週[一二三四五六日])\s*第\s*\d+\s*時段\s*\(\s*(\d{1,2}:\d{2})\s*~\s*(\d{1,2}:\d{2})\s*\)\s*$/,
     weekdays: Object.freeze(['週日', '週一', '週二', '週三', '週四', '週五', '週六']),
     // Menu links EduLog names itself (translated at display), so they follow EduLog's language
     // instead of whatever the provider translated. Other links keep the provider's text.
@@ -135,7 +134,10 @@
     // Unfilled lists (/admissions/unfilled_report; the month list stays zh-TW in every locale)
     ['學習紀錄節次', '学习记录节次', 'Record Stage'], ['目前節次', '目前节次', 'Current Stage'],
   ]
-  const fold = value => String(value ?? '').trim().replace(/\s+/g, ' ').replace(/\s*[：:]$/, '').toLowerCase()
+  const fold = value => {
+    const text = String(value ?? '').trim().replace(/\s+/g, ' ')
+    return (text.endsWith('：') || text.endsWith(':') ? text.slice(0, -1).trim() : text).toLowerCase()
+  }
   const forms = new Map(), canonical = new Map()
   for (const [zh, ...others] of TERMS) {
     forms.set(zh, [...new Set([...(forms.get(zh) || [zh]), ...others])])
@@ -190,8 +192,12 @@
   // wording of one of these terms, otherwise null. Several terms share English forms
   // ("Course"), so callers name the terms they expect instead of guessing one.
   function leadTerm(value, ...terms) {
-    const match = /^\s*([^：:]+?)\s*[：:]\s*([\s\S]*)$/.exec(String(value ?? ''))
-    return match && isTerm(match[1], ...terms) ? match[2].trim() : null
+    const text = String(value ?? '')
+    const fullWidthColon = text.indexOf('：'), asciiColon = text.indexOf(':')
+    const colon = fullWidthColon < 0 ? asciiColon : asciiColon < 0 ? fullWidthColon : Math.min(fullWidthColon, asciiColon)
+    if (colon < 0) return null
+    const label = text.slice(0, colon).trim()
+    return isTerm(label, ...terms) ? text.slice(colon + 1).trim() : null
   }
   // "評語：" in any wording: a label followed by a colon.
   const labelPattern = (...terms) => new RegExp(terms.flatMap(termForms).map(form => `${escape(form)}\\s*[：:]`).join('|'))
