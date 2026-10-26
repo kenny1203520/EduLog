@@ -33,7 +33,7 @@ export function parseTag(tag) {
 export function extensionId(key) {
   const bytes = Buffer.from(key, 'base64')
   if (bytes.toString('base64') !== key || createPublicKey({ key: bytes, type: 'spki', format: 'der' }).asymmetricKeyType !== 'rsa') throw new Error('Expected a base64 DER RSA public key')
-  return sha256(bytes).slice(0, 32).replace(/[0-9a-f]/g, c => String.fromCharCode(97 + parseInt(c, 16)))
+  return sha256(bytes).slice(0, 32).replace(/[0-9a-f]/g, c => String.fromCharCode(97 + Number.parseInt(c, 16)))
 }
 export function runtimePath(path) {
   return path === 'manifest.json' || /^(background|content|popup|sidepanel|shared|sites|styles|workspace|icons|assets)\/(?!.*(?:^|\/)[.])[^\s]+\.(js|css|html|json|png|svg|jpg|jpeg|webp|woff2?)$/.test(path)
