@@ -97,10 +97,32 @@
   }
   // "樹林_非凡文理_201教室（菁英） - 週六 第 1 時段 (10:00 ~ 12:00)" → weekday, times and place parts.
   function classSchedule(name) {
-    const text = lexicon.locale.canonClassName(collapse(name)), match = lexicon.navigation.className.exec(text)
-    if (!match) return null
-    const place = match[1].split('_').filter(Boolean)
-    return { weekday: lexicon.navigation.weekdays.indexOf(match[2]), weekdayLabel: match[2], start: match[3].padStart(5, '0'), end: match[4].padStart(5, '0'), branch: place.slice(0, -1).join(' '), room: place.at(-1) || match[1] }
+    const text = lexicon.locale.canonClassName(collapse(name))
+    const separator = text.lastIndexOf(' - ')
+    if (separator < 0) return null
+    const placeText = text.slice(0, separator).trim()
+    const schedule = text.slice(separator + 3).trim()
+    const weekdayLabel = lexicon.navigation.weekdays.find(day => schedule.startsWith(day))
+    if (!weekdayLabel) return null
+    const details = schedule.slice(weekdayLabel.length).trim()
+    const opening = details.indexOf('('), closing = details.indexOf(')', opening + 1)
+    if (opening < 0 || closing !== details.length - 1) return null
+    const period = details.slice(0, opening).trim()
+    if (!period.startsWith('\u7b2c') || !period.endsWith('\u6642\u6bb5')) return null
+    const sequence = period.slice(1, -2).trim()
+    const digits = value => value.length > 0 && [...value].every(char => char >= '0' && char <= '9')
+    if (!digits(sequence)) return null
+    const times = details.slice(opening + 1, closing).split('~').map(value => value.trim())
+    if (times.length !== 2) return null
+    const parseTime = value => {
+      const parts = value.split(':')
+      if (parts.length !== 2 || parts[0].length < 1 || parts[0].length > 2 || parts[1].length !== 2 || !parts.every(digits)) return null
+      return `${parts[0].padStart(2, '0')}:${parts[1]}`
+    }
+    const start = parseTime(times[0]), end = parseTime(times[1])
+    if (!start || !end) return null
+    const place = placeText.split('_').filter(Boolean)
+    return { weekday: lexicon.navigation.weekdays.indexOf(weekdayLabel), weekdayLabel, start, end, branch: place.slice(0, -1).join(' '), room: place.at(-1) || placeText }
   }
   // The source site schedules classes in Taiwan time (UTC+8, no daylight saving), whatever the browser's time zone.
   const SITE_OFFSET = 8 * 3600e3

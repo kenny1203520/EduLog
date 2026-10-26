@@ -202,7 +202,7 @@
         else if (child.nodeType===3) value+=child.textContent
         else if (child.nodeType===1 && !child.matches('button,input,select,textarea,.dropdown,.badge,.admission-comment-box,.tooltip,.popover,.status,[role="tooltip"],[data-edulog-owned]')) value+=child.textContent
       }
-      value=value.replace(/\u00a0/g,' ').replace(/^[\s：:]+|[\s]+$/g,'').trim()
+      value=value.replace(/\u00a0/g,' ').trim().replace(/^[：:]+/,'').trim()
       if (value || found) return value.slice(0,10000)
       const next=label.nextElementSibling
       if(next&&['P','DD','SPAN'].includes(next.tagName))return next.textContent.trim().slice(0,10000)
@@ -218,8 +218,12 @@
   function admissionCourse(doc) {
     const item=[...doc.querySelectorAll('#admission-data li')].find(li=>site.leadTerm(text(li),'課程名稱')!==null)
     const raw=site.leadTerm(item?.textContent||'','課程名稱')||''
-    const match=raw.match(/^(.*?)\s*\(([a-z][a-z0-9-]{1,63})\)\s*$/i)
-    return {sourceCourseName:(match?.[1]||raw).trim(),sourceCourseCode:match?.[2]?.toLowerCase()||null,sourceCourseLabel:raw||null}
+    const label=raw.trim(),close=label.endsWith(')')?label.length-1:-1,open=close>=0?label.lastIndexOf('(',close):-1
+    const code=open>=0?label.slice(open+1,close):''
+    const letter=character=>character>='a'&&character<='z'||character>='A'&&character<='Z'
+    const digit=character=>character>='0'&&character<='9'
+    const validCode=code.length>=2&&code.length<=64&&letter(code[0])&&[...code.slice(1)].every(character=>letter(character)||digit(character)||character==='-')
+    return {sourceCourseName:(validCode?label.slice(0,open):label).trim(),sourceCourseCode:validCode?code.toLowerCase():null,sourceCourseLabel:raw||null}
   }
   function admissionStudent(doc) {
     const item=[...doc.querySelectorAll('#admission-data li')].find(li=>site.leadTerm(text(li),'學生')!==null)
@@ -240,7 +244,7 @@
     const records = [], issues = [], students = new Map(), admissions = new Map(), reportIds = new Set()
     const title = text(doc.querySelector('#page-body > .content h2, #page-body > .content h1')) || `班級 ${classId}`
     for (const row of doc.querySelectorAll('#reports tbody tr, #students-table tbody tr')) {
-      const rowLinks = links(row), admission = rowLinks.find(a => /^\/dt_admissions\/\d+$/.test(a.path))?.path.match(/\d+$/)?.[0] || rowLinks.find(a => /^\/admissions\/comments\/\d+\/edit_teacher$/.test(a.path))?.path.split('/')[3]
+      const rowLinks = links(row), admission = rowLinks.find(a => /^\/dt_admissions\/\d+$/.test(a.path))?.path.split('/').pop() || rowLinks.find(a => /^\/admissions\/comments\/\d+\/edit_teacher$/.test(a.path))?.path.split('/')[3]
       if (!admission) continue
       const student = rowLinks.find(a => /^\/students\/\d+(?:\/(?:accounts|teachers_comment))?$/.test(a.path))?.path.match(/^\/students\/(\d+)/)?.[1]
       // Read only the site's name/course text nodes, never action/status text.
