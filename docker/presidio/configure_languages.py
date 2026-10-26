@@ -73,6 +73,10 @@ def taiwan_recognizers(code: str) -> list[dict]:
 
 
 def write_config(languages: list[str], out_dir: Path) -> None:
+    out_dir = out_dir.resolve()
+    expected_dir = Path("/app/conf-edulog").resolve()
+    if out_dir != expected_dir:
+        sys.exit("Configuration output must be /app/conf-edulog")
     out_dir.mkdir(parents=True, exist_ok=True)
     nlp = {
         "nlp_engine_name": "spacy",
@@ -103,8 +107,11 @@ def main() -> None:
     if len(sys.argv) != 3:
         sys.exit("usage: configure_languages.py <languages> <out_dir>")
     languages = parse_languages(sys.argv[1])
+    out_dir = Path(sys.argv[2]).resolve()
+    if out_dir != Path("/app/conf-edulog").resolve():
+        sys.exit("Configuration output must be /app/conf-edulog")
     install_models(languages)
-    write_config(languages, Path(sys.argv[2]))
+    write_config(languages, out_dir)
     print(f"Presidio languages: {', '.join(languages)}")
 
 

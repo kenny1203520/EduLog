@@ -1,15 +1,23 @@
 import { createHash, createPublicKey } from 'node:crypto'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
-import { dirname, posix, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { posix } from 'node:path'
 import { safePath, zipFiles, unzipFiles } from './archive.mjs'
 import { assertNoSecrets } from './secrets.mjs'
+import { repoRoot } from './paths.mjs'
 
-export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
+export { repoRoot }
+
 export const config = JSON.parse(readFileSync(new URL('./config.json', import.meta.url), 'utf8'))
 export const sha256 = data => createHash('sha256').update(data).digest('hex')
-export function git(args, options = {}) { return execFileSync('git', args, { cwd: repoRoot, maxBuffer: 20 * 1024 * 1024, ...options }) }
+export function git(args, options = {}) { return execFileSync('git', args, { cwd: repoRoot, maxBuffer: 20 * 1024 * 1024, ...options, shell: false }) }
+
+export function validateGitRef(ref) {
+  if (typeof ref !== 'string' || !/^(?:HEAD|[a-f0-9]{40}|[a-f0-9]{64}|[A-Za-z0-9][A-Za-z0-9._/-]{0,127})$/.test(ref) || /(?:\.\.|\/\/|\/(?:\.|\.\.)\/|\/$|\.$)/.test(ref)) {
+    throw new Error('Invalid Git reference')
+  }
+  return ref
+}
 
 export function parseVersion(version, channel) {
   if (!['beta', 'stable'].includes(channel)) throw new Error('Channel must be beta or stable')
@@ -68,7 +76,8 @@ export function buildRelease({ ref = 'HEAD', channel = 'beta', version, distribu
   const parsed = parseVersion(version, channel)
   if (!['zip', 'store'].includes(distribution)) throw new Error('Distribution must be zip or store')
   if (channel === 'stable' && distribution !== 'store') throw new Error('Stable releases require a configured store item')
-  const commit = readGit(['rev-parse', '--verify', '--end-of-options', `${ref}^{commit}`]).toString().trim()
+  const commit = readGit(['rev-parse', '--verify', '--end-of-options', `${validateGitRef(ref)}^{commit}`]).toString().trim()
+  if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(commit)) throw new Error('Git returned an invalid commit ID')
   const files = new Map()
   const entries = readGit(['ls-tree', '-r', '-z', commit, '--', 'extension/']).toString().split('\0').filter(Boolean)
   for (const entry of entries) {
