@@ -103,6 +103,9 @@ onMounted(() => load())
             {{ t('ai.settings.picker_show_all', { n: hiddenCount }) }}
         </label>
         <div v-if="manual">
+            <p v-if="unsupportedReason !== null" class="mb-1 text-xs text-gray-600">
+                {{ unsupportedReason === 'chatgpt_plan' ? t('ai.settings.picker_manual_chatgpt') : t('ai.settings.picker_manual_unavailable') }}
+            </p>
             <input :value="manualId" maxlength="200" class="min-h-11 w-full rounded-xl border border-gray-200 px-3 text-sm"
                 :placeholder="t('ai.settings.model_id_placeholder')" :aria-label="t('ai.settings.model_id')"
                 @input="typeManual(($event.target as HTMLInputElement).value)" />
