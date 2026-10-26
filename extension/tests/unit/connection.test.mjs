@@ -6,6 +6,11 @@ import { JSDOM, VirtualConsole } from '../../../app/node_modules/jsdom/lib/api.j
 import { webcrypto } from 'node:crypto'
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8')
 const wait = () => new Promise(resolve => setTimeout(resolve, 30))
+const waitFor = async predicate => {
+  const deadline = Date.now() + 1000
+  while (!predicate() && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10))
+  assert.ok(predicate(), 'expected condition to become true')
+}
 const pendingJsdomErrors = []
 function trackedDom(...args) {
   const virtualConsole = new VirtualConsole()
@@ -35,7 +40,7 @@ test('pairing includes named installation metadata and blocks duplicate submissi
   const get = id => w.document.getElementById(id)
   get('instance').value = 'http://localhost:5173'; get('device-name').value = 'Teaching laptop'
   get('server-form').dispatchEvent(new w.Event('submit', { cancelable: true }))
-  await wait()
+  await waitFor(() => requests.length === 1)
   get('server-form').dispatchEvent(new w.Event('submit', { cancelable: true }))
   assert.equal(requests.length, 1)
   assert.equal(get('device-name').disabled, true)

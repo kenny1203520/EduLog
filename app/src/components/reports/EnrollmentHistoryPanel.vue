@@ -13,8 +13,8 @@
         <a v-if="selected.external_link" :href="selected.external_link" target="_blank" rel="noopener noreferrer">查看原站報告</a>
         <label v-if="candidates.length">綁定課次<select v-model="occurrence"><option value="">請選擇並核對課次</option><option v-for="item in candidates" :key="item.id" :value="item.id">{{ item.occurrence_date }} · {{ item.class_name }} · {{ item.start_time }}–{{ item.end_time }}</option></select></label>
         <button v-if="candidateCursor" :disabled="loading" @click="choose(selected,true)">載入更多課次</button>
-        <label v-if="selected.class_notes"><input v-model="includeInternal" type="checkbox">另行允許內部紀錄</label>
-        <div v-if="conflicts.length"><h4>綁定差異</h4><label v-for="conflict in conflicts" :key="conflict.field"><input v-model="overwrite" type="checkbox" :value="conflict.field">覆寫 {{ fieldLabels[conflict.field] || conflict.field }}：{{ conflict.before }} → {{ conflict.after }}</label><p>未勾選的差異保留 EduLog 原值；變更選擇後請重新檢查。</p></div>
+        <label v-if="selected.class_notes" for="edulog-enrollmenthistorypanel-16-2341"><input v-model="includeInternal" type="checkbox">另行允許內部紀錄</label>
+        <div v-if="conflicts.length"><h4>綁定差異</h4><label v-for="conflict in conflicts" :key="conflict.field"><input v-model="overwrite" type="checkbox" :value="conflict.field" id="edulog-enrollmenthistorypanel-16-2341">覆寫 {{ fieldLabels[conflict.field] || conflict.field }}：{{ conflict.before }} → {{ conflict.after }}</label><p>未勾選的差異保留 EduLog 原值；變更選擇後請重新檢查。</p></div>
         <button v-if="occurrence" :disabled="loading" @click="bind(Boolean(preview))">{{ preview?'確認綁定課次報告':'檢查綁定差異' }}</button>
       </article>
     </div>

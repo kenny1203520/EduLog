@@ -15,7 +15,8 @@ export function workCategory(work) {
   if(['failed','partial_complete','outcome_unknown','pending_confirmation'].includes(work.status))return 'attention'
   return 'resumable'
 }
-export function combineWorkRecords(local=[],remote={imports:[],pushes:[]},metadata=[]) {
+const EMPTY_REMOTE_WORK = Object.freeze({ imports: Object.freeze([]), pushes: Object.freeze([]) })
+export function combineWorkRecords(local=[],remote=EMPTY_REMOTE_WORK,metadata=[]) {
   const byMetadataJob=new Map(metadata.filter(item=>item.server_job_id).map(item=>[item.server_job_id,item]))
   const byMetadataId=new Map(metadata.map(item=>[item.work_id,item]))
   const usedMetadata=new Set()

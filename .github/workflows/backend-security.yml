@@ -17,8 +17,8 @@ jobs:
   deno:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: denoland/setup-deno@v1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: denoland/setup-deno@11b63cf76cfcafb4e43f97b6cad24d8e8438f62d # v1
         with:
           deno-version: v1.x
       - run: deno test --allow-read supabase/tests/migration_chain_static_test.ts supabase/tests/teacher_permission_migration_static_test.ts supabase/tests/core_rls_fixture_static_test.ts
@@ -29,12 +29,12 @@ jobs:
       run:
         working-directory: app
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 26
           cache: npm
           cache-dependency-path: app/package-lock.json
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm run test -- --run
       - run: npm run build

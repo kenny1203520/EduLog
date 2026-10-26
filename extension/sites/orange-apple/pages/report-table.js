@@ -29,7 +29,7 @@
         if (row.querySelector('td')) {
           mark(row, 'data-edulog-report-row', '')
           mark(row,'data-edulog-course-name',text(row.cells[1]))
-          const sourceHeadings=[...(reports.rows[0]?.cells||[])].map(text)
+          const sourceHeadings=[...(reports.rows[0]?.cells||[])].map(cell => text(cell))
           for(const [index,cell] of [...row.cells].entries())mark(cell,'data-edulog-column-label',sourceHeadings[index]||'')
           view.reportDetails ||= new WeakMap()
           if (!view.reportDetails.has(row)) view.reportDetails.set(row,new Map())

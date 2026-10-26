@@ -35,13 +35,13 @@ jobs:
       run:
         working-directory: server
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 26
           cache: npm
           cache-dependency-path: server/package-lock.json
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm run typecheck
       - run: npm run build
       - run: npm test -- --run
@@ -49,9 +49,9 @@ jobs:
   deployment-contract:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 26
       - name: Test tag release automation
@@ -74,7 +74,7 @@ jobs:
           ! grep -R --exclude='*.spec.*' --binary-files=without-match -E 'supabase\.(from|rpc|functions|channel|storage)|@supabase/supabase-js|VITE_SUPABASE_URL|VITE_SUPABASE_ANON_KEY|VITE_SUPABASE_FUNCTIONS_BASE_URL' app/src
 
       - name: Install frontend dependencies
-        run: npm ci --prefix app
+        run: npm ci --ignore-scripts --prefix app
       - name: Run frontend tests
         run: npm test --prefix app -- --run
       - name: Build frontend

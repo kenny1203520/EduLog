@@ -202,7 +202,7 @@
         else if (child.nodeType===3) value+=child.textContent
         else if (child.nodeType===1 && !child.matches('button,input,select,textarea,.dropdown,.badge,.admission-comment-box,.tooltip,.popover,.status,[role="tooltip"],[data-edulog-owned]')) value+=child.textContent
       }
-      value=value.replace(/\u00a0/g,' ').replace(/^[\s：:]+|[\s]+$/g,'').trim()
+      value=value.replace(/\u00a0/g,' ').trim().replace(/^[：:]+/,'').trim()
       if (value || found) return value.slice(0,10000)
       const next=label.nextElementSibling
       if(next&&['P','DD','SPAN'].includes(next.tagName))return next.textContent.trim().slice(0,10000)
@@ -218,8 +218,12 @@
   function admissionCourse(doc) {
     const item=[...doc.querySelectorAll('#admission-data li')].find(li=>site.leadTerm(text(li),'課程名稱')!==null)
     const raw=site.leadTerm(item?.textContent||'','課程名稱')||''
-    const match=raw.match(/^(.*?)\s*\(([a-z][a-z0-9-]{1,63})\)\s*$/i)
-    return {sourceCourseName:(match?.[1]||raw).trim(),sourceCourseCode:match?.[2]?.toLowerCase()||null,sourceCourseLabel:raw||null}
+    const label=raw.trim(),close=label.endsWith(')')?label.length-1:-1,open=close>=0?label.lastIndexOf('(',close):-1
+    const code=open>=0?label.slice(open+1,close):''
+    const letter=character=>character>='a'&&character<='z'||character>='A'&&character<='Z'
+    const digit=character=>character>='0'&&character<='9'
+    const validCode=code.length>=2&&code.length<=64&&letter(code[0])&&[...code.slice(1)].every(character=>letter(character)||digit(character)||character==='-')
+    return {sourceCourseName:(validCode?label.slice(0,open):label).trim(),sourceCourseCode:validCode?code.toLowerCase():null,sourceCourseLabel:raw||null}
   }
   function admissionStudent(doc) {
     const item=[...doc.querySelectorAll('#admission-data li')].find(li=>site.leadTerm(text(li),'學生')!==null)
@@ -240,7 +244,7 @@
     const records = [], issues = [], students = new Map(), admissions = new Map(), reportIds = new Set()
     const title = text(doc.querySelector('#page-body > .content h2, #page-body > .content h1')) || `班級 ${classId}`
     for (const row of doc.querySelectorAll('#reports tbody tr, #students-table tbody tr')) {
-      const rowLinks = links(row), admission = rowLinks.find(a => /^\/dt_admissions\/\d+$/.test(a.path))?.path.match(/\d+$/)?.[0] || rowLinks.find(a => /^\/admissions\/comments\/\d+\/edit_teacher$/.test(a.path))?.path.split('/')[3]
+      const rowLinks = links(row), admission = rowLinks.find(a => /^\/dt_admissions\/\d+$/.test(a.path))?.path.split('/').pop() || rowLinks.find(a => /^\/admissions\/comments\/\d+\/edit_teacher$/.test(a.path))?.path.split('/')[3]
       if (!admission) continue
       const student = rowLinks.find(a => /^\/students\/\d+(?:\/(?:accounts|teachers_comment))?$/.test(a.path))?.path.match(/^\/students\/(\d+)/)?.[1]
       // Read only the site's name/course text nodes, never action/status text.
@@ -334,7 +338,7 @@
       const editPath=reportId&&ownerAdmission?`/dt_admissions/${ownerAdmission}/reports/${reportId}/edit`:null
       const sessionOrdinal=sessionRaw.match(/\d+/)?.[0]||null
       const sameAdmission=ownerAdmission===admissionId
-      results.push({kind:'report',source_id:reportId,enrollment_source_id:ownerAdmission||admissionId,sourceOwnerAdmissionId:ownerAdmission,sourceAdmissionContextVerified:sameAdmission,sourceRowType:rowType,sourceRowReason:isPreviousAdmission&&!ownerRef?'無法從原生報告連結確認前一報名。':undefined,sourceLookupReportId:lookupReportIds.length===1?lookupReportIds[0]:null,sourceLookupReportIds:lookupReportIds,sourceAttendanceAction:attendanceAction,sourceStudentName:sameAdmission?student.sourceStudentName:'',student_source_id:sameAdmission?student.student_source_id:null,date,dateRaw,sourceSessionOrdinal:sessionOrdinal,sourceSessionLabel:sessionRaw,sourceCourseName:sameAdmission?course.sourceCourseName:'',sourceCourseCode:sameAdmission?course.sourceCourseCode:null,sourceCourseLabel:sameAdmission?course.sourceCourseLabel:null,sourceLessonSequence:stageNumber,
+      results.push({kind:'report',source_id:reportId,enrollment_source_id:ownerAdmission||admissionId,sourceOwnerAdmissionId:ownerAdmission,sourceAdmissionContextVerified:sameAdmission,sourceRowType:rowType,sourceRowReason:isPreviousAdmission&&!ownerRef?'無法從原生報告連結確認前一報名。':undefined,sourceLookupReportId:lookupReportIds.length===1?lookupReportIds[0]:null,sourceLookupReportIds:lookupReportIds,sourceAttendanceAction:attendanceAction,sourceStudentName:sameAdmission?student.sourceStudentName:'',student_source_id:sameAdmission?student.student_source_id:null,date,dateRaw,sourceSessionOrdinal:sessionOrdinal,sourceSessionLabel:sessionRaw,sourceCourseName:sameAdmission?course.sourceCourseName:'',sourceCourseCode:sameAdmission?course.sourceCourseCode:null,sourceCourseLabel:sameAdmission?course.sourceCourseLabel:null,
         identityUnverified:!reportId,
         sourceEvidence:[evidence(row,`/dt_admissions/${admissionId}`,[['admission_id','目前頁面報名 ID',admissionId],['owner_admission_id','列所屬報名 ID',ownerAdmission],['student_id','來源學生 ID',sameAdmission?student.student_source_id:null],['student_name','學生姓名原文',sameAdmission?student.sourceStudentName:''],['report_id','原生報告編輯 ID',reportId],['attendance_lookup_id','設為不出席連結查找 ID',lookupReportIds.join(',')],['course_name','來源課程名稱',sameAdmission?course.sourceCourseName:''],['course_code','來源課程代碼',sameAdmission?course.sourceCourseCode:''],['date','課次日期原文',dateRaw],['row_type','來源列類型',rowType],...sourceFields.map(f=>[f.key,f.label,f.value])])],
         sourceFields,sourceLessonLabel:stageLabel||stageRaw||undefined,sourceLessonSequence:lessonStage(stageLabel||stageRaw||''),sourceLearningStatus:sourceFields.find(f=>f.learningStatus)?.learningStatus||null,sourceLearningStatusRaw:sourceFields.find(f=>f.label==='學習狀態原文')?.value||'',sourceInternalNotes:sourceFields.filter(f=>f.internal&&!f.learningStatus).map(f=>f.value).join('\n'),

@@ -16,6 +16,7 @@
 # Requirements:
 #   - Docker with Docker Compose (docker compose, not docker-compose)
 #   - Running Supabase self-hosted setup with Postgres 15
+#   - setfacl from the system's ACL package (usually named "acl")
 #   - At least 2x current database size + 5 GB free disk space
 #
 # Backup:
@@ -74,20 +75,20 @@ warn() { printf 'Warning: %s\n' "$*" >&2; }
 
 # Temp dir on host for tarball + scripts (mounted into containers)
 staging_dir=""
+staging_uid=""
+staging_gid=""
+migration_postgres_uids=()
+migration_target_postgres_uid=""
 pg_password=""
 current_image=""
 drop_extensions=""
 db_config_vol=""
 
 # Remove leftover containers and staging dir on exit.
-# Uses an alpine container for rm because the tarball build runs as root
-# inside Docker - the resulting files are root-owned and can't be deleted
-# by the host user on macOS.
 cleanup() {
     docker rm -f "$UPGRADE_CONTAINER" >/dev/null 2>&1 || true
     docker rm -f "$COMPLETE_CONTAINER" >/dev/null 2>&1 || true
-    if [ -n "$staging_dir" ] && [ -d "$staging_dir" ]; then
-        docker run --rm -v "$staging_dir:/cleanup" alpine rm -rf /cleanup 2>/dev/null || true
+    if [[ -n "$staging_dir" && -d "$staging_dir" ]]; then
         rm -rf "$staging_dir" 2>/dev/null || true
     fi
 }
@@ -97,7 +98,7 @@ on_interrupt() {
     echo ""
     warn "Interrupted. Cleaning up..."
     # If db-config was chowned to PG17, restore for PG15 rollback
-    if [ -n "$db_config_vol" ] && [ -n "$current_image" ]; then
+    if [[ -n "$db_config_vol" && -n "$current_image" ]]; then
         docker run --rm -v "${db_config_vol}:/vol" "$current_image" \
             chown -R postgres:postgres /vol/ 2>/dev/null || true
     fi
@@ -106,8 +107,8 @@ on_interrupt() {
 trap on_interrupt INT
 
 confirm() {
-    if [ "$AUTO_CONFIRM" = true ]; then return 0; fi
-    if ! test -t 0; then
+    if [[ "$AUTO_CONFIRM" == true ]]; then return 0; fi
+    if [[ ! -t 0 ]]; then
         die "This script must be run interactively, or use --yes to skip prompts."
     fi
     printf '%s (y/N) ' "$1"
@@ -128,7 +129,7 @@ run_sql_on() {
 
 wait_for_healthy() {
     local container=$1 retries=30
-    while [ $retries -gt 0 ]; do
+    while [[ $retries -gt 0 ]]; do
         if docker exec "$container" pg_isready -U postgres -h localhost >/dev/null 2>&1; then
             return 0
         fi
@@ -141,29 +142,32 @@ wait_for_healthy() {
 # --- Pre-flight checks -----------------------------------------------------
 
 preflight() {
+    local acl_probe
+
     info "Running pre-flight checks"
 
-    if [ "$(id -u)" -ne 0 ]; then
+    if [[ "$(id -u)" -ne 0 ]]; then
         die "This script must be run as root (e.g. sudo bash $0)."
     fi
 
     docker compose version >/dev/null 2>&1 || die "Docker Compose not found."
     command -v curl >/dev/null 2>&1 || die "curl is required (for downloading upgrade scripts)."
-    [ -f docker-compose.yml ] || die "Run this script from the docker/ directory."
-    [ -f docker-compose.pg17.yml ] || die "Missing docker-compose.pg17.yml."
-    [ -f .env ] || die "Missing .env file."
+    command -v setfacl >/dev/null 2>&1 || die "setfacl is required (install the system ACL package, usually named acl)."
+    [[ -f docker-compose.yml ]] || die "Run this script from the docker/ directory."
+    [[ -f docker-compose.pg17.yml ]] || die "Missing docker-compose.pg17.yml."
+    [[ -f .env ]] || die "Missing .env file."
 
     # Resolve db-config volume (exact match on _db-config suffix or bare db-config)
     db_config_vol=$(docker volume ls --filter "name=db-config" --format '{{.Name}}' \
         | grep -E '^db-config$|_db-config$' | head -n 1)
-    [ -n "$db_config_vol" ] || die "Could not find db-config volume. Is Supabase running?"
+    [[ -n "$db_config_vol" ]] || die "Could not find db-config volume. Is Supabase running?"
 
     # Read the target PG17 image from the compose overlay (what the user will run)
     PG17_TARGET_IMAGE=$(grep 'image:.*postgres' docker-compose.pg17.yml | awk '{print $2}' | head -n 1)
-    [ -n "$PG17_TARGET_IMAGE" ] || die "Could not read image from docker-compose.pg17.yml."
+    [[ -n "$PG17_TARGET_IMAGE" ]] || die "Could not read image from docker-compose.pg17.yml."
 
     pg_password=$(grep '^POSTGRES_PASSWORD=' .env | cut -d '=' -f 2- | sed "s/^['\"]//;s/['\"]$//" | head -n 1)
-    [ -n "$pg_password" ] || die "POSTGRES_PASSWORD not set in .env."
+    [[ -n "$pg_password" ]] || die "POSTGRES_PASSWORD not set in .env."
 
     docker inspect "$DB_CONTAINER" >/dev/null 2>&1 \
         || die "Container '$DB_CONTAINER' not found. Is Supabase running?"
@@ -177,10 +181,19 @@ preflight() {
 
     local status
     status=$(docker inspect "$DB_CONTAINER" --format '{{.State.Status}}')
-    [ "$status" = "running" ] || die "'$DB_CONTAINER' is not running (status: $status)."
-    [ -d "$DATA_DIR" ] || die "Data directory not found: $DATA_DIR"
+    [[ "$status" == "running" ]] || die "'$DB_CONTAINER' is not running (status: $status)."
+    [[ -d "$DATA_DIR" ]] || die "Data directory not found: $DATA_DIR"
 
-    if [ -d "$BACKUP_DIR" ]; then
+    # Verify the data filesystem supports ACLs before stopping Postgres.
+    acl_probe=$(mktemp -d "${MIGRATION_DIR}.acl-check.XXXXXX") || die "Could not create an ACL preflight directory."
+    if ! setfacl -m "u:65534:rwx" "$acl_probe" >/dev/null 2>&1 \
+        || ! setfacl -d -m "u:65534:rwx" "$acl_probe" >/dev/null 2>&1; then
+        rmdir "$acl_probe"
+        die "The data filesystem must support POSIX ACLs for the migration directory."
+    fi
+    rmdir "$acl_probe"
+
+    if [[ -d "$BACKUP_DIR" ]]; then
         warn "Backup directory already exists: $BACKUP_DIR"
         warn "This is likely from a previous upgrade attempt."
         warn "If you haven't verified that previous upgrade, roll back first:"
@@ -194,23 +207,23 @@ preflight() {
         confirm "Delete $BACKUP_DIR and start a fresh upgrade?"
         rm -rf "$BACKUP_DIR"
     fi
-    if [ -d "$MIGRATION_DIR" ]; then
+    if [[ -d "$MIGRATION_DIR" ]]; then
         rm -rf "$MIGRATION_DIR"
     fi
 
     # Disk space
     local data_size_kb data_size_mb avail_kb avail_mb needed_mb
     data_size_kb=$(du -sk "$DATA_DIR" 2>/dev/null | cut -f1)
-    [ -n "$data_size_kb" ] || die "Could not calculate data size for $DATA_DIR"
+    [[ -n "$data_size_kb" ]] || die "Could not calculate data size for $DATA_DIR"
     data_size_mb=$((data_size_kb / 1024))
     avail_kb=$(df -k "$(dirname "$DATA_DIR")" | awk 'NR==2 { print $4 }')
-    [ -n "$avail_kb" ] || die "Could not calculate available disk space for $(dirname "$DATA_DIR")"
+    [[ -n "$avail_kb" ]] || die "Could not calculate available disk space for $(dirname "$DATA_DIR")"
     avail_mb=$((avail_kb / 1024))
     needed_mb=$((data_size_mb * 2 + 5000))
     echo "  Data size:       ${data_size_mb} MB"
     echo "  Available space: ${avail_mb} MB"
     echo "  Estimated need:  ${needed_mb} MB"
-    if [ "$avail_mb" -lt "$needed_mb" ]; then
+    if [[ "$avail_mb" -lt "$needed_mb" ]]; then
         warn "Disk space may be insufficient."
         warn "pg_upgrade copies data; need ~2x data size + ~5 GB for the upgrade tarball."
         confirm "Continue anyway?"
@@ -225,7 +238,7 @@ preflight() {
         WHERE extname IN ('timescaledb', 'plv8', 'plcoffee', 'plls');
     " 2>/dev/null | tr -d '[:space:]') || true
 
-    if [ -n "$incompatible" ]; then
+    if [[ -n "$incompatible" ]]; then
         warn "Incompatible extensions found: $incompatible"
         warn "These do not exist in Postgres 17 and must be dropped before upgrading."
         warn "If you proceed, they will be dropped automatically."
@@ -258,7 +271,7 @@ preflight() {
 pull_image() {
     info "Pulling Postgres 17 images"
     docker pull "$PG17_UPGRADE_IMAGE"
-    if [ "$PG17_TARGET_IMAGE" != "$PG17_UPGRADE_IMAGE" ]; then
+    if [[ "$PG17_TARGET_IMAGE" != "$PG17_UPGRADE_IMAGE" ]]; then
         docker pull "$PG17_TARGET_IMAGE"
     fi
 }
@@ -275,9 +288,12 @@ pull_image() {
 build_tarball() {
     local tmpbase="${TMPDIR:-/tmp}"
     staging_dir=$(mktemp -d "${tmpbase%/}/supabase-pg17-upgrade.XXXXXX")
-    # World-writable so Docker containers can write to bind mounts on macOS,
-    # where the VM's root user has no special access to host directories.
-    chmod 777 "$staging_dir"
+    # Keep the directory writable only by the invoking user and let the build
+    # container write as that user, including on macOS Docker bind mounts.
+    staging_uid="${SUDO_UID:-$(id -u)}"
+    staging_gid="${SUDO_GID:-$(id -g)}"
+    chown "$staging_uid:$staging_gid" "$staging_dir"
+    chmod 755 "$staging_dir"
     echo "  Staging directory: $staging_dir"
 
     # Download upgrade scripts from the supabase/postgres repo (pinned to PG17_SCRIPTS_REF).
@@ -286,18 +302,22 @@ build_tarball() {
     local scripts_base="https://raw.githubusercontent.com/supabase/postgres/${PG17_SCRIPTS_REF}/ansible/files/admin_api_scripts/pg_upgrade_scripts"
     mkdir -p "$staging_dir/scripts"
     for script in initiate.sh complete.sh common.sh pgsodium_getkey.sh check.sh prepare.sh; do
-        curl -fsSL "$scripts_base/$script" -o "$staging_dir/scripts/$script" \
+        curl --proto '=https' --proto-redir '=https' -fsSL \
+            "$scripts_base/$script" -o "$staging_dir/scripts/$script" \
             || die "Failed to download $script from GitHub"
     done
+    chmod 755 "$staging_dir/scripts"
+    chmod 644 "$staging_dir"/scripts/*.sh
 
-    if [ -f "$TARBALL_CACHE" ]; then
+    if [[ -f "$TARBALL_CACHE" ]]; then
         info "Using cached upgrade tarball: $TARBALL_CACHE"
         cp "$TARBALL_CACHE" "$staging_dir/pg_upgrade_bin.tar.gz"
+        chmod 644 "$staging_dir/pg_upgrade_bin.tar.gz"
         return
     fi
 
     info "Building upgrade tarball from Postgres 17 image (first run)"
-    docker run --rm --user root --entrypoint bash \
+    docker run --rm --user "$staging_uid:$staging_gid" --entrypoint bash \
         -v "$staging_dir:/export" \
         "$PG17_UPGRADE_IMAGE" \
         -c '
@@ -316,12 +336,12 @@ build_tarball() {
                 case "$name" in .*-wrapped) continue ;; esac
 
                 # Check for ELF
-                if [ -x "$f" ] && file -b "$f" | grep -q "ELF .* executable"; then
+                if [[ -x "$f" ]] && file -b "$f" | grep -q "ELF .* executable"; then
                     cp "$f" /export/17/bin/"$name"
                 else
                     # Shell wrapper - extract the real .xxx-wrapped ELF path
                     wrapped=$(grep -o "/nix/store/[^ \"]*-wrapped" "$f" 2>/dev/null | head -n 1 || true)
-                    if [ -n "$wrapped" ] && [ -f "$wrapped" ]; then
+                    if [[ -n "$wrapped" && -f "$wrapped" ]]; then
                         cp "$wrapped" /export/17/bin/"$name"
                     else
                         cp "$f" /export/17/bin/"$name"
@@ -367,8 +387,8 @@ build_tarball() {
 
             # Verify critical files before creating tarball
             echo "  Checking for key files..."
-            [ -f /export/17/bin/postgres ] || { echo "Error: bin/postgres missing"; exit 1; }
-            [ -f /export/17/share/postgresql/timezonesets/Default ] || { echo "Error: timezonesets/Default missing"; exit 1; }
+            [[ -f /export/17/bin/postgres ]] || { echo "Error: bin/postgres missing"; exit 1; }
+            [[ -f /export/17/share/postgresql/timezonesets/Default ]] || { echo "Error: timezonesets/Default missing"; exit 1; }
             ls /export/17/share/postgresql/extension/*.control >/dev/null 2>&1 || { echo "Error: no .control files in extension/"; exit 1; }
             ls /export/17/lib/*.so >/dev/null 2>&1 || { echo "Error: no .so files in lib/"; exit 1; }
 
@@ -377,6 +397,7 @@ build_tarball() {
 
             echo "  Tarball: $(du -sh /export/pg_upgrade_bin.tar.gz | cut -f1)"
         '
+    chmod 644 "$staging_dir/pg_upgrade_bin.tar.gz"
 
     # Cache for next run
     cp "$staging_dir/pg_upgrade_bin.tar.gz" "$TARBALL_CACHE"
@@ -386,7 +407,7 @@ build_tarball() {
 # --- Step 3: Drop incompatible extensions ----------------------------------
 
 drop_incompatible_extensions() {
-    if [ -z "$drop_extensions" ]; then
+    if [[ -z "$drop_extensions" ]]; then
         return
     fi
     info "Dropping incompatible extensions"
@@ -394,7 +415,7 @@ drop_incompatible_extensions() {
     local ext
     echo "$drop_extensions" | tr ',' '\n' | while read -r ext; do
         ext=$(echo "$ext" | tr -d '[:space:]')
-        [ -z "$ext" ] && continue
+        [[ -z "$ext" ]] && continue
         echo "  DROP EXTENSION $ext CASCADE"
         run_sql_on "$DB_CONTAINER" -c "DROP EXTENSION IF EXISTS \"$ext\" CASCADE;"
     done
@@ -424,11 +445,30 @@ stop_and_backup() {
 # /data_migration) operate on symlinks rather than bind mounts.
 
 run_upgrade() {
-    local abs_data_dir abs_migration_dir
+    local abs_data_dir abs_migration_dir image postgres_uid acl_entries=""
 
     mkdir -p "$MIGRATION_DIR"
-    # World-writable for macOS Docker bind mount compatibility (see build_tarball)
-    chmod 777 "$MIGRATION_DIR"
+    migration_target_postgres_uid=$(docker run --rm --entrypoint id "$PG17_TARGET_IMAGE" -u postgres)
+    [[ "$migration_target_postgres_uid" =~ ^[1-9][0-9]*$ ]] || die "Could not determine the target Postgres user ID."
+
+    for image in "$current_image" "$PG17_UPGRADE_IMAGE" "$PG17_TARGET_IMAGE"; do
+        postgres_uid=$(docker run --rm --entrypoint id "$image" -u postgres)
+        [[ "$postgres_uid" =~ ^[1-9][0-9]*$ ]] || die "Could not determine the Postgres user ID in $image."
+        if [[ ! " ${migration_postgres_uids[*]} " =~ " ${postgres_uid} " ]]; then
+            migration_postgres_uids+=("$postgres_uid")
+        fi
+    done
+
+    # Keep the directory private, then grant access only to the Postgres UIDs
+    # used by the source, upgrade, and target images. Default ACLs cover output
+    # created beneath it when the PG15 and PG17 UIDs differ.
+    chmod 0700 "$MIGRATION_DIR"
+    for postgres_uid in "${migration_postgres_uids[@]}"; do
+        if [[ -n "$acl_entries" ]]; then acl_entries+=","; fi
+        acl_entries+="u:${postgres_uid}:rwx"
+    done
+    setfacl -m "$acl_entries" "$MIGRATION_DIR"
+    setfacl -d -m "$acl_entries" "$MIGRATION_DIR"
     abs_data_dir=$(cd "$DATA_DIR" && pwd)
     abs_migration_dir=$(cd "$MIGRATION_DIR" && pwd)
 
@@ -566,7 +606,7 @@ run_complete() {
     # complete.sh's ERR trap exits with 0 in some cases; check status file
     local status
     status=$(docker exec "$COMPLETE_CONTAINER" cat /tmp/pg-upgrade-status 2>/dev/null || echo "unknown")
-    if [ "$status" != "complete" ]; then
+    if [[ "$status" != "complete" ]]; then
         warn "complete.sh failed. Postgres log:"
         docker exec "$COMPLETE_CONTAINER" cat /tmp/postgres.log 2>/dev/null || true
         echo ""
@@ -574,7 +614,7 @@ run_complete() {
         warn "Restoring db-config ownership for PG15..."
         local orig_owner
         orig_owner=$(docker exec "$COMPLETE_CONTAINER" cat /tmp/dbconfig_owner 2>/dev/null || true)
-        if [ -n "$orig_owner" ]; then
+        if [[ -n "$orig_owner" ]]; then
             docker exec "$COMPLETE_CONTAINER" chown -R "$orig_owner" /etc/postgresql-custom/ 2>/dev/null || true
         fi
         docker rm -f "$COMPLETE_CONTAINER" >/dev/null 2>&1 || true
@@ -589,6 +629,16 @@ run_complete() {
 
     info "complete.sh finished successfully"
     docker rm -f "$COMPLETE_CONTAINER" >/dev/null 2>&1 || true
+
+    # Once PG17 has completed, only the Postgres UID of the target image needs
+    # access to the migrated data. Remove temporary grants to the other image UIDs.
+    local postgres_uid
+    for postgres_uid in "${migration_postgres_uids[@]}"; do
+        if [[ "$postgres_uid" != "$migration_target_postgres_uid" ]]; then
+            setfacl -R -x "u:${postgres_uid}" "$MIGRATION_DIR"
+            setfacl -R -d -x "u:${postgres_uid}" "$MIGRATION_DIR"
+        fi
+    done
 }
 
 # --- Step 7: Swap data directories -----------------------------------------
@@ -621,14 +671,14 @@ start_pg17() {
 
     echo "  Waiting for Postgres 17 to be ready..."
     local retries=60
-    while [ $retries -gt 0 ]; do
+    while [[ $retries -gt 0 ]]; do
         if docker exec "$DB_CONTAINER" pg_isready -U postgres -h localhost >/dev/null 2>&1; then
             break
         fi
         retries=$((retries - 1))
         sleep 2
     done
-    [ $retries -gt 0 ] || die "Postgres 17 did not start within 120 seconds."
+    [[ $retries -gt 0 ]] || die "Postgres 17 did not start within 120 seconds."
 
     local new_version
     new_version=$(run_sql_on "$DB_CONTAINER" -A -t -c "SHOW server_version;" 2>/dev/null | head -n 1)

@@ -1,9 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { zipFiles, unzipFiles, safePath } from '../archive.mjs'
-import { buildRelease, config, extensionId, git, parseTag, parseVersion, sha256, validateRuntime, verifyRelease } from '../release.mjs'
+import { buildRelease, config, extensionId, parseTag, parseVersion, readExtensionFileAtCommit, resolveCommit, sha256, validateGitRef, validateRuntime, verifyRelease } from '../release.mjs'
+import { publishExtensionRelease } from '../github-release.mjs'
 import { checkCompatibility } from '../preflight.mjs'
-import { publishRelease, releaseState, renderReceipt, readReceipt, createStoreClient, compareVersions } from '../store.mjs'
+import { githubApiUrl, publishRelease, releaseState, renderReceipt, readReceipt, createStoreClient, compareVersions } from '../store.mjs'
+import { repoRoot, resolveNativeAssetFile, resolveProjectPath, resolveReleaseArchive, resolveScreenshotDirectory, resolveWithin } from '../paths.mjs'
 
 const key = config.sideloadPublicKey, item = extensionId(key)
 function fixture() {
@@ -21,6 +26,32 @@ test('tags and versions reject malformed, overflowing and channel-confused input
   assert.throws(() => parseVersion('1.2.3', 'unknown'))
   assert.equal(compareVersions('0.1.1.10', '0.1.1.2'), 1)
   assert.equal(compareVersions('1.0.0', '1.0.0.0'), 0)
+})
+test('CLI refs and file paths reject argument and directory traversal', () => {
+  assert.equal(validateGitRef('HEAD'), 'HEAD')
+  assert.equal(validateGitRef('extension/beta/v0.1.1.1'), 'extension/beta/v0.1.1.1')
+  for (const ref of ['--upload-pack=payload', '../outside', 'extension//beta', 'branch@{1}']) assert.throws(() => validateGitRef(ref))
+
+  const temporary = mkdtempSync(join(tmpdir(), 'edulog-safe-paths-'))
+  try {
+    assert.equal(resolveReleaseArchive(temporary, 'EduLog-Teaching-Tools-beta-0.1.1.1.zip'), join(temporary, 'EduLog-Teaching-Tools-beta-0.1.1.1.zip'))
+    assert.throws(() => resolveReleaseArchive(temporary, '../../.env'), /Invalid release archive/)
+    assert.throws(() => resolveWithin(temporary, '../outside', 'Test path'), /allowed directory/)
+    assert.throws(() => resolveProjectPath(join(temporary, 'release.json'), 'Metadata path'), /allowed directory/)
+    assert.equal(resolveScreenshotDirectory(join(temporary, 'screenshots'), 'test'), join(temporary, 'screenshots'))
+    assert.throws(() => resolveScreenshotDirectory(repoRoot, 'test'), /Screenshot directory/)
+    assert.throws(() => resolveNativeAssetFile(temporary, '../../.env'), /Invalid native CSS asset/)
+  } finally {
+    rmSync(temporary, { recursive: true, force: true })
+  }
+})
+test('GitHub release API requests stay on the authenticated API origin', () => {
+  const url = githubApiUrl('kenny1203520/EduLog', { kind: 'tag', tag: 'extension/beta/v0.1.1.1' })
+  assert.equal(url.origin, 'https://api.github.com')
+  assert.equal(url.pathname, '/repos/kenny1203520/EduLog/releases/tags/extension%2Fbeta%2Fv0.1.1.1')
+  assert.throws(() => githubApiUrl('owner/../../attacker', { kind: 'releases', page: 1 }))
+  assert.throws(() => githubApiUrl('kenny1203520/EduLog', { kind: 'tag', tag: 'https://attacker.invalid' }))
+  assert.throws(() => githubApiUrl('kenny1203520/EduLog', { kind: 'release', id: '../secret' }))
 })
 test('sideload ID is stable; public key is validated', () => {
   assert.equal(item, 'caefagceiajdhjnmogiaicaijckmplge')
@@ -55,16 +86,79 @@ test('verification binds ZIP bytes, manifest ID/version and the complete file in
   assert.throws(() => verifyRelease(archive, { ...metadata, files: {} }), /file list/)
 })
 test('packaging is reproducible from pinned committed Git objects and excludes non-runtime files', () => {
-  const commit = git(['rev-parse', 'HEAD']).toString().trim()
+  const commit = resolveCommit('HEAD')
   const args = { ref: commit, version: '0.1.1.1' }
   const first = buildRelease(args), second = buildRelease(args)
   assert.deepEqual(first.archive, second.archive)
   assert.equal(second.metadata.commit, commit)
   assert.equal(second.metadata.distribution, 'zip')
-  assert.deepEqual(second.files.get('background/service-worker.js'), git(['show', commit + ':extension/background/service-worker.js']))
+  assert.deepEqual(second.files.get('background/service-worker.js'), readExtensionFileAtCommit(commit, 'extension/background/service-worker.js'))
+  assert.throws(() => readExtensionFileAtCommit(commit, '../../.git/config'), /Unsafe archive path/)
   for (const name of second.files.keys()) assert.doesNotMatch(name, /(^|\/)(tests|dist|node_modules)|README|package\.json|\.pem$|\.env/)
   assert.throws(() => buildRelease({ ...args, channel: 'stable', version: '0.1.1' }), /configured store/)
   assert.throws(() => buildRelease({ ...args, distribution: 'store' }), /CWS_PUBLIC_KEY/)
+})
+
+test('GitHub publisher creates a draft, uploads verified release files, then publishes it', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'edulog-publish-test-'))
+  try {
+    const { archive, metadata } = buildRelease({ version: '0.1.1.1' })
+    writeFileSync(resolveReleaseArchive(directory, metadata.archive), archive)
+    writeFileSync(join(directory, `${metadata.archive}.sha256`), `${metadata.sha256}  ${metadata.archive}\n`)
+    writeFileSync(join(directory, 'release.json'), JSON.stringify(metadata, null, 2) + '\n')
+    writeFileSync(join(directory, 'TESTING.md'), readFileSync(new URL('../../../docs/deployment/extension-testing.md', import.meta.url)))
+
+    const events = []
+    const uploadUrl = 'https://uploads.github.com/repos/kenny1203520/EduLog/releases/42/assets{?name,label}'
+    const fetchImpl = async (input, options = {}) => {
+      const url = new URL(input)
+      const method = options.method || 'GET'
+      if (url.origin === 'https://api.github.com' && url.pathname.includes('/commits/')) {
+        events.push('commit')
+        return Response.json({ sha: metadata.commit })
+      }
+      if (url.origin === 'https://api.github.com' && url.pathname.endsWith('/releases') && method === 'GET') {
+        events.push('list')
+        return Response.json([])
+      }
+      if (url.origin === 'https://api.github.com' && url.pathname.endsWith('/releases') && method === 'POST') {
+        const body = JSON.parse(options.body)
+        assert.equal(body.draft, true)
+        assert.equal(body.make_latest, 'false')
+        events.push('create')
+        return Response.json({ id: 42, tag_name: body.tag_name, upload_url: uploadUrl, draft: true, assets: [] }, { status: 201 })
+      }
+      if (url.origin === 'https://uploads.github.com' && method === 'POST') {
+        assert.equal(options.headers['Content-Type'], url.searchParams.get('name').endsWith('.zip') ? 'application/zip' : 'application/octet-stream')
+        events.push(`upload:${url.searchParams.get('name')}`)
+        return Response.json({ name: url.searchParams.get('name') }, { status: 201 })
+      }
+      if (url.origin === 'https://api.github.com' && url.pathname.endsWith('/releases/42') && method === 'PATCH') {
+        const body = JSON.parse(options.body)
+        assert.equal(body.draft, false)
+        events.push('publish')
+        return Response.json({ id: 42, ...body })
+      }
+      throw new Error(`Unexpected mocked GitHub request: ${method} ${url}`)
+    }
+
+    await publishExtensionRelease({
+      releaseTag: 'extension/beta/v0.1.1.1',
+      metadataPath: join(directory, 'release.json'),
+      token: 'test-token',
+      fetchImpl,
+    })
+    assert.deepEqual(events, [
+      'commit', 'list', 'create',
+      `upload:${metadata.archive}`,
+      `upload:${metadata.archive}.sha256`,
+      'upload:release.json',
+      'upload:TESTING.md',
+      'publish',
+    ])
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
 })
 
 test('readiness uses exact origin and fails closed for missing settings, permissions or capabilities', async () => {

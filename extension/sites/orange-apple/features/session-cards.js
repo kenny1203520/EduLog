@@ -15,6 +15,35 @@
   // UI wording goes through the shared phrasebook (zh-TW / zh-CN / en); data stays in params.
   const tx = (text, params = {}) => globalThis.edulogUi?.tx(text, params) ?? String(text).replace(/\{(\w+)\}/g, (_, name) => String(params[name] ?? ''))
   const collapse = value => String(value || '').trim().replace(/\s+/g, ' ')
+  const counts = (value, count) => {
+    const text = String(value || '')
+    const digit = character => character >= '0' && character <= '9'
+    const whitespace = character => character !== undefined && character.trim() === ''
+    let start = 0
+    while (start < text.length) {
+      let position = start
+      const values = []
+      const firstStart = position
+      while (digit(text[position])) position++
+      if (position === firstStart) { start++; continue }
+      const firstEnd = position
+      values.push(Number(text.slice(firstStart, position)))
+      let valid = true
+      for (let part = 1; part < count; part++) {
+        while (whitespace(text[position])) position++
+        if (text[position] !== '/') { valid = false; break }
+        position++
+        while (whitespace(text[position])) position++
+        const digitsStart = position
+        while (digit(text[position])) position++
+        if (position === digitsStart) { valid = false; break }
+        values.push(Number(text.slice(digitsStart, position)))
+      }
+      if (valid && values.every(Number.isSafeInteger)) return values
+      start = firstEnd
+    }
+    return null
+  }
   // Persistent chips first; the rest sit under 更多.
   const PRIMARY_CHIPS = [['pending', '待處理'], ['unmarked', '未點名'], ['incomplete', '資料未齊'], ['all', '全部']]
   const MORE_CHIPS = [['attention', '需關注'], ['leave', '請假 / 缺席'], ['done', '已完成'], ['closed', '原站未開放'], ['other', '非本堂']]
@@ -30,8 +59,8 @@
     if (column < 0) return roster
     for (const row of table.rows) {
       const admission = row.querySelector(selectors.admissionId)?.getAttribute('data-admission-id')
-      const match = /(\d+)\s*\/\s*(\d+)/.exec(collapse(row.cells[column]?.textContent))
-      if (admission && match) roster.set(admission, { remaining: Number(match[1]), total: Number(match[2]) })
+      const match = counts(collapse(row.cells[column]?.textContent), 2)
+      if (admission && match) roster.set(admission, { remaining: match[0], total: match[1] })
     }
     return roster
   }
@@ -79,7 +108,7 @@
     const courseText = collapse(courseCell?.textContent)
     const expired = words.courseExpired.exec(courseText)?.[0] || null
     const remaining = admission ? roster.get(admission)?.remaining : undefined
-    const stats = /(\d+)\s*\/\s*(\d+)\s*\/\s*(\d+)/.exec(collapse(row.cells[2]?.textContent))
+    const stats = counts(collapse(row.cells[2]?.textContent), 3)
     const note = row.querySelector(selectors.noteLink)
     const paused = Boolean(state.courseStatus && !state.otherSession)
     const recordLink = cell?.querySelector(selectors.recordLink) || null
@@ -111,7 +140,7 @@
       stage: collapse(courseCell?.querySelector(selectors.lastStage)?.textContent),
       recordLink,
       enable: enableReady ? enable : null, enableBlocked: Boolean(enable) && !enableReady && unmarked,
-      stats: stats ? { attended: stats[1], absent: stats[2], unrecorded: stats[3] } : null,
+      stats: stats ? { attended: stats[0], absent: stats[1], unrecorded: stats[2] } : null,
       // Assumption to verify: the note popover box has text only when a note exists.
       note, noteHasContent: Boolean(collapse(note?.querySelector('.admission-comment-box')?.textContent)),
       profile: linkMatching(row, href => lexicon.paths.enrollment.test(href)),

@@ -127,7 +127,7 @@
         if (cells.length < 3) continue
         const label = collapse(cells[0].textContent), dateText = collapse(cells[1].textContent), amountText = collapse(cells.at(-1).textContent)
         const dates = dateText.match(words.hourDate) || []
-        const amount = /\d/.test(amountText) ? Number(amountText.replace(/NT\$|,|\s/g, '')) : NaN
+        const amount = /\d/.test(amountText) ? Number(amountText.replace(/NT\$|,|\s/g, '')) : Number.NaN
         if (!label || !Number.isFinite(amount)) { unreadable++; continue }
         sum += amount
         const schedule = model.classSchedule(label)

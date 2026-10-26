@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
+import { resolveProjectPath } from './paths.mjs'
 
 export async function checkCompatibility(metadata, { url, token, fetchImpl = fetch }) {
   if (!url || !token) throw new Error('EXTENSION_API_URL and EXTENSION_API_TOKEN are required for a tagged release')
@@ -20,7 +21,9 @@ export async function checkCompatibility(metadata, { url, token, fetchImpl = fet
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    const metadata = JSON.parse(readFileSync(process.argv[2], 'utf8'))
-    console.log(JSON.stringify(await checkCompatibility(metadata, { url: process.env.EXTENSION_API_URL, token: process.env.EXTENSION_API_TOKEN })))
+    const metadataPath = resolveProjectPath(process.argv[2], 'Release metadata path')
+    const metadata = JSON.parse(readFileSync(metadataPath, 'utf8'))
+    await checkCompatibility(metadata, { url: process.env.EXTENSION_API_URL, token: process.env.EXTENSION_API_TOKEN })
+    console.log('Extension release compatibility check passed')
   } catch (error) { console.error(error.message); process.exitCode = 1 }
 }

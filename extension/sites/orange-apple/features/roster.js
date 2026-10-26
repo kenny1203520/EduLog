@@ -7,6 +7,30 @@
   const { text: words, selectors } = lexicon
   const LOW_REMAINING = 2
   const collapse = value => String(value || '').trim().replace(/\s+/g, ' ')
+  const ratio = value => {
+    const text = String(value || '')
+    const digit = character => character >= '0' && character <= '9'
+    const whitespace = character => character !== undefined && character.trim() === ''
+    let start = 0
+    while (start < text.length) {
+      let position = start
+      if (!digit(text[position])) { start++; continue }
+      while (digit(text[position])) position++
+      const firstEnd = position
+      const first = Number(text.slice(start, position))
+      while (whitespace(text[position])) position++
+      if (text[position] !== '/') { start = firstEnd; continue }
+      position++
+      while (whitespace(text[position])) position++
+      const secondStart = position
+      while (digit(text[position])) position++
+      if (position === secondStart) { start = firstEnd; continue }
+      const values = [first, Number(text.slice(secondStart, position))]
+      if (values.every(Number.isSafeInteger)) return values
+      start = firstEnd
+    }
+    return null
+  }
   // UI wording goes through the shared phrasebook (zh-TW / zh-CN / en); data stays in params.
   const tx = (text, params = {}) => globalThis.edulogUi?.tx(text, params) ?? String(text).replace(/\{(\w+)\}/g, (_, name) => String(params[name] ?? ''))
   const CHIPS = [['all', '全部'], ['low', '剩餘少'], ['notStarted', '尚未開課'], ['special', '特殊狀態']]
@@ -41,8 +65,8 @@
       const period = collapse([...(courseCell?.querySelectorAll(':scope > div') || [])].map(node => node.textContent).join(' '))
       const signup = cell('signup')
       const startBadge = [...(signup?.querySelectorAll('.badge') || [])].find(node => words.plannedStart.test(node.textContent))
-      const remaining = /(\d+)\s*\/\s*(\d+)/.exec(collapse(cell('remaining')?.textContent))
-      const makeup = /(\d+)\s*\/\s*(\d+)/.exec(collapse(cell('makeup')?.textContent))
+      const remaining = ratio(collapse(cell('remaining')?.textContent))
+      const makeup = ratio(collapse(cell('makeup')?.textContent))
       const colour = rowColour(row)
       const note = row.querySelector(selectors.noteLink)
       enrolments.push({
@@ -50,8 +74,8 @@
         grade: collapse(cell('grade')?.textContent),
         course, period,
         plannedStart: startBadge ? collapse(startBadge.nextElementSibling?.textContent) || tx('未定') : null,
-        remaining: remaining ? Number(remaining[1]) : null, total: remaining ? Number(remaining[2]) : null,
-        makeup: makeup ? { used: Number(makeup[1]), allowed: Number(makeup[2]) } : null,
+        remaining: remaining ? remaining[0] : null, total: remaining ? remaining[1] : null,
+        makeup: makeup ? { used: makeup[0], allowed: makeup[1] } : null,
         special: SPECIAL.filter(item => item.test(row, colour)).map(({ tone, label }) => ({ tone, label })),
         checkbox: row.cells[0]?.querySelector('input[type=checkbox]') || null,
         note, noteHasContent: Boolean(collapse(note?.querySelector('.admission-comment-box')?.textContent)),

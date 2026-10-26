@@ -82,12 +82,12 @@ async function handleLogin() {
 
             <form @submit.prevent="handleLogin" class="space-y-6 w-full">
                 <div class="space-y-2">
-                    <label class="block text-[12px] font-black text-emerald-600 uppercase tracking-[0.2em] ml-1">{{
+                    <label class="block text-[12px] font-black text-emerald-600 uppercase tracking-[0.2em] ml-1" for="edulog-loginview-28-1916">{{
                         $t('auth.email') }}</label>
                     <div class="relative group">
                         <input v-model="email" type="email" required
                             class="w-full border-gray-100 rounded-2xl px-5 py-4 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all outline-none bg-gray-50/50 focus:bg-white text-gray-800 placeholder-gray-400 font-medium"
-                            :placeholder="$t('auth.email_placeholder')">
+                            :placeholder="$t('auth.email_placeholder')" id="edulog-loginview-28-1916">
                         <div
                             class="absolute inset-0 border-2 border-transparent group-focus-within:border-emerald-500/20 rounded-2xl pointer-events-none transition-all">
                         </div>

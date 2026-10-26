@@ -153,7 +153,7 @@ onMounted(async () => {
                     </select>
                 </label>
                 <label class="block text-sm font-bold text-gray-700">{{ t('ai.settings.label') }}
-                    <input v-model="form.label" maxlength="120" class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 px-3 text-sm" :placeholder="t(`ai.providers.${form.provider}`)" />
+                    <input v-model="form.label" maxlength="120" class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 px-3 text-sm" :placeholder="t(`ai.providers.${form.provider}`)"  :aria-label="t(`ai.providers.${form.provider}`)"/>
                 </label>
                 <label class="block text-sm font-bold text-gray-700">{{ t('ai.settings.api_key') }}
                     <input v-model="form.secret" type="password" autocomplete="off" required maxlength="4096" class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 px-3 text-sm" />

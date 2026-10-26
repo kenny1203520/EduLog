@@ -27,29 +27,29 @@
                         $t('student.suspension.add_new') }}</h3>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div class="space-y-2">
-                            <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">
+                            <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentsuspensions-30-1850">
                                 {{ $t('student.suspension.start_date') }} <span class="text-red-500">*</span>
                             </label>
                             <input type="date" v-model="newSuspension.startDate"
-                                class="w-full bg-white border-gray-100 rounded-2xl px-5 py-3 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all font-bold text-gray-700 shadow-sm">
+                                class="w-full bg-white border-gray-100 rounded-2xl px-5 py-3 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all font-bold text-gray-700 shadow-sm" id="edulog-studentsuspensions-30-1850">
                         </div>
                         <div class="space-y-2">
-                            <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">
+                            <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentsuspensions-37-2503">
                                 {{ $t('student.suspension.end_date') }}
                                 <span class="text-[10px] lowercase italic lowercase">({{
                                     $t('student.suspension.indefinite_hint')
                                 }})</span>
                             </label>
                             <input type="date" v-model="newSuspension.endDate"
-                                class="w-full bg-white border-gray-100 rounded-2xl px-5 py-3 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all font-bold text-gray-700 shadow-sm">
+                                class="w-full bg-white border-gray-100 rounded-2xl px-5 py-3 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all font-bold text-gray-700 shadow-sm" id="edulog-studentsuspensions-37-2503">
                         </div>
                         <div class="md:col-span-2 space-y-2">
-                            <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">
+                            <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentsuspensions-47-3339">
                                 {{ $t('student.suspension.reason') }}
                             </label>
                             <input type="text" v-model="newSuspension.reason"
                                 :placeholder="$t('student.suspension.reason_placeholder')"
-                                class="w-full bg-white border-gray-100 rounded-2xl px-5 py-3 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all font-bold text-gray-700 shadow-sm">
+                                class="w-full bg-white border-gray-100 rounded-2xl px-5 py-3 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all font-bold text-gray-700 shadow-sm" id="edulog-studentsuspensions-47-3339">
                         </div>
                     </div>
                     <div class="mt-8 flex justify-end">
@@ -97,10 +97,10 @@
                                 <div class="grid grid-cols-2 gap-4">
                                     <div class="space-y-1.5">
                                         <label
-                                            class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">{{
+                                            class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1" for="edulog-studentsuspensions-99-7382">{{
                                                 $t('student.suspension.end_date') }}</label>
                                         <input type="date" v-model="editForm.endDate"
-                                            class="w-full text-sm font-bold bg-gray-50 border-gray-100 rounded-xl px-4 py-2 hover:bg-white transition-colors focus:ring-4 focus:ring-emerald-500/10 outline-none focus:border-emerald-500">
+                                            class="w-full text-sm font-bold bg-gray-50 border-gray-100 rounded-xl px-4 py-2 hover:bg-white transition-colors focus:ring-4 focus:ring-emerald-500/10 outline-none focus:border-emerald-500" id="edulog-studentsuspensions-99-7382">
                                         <div class="mt-2 ml-1">
                                             <label
                                                 class="inline-flex items-center text-[10px] font-black text-gray-400 hover:text-emerald-600 cursor-pointer transition-colors uppercase tracking-widest">
@@ -113,10 +113,10 @@
                                     </div>
                                     <div class="space-y-1.5">
                                         <label
-                                            class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">{{
+                                            class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1" for="edulog-studentsuspensions-115-8931">{{
                                                 $t('student.suspension.reason') }}</label>
                                         <input type="text" v-model="editForm.reason"
-                                            class="w-full text-sm font-bold bg-gray-50 border-gray-100 rounded-xl px-4 py-2 hover:bg-white transition-colors focus:ring-4 focus:ring-emerald-500/10 outline-none focus:border-emerald-500">
+                                            class="w-full text-sm font-bold bg-gray-50 border-gray-100 rounded-xl px-4 py-2 hover:bg-white transition-colors focus:ring-4 focus:ring-emerald-500/10 outline-none focus:border-emerald-500" id="edulog-studentsuspensions-115-8931">
                                     </div>
                                 </div>
                                 <div class="flex justify-end gap-3 pt-4 border-t border-gray-50">

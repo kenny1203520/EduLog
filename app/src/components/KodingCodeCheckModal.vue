@@ -300,20 +300,20 @@ function launchKodingCheck() {
 
                 <div class="grid gap-4 md:grid-cols-2">
                     <div>
-                        <label class="mb-2 block text-sm font-bold text-gray-700">
+                        <label class="mb-2 block text-sm font-bold text-gray-700" for="edulog-kodingcodecheckmodal-38-2384">
                             {{ $t('classroom.koding_lesson') }}
                         </label>
                         <BaseDropdown v-model="form.lesson" :options="lessonOptions" theme="amber"
-                            :disabled="isLoadingLessons" />
+                            :disabled="isLoadingLessons"  id="edulog-kodingcodecheckmodal-38-2384"/>
                     </div>
 
                     <div>
-                        <label class="mb-2 block text-sm font-bold text-gray-700">
+                        <label class="mb-2 block text-sm font-bold text-gray-700" for="edulog-kodingcodecheckmodal-46-2777">
                             {{ $t('classroom.koding_comparison') }}
                         </label>
                         <SearchableSelect v-model="form.candidateKey" :options="candidateOptions"
                             :placeholder="$t('classroom.koding_select_comparison')"
-                            @update:modelValue="handleCandidateChange" />
+                            @update:modelValue="handleCandidateChange"  id="edulog-kodingcodecheckmodal-46-2777"/>
                         <label
                             class="mt-3 flex cursor-pointer items-start gap-3 rounded-2xl border border-amber-100 bg-amber-50/60 px-3 py-2 text-sm font-semibold text-amber-900">
                             <input v-model="showOnlyCourseStudents" type="checkbox"
@@ -344,10 +344,10 @@ function launchKodingCheck() {
                 </div>
 
                 <div v-if="selectedCandidateCredentials.length > 0">
-                    <label class="mb-2 block text-sm font-bold text-gray-700">
+                    <label class="mb-2 block text-sm font-bold text-gray-700" for="edulog-kodingcodecheckmodal-82-5046">
                         {{ $t('classroom.koding_account') }}
                     </label>
-                    <BaseDropdown v-model="form.credentialId" :options="credentialOptions" theme="amber" />
+                    <BaseDropdown v-model="form.credentialId" :options="credentialOptions" theme="amber"  id="edulog-kodingcodecheckmodal-82-5046"/>
                 </div>
             </div>
 

@@ -212,33 +212,33 @@ async function submitActivateTrial() {
                     <TimeZoneSelect :label="$t('common.time_zone')" dense />
 
                     <div class="space-y-2">
-                        <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1">{{
+                        <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1" for="edulog-activatetrialmodal-39-2516">{{
                             $t('student.activate_trial_modal.classroom_filter') }}</label>
                         <SearchableSelect v-model="selectedClassroomId" :options="classroomOptions"
                             :placeholder="isLoadingClassrooms ? $t('common.loading') : $t('classroom.all_rooms')"
-                            :disabled="!currentEnrollment" />
+                            :disabled="!currentEnrollment"  id="edulog-activatetrialmodal-39-2516"/>
                     </div>
 
                     <div class="space-y-2">
-                        <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1">{{
+                        <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1" for="edulog-activatetrialmodal-47-3067">{{
                             $t('student.activate_trial_modal.to_classroom') }}</label>
                         <SearchableSelect v-model="activateTrialForm.class_session_id" :options="sessionOptions"
-                            :placeholder="$t('common.select_placeholder')" :disabled="!currentEnrollment" />
+                            :placeholder="$t('common.select_placeholder')" :disabled="!currentEnrollment"  id="edulog-activatetrialmodal-47-3067"/>
                     </div>
 
                     <div class="space-y-2">
-                        <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1">{{
+                        <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1" for="edulog-activatetrialmodal-54-3560">{{
                             $t('student.activate_trial_modal.effective_date') }}</label>
                         <input type="date" v-model="activateTrialForm.effective_date"
-                            class="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-3 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-700 shadow-sm">
+                            class="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-3 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-700 shadow-sm" id="edulog-activatetrialmodal-54-3560">
                     </div>
 
                     <div class="space-y-2">
-                        <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1">{{
+                        <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1" for="edulog-activatetrialmodal-61-4132">{{
                             $t('student.activate_trial_modal.target_total_reports') }}</label>
                         <input type="number" min="1" step="1" v-model.number="activateTrialForm.target_total_reports"
                             :disabled="isLoadingEnrollment"
-                            class="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-3 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-700 shadow-sm disabled:opacity-60">
+                            class="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-3 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-700 shadow-sm disabled:opacity-60" id="edulog-activatetrialmodal-61-4132">
                         <p class="text-xs font-bold text-gray-400 ml-1">
                             {{ $t('student.activate_trial_modal.target_total_reports_hint', defaultReportCount, { named: { count: defaultReportCount } }) }}
                         </p>

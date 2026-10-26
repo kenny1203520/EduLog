@@ -214,7 +214,12 @@ function resetUserSearchState() {
 }
 
 function isValidEmail(email: string) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    const normalized = email
+    if (!normalized || /\s/.test(normalized)) return false
+    const atIndex = normalized.indexOf('@')
+    if (atIndex <= 0 || atIndex !== normalized.lastIndexOf('@')) return false
+    const domainDot = normalized.indexOf('.', atIndex + 1)
+    return domainDot > atIndex + 1 && domainDot < normalized.length - 1
 }
 
 function isValidUuid(value: string) {
@@ -567,7 +572,7 @@ async function deleteTeacherCredential(credential: TeacherCredentialDTO) {
                             </svg>
                         </div>
                         <input v-model="searchQuery" type="text" :placeholder="t('teacher.search_placeholder')"
-                            class="flex-1 bg-transparent border-none outline-none text-sm font-bold text-gray-700 placeholder:text-gray-300 py-2 min-w-0" />
+                            class="flex-1 bg-transparent border-none outline-none text-sm font-bold text-gray-700 placeholder:text-gray-300 py-2 min-w-0"  :aria-label="t('teacher.search_placeholder')"/>
                         <button v-if="searchQuery" @click="searchQuery = ''"
                             class="p-2 text-gray-300 hover:text-gray-500 transition-colors">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
@@ -674,11 +679,12 @@ async function deleteTeacherCredential(credential: TeacherCredentialDTO) {
                 class="bg-white rounded-3xl shadow-sm border border-gray-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group overflow-hidden flex flex-col h-full relative">
 
                 <!-- Selection Checkbox -->
-                <div class="absolute top-4 left-4 z-10">
+                <label class="absolute top-4 left-4 z-10">
                     <input type="checkbox" :checked="teacher.id ? selectedTeacherIds.has(teacher.id) : false"
                         @change="toggleTeacherSelection(teacher.id, ($event.target as HTMLInputElement).checked)"
                         class="h-5 w-5 rounded-lg border-gray-200 text-emerald-600 focus:ring-emerald-500 transition-all cursor-pointer shadow-sm" />
-                </div>
+                    <span class="sr-only">{{ teacher.name }}</span>
+                </label>
 
                 <!-- Card Header/Avatar -->
                 <div class="p-6 pb-0 flex flex-col items-center text-center">
@@ -822,13 +828,13 @@ async function deleteTeacherCredential(credential: TeacherCredentialDTO) {
                     <div class="mb-6 rounded-3xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
                         <div class="flex flex-col gap-3 lg:flex-row lg:items-end">
                             <div class="flex-1">
-                                <label class="mb-2 block text-sm font-semibold text-slate-700">
+                                <label class="mb-2 block text-sm font-semibold text-slate-700" for="edulog-teachermanagementview-286-20486">
                                     {{ t('teacher.user_search_label') }}
                                 </label>
                                 <input v-model="userSearchQuery" type="email"
                                     :placeholder="t('teacher.user_search_placeholder')"
                                     class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
-                                    @keydown.enter.prevent="searchUsersByEmail" />
+                                    @keydown.enter.prevent="searchUsersByEmail"  id="edulog-teachermanagementview-286-20486"/>
                             </div>
                             <div class="flex items-center gap-3">
                                 <label class="inline-flex items-center gap-2 text-sm text-slate-700">
@@ -874,11 +880,11 @@ async function deleteTeacherCredential(credential: TeacherCredentialDTO) {
 
                     <div class="grid gap-5 md:grid-cols-2">
                         <div>
-                            <label class="mb-2 block text-sm font-semibold text-slate-700">
+                            <label class="mb-2 block text-sm font-semibold text-slate-700" for="edulog-teachermanagementview-338-24164">
                                 {{ t('teacher.user_id_label') }}
                             </label>
                             <input v-model="form.user_id" type="text" :placeholder="t('teacher.user_id_placeholder')" :disabled="!!editingTeacher"
-                                class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
+                                class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"  id="edulog-teachermanagementview-338-24164"/>
                             <div v-if="editingTeacher?.id" class="mt-2 flex flex-wrap items-center gap-2">
                                 <p class="text-xs font-medium text-amber-700">{{ t('teacher.account_link_locked') }}</p>
                                 <button type="button" class="rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-50" @click="openAccountLinkDialog">
@@ -888,59 +894,60 @@ async function deleteTeacherCredential(credential: TeacherCredentialDTO) {
                         </div>
 
                         <div>
-                            <label class="mb-2 block text-sm font-semibold text-slate-700">
+                            <label class="mb-2 block text-sm font-semibold text-slate-700" for="edulog-teachermanagementview-352-25408">
                                 {{ t('teacher.name_label') }} <span class="text-rose-500">*</span>
                             </label>
                             <input v-model="form.name" type="text" :placeholder="t('teacher.name_placeholder')"
-                                class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
+                                class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"  id="edulog-teachermanagementview-352-25408"/>
                         </div>
 
                         <div>
-                            <label class="mb-2 block text-sm font-semibold text-slate-700">
+                            <label class="mb-2 block text-sm font-semibold text-slate-700" for="edulog-teachermanagementview-360-26060">
                                 {{ t('teacher.email_label') }} <span class="text-rose-500">*</span>
                             </label>
                             <input v-model="form.email" type="email" :placeholder="t('teacher.email_placeholder')"
-                                class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
+                                class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"  id="edulog-teachermanagementview-360-26060"/>
                         </div>
 
                         <div>
-                            <label class="mb-2 block text-sm font-semibold text-slate-700">
+                            <label class="mb-2 block text-sm font-semibold text-slate-700" for="edulog-teachermanagementview-368-26716">
                                 {{ t('teacher.phone_label') }}
                             </label>
                             <input v-model="form.phone" type="tel" :placeholder="t('teacher.phone_placeholder')"
-                                class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
+                                class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"  id="edulog-teachermanagementview-368-26716"/>
                         </div>
 
                         <div>
-                            <label class="mb-2 block text-sm font-semibold text-slate-700">
+                            <label class="mb-2 block text-sm font-semibold text-slate-700" for="edulog-teachermanagementview-376-27333">
                                 {{ t('teacher.birthday_label') }}
                             </label>
                             <input v-model="form.birthday" type="date"
-                                class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
+                                class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"  id="edulog-teachermanagementview-376-27333"/>
                         </div>
 
                         <div>
-                            <label class="mb-2 block text-sm font-semibold text-slate-700">
+                            <label class="mb-2 block text-sm font-semibold text-slate-700" for="edulog-teachermanagementview-384-27884">
                                 {{ t('teacher.gov_id_label') }}
                             </label>
                             <input v-model="form.gov_id" type="text" maxlength="20"
                                 :placeholder="t('teacher.gov_id_placeholder')"
-                                class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
+                                class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"  id="edulog-teachermanagementview-384-27884"/>
                         </div>
 
                         <div class="md:col-span-2">
-                            <label class="mb-2 block text-sm font-semibold text-slate-700">
+                            <label class="mb-2 block text-sm font-semibold text-slate-700" for="edulog-teachermanagementview-393-28574">
                                 {{ t('teacher.address_label') }}
                             </label>
                             <input v-model="form.address" type="text" :placeholder="t('teacher.address_placeholder')"
-                                class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
+                                class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"  id="edulog-teachermanagementview-393-28574"/>
                         </div>
 
                         <div class="md:col-span-2">
-                            <label class="mb-2 block text-sm font-semibold text-slate-700">
+                            <p class="mb-2 block text-sm font-semibold text-slate-700">
                                 {{ t('teacher.bio_label') }}
-                            </label>
+                            </p>
                             <TextEditor v-model="teacherBioContent" preset="form" :min-height="112"
+                                :aria-label="t('teacher.bio_label')"
                                 :placeholder="t('teacher.bio_placeholder')" />
                         </div>
                     </div>
@@ -961,43 +968,43 @@ async function deleteTeacherCredential(credential: TeacherCredentialDTO) {
                                 class="space-y-4 rounded-2xl border border-emerald-100 bg-white p-4">
                                 <div class="grid gap-3 md:grid-cols-2">
                                     <div>
-                                        <label class="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                                        <label class="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500" for="edulog-teachermanagementview-425-30803">
                                             {{ t('teacher.credentials_platform') }}
                                         </label>
                                         <BaseDropdown v-model="credential.platformSelection" :options="platformOptions"
-                                            theme="emerald" />
+                                            theme="emerald"  id="edulog-teachermanagementview-425-30803"/>
                                     </div>
                                     <div v-if="credential.platformSelection === 'Other'">
-                                        <label class="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                                        <label class="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500" for="edulog-teachermanagementview-432-31376">
                                             {{ t('teacher.credentials_platform_name') }}
                                         </label>
                                         <input v-model="credential.customPlatform" type="text"
                                             :placeholder="t('teacher.credentials_platform_name')"
-                                            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
+                                            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"  id="edulog-teachermanagementview-432-31376"/>
                                     </div>
                                 </div>
 
                                 <div class="grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto] md:items-end">
                                     <div>
-                                        <label class="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                                        <label class="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500" for="edulog-teachermanagementview-443-32288">
                                             {{ t('teacher.credentials_username') }}
                                         </label>
                                         <input v-model="credential.username" type="text"
-                                            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
+                                            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"  id="edulog-teachermanagementview-443-32288"/>
                                     </div>
                                     <div>
-                                        <label class="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                                        <label class="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500" for="edulog-teachermanagementview-450-32949">
                                             {{ t('teacher.credentials_password') }}
                                         </label>
                                         <input v-model="credential.password" type="text"
-                                            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
+                                            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"  id="edulog-teachermanagementview-450-32949"/>
                                     </div>
                                     <div>
-                                        <label class="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                                        <label class="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500" for="edulog-teachermanagementview-457-33610">
                                             {{ t('teacher.credentials_url') }}
                                         </label>
                                         <input v-model="credential.url" type="url"
-                                            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
+                                            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"  id="edulog-teachermanagementview-457-33610"/>
                                     </div>
                                     <div class="flex gap-2">
                                         <button @click="updateTeacherCredential(credential)" :disabled="isCredentialSaving"
@@ -1032,43 +1039,43 @@ async function deleteTeacherCredential(credential: TeacherCredentialDTO) {
                             class="mt-3 space-y-4 rounded-2xl border border-dashed border-emerald-200 bg-white/80 p-4">
                             <div class="grid gap-3 md:grid-cols-2">
                                 <div>
-                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500" for="edulog-teachermanagementview-496-36833">
                                         {{ t('teacher.credentials_platform') }}
                                     </label>
                                     <BaseDropdown v-model="newCredential.platform" :options="platformOptions"
-                                        theme="emerald" :placeholder="t('teacher.credentials_platform')" />
+                                        theme="emerald" :placeholder="t('teacher.credentials_platform')"  id="edulog-teachermanagementview-496-36833"/>
                                 </div>
                                 <div v-if="newCredential.platform === 'Other'">
-                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500" for="edulog-teachermanagementview-503-37415">
                                         {{ t('teacher.credentials_platform_name') }}
                                     </label>
                                     <input v-model="newCredential.customPlatform" type="text"
                                         :placeholder="t('teacher.credentials_platform_name')"
-                                        class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" />
+                                        class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"  id="edulog-teachermanagementview-503-37415"/>
                                 </div>
                             </div>
 
                             <div class="grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto] md:items-end">
                                 <div>
-                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500" for="edulog-teachermanagementview-514-38272">
                                         {{ t('teacher.credentials_username') }}
                                     </label>
                                     <input v-model="newCredential.username" type="text"
-                                        class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" />
+                                        class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"  id="edulog-teachermanagementview-514-38272"/>
                                 </div>
                                 <div>
-                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500" for="edulog-teachermanagementview-521-38890">
                                         {{ t('teacher.credentials_password') }}
                                     </label>
                                     <input v-model="newCredential.password" type="text"
-                                        class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" />
+                                        class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"  id="edulog-teachermanagementview-521-38890"/>
                                 </div>
                                 <div>
-                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500" for="edulog-teachermanagementview-528-39508">
                                         {{ t('teacher.credentials_url') }}
                                     </label>
                                     <input v-model="newCredential.url" type="url"
-                                        class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" />
+                                        class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"  id="edulog-teachermanagementview-528-39508"/>
                                 </div>
                                 <div class="flex gap-2">
                                     <button @click="closeAddCredentialForm" :disabled="isCredentialSaving"

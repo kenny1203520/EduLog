@@ -375,7 +375,7 @@ export function renderEnrollmentDetail(body, row, { view, controller, context, h
       h('button', { type: 'button', class: 'btn btn-secondary btn-sm', onclick: () => hooks.openAdvanced('students', id) }, icon('sliders'), say(h('span'), 'ws.detail.fullMatch')),
       skipped
         ? h('button', { type: 'button', class: 'btn btn-ghost btn-sm', onclick: () => hooks.restore(row) }, icon('rotate'), say(h('span'), 'ws.restore'))
-        : h('button', { type: 'button', class: 'btn btn-danger-ghost btn-sm', onclick: () => hooks.skip(row) }, say(h('span'), 'ws.skip'))))
+        : h('button', { type: 'button', class: 'btn btn-danger-ghost btn-sm', onclick: () => hooks.skip(row) }, say(h('span'), 'ws.skip-item'))))
 }
 
 export { openDrawer, closeDrawer }

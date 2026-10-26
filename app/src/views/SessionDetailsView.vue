@@ -2603,9 +2603,10 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                             <label class="relative inline-flex items-center cursor-pointer"
                                 :title="isOccurrenceInHoliday ? $t('report.error.cannot_set_conducted_during_holiday') : $t('classroom.class_held')"
                                 :class="{ 'opacity-50 cursor-not-allowed': isOccurrenceInHoliday }">
+                                <span class="sr-only">{{ $t('classroom.class_held') }}</span>
                                 <input type="checkbox" :checked="todayOccurrence && todayOccurrence.isConducted"
                                     :disabled="isOccurrenceInHoliday" @change="toggleIsConducted($event)"
-                                    class="sr-only peer">
+                                    :aria-label="$t('classroom.class_held')" class="sr-only peer">
                                 <div :class="isOccurrenceInHoliday ? 'bg-red-100' : 'bg-gray-200'"
                                     class="w-14 h-7 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-emerald-500">
                                 </div>
@@ -2662,9 +2663,11 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                 <label class="relative inline-flex shrink-0 items-center cursor-pointer"
                                     :class="{ 'opacity-50 cursor-not-allowed': !canEditTeacherAttendance(teacher) || isOccurrenceInHoliday || isTeacherOnLeave(teacher.id) }"
                                     :title="isTeacherOnLeave(teacher.id) ? $t('classroom.teacher_attendance_on_leave') : (isOccurrenceInHoliday ? $t('report.error.cannot_set_teacher_present_during_holiday') : (!canEditTeacherAttendance(teacher) ? $t('classroom.teacher_attendance_only_self') : ''))">
+                                    <span class="sr-only">{{ teacher.name }} - {{ $t('attendance.present') }}</span>
                                     <input type="checkbox" :checked="isTeacherPresent(teacher.id, teacher.user_id)"
                                         :disabled="!canEditTeacherAttendance(teacher) || isOccurrenceInHoliday || isTeacherOnLeave(teacher.id)"
-                                        @change="toggleTeacherAttendance(teacher.id, $event)" class="sr-only peer">
+                                        @change="toggleTeacherAttendance(teacher.id, $event)"
+                                        :aria-label="`${teacher.name} - ${$t('attendance.present')}`" class="sr-only peer">
                                     <div :class="isOccurrenceInHoliday ? 'bg-red-100' : 'bg-gray-200'"
                                         class="relative h-6 w-11 rounded-full transition-colors after:absolute after:left-[2px] after:top-0.5 after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all peer-checked:bg-emerald-500 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none">
                                     </div>
@@ -2679,17 +2682,17 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                     </div>
 
                     <div class="flex flex-col gap-3 rounded-[2rem] border border-gray-100 bg-white p-4 shadow-sm sm:flex-row sm:items-center">
-                        <label class="relative min-w-0 flex-1">
+                        <label class="relative min-w-0 flex-1" for="edulog-sessiondetailsview-291-24450">
                             <span class="sr-only">{{ $t('classroom.student_search') }}</span>
                             <svg class="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m21 21-4.35-4.35m1.35-5.65a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" />
                             </svg>
                             <input v-model="studentSearchQuery" type="search" :placeholder="$t('classroom.student_search_placeholder')"
-                                class="w-full rounded-2xl border border-gray-100 bg-gray-50 py-3 pl-12 pr-10 font-bold text-gray-800 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10">
+                                class="w-full rounded-2xl border border-gray-100 bg-gray-50 py-3 pl-12 pr-10 font-bold text-gray-800 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10" :aria-label="$t('classroom.student_search_placeholder')">
                             <button v-if="studentSearchQuery" type="button" @click="studentSearchQuery = ''"
                                 class="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700" :aria-label="$t('common.clear')">×</button>
                         </label>
-                        <select v-model="studentAttendanceFilter" class="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3 font-black text-gray-700 outline-none focus:border-emerald-500">
+                        <select v-model="studentAttendanceFilter" class="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3 font-black text-gray-700 outline-none focus:border-emerald-500" id="edulog-sessiondetailsview-291-24450">
                             <option value="all">{{ $t('classroom.student_filter_all') }}</option>
                             <option value="present">{{ $t('attendance.present') }}</option>
                             <option value="absent">{{ $t('attendance.absent') }}</option>
@@ -2919,34 +2922,34 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                     </div>
 
                     <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-2">{{ $t('classroom.add_student_search')
+                        <label class="block text-sm font-bold text-gray-700 mb-2" for="edulog-sessiondetailsview-531-43853">{{ $t('classroom.add_student_search')
                         }}</label>
                         <input v-model="makeupSearch" type="text"
                             :placeholder="$t('classroom.add_student_search_placeholder')"
-                            class="w-full border-gray-300 rounded-xl px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none" />
+                            class="w-full border-gray-300 rounded-xl px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"  id="edulog-sessiondetailsview-531-43853"/>
                     </div>
 
                     <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-2">{{ $t('classroom.add_student_student')
+                        <label class="block text-sm font-bold text-gray-700 mb-2" for="edulog-sessiondetailsview-539-44367">{{ $t('classroom.add_student_student')
                         }}</label>
                         <BaseDropdown v-model="selectedMakeupStudentId" :options="makeupStudentOptions"
                             :placeholder="$t('classroom.add_student_select_student_placeholder')" theme="emerald"
-                            @change="handleMakeupStudentChange" :disabled="isAddingStudent" />
+                            @change="handleMakeupStudentChange" :disabled="isAddingStudent"  id="edulog-sessiondetailsview-539-44367"/>
                     </div>
 
                     <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-2">{{ $t('classroom.add_student_course')
+                        <label class="block text-sm font-bold text-gray-700 mb-2" for="edulog-sessiondetailsview-547-44890">{{ $t('classroom.add_student_course')
                         }}</label>
                         <BaseDropdown v-model="selectedMakeupEnrollmentId" :options="makeupEnrollmentOptions"
                             :placeholder="$t('classroom.add_student_select_course_placeholder')" theme="emerald"
-                            :disabled="isAddingStudent || !selectedMakeupStudentId" />
+                            :disabled="isAddingStudent || !selectedMakeupStudentId"  id="edulog-sessiondetailsview-547-44890"/>
                     </div>
 
                     <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-2">{{
+                        <label class="block text-sm font-bold text-gray-700 mb-2" for="edulog-sessiondetailsview-555-45409">{{
                             $t('classroom.add_student_join_date') }}</label>
                         <input type="date" v-model="makeupJoinDate"
-                            class="w-full border-gray-300 rounded-xl px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none" />
+                            class="w-full border-gray-300 rounded-xl px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"  id="edulog-sessiondetailsview-555-45409"/>
                     </div>
 
                     <div v-if="selectedMakeupEnrollment" class="bg-emerald-50 border border-emerald-100 rounded-xl p-4">
@@ -3011,12 +3014,12 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
 
                     <div class="grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto] md:items-end">
                         <div>
-                            <label class="block text-xs font-bold uppercase tracking-wide text-amber-900 mb-1">
+                            <label class="block text-xs font-bold uppercase tracking-wide text-amber-900 mb-1" for="edulog-sessiondetailsview-623-50547">
                                 {{ $t('classroom.copy_template_load_from') }}
                             </label>
                             <BaseDropdown v-model="selectedAttendanceTemplateLoadKey"
                                 :options="attendanceTemplateLoadOptionsDropdown"
-                                :placeholder="$t('classroom.copy_template_load_from')" theme="amber" />
+                                :placeholder="$t('classroom.copy_template_load_from')" theme="amber"  id="edulog-sessiondetailsview-623-50547"/>
                         </div>
                         <button @click="loadSelectedAttendanceTemplate"
                             class="rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-amber-600"
@@ -3044,11 +3047,11 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                         </div>
 
                         <div v-if="variable.modeOptions?.length" class="space-y-1">
-                            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500" for="edulog-sessiondetailsview-656-52738">
                                 {{ $t('classroom.copy_template_variable_mode_label') }}
                             </label>
                             <BaseDropdown v-model="selectedAttendanceTemplateModes[variable.key]"
-                                :options="variable.modeOptions" theme="gray" />
+                                :options="variable.modeOptions" theme="gray"  id="edulog-sessiondetailsview-656-52738"/>
                         </div>
 
                         <div>
@@ -3157,7 +3160,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                 </svg>
                             </div>
                             <input v-model="teacherSearchQuery" type="text" :placeholder="$t('common.search_teacher')"
-                                class="flex-1 bg-transparent border-none outline-none text-sm font-bold text-gray-700 placeholder:text-gray-300 py-2" />
+                                class="flex-1 bg-transparent border-none outline-none text-sm font-bold text-gray-700 placeholder:text-gray-300 py-2"  :aria-label="$t('common.search_teacher')"/>
                         </div>
                     </div>
 

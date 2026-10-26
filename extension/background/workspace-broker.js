@@ -62,7 +62,7 @@ export function installWorkspaceBroker(getStatus) {
     const [method, path] = operations[message.operation], url = new URL(`${bound.instance}/api/extension/v1${path}`)
     if (method === 'GET' && message.query && message.operation !== 'work-records') for (const [key, value] of Object.entries(message.query)) { if (value == null || value === '') continue; if (!['offset','id','resource','classroom_id','course_id','class_session_id','student_id','enrollment_id','class_occurrence_id','date_from','date_to','search','cursor','limit','summary','roster_date','sort','anchor_date','exclude_course_id','source_admission_id','unlinked_only','source_origin','adapter_version'].includes(key) || String(value).length > (key==='cursor'?160:100)) fail('查詢格式不正確。'); url.searchParams.set(key, String(value)) }
     if (message.operation === 'work-records' && message.query) for (const [key,value] of Object.entries(message.query)) { if(value==null||value==='')continue;if(!['limit','cursor'].includes(key)||String(value).length>100)fail('工作紀錄查詢格式不正確。');url.searchParams.set(key,String(value)) }
-    const payload = method === 'GET' ? undefined : JSON.stringify(message.operation === 'complete' ? message.body : message.body)
+    const payload = method === 'GET' ? undefined : JSON.stringify(message.body)
     if (payload && new TextEncoder().encode(payload).byteLength > 200000) fail('批次過大，請拆分後再試。')
     const readOnly = ['history-list','history-route','history-detail','history-candidates','context','catalog','resolve','field-resolve','sync-preferences-get','reports','work','work-records','report-decisions-resolve','reconcile','import-info'].includes(message.operation)
     if (readOnly && message.requestId && !/^[a-f0-9-]{36}$/i.test(message.requestId)) fail('查詢識別碼不正確。')

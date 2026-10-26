@@ -58,9 +58,10 @@ export function pickEffectivePolicy(rows: QuotaPolicyRow[], userId: string, role
   if (user) return toPolicy(user)
   const roles = new Set(roleIds)
   const rolePolicies = rows.filter((row) => row.scope === 'role' && row.target_id && roles.has(row.target_id)).map(toPolicy)
-  if (rolePolicies.length > 0) {
+  const initialPolicy = rolePolicies[0]
+  if (initialPolicy) {
     return rolePolicies.reduce((best, policy) =>
-      policy.oneTimeTotal + policy.periodAmount > best.oneTimeTotal + best.periodAmount ? policy : best)
+      policy.oneTimeTotal + policy.periodAmount > best.oneTimeTotal + best.periodAmount ? policy : best, initialPolicy)
   }
   const fallback = rows.find((row) => row.scope === 'default')
   return fallback ? toPolicy(fallback) : null

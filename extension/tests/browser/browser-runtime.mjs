@@ -1,4 +1,4 @@
-import { pathToFileURL } from 'node:url'
+import { resolveNativeAssetFile, resolveNativeAssetsDirectory, resolveScreenshotDirectory } from '../../../scripts/extension/paths.mjs'
 export { fileURLToPath } from 'node:url'
 
 // The checks assert zh-TW copy and the UI follows navigator.language. CI runners default to en-US
@@ -11,12 +11,13 @@ function withLocale(browser) {
   }
   return browser
 }
-export async function loadPlaywright(modulePath) {
-  const imported = await (modulePath ? import(pathToFileURL(modulePath).href) : import('@playwright/test'))
+export async function loadPlaywright() {
+  const imported = await import('@playwright/test')
   const api = imported.chromium ? imported : imported.default
   const launch = api.chromium.launch.bind(api.chromium)
   return { ...api, chromium: Object.assign(Object.create(api.chromium), { launch: async options => withLocale(await launch(options)) }) }
 }
+export { resolveNativeAssetFile, resolveNativeAssetsDirectory, resolveScreenshotDirectory }
 export function browserTargets() {
   const channels = (process.env.EXTENSION_BROWSERS || 'chrome,msedge').split(',').map(s => s.trim())
   if (!channels.length || channels.some(c => !['chrome', 'msedge', 'chromium'].includes(c))) throw new Error('EXTENSION_BROWSERS must contain chrome, msedge or chromium')

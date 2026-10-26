@@ -262,7 +262,7 @@ function workView() {
 /** Build the page; `root` is the <body>. */
 export function renderShell(root = document.body) {
   root.replaceChildren(
-    T('a', 'ws.skip', { class: 'skip', href: '#main' }),
+    T('a', 'ws.skip-to-content', { class: 'skip', href: '#main' }),
     h('div', { class: 'ws' },
       header(),
       tabs(),

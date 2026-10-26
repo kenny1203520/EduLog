@@ -376,7 +376,7 @@ onMounted(load)
                 <div class="flex flex-wrap items-start justify-between gap-3">
                     <div><h4 class="font-black text-gray-900">{{ t('rbac.platform_teaching_assignments.local_title') }}</h4><p class="mt-1 text-sm text-gray-500">{{ t('rbac.platform_teaching_assignments.local_hint') }}</p></div>
                     <div class="flex flex-wrap gap-2">
-                        <select v-model="scopeType" class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-bold"><option value="classroom">{{ t('rbac.scope.classroom') }}</option><option value="class_session">{{ t('rbac.scope.class_session') }}</option></select>
+                        <select v-model="scopeType" :aria-label="t('rbac.scope.label')" class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-bold"><option value="classroom">{{ t('rbac.scope.classroom') }}</option><option value="class_session">{{ t('rbac.scope.class_session') }}</option></select>
                         <div v-if="scopeType === 'classroom'" class="w-full sm:w-64"><SearchableSelect v-model="classroomId" :options="classroomOptions" :placeholder="t('common.select_placeholder')" :aria-label="t('rbac.scope.classroom')" /></div>
                         <template v-else>
                             <div class="w-full sm:w-64"><SearchableSelect v-model="filterClassroomId" :options="sessionFilterOptions" :placeholder="t('rbac.platform_teaching_assignments.all_classrooms')" :aria-label="t('rbac.platform_teaching_assignments.classroom_filter')" /></div>

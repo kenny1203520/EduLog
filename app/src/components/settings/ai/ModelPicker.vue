@@ -98,8 +98,8 @@ onMounted(() => load())
                 </svg>
             </button>
         </div>
-        <label v-if="unsupportedReason === null && hiddenCount > 0" class="flex min-h-11 cursor-pointer items-center gap-2 text-xs font-bold text-gray-600">
-            <input v-model="showAll" type="checkbox" class="h-4 w-4 accent-emerald-600" />
+        <label v-if="unsupportedReason === null && hiddenCount > 0" class="flex min-h-11 cursor-pointer items-center gap-2 text-xs font-bold text-gray-600" for="model-picker-show-all">
+            <input id="model-picker-show-all" v-model="showAll" type="checkbox" class="h-4 w-4 accent-emerald-600" />
             {{ t('ai.settings.picker_show_all', { n: hiddenCount }) }}
         </label>
         <div v-if="manual">
