@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { extensionId, verifyRelease } from './release.mjs'
+import { extensionId, parseTag, verifyRelease } from './release.mjs'
+import { resolveProjectPath, resolveReleaseArchive } from './paths.mjs'
 
 const liveStates = new Set(['PUBLISHED', 'PUBLISHED_TO_TESTERS'])
 const versions = revision => (revision?.distributionChannels || []).map(c => c.crxVersion).filter(Boolean)
@@ -89,11 +90,36 @@ export function renderReceipt(body, receipt) {
   const clean = body.replace(marker, '\n').replace(/\nChrome Web Store：[^\n]*/g, '').trim()
   return clean + '\n\nChrome Web Store：' + labels[receipt.state] + '（' + receipt.version + '）\n\n<!-- edulog-extension-state\n' + JSON.stringify(receipt) + '\n-->\n'
 }
+export function githubApiUrl(repository, endpoint) {
+  const [owner, name] = (repository || '').split('/')
+  if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(owner || '') || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,98}$/.test(name || '') || name === '.' || name === '..') {
+    throw new Error('Invalid GitHub repository')
+  }
+  const repositoryPath = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`
+  const url = new URL('https://api.github.com')
+  if (endpoint.kind === 'releases') {
+    if (!Number.isSafeInteger(endpoint.page) || endpoint.page < 1) throw new Error('Invalid release page')
+    url.pathname = `${repositoryPath}/releases`
+    url.searchParams.set('per_page', '100')
+    url.searchParams.set('page', String(endpoint.page))
+  } else if (endpoint.kind === 'tag') {
+    parseTag(endpoint.tag)
+    url.pathname = `${repositoryPath}/releases/tags/${encodeURIComponent(endpoint.tag)}`
+  } else if (endpoint.kind === 'release') {
+    if (!/^[1-9][0-9]*$/.test(String(endpoint.id))) throw new Error('Invalid GitHub release ID')
+    url.pathname = `${repositoryPath}/releases/${endpoint.id}`
+  } else {
+    throw new Error('Invalid GitHub release request')
+  }
+  if (url.origin !== 'https://api.github.com') throw new Error('Invalid GitHub API origin')
+  return url
+}
+
 function githubClient() {
   const repository = process.env.GITHUB_REPOSITORY, token = process.env.GITHUB_TOKEN
-  if (!/^[\w.-]+\/[\w.-]+$/.test(repository || '') || !token) throw new Error('GITHUB_REPOSITORY and GITHUB_TOKEN required for durable release state')
-  return async (path, body) => {
-    const response = await fetch('https://api.github.com/repos/' + repository + path, {
+  if (!token) throw new Error('GITHUB_REPOSITORY and GITHUB_TOKEN required for durable release state')
+  return async (endpoint, body) => {
+    const response = await fetch(githubApiUrl(repository, endpoint), {
       method: body === undefined ? 'GET' : 'PATCH', redirect: 'error', signal: AbortSignal.timeout(30000),
       headers: { authorization: 'Bearer ' + token, accept: 'application/vnd.github+json', 'content-type': 'application/json', 'x-github-api-version': '2022-11-28' },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -107,14 +133,14 @@ async function main() {
   if (process.argv[2] === 'monitor') {
     // Follow all historical pending submissions, not just the most recent page.
     for (let page = 1; ; page++) {
-      const releases = await gh('/releases?per_page=100&page=' + page)
+      const releases = await gh({ kind: 'releases', page })
       for (const release of releases) {
         const receipt = readReceipt(release.body || '')
         if (!receipt || !['pending', 'submitting'].includes(receipt.state)) continue
         const client = createStoreClient({ publisher: receipt.publisher, item: receipt.item, token })
         const state = releaseState(await client.status(), receipt.version, { detectSuperseded: true })
         if (state && state !== receipt.state) {
-          await gh('/releases/' + release.id, { body: renderReceipt(release.body || '', { ...receipt, state }) })
+          await gh({ kind: 'release', id: release.id }, { body: renderReceipt(release.body || '', { ...receipt, state }) })
           console.log(release.tag_name + ': ' + state)
           if (state === 'rejected') process.exitCode = 1
         }
@@ -123,12 +149,15 @@ async function main() {
     }
     return
   }
-  const metadataPath = process.argv[2], metadata = JSON.parse(readFileSync(metadataPath, 'utf8'))
-  const archive = readFileSync(join(dirname(metadataPath), metadata.archive)), item = process.env.CWS_EXTENSION_ID
-  const release = await gh('/releases/tags/' + encodeURIComponent(process.env.RELEASE_TAG || ''))
+  const metadataPath = resolveProjectPath(process.argv[2], 'Release metadata path')
+  const metadata = JSON.parse(readFileSync(metadataPath, 'utf8'))
+  const archive = readFileSync(resolveReleaseArchive(dirname(metadataPath), metadata.archive)), item = process.env.CWS_EXTENSION_ID
+  const releaseTag = process.env.RELEASE_TAG || ''
+  parseTag(releaseTag)
+  const release = await gh({ kind: 'tag', tag: releaseTag })
   const client = createStoreClient({ publisher, item, token })
   const receipt = await publishRelease({ client, metadata, archive, item, previous: readReceipt(release.body || ''), save: async receipt => {
-    await gh('/releases/' + release.id, { body: renderReceipt(release.body || '', { ...receipt, publisher }) })
+    await gh({ kind: 'release', id: release.id }, { body: renderReceipt(release.body || '', { ...receipt, publisher }) })
   } })
   console.log('Chrome Web Store: ' + receipt.state)
   if (receipt.state === 'rejected') process.exitCode = 1

@@ -1,23 +1,23 @@
-import { loadPlaywright, browserTargets } from './browser-runtime.mjs'
+import { loadPlaywright, browserTargets, resolveNativeAssetFile, resolveNativeAssetsDirectory, resolveScreenshotDirectory } from './browser-runtime.mjs'
 import { siteFiles } from '../site-files.mjs'
 // Optional visual/keyboard check. No real site requests or personal fixtures.
 // node tests/browser-check.mjs <playwright/index.mjs> [screenshots-dir] [native-css-dir]
 import assert from 'node:assert/strict'
-import { readFileSync, existsSync, readdirSync, mkdirSync, mkdtempSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { readFileSync, existsSync, readdirSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 
-const { chromium } = await loadPlaywright(process.argv.slice(2).find(arg => !arg.startsWith('--')))
-const output = process.argv[3] || mkdtempSync(join(tmpdir(), 'edulog-ui-'))
+const { chromium } = await loadPlaywright()
+const output = resolveScreenshotDirectory(process.argv[3], 'ui')
 mkdirSync(output, { recursive: true })
 const read = file => readFileSync(new URL(file, import.meta.url), 'utf8')
 const css = read('../../styles/edulog-tokens.css') + read('../../sites/orange-apple/site.css') + read('../../content/dialog-layout.css')
 let nativeCss = read('../fixtures/native-bootstrap-dialog.css')
-if (process.argv[4]) {
-  const dir = process.argv[4]
-  const application = readdirSync(dir).find(n => n.startsWith('application-'))
+const nativeAssets = resolveNativeAssetsDirectory(process.argv[4])
+if (nativeAssets) {
+  const dir = nativeAssets
+  const application = readdirSync(dir).find(n => /^application-[A-Za-z0-9._-]+\.css$/.test(n))
   nativeCss = [application, 'flatpickr.min.css', 'style.min.css', 'all.css', 'jquery.dataTables.min.css', 'bootstrap-table.min.css', 'selectize.bootstrap5.min.css']
-    .filter(n => n && existsSync(join(dir, n))).map(n => readFileSync(join(dir, n), 'utf8')).join('\n')
+    .filter(n => n && existsSync(resolveNativeAssetFile(dir, n))).map(n => readFileSync(resolveNativeAssetFile(dir, n), 'utf8')).join('\n')
 }
 // en-US copy is longer: the toolbar, floating button and both panels must still fit 360px.
 // The fixtures are a zh-TW site, which "follow the site" would keep in zh-TW, so English is

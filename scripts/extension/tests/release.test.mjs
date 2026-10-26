@@ -1,9 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { zipFiles, unzipFiles, safePath } from '../archive.mjs'
-import { buildRelease, config, extensionId, git, parseTag, parseVersion, sha256, validateRuntime, verifyRelease } from '../release.mjs'
+import { buildRelease, config, extensionId, git, parseTag, parseVersion, sha256, validateGitRef, validateRuntime, verifyRelease } from '../release.mjs'
 import { checkCompatibility } from '../preflight.mjs'
-import { publishRelease, releaseState, renderReceipt, readReceipt, createStoreClient, compareVersions } from '../store.mjs'
+import { githubApiUrl, publishRelease, releaseState, renderReceipt, readReceipt, createStoreClient, compareVersions } from '../store.mjs'
+import { repoRoot, resolveNativeAssetFile, resolveProjectPath, resolveReleaseArchive, resolveScreenshotDirectory, resolveWithin } from '../paths.mjs'
 
 const key = config.sideloadPublicKey, item = extensionId(key)
 function fixture() {
@@ -21,6 +25,32 @@ test('tags and versions reject malformed, overflowing and channel-confused input
   assert.throws(() => parseVersion('1.2.3', 'unknown'))
   assert.equal(compareVersions('0.1.1.10', '0.1.1.2'), 1)
   assert.equal(compareVersions('1.0.0', '1.0.0.0'), 0)
+})
+test('CLI refs and file paths reject argument and directory traversal', () => {
+  assert.equal(validateGitRef('HEAD'), 'HEAD')
+  assert.equal(validateGitRef('extension/beta/v0.1.1.1'), 'extension/beta/v0.1.1.1')
+  for (const ref of ['--upload-pack=payload', '../outside', 'extension//beta', 'branch@{1}']) assert.throws(() => validateGitRef(ref))
+
+  const temporary = mkdtempSync(join(tmpdir(), 'edulog-safe-paths-'))
+  try {
+    assert.equal(resolveReleaseArchive(temporary, 'EduLog-Teaching-Tools-beta-0.1.1.1.zip'), join(temporary, 'EduLog-Teaching-Tools-beta-0.1.1.1.zip'))
+    assert.throws(() => resolveReleaseArchive(temporary, '../../.env'), /Invalid release archive/)
+    assert.throws(() => resolveWithin(temporary, '../outside', 'Test path'), /allowed directory/)
+    assert.throws(() => resolveProjectPath(join(temporary, 'release.json'), 'Metadata path'), /allowed directory/)
+    assert.equal(resolveScreenshotDirectory(join(temporary, 'screenshots'), 'test'), join(temporary, 'screenshots'))
+    assert.throws(() => resolveScreenshotDirectory(repoRoot, 'test'), /Screenshot directory/)
+    assert.throws(() => resolveNativeAssetFile(temporary, '../../.env'), /Invalid native CSS asset/)
+  } finally {
+    rmSync(temporary, { recursive: true, force: true })
+  }
+})
+test('GitHub release API requests stay on the authenticated API origin', () => {
+  const url = githubApiUrl('kenny1203520/EduLog', { kind: 'tag', tag: 'extension/beta/v0.1.1.1' })
+  assert.equal(url.origin, 'https://api.github.com')
+  assert.equal(url.pathname, '/repos/kenny1203520/EduLog/releases/tags/extension%2Fbeta%2Fv0.1.1.1')
+  assert.throws(() => githubApiUrl('owner/../../attacker', { kind: 'releases', page: 1 }))
+  assert.throws(() => githubApiUrl('kenny1203520/EduLog', { kind: 'tag', tag: 'https://attacker.invalid' }))
+  assert.throws(() => githubApiUrl('kenny1203520/EduLog', { kind: 'release', id: '../secret' }))
 })
 test('sideload ID is stable; public key is validated', () => {
   assert.equal(item, 'caefagceiajdhjnmogiaicaijckmplge')

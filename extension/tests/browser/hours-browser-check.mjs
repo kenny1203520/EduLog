@@ -1,16 +1,16 @@
-import { loadPlaywright, browserTargets } from './browser-runtime.mjs'
+import { loadPlaywright, browserTargets, resolveNativeAssetFile, resolveNativeAssetsDirectory, resolveScreenshotDirectory } from './browser-runtime.mjs'
 import { siteFiles } from '../site-files.mjs'
 // Isolated synthetic site only. No account access or real salary data.
 // node tests/hours-browser-check.mjs <playwright/index.mjs> <output> <native-css-dir>
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync, mkdirSync, writeFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
-const { chromium } = await loadPlaywright(process.argv.slice(2).find(arg => !arg.startsWith('--')))
-const output = process.argv[3]
+const { chromium } = await loadPlaywright()
+const output = resolveScreenshotDirectory(process.argv[3], 'hours')
 mkdirSync(output, { recursive: true })
 const read = name => readFileSync(new URL(name, import.meta.url), 'utf8')
-const dir = process.argv[4]
-const nativeCss = dir ? readdirSync(dir).filter(name => name.startsWith('application-') && name.endsWith('.css')).map(name => readFileSync(join(dir, name), 'utf8')).join('\n') : ''
+const dir = resolveNativeAssetsDirectory(process.argv[4])
+const nativeCss = dir ? readdirSync(dir).filter(name => /^application-[A-Za-z0-9._-]+\.css$/.test(name)).map(name => readFileSync(resolveNativeAssetFile(dir, name), 'utf8')).join('\n') : ''
 const body = read('../fixtures/hours-nested.html').replace('</head>', `<style>${nativeCss}</style><style>${read('../../styles/edulog-tokens.css')}</style><style>${read('../../sites/orange-apple/site.css')}</style></head>`)
 const early = ['shared/runtime-bridge.js', 'sites/orange-apple/core/lexicon.js', 'sites/orange-apple/core/model.js', 'sites/orange-apple/core/adapter.js', 'content/bootstrap.js'].map(file => read(`../../${file}`))
 const late = [...siteFiles('workflows'), 'shared/connection-ui.js', 'shared/integration-ui.js'].map(file => read(`../../${file}`))

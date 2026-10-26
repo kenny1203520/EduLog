@@ -4,11 +4,17 @@ import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { parseTag, verifyRelease, sha256 } from './release.mjs'
 import { compareVersions } from './store.mjs'
+import { resolveProjectPath, resolveReleaseArchive } from './paths.mjs'
 
-const gh = args => execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] })
+const gh = args => {
+  if (!Array.isArray(args) || args.some(arg => typeof arg !== 'string' || /[\0\r\n]/.test(arg))) throw new Error('Invalid GitHub CLI arguments')
+  return execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'], shell: false })
+}
 try {
-  const path = process.argv[2], directory = dirname(path), metadata = JSON.parse(readFileSync(path, 'utf8'))
-  verifyRelease(readFileSync(join(directory, metadata.archive)), metadata)
+  const metadataPath = resolveProjectPath(process.argv[2], 'Release metadata path')
+  const directory = dirname(metadataPath), metadata = JSON.parse(readFileSync(metadataPath, 'utf8'))
+  const archivePath = resolveReleaseArchive(directory, metadata.archive)
+  verifyRelease(readFileSync(archivePath), metadata)
   const tag = process.env.RELEASE_TAG, parsed = parseTag(tag)
   if (parsed.version !== metadata.version || parsed.channel !== metadata.channel) throw new Error('Tag/package mismatch')
   const remoteCommit = gh(['api', 'repos/{owner}/{repo}/commits/' + encodeURIComponent(tag), '--jq', '.sha']).trim()

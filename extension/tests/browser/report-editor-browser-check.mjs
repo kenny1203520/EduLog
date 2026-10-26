@@ -1,15 +1,14 @@
-import { loadPlaywright, launchBrowser } from './browser-runtime.mjs'
+import { loadPlaywright, launchBrowser, resolveScreenshotDirectory } from './browser-runtime.mjs'
 import { siteFiles } from '../site-files.mjs'
 // Optional visual check for the lesson report editor. Local de-identified fixture only;
 // no real site requests.
 // node tests/report-editor-browser-check.mjs <playwright/index.mjs> [screenshots-dir]
 import assert from 'node:assert/strict'
-import { readFileSync, mkdirSync, mkdtempSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { readFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 
-const { chromium } = await loadPlaywright(process.argv.slice(2).find(arg => !arg.startsWith('--')))
-const output = process.argv[3] || mkdtempSync(join(tmpdir(), 'edulog-editor-'))
+const { chromium } = await loadPlaywright()
+const output = resolveScreenshotDirectory(process.argv[3], 'editor')
 mkdirSync(output, { recursive: true })
 const read = file => readFileSync(new URL(file, import.meta.url), 'utf8')
 const css = read('../../styles/edulog-tokens.css') + read('../../sites/orange-apple/site.css') + read('../../content/dialog-layout.css') + read('../fixtures/native-bootstrap-dialog.css')

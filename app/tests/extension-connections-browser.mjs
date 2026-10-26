@@ -2,9 +2,9 @@
 import assert from 'node:assert/strict'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { pathToFileURL } from 'node:url'
-const { chromium } = await import(pathToFileURL(process.argv[2]).href)
-const output = process.argv[3]
+import { resolveScreenshotDirectory } from '../../scripts/extension/paths.mjs'
+const { chromium } = await import('@playwright/test')
+const output = resolveScreenshotDirectory(process.argv[3], 'connections')
 mkdirSync(output,{recursive:true})
 const record = { id:'11111111-1111-4111-8111-111111111111',installation_id:'22222222-2222-4222-8222-222222222222',device_name:'教室筆電 · Chrome',browser_name:'Chrome',platform_name:'Windows',extension_origin:'chrome-extension://'+'a'.repeat(32),created_at:'2026-10-01T00:00:00Z',last_used_at:'2026-10-01T01:00:00Z',expires_at:'2099-01-01T00:00:00Z',revoked_at:null}
 for(const [name,executablePath] of [['chrome','C:/Program Files/Google/Chrome/Application/chrome.exe'],['edge','C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe']]){
