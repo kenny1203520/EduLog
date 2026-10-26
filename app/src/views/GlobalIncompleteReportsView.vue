@@ -101,7 +101,7 @@
                         </div>
                         <input type="text" v-model="searchQuery"
                             class="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-100 rounded-xl text-sm font-bold text-gray-700 placeholder:text-gray-300 outline-none focus:ring-4 focus:ring-emerald-500/5 focus:border-emerald-200 transition-all shadow-sm"
-                            :placeholder="t('report.search_placeholder')" />
+                            :placeholder="t('report.search_placeholder')"  :aria-label="t('report.search_placeholder')"/>
                     </div>
 
                     <!-- Refresh Button -->

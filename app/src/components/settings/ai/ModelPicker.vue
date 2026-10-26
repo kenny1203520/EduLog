@@ -98,14 +98,11 @@ onMounted(() => load())
                 </svg>
             </button>
         </div>
-        <label v-if="unsupportedReason === null && hiddenCount > 0" class="flex min-h-11 cursor-pointer items-center gap-2 text-xs font-bold text-gray-600">
-            <input v-model="showAll" type="checkbox" class="h-4 w-4 accent-emerald-600" />
+        <label v-if="unsupportedReason === null && hiddenCount > 0" class="flex min-h-11 cursor-pointer items-center gap-2 text-xs font-bold text-gray-600" for="model-picker-show-all">
+            <input id="model-picker-show-all" v-model="showAll" type="checkbox" class="h-4 w-4 accent-emerald-600" />
             {{ t('ai.settings.picker_show_all', { n: hiddenCount }) }}
         </label>
         <div v-if="manual">
-            <p v-if="unsupportedReason !== null" class="mb-1 text-xs text-gray-600">
-                {{ unsupportedReason === 'chatgpt_plan' ? t('ai.settings.picker_manual_chatgpt') : t('ai.settings.picker_manual_unavailable') }}
-            </p>
             <input :value="manualId" maxlength="200" class="min-h-11 w-full rounded-xl border border-gray-200 px-3 text-sm"
                 :placeholder="t('ai.settings.model_id_placeholder')" :aria-label="t('ai.settings.model_id')"
                 @input="typeManual(($event.target as HTMLInputElement).value)" />

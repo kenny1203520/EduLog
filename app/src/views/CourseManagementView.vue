@@ -459,17 +459,17 @@ async function deleteLesson(id: string) {
                                     <div class="flex flex-col lg:flex-row gap-4">
                                         <div class="w-full lg:w-16 space-y-1">
                                             <label
-                                                class="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">#SEQ</label>
+                                                class="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1" for="edulog-coursemanagementview-192-13880">#SEQ</label>
                                             <input v-model.number="lessonForm.sequence" type="number"
-                                                class="w-full bg-white border-emerald-100 rounded-xl px-3 py-2 text-center font-black focus:ring-emerald-500 focus:border-emerald-500">
+                                                class="w-full bg-white border-emerald-100 rounded-xl px-3 py-2 text-center font-black focus:ring-emerald-500 focus:border-emerald-500" id="edulog-coursemanagementview-192-13880">
                                         </div>
                                         <div class="flex-1 space-y-1">
                                             <label
-                                                class="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">{{
+                                                class="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1" for="edulog-coursemanagementview-198-14475">{{
                                                     $t('course.lesson_title') }}</label>
                                             <input v-model="lessonForm.title"
                                                 class="w-full bg-white border-emerald-100 rounded-xl px-4 py-2 font-bold focus:ring-emerald-500 focus:border-emerald-500"
-                                                @keyup.enter="saveLesson(selectedCourse.id!)" auto-focus>
+                                                @keyup.enter="saveLesson(selectedCourse.id!)" auto-focus id="edulog-coursemanagementview-198-14475">
                                         </div>
                                     </div>
                                     <div class="flex justify-end gap-3 mt-4">
@@ -498,8 +498,8 @@ async function deleteLesson(id: string) {
                                     <div v-if="editingLessonId === lesson.id"
                                         class="flex-1 w-full flex flex-col lg:flex-row gap-4 items-center animate-in fade-in duration-300">
                                         <input v-model.number="lessonForm.sequence" type="number"
-                                            class="w-full lg:w-16 text-center bg-gray-50 border-gray-100 rounded-xl py-2 font-black">
-                                        <input v-model="lessonForm.title"
+                                            :aria-label="$t('course.lesson_sequence')" class="w-full lg:w-16 text-center bg-gray-50 border-gray-100 rounded-xl py-2 font-black">
+                                        <input v-model="lessonForm.title" :aria-label="$t('course.lesson_title')"
                                             class="flex-1 w-full bg-gray-50 border-gray-100 rounded-xl px-4 py-2 font-bold"
                                             @keyup.enter="saveLesson(selectedCourse.id!)">
                                         <div class="flex gap-2 w-full lg:w-auto justify-end">
@@ -603,29 +603,29 @@ async function deleteLesson(id: string) {
                     $t('course.add_course') }}</h3>
                 <div class="space-y-4">
                     <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('course.subject')
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5" for="edulog-coursemanagementview-337-26122">{{ $t('course.subject')
                         }}</label>
                         <input v-model="courseForm.subject" :placeholder="$t('course.subject_placeholder')"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500" id="edulog-coursemanagementview-337-26122">
                     </div>
                     <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('course.stage') }}</label>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5" for="edulog-coursemanagementview-343-26549">{{ $t('course.stage') }}</label>
                         <input v-model="courseForm.stage" :placeholder="$t('course.stage_placeholder')"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500" id="edulog-coursemanagementview-343-26549">
                     </div>
                     <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5" for="edulog-coursemanagementview-348-26946">
                             {{ $t('course.display_name') }}
                             <span class="text-xs text-gray-400 block font-normal mt-0.5">{{
                                 $t('course.display_name_hint') }}</span>
                         </label>
                         <input v-model="courseForm.display_name" :placeholder="$t('course.display_name_placeholder')"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500" id="edulog-coursemanagementview-348-26946">
                     </div>
                     <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('course.description')
-                        }}</label>
-                        <TextEditor v-model="courseDescriptionContent" preset="form" :min-height="96" />
+                        <p class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('course.description')
+                        }}</p>
+                        <TextEditor v-model="courseDescriptionContent" :aria-label="$t('course.description')" preset="form" :min-height="96" />
                     </div>
                 </div>
                 <div class="flex justify-end gap-3 mt-8 pt-4 border-t border-gray-50">

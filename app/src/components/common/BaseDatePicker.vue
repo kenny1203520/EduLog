@@ -6,6 +6,7 @@ import { DateUtils } from '@/utils/DateUtils'
 
 const props = withDefaults(defineProps<{
     modelValue: string
+    id?: string
     placeholder?: string
     theme?: 'amber' | 'emerald' | 'indigo' | 'gray'
     disabled?: boolean
@@ -115,7 +116,7 @@ onUnmounted(() => {
 
 <template>
     <div ref="containerRef" class="relative">
-        <button type="button" :disabled="disabled" @click="toggle"
+        <button :id="id" type="button" :disabled="disabled" @click="toggle"
             class="w-full bg-gray-50 border border-gray-100 rounded-2xl px-5 py-4 outline-none focus:ring-4 transition-all text-lg font-bold shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between gap-3"
             :class="[themeClasses.ring, themeClasses.border]">
             <span class="truncate" :class="selectedDate ? themeClasses.text : 'text-gray-400'">

@@ -239,28 +239,28 @@ async function submitEnrollment() {
 
                     <div class="space-y-2">
                         <label
-                            class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                            class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-enrollstudentmodal-40-2386">{{
                                 $t('student.enroll_modal.course') }}</label>
                         <SearchableSelect v-model="enrollForm.course_catalog_id" :options="catalogOptions"
-                            :placeholder="$t('common.select_placeholder')" fontSizeClass="text-lg" />
+                            :placeholder="$t('common.select_placeholder')" fontSizeClass="text-lg"  id="edulog-enrollstudentmodal-40-2386"/>
                     </div>
 
                     <div class="space-y-2">
                         <label
-                            class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                            class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-enrollstudentmodal-48-2895">{{
                                 $t('student.enroll_modal.classroom') }}</label>
                         <SearchableSelect v-model="selectedClassroomId" :options="classroomOptions"
                             :placeholder="$t('student.internal_courses.classroom_none')" fontSizeClass="text-lg"
-                            :disabled="!enrollForm.course_catalog_id" />
+                            :disabled="!enrollForm.course_catalog_id"  id="edulog-enrollstudentmodal-48-2895"/>
                     </div>
 
                     <div class="space-y-4">
                         <label
-                            class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                            class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-enrollstudentmodal-57-3484">{{
                                 $t('student.enroll_modal.class_session') }}</label>
                         <SearchableSelect v-model="enrollForm.class_session_id" :options="sessionOptions"
                             :placeholder="$t('common.select_placeholder')" fontSizeClass="text-lg"
-                            :disabled="!enrollForm.course_catalog_id" />
+                            :disabled="!enrollForm.course_catalog_id"  id="edulog-enrollstudentmodal-57-3484"/>
 
                         <!-- Modular Capacity Progress Bar -->
                         <div v-if="enrollForm.class_session_id"
@@ -275,46 +275,46 @@ async function submitEnrollment() {
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="space-y-2">
                         <label
-                            class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                            class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-enrollstudentmodal-76-4643">{{
                                 $t('student.enroll_modal.type') }}</label>
                         <BaseDropdown v-model="enrollForm.enrollment_type" :options="[
                             { label: $t('student.enroll_modal.type_regular'), value: 'regular' },
                             { label: $t('student.enroll_modal.type_trial'), value: 'trial' }
-                        ]" theme="emerald" fontSizeClass="text-lg" />
+                        ]" theme="emerald" fontSizeClass="text-lg"  id="edulog-enrollstudentmodal-76-4643"/>
                     </div>
 
                     <div class="space-y-2">
                         <label
-                            class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                            class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-enrollstudentmodal-86-5289">{{
                                 $t('student.enroll_modal.start_date') }}</label>
                         <input type="date" v-model="enrollForm.start_date"
-                            class="w-full px-5 py-4 text-lg font-bold bg-gray-50 border-gray-100 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all text-gray-700 shadow-sm">
+                            class="w-full px-5 py-4 text-lg font-bold bg-gray-50 border-gray-100 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all text-gray-700 shadow-sm" id="edulog-enrollstudentmodal-86-5289">
                     </div>
 
                     <div class="space-y-2 md:col-span-2">
                         <label
-                            class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                            class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-enrollstudentmodal-94-5909">{{
                                 $t('student.internal_courses.external_link') }}</label>
                         <input type="url" v-model="enrollForm.external_link"
                             class="w-full px-5 py-4 text-lg font-bold bg-gray-50 border-gray-100 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all text-gray-700 shadow-sm"
-                            placeholder="https://">
+                            placeholder="https://" id="edulog-enrollstudentmodal-94-5909">
                     </div>
 
                     <div class="space-y-2">
                         <label
-                            class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                            class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-enrollstudentmodal-103-6575">{{
                                 $t('student.internal_courses.koding_admission_id') }}</label>
                         <input type="text" v-model="enrollForm.koding_admission_id"
                             class="w-full px-5 py-4 text-lg font-bold bg-gray-50 border-gray-100 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all text-gray-700 shadow-sm"
-                            :placeholder="$t('common.optional')">
+                            :placeholder="$t('common.optional')" id="edulog-enrollstudentmodal-103-6575">
                     </div>
 
                     <div class="space-y-2">
                         <label
-                            class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                            class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-enrollstudentmodal-112-7268">{{
                                 $t('student.enroll_modal.generate_count') || 'Expected Lessons' }}</label>
                         <input type="number" v-model.number="enrollForm.generate_count" min="1" max="100"
-                            class="w-full px-5 py-4 text-lg font-bold bg-gray-50 border-gray-100 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all text-gray-700 shadow-sm">
+                            class="w-full px-5 py-4 text-lg font-bold bg-gray-50 border-gray-100 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all text-gray-700 shadow-sm" id="edulog-enrollstudentmodal-112-7268">
                     </div>
                 </div>
             </div>

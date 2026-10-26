@@ -943,7 +943,7 @@ function clearTeacherSelection() {
                             </svg>
                         </div>
                         <input v-model="searchQuery" type="text" :placeholder="t('common.search')"
-                            class="flex-1 bg-transparent border-none outline-none text-sm font-bold text-gray-700 placeholder:text-gray-300 py-2 min-w-0" />
+                            class="flex-1 bg-transparent border-none outline-none text-sm font-bold text-gray-700 placeholder:text-gray-300 py-2 min-w-0"  :aria-label="t('common.search')"/>
                         <button v-if="searchQuery" @click="searchQuery = ''"
                             class="p-2 text-gray-300 hover:text-gray-500 transition-colors">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
@@ -1007,11 +1007,11 @@ function clearTeacherSelection() {
             </div>
 
             <div v-if="activeTab === 'sessions'" class="flex items-center gap-2 md:ml-auto w-full md:w-auto relative">
-                <label class="text-xs font-black text-gray-500 uppercase tracking-widest whitespace-nowrap">{{
+                <label class="text-xs font-black text-gray-500 uppercase tracking-widest whitespace-nowrap" for="edulog-classroommanagementview-93-6711">{{
                     $t('classroom.filter_by_room') }}</label>
 
                 <SearchableSelect v-model="selectedSessionClassroomFilter" :options="classroomOptions"
-                    :placeholder="$t('classroom.all_rooms')" class="min-w-[240px]" />
+                    :placeholder="$t('classroom.all_rooms')" class="min-w-[240px]"  id="edulog-classroommanagementview-93-6711"/>
 
                 <button v-if="selectedSessionClassroomFilter" @click="selectedSessionClassroomFilter = ''"
                     class="px-3 py-2 rounded-xl text-xs font-black uppercase tracking-widest text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all border border-transparent hover:border-red-100">
@@ -1320,15 +1320,15 @@ function clearTeacherSelection() {
                 <h3 class="text-xl font-bold mb-6 text-gray-800">{{ editingSession ? $t('classroom.edit_session') : $t('classroom.add_session') }}</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="md:col-span-2">
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.session_name')
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5" for="edulog-classroommanagementview-406-32698">{{ $t('classroom.session_name')
                             }}</label>
                         <input v-model="newSession.name" :placeholder="$t('classroom.session_placeholder')"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500" id="edulog-classroommanagementview-406-32698">
                     </div>
 
                     <div class="md:col-span-2">
-                        <label class="block text-sm font-semibold text-gray-700 mb-2">{{ $t('classroom.session_type') }}</label>
-                        <div class="grid grid-cols-2 gap-2 rounded-xl bg-gray-100 p-1">
+                        <p class="block text-sm font-semibold text-gray-700 mb-2">{{ $t('classroom.session_type') }}</p>
+                        <div role="group" :aria-label="$t('classroom.session_type')" class="grid grid-cols-2 gap-2 rounded-xl bg-gray-100 p-1">
                             <button type="button" @click="setSessionType('regular')"
                                 class="rounded-lg px-4 py-2 text-sm font-bold transition"
                                 :class="newSession.session_type !== 'camp' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500'">
@@ -1343,17 +1343,17 @@ function clearTeacherSelection() {
                     </div>
 
                     <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5" for="edulog-classroommanagementview-429-34283">{{
                             $t('student.internal_courses.classroom') }}</label>
                         <SearchableSelect v-model="newSession.classroom_id" :options="roomOptions"
-                            :placeholder="$t('student.internal_courses.session_select_placeholder')" />
+                            :placeholder="$t('student.internal_courses.session_select_placeholder')"  id="edulog-classroommanagementview-429-34283"/>
                     </div>
 
                     <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.capacity')
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5" for="edulog-classroommanagementview-436-34711">{{ $t('classroom.capacity')
                             }}</label>
                         <input type="number" v-model="newSession.capacity"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500" id="edulog-classroommanagementview-436-34711">
                     </div>
 
                     <!-- <div>
@@ -1365,37 +1365,37 @@ function clearTeacherSelection() {
                     </div> -->
 
                     <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('common.start_date') }}
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5" for="edulog-classroommanagementview-451-35602">{{ $t('common.start_date') }}
                             <span v-if="newSession.session_type !== 'camp'" class="text-red-500">*</span></label>
                         <input type="date" v-model="newSession.start_date" :required="newSession.session_type !== 'camp'"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500" id="edulog-classroommanagementview-451-35602">
                     </div>
 
                     <div>
                         <div class="flex items-center justify-between mb-1.5">
-                            <label class="block text-sm font-semibold text-gray-700">{{ $t('common.end_date') }}</label>
+                            <label for="classroom-session-end-date" class="block text-sm font-semibold text-gray-700">{{ $t('common.end_date') }}</label>
                             <button v-if="newSession.end_date" @click="newSession.end_date = null"
                                 class="text-[10px] text-gray-400 hover:text-red-500 font-medium uppercase tracking-wider transition-colors">
                                 {{ $t('common.clear') }}
                             </button>
                         </div>
-                        <input type="date" v-model="newSession.end_date"
+                        <input id="classroom-session-end-date" type="date" v-model="newSession.end_date"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                         <p class="text-xs text-gray-500 mt-1">{{ newSession.session_type === 'camp' ? $t('classroom.camp_date_hint') : $t('classroom.long_term_hint') }}</p>
                     </div>
 
                     <div class="md:col-span-2">
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.external_link')
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5" for="edulog-classroommanagementview-471-37136">{{ $t('classroom.external_link')
                             }}</label>
                         <input v-model="newSession.external_link"
                             :placeholder="$t('classroom.external_link_placeholder')"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500" id="edulog-classroommanagementview-471-37136">
                     </div>
 
                     <div class="md:col-span-2">
-                        <label class="block text-sm font-semibold text-gray-700 mb-2">{{ $t('classroom.schedule')
-                            }}</label>
-                        <div v-if="newSession.session_type !== 'camp'" class="flex gap-2 mb-3">
+                        <p class="block text-sm font-semibold text-gray-700 mb-2">{{ $t('classroom.schedule')
+                            }}</p>
+                        <div v-if="newSession.session_type !== 'camp'" role="group" :aria-label="$t('classroom.schedule')" class="flex gap-2 mb-3">
                             <button type="button" @click="setScheduleMode('weekly')"
                                 class="rounded-lg border px-3 py-1.5 text-sm font-bold"
                                 :class="newSession.schedule_mode === 'weekly' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-gray-200 text-gray-500'">
@@ -1411,7 +1411,7 @@ function clearTeacherSelection() {
                             <div v-for="(rule, index) in newSession.schedule_rules" :key="rule.id || index"
                                 class="grid grid-cols-1 sm:grid-cols-[minmax(120px,1fr)_auto_auto_auto] items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3">
                                 <BaseDropdown v-if="newSession.schedule_mode === 'weekly'"
-                                    v-model="rule.day_of_week" :options="dayOptions" theme="emerald" />
+                                    v-model="rule.day_of_week" :options="dayOptions" theme="emerald" :aria-label="$t('classroom.day_of_week')" />
                                 <label v-else-if="newSession.schedule_mode === 'monthly'" class="flex items-center gap-2 text-sm text-gray-600">
                                     {{ $t('classroom.monthly_day_prefix') }}
                                     <input type="number" min="1" max="31" v-model.number="rule.day_of_month"
@@ -1419,11 +1419,12 @@ function clearTeacherSelection() {
                                     {{ $t('classroom.monthly_day_suffix') }}
                                 </label>
                                 <input v-else type="date" v-model="rule.occurrence_date"
+                                    :aria-label="$t('classroom.copy_template_variable_labels.occurrence_date')"
                                     class="border-gray-300 rounded-lg focus:ring-purple-500 focus:border-purple-500">
                                 <input type="time" v-model="rule.start_time"
-                                    class="border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                                    :aria-label="$t('classroom.start_time')" class="border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                                 <input type="time" v-model="rule.end_time"
-                                    class="border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                                    :aria-label="$t('classroom.end_time')" class="border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                                 <button type="button" @click="removeScheduleRule(index)"
                                     class="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-600"
                                     :title="$t('common.delete')">×</button>
@@ -1440,10 +1441,10 @@ function clearTeacherSelection() {
                     </div>
 
                     <div class="md:col-span-2">
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('common.time_zone')
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5" for="edulog-classroommanagementview-526-41612">{{ $t('common.time_zone')
                             }}</label>
                         <select v-model="newSession.time_zone"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500" id="edulog-classroommanagementview-526-41612">
                             <option v-for="option in preferences.timeZoneOptions" :key="option.value"
                                 :value="option.value">
                                 {{ option.label }}
@@ -1452,10 +1453,14 @@ function clearTeacherSelection() {
                     </div>
 
                     <div class="md:col-span-2">
-                        <label class="block text-sm font-medium text-gray-700 mb-2">{{
-                            $t('student.internal_courses.course') }}</label>
-                        <div class="h-40 overflow-y-auto border border-gray-200 rounded-lg p-3 bg-gray-50 space-y-1">
-                            <div v-for="c in courses" :key="c.id" @click="toggleCourseSelection(c.id!)"
+                        <p class="block text-sm font-medium text-gray-700 mb-2">{{
+                            $t('student.internal_courses.course') }}</p>
+                        <div role="group" :aria-label="$t('student.internal_courses.course')" class="h-40 overflow-y-auto border border-gray-200 rounded-lg p-3 bg-gray-50 space-y-1">
+                            <div v-for="c in courses" :key="c.id" role="checkbox" tabindex="0"
+                                :aria-checked="newSession.course_ids?.includes(c.id!) ?? false"
+                                @click="toggleCourseSelection(c.id!)"
+                                @keydown.enter.prevent="toggleCourseSelection(c.id!)"
+                                @keydown.space.prevent="toggleCourseSelection(c.id!)"
                                 class="flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-white select-none transition"
                                 :class="newSession.course_ids?.includes(c.id!) ? 'bg-white shadow-sm ring-1 ring-emerald-500' : ''">
                                 <div class="w-4 h-4 rounded border flex items-center justify-center transition-colors"
@@ -1476,8 +1481,8 @@ function clearTeacherSelection() {
                     </div>
 
                     <div class="md:col-span-2">
-                        <label class="block text-sm font-semibold text-gray-700 mb-2">{{
-                            $t('classroom.copy.teaching_schedule') }}</label>
+                        <p class="block text-sm font-semibold text-gray-700 mb-2">{{
+                            $t('classroom.copy.teaching_schedule') }}</p>
                         <p v-if="teacherRolePermissionError" role="alert" class="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
                             <span>{{ $t('rbac.teacher_assignment_permission_check_failed') }}</span>
                             <button type="button" class="min-h-11 rounded-lg px-3 underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500" @click="retryTeacherRoleCatalog">{{ $t('rbac.platform_teaching_assignments.retry') }}</button>
@@ -1508,17 +1513,17 @@ function clearTeacherSelection() {
                                 <div class="flex items-start justify-between gap-3">
                                     <div class="flex-1">
                                         <label
-                                            class="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">{{
+                                            class="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1" :for="`teacher-assignment-teacher-${entry.index}`">{{
                                                 $t('classroom.teacher') }}</label>
                                         <SearchableSelect v-model="entry.config.teacher_id" :options="teacherOptions"
-                                            :placeholder="$t('classroom.teacher_search_placeholder')" :disabled="teacherRoleManageAllowed !== true || teacherAssignmentsLoadError" />
+                                            :placeholder="$t('classroom.teacher_search_placeholder')" :disabled="teacherRoleManageAllowed !== true || teacherAssignmentsLoadError" :id="`teacher-assignment-teacher-${entry.index}`"/>
                                     </div>
                                     <div class="flex-1">
-                                        <label class="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">
+                                        <label class="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1" :for="`teacher-assignment-role-${entry.index}`">
                                             {{ $t('classroom.teacher_role') }}</label>
                                         <SearchableSelect v-model="entry.config.role_id" :options="teacherRoleOptions"
                                             :placeholder="$t('classroom.teacher_role_placeholder')"
-                                            :disabled="teacherRoleManageAllowed !== true || teacherAssignmentsLoadError || teacherRoleCatalogError || !teacherRoleCatalog.length" />
+                                            :disabled="teacherRoleManageAllowed !== true || teacherAssignmentsLoadError || teacherRoleCatalogError || !teacherRoleCatalog.length" :id="`teacher-assignment-role-${entry.index}`"/>
                                     </div>
                                     <button @click="removeTeacherAssignment(entry.index)" :disabled="teacherRoleManageAllowed !== true || teacherAssignmentsLoadError"
                                         class="mt-6 p-2 text-gray-400 hover:text-red-500 transition-colors">
@@ -1540,14 +1545,14 @@ function clearTeacherSelection() {
                                 <div class="grid grid-cols-2 gap-3">
                                     <div>
                                         <label
-                                            class="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">{{
+                                            class="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1" :for="`teacher-assignment-start-${entry.index}`">{{
                                                 $t('common.start_date') }}</label>
                                         <input type="date" v-model="entry.config.effective_from"
-                                            :disabled="teacherRoleManageAllowed !== true || teacherAssignmentsLoadError" class="w-full text-sm border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-100" />
+                                            :disabled="teacherRoleManageAllowed !== true || teacherAssignmentsLoadError" class="w-full text-sm border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-100" :id="`teacher-assignment-start-${entry.index}`"/>
                                     </div>
                                     <div>
                                         <div class="flex items-center justify-between mb-1">
-                                            <label
+                                            <label :for="`teacher-assignment-end-${entry.index}`"
                                                 class="block text-[10px] font-bold uppercase tracking-wider text-gray-500">
                                                 {{ $t('common.end_date') }}
                                                 <span v-if="!entry.config.effective_to"
@@ -1559,7 +1564,7 @@ function clearTeacherSelection() {
                                                 {{ $t('common.clear') }}
                                             </button>
                                         </div>
-                                        <input type="date" v-model="entry.config.effective_to"
+                                        <input :id="`teacher-assignment-end-${entry.index}`" type="date" v-model="entry.config.effective_to"
                                             :disabled="teacherRoleManageAllowed !== true || teacherAssignmentsLoadError" class="w-full text-sm border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-100" />
                                     </div>
                                 </div>

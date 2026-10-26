@@ -1,9 +1,9 @@
 <template>
     <fieldset class="text-editor-settings" :disabled="disabled">
-        <label><input type="checkbox" :checked="enabled" @change="toggleEnabled"> {{ t('editor.settings.style_controls') }}</label>
+        <label for="edulog-texteditorsettingspanel-3-74"><input type="checkbox" :checked="enabled" @change="toggleEnabled"> {{ t('editor.settings.style_controls') }}</label>
         <template v-if="enabled">
             <label>{{ t('editor.settings.preset') }}
-                <select :value="preset" @change="emitPreset">
+                <select :value="preset" @change="emitPreset" id="edulog-texteditorsettingspanel-3-74">
                     <option v-for="value in presets" :key="value" :value="value">{{ t(`editor.settings.presets.${value}`) }}</option>
                 </select>
             </label>

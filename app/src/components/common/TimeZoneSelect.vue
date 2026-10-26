@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, useId } from 'vue'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { TimeZoneService } from '@/services/TimeZoneService'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
 
 const props = withDefaults(defineProps<{
     label?: string
+    id?: string
     dense?: boolean
     modelValue?: string
     fontSizeClass?: string
@@ -17,6 +18,8 @@ const props = withDefaults(defineProps<{
 })
 
 const emit = defineEmits<{ (event: 'update:modelValue', value: string): void }>()
+const generatedId = useId()
+const selectId = computed(() => props.id ?? `time-zone-select-${generatedId}`)
 const preferences = usePreferencesStore()
 const internalValue = computed({
     get: () => props.modelValue !== undefined ? props.modelValue : preferences.timeZone,
@@ -30,9 +33,9 @@ const selectSize = computed(() => props.fontSizeClass || (props.dense ? 'text-xs
 </script>
 
 <template>
-    <label class="block min-w-0">
+        <label :for="selectId" class="block min-w-0">
         <span v-if="label" class="mb-1 ml-1 block text-sm font-black uppercase tracking-widest text-gray-400">{{ label }}</span>
-        <SearchableSelect v-model="internalValue" :options="options" :font-size-class="selectSize"
+        <SearchableSelect :id="selectId" v-model="internalValue" :options="options" :font-size-class="selectSize"
             :aria-label="label || $t('common.time_zone')" :placeholder="$t('settings.timezone.search_placeholder')" />
     </label>
 </template>

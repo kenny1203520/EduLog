@@ -181,10 +181,10 @@ watch(isEditingMainDetails, (val) => {
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div class="space-y-1.5">
-                <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.name')
+                <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentmaindetails-17-931">{{ $t('student.name')
                 }}</label>
                 <input v-if="isEditingMainDetails" v-model="form.name" type="text"
-                    class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+                    class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400" id="edulog-studentmaindetails-17-931">
                 <div v-else
                     class="text-gray-800 px-4 py-3 text-base font-bold bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">
                     {{ form.name || '-' }}</div>
@@ -192,7 +192,7 @@ watch(isEditingMainDetails, (val) => {
 
             <div v-if="canReadSensitive" class="space-y-1.5">
                 <div class="flex items-center gap-2 mb-1.5">
-                    <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                    <label for="student-government-id" class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                         $t('student.gov_id') }}</label>
                     <button @click.stop="showGovId = !showGovId"
                         class="text-gray-400 hover:text-gray-600 focus:outline-none"
@@ -212,7 +212,7 @@ watch(isEditingMainDetails, (val) => {
                     </button>
                 </div>
                 <input v-if="isEditingMainDetails && canUpdateSensitive" v-model="form.gov_id" :type="showGovId ? 'text' : 'password'"
-                    class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+                    id="student-government-id" class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
                 <div v-else
                     class="text-gray-800 px-4 py-3 text-base font-bold bg-gray-50/50 rounded-lg border border-transparent min-h-[46px] font-mono flex items-center">
                     <span v-if="showGovId">{{ form.gov_id || '-' }}</span>
@@ -221,20 +221,20 @@ watch(isEditingMainDetails, (val) => {
             </div>
 
             <div v-if="canReadSensitive" class="space-y-1.5">
-                <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.birthday')
+                <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentmaindetails-57-4465">{{ $t('student.birthday')
                 }}</label>
                 <input v-if="isEditingMainDetails && canUpdateSensitive" v-model="form.birthday" type="date"
-                    class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+                    class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400" id="edulog-studentmaindetails-57-4465">
                 <div v-else
                     class="text-gray-800 px-4 py-3 text-base font-bold bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">
                     {{ form.birthday || '-' }}</div>
             </div>
 
             <div class="space-y-1.5">
-                <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentmaindetails-67-5252">{{
                     $t('student.external_link') }}</label>
                 <input v-if="isEditingMainDetails" v-model="form.external_link" type="url" placeholder="https://"
-                    class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+                    class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400" id="edulog-studentmaindetails-67-5252">
                 <div v-else
                     class="text-gray-800 px-4 py-3 text-base font-bold bg-gray-50/50 rounded-lg border border-transparent min-h-[46px] overflow-hidden text-ellipsis whitespace-nowrap">
                     <a v-if="form.external_link" :href="form.external_link" target="_blank" rel="noopener noreferrer"
@@ -251,49 +251,49 @@ watch(isEditingMainDetails, (val) => {
             </div>
 
             <div v-if="canReadSensitive" class="space-y-1.5">
-                <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('auth.email')
+                <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentmaindetails-87-6956">{{ $t('auth.email')
                 }}</label>
                 <input v-if="isEditingMainDetails && canUpdateSensitive" v-model="form.email" type="email" @blur="emailTouched = true"
                     class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400"
-                    :class="{ 'border-red-500 focus:ring-red-500': emailError }">
+                    :class="{ 'border-red-500 focus:ring-red-500': emailError }" id="edulog-studentmaindetails-87-6956">
                 <div v-else
                     class="text-gray-800 px-4 py-3 text-base font-bold bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">
                     {{ form.email || '-' }}</div>
                 <p v-if="emailError && isEditingMainDetails" class="text-xs text-red-500 mt-1">{{ emailError }}</p>
             </div>
             <div v-if="canReadSensitive" class="space-y-1.5">
-                <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentmaindetails-98-7980">{{
                     $t('student.contacts.phone') }}</label>
                 <input v-if="isEditingMainDetails && canUpdateSensitive" v-model="form.phone" type="tel"
-                    class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+                    class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400" id="edulog-studentmaindetails-98-7980">
                 <div v-else
                     class="text-gray-800 px-4 py-3 text-base font-bold bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">
                     {{ form.phone || '-' }}</div>
             </div>
 
             <div v-if="canReadSensitive" class="space-y-1.5 md:col-span-2">
-                <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentmaindetails-108-8808">{{
                     $t('student.residence_address') }}</label>
                 <input v-if="isEditingMainDetails && canUpdateSensitive" v-model="form.residence_address" type="text"
-                    class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+                    class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400" id="edulog-studentmaindetails-108-8808">
                 <div v-else
                     class="text-gray-800 px-4 py-3 text-base font-bold bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">
                     {{ form.residence_address || '-' }}</div>
             </div>
             <div v-if="canReadSensitive" class="space-y-1.5 md:col-span-2">
-                <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentmaindetails-117-9663">{{
                     $t('student.mailing_address') }}</label>
                 <input v-if="isEditingMainDetails && canUpdateSensitive" v-model="form.mailing_address" type="text"
-                    class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+                    class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400" id="edulog-studentmaindetails-117-9663">
                 <div v-else
                     class="text-gray-800 px-4 py-3 text-base font-bold bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">
                     {{ form.mailing_address || '-' }}</div>
             </div>
 
             <div class="space-y-1.5 md:col-span-2">
-                <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.notes')
-                }}</label>
-                <TextEditor v-if="isEditingMainDetails" v-model="notesContent" preset="form" :min-height="86" />
+                <p class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.notes')
+                }}</p>
+                <TextEditor v-if="isEditingMainDetails" v-model="notesContent" :aria-label="$t('student.notes')" preset="form" :min-height="86" />
                 <RichTextViewer v-else-if="form.notes" :content="notesContent" :min-height="86" />
                 <div v-else class="text-gray-800 px-4 py-3">-</div>
             </div>
