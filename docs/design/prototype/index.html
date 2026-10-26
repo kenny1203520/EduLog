@@ -473,16 +473,7 @@ function wsRead(){
 }
 const choiceSeg = (id, a, b, la = '對應既有', lb = '新建') =>
   `<div class="seg" role="group" aria-label="處理方式"><button aria-pressed="${st.choice[id]===a}" data-choice="${id}:${a}">${I('link')}${la}</button><button aria-pressed="${st.choice[id]===b}" data-choice="${id}:${b}">${I('plus')}${lb}</button></div>`
-function textWithoutTags(markup){
-  const text=[]
-  for(let index=0;index<markup.length;index++){
-    if(markup[index]!=='<'){text.push(markup[index]);continue}
-    const closing=markup.indexOf('>',index+1)
-    if(closing<=index+1){text.push('<');continue}
-    index=closing
-  }
-  return text.join('')
-}
+function textWithoutTags(markup){ return markup.replace(/<[^>]*>/g,'') }
 function exRow(id, tone, name, meta, body){
   return `<div class="ex" data-tone="${tone}" ${st.sel===id?'aria-selected="true"':''}>
     <div class="ex-top"><div class="row-main"><span class="row-name">${name}</span><span class="row-meta">${meta}</span></div>
