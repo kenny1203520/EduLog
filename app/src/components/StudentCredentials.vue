@@ -289,43 +289,43 @@ function credentialUrl(url: string): string {
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="w-full">
                             <label
-                                class="text-[12px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                                class="text-[12px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentcredentials-113-10123">{{
                                     $t('student.credentials.platform') }}</label>
                             <BaseDropdown v-model="editCredentialForm.platform" :options="platformOptions"
-                                theme="emerald" />
+                                theme="emerald"  id="edulog-studentcredentials-113-10123"/>
                         </div>
                         <div v-if="editCredentialForm.platform === 'Other'">
                             <label
-                                class="text-[12px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                                class="text-[12px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentcredentials-120-10628">{{
                                     $t('student.credentials.platform_name') }}</label>
                             <input v-model="otherPlatformEdit" :placeholder="$t('student.credentials.platform_name')"
-                                class="w-full border-gray-300 rounded-xl px-4 py-2.5 text-sm font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                                class="w-full border-gray-300 rounded-xl px-4 py-2.5 text-sm font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none" id="edulog-studentcredentials-120-10628">
                         </div>
                     </div>
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-gray-50">
                         <div class="w-full">
                             <label
-                                class="text-[12px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                                class="text-[12px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentcredentials-130-11358">{{
                                     $t('student.credentials.username') }}</label>
                             <input v-model="editCredentialForm.username"
                                 :placeholder="$t('student.credentials.username')"
-                                class="w-full border-gray-300 rounded-xl px-4 py-2.5 text-sm font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                                class="w-full border-gray-300 rounded-xl px-4 py-2.5 text-sm font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none" id="edulog-studentcredentials-130-11358">
                         </div>
                         <div class="w-full">
                             <label
-                                class="text-[12px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                                class="text-[12px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentcredentials-138-11991">{{
                                     $t('student.credentials.password') }}</label>
                             <input v-model="editCredentialForm.password"
                                 :placeholder="$t('student.credentials.password')"
-                                class="w-full border-gray-300 rounded-xl px-4 py-2.5 text-sm font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                                class="w-full border-gray-300 rounded-xl px-4 py-2.5 text-sm font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none" id="edulog-studentcredentials-138-11991">
                         </div>
                         <div class="sm:col-span-2">
                             <label
-                                class="text-[12px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                                class="text-[12px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentcredentials-146-12631">{{
                                     $t('student.credentials.url') }}</label>
                             <input v-model="editCredentialForm.url" :placeholder="$t('student.credentials.url')"
-                                class="w-full border-gray-300 rounded-xl px-4 py-2.5 text-sm font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                                class="w-full border-gray-300 rounded-xl px-4 py-2.5 text-sm font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none" id="edulog-studentcredentials-146-12631">
                         </div>
                     </div>
 
@@ -369,36 +369,36 @@ function credentialUrl(url: string): string {
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="w-full">
-                        <label class="text-[12px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                        <label class="text-[12px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentcredentials-194-16094">{{
                             $t('student.credentials.platform') }}</label>
-                        <BaseDropdown v-model="newCredential.platform" :options="platformOptions" theme="emerald" />
+                        <BaseDropdown v-model="newCredential.platform" :options="platformOptions" theme="emerald"  id="edulog-studentcredentials-194-16094"/>
                     </div>
                     <div v-if="newCredential.platform === 'Other'" class="w-full">
-                        <label class="text-[12px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                        <label class="text-[12px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentcredentials-199-16516">{{
                             $t('student.credentials.platform_name') }}</label>
                         <input v-model="otherPlatformAdd" :placeholder="$t('student.credentials.platform_name')"
-                            class="w-full border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                            class="w-full border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none" id="edulog-studentcredentials-199-16516">
                     </div>
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-gray-100">
                     <div class="w-full">
-                        <label class="text-[12px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                        <label class="text-[12px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentcredentials-208-17178">{{
                             $t('student.credentials.username') }}</label>
                         <input v-model="newCredential.username" :placeholder="$t('student.credentials.username')"
-                            class="w-full border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                            class="w-full border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none" id="edulog-studentcredentials-208-17178">
                     </div>
                     <div class="w-full">
-                        <label class="text-[12px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                        <label class="text-[12px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentcredentials-214-17714">{{
                             $t('student.credentials.password') }}</label>
                         <input v-model="newCredential.password" :placeholder="$t('student.credentials.password')"
-                            class="w-full border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                            class="w-full border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none" id="edulog-studentcredentials-214-17714">
                     </div>
                     <div class="sm:col-span-2">
-                        <label class="text-[12px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                        <label class="text-[12px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentcredentials-220-18257">{{
                             $t('student.credentials.url') }}</label>
                         <input v-model="newCredential.url" :placeholder="$t('student.credentials.url')"
-                            class="w-full border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                            class="w-full border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none" id="edulog-studentcredentials-220-18257">
                     </div>
                 </div>
 

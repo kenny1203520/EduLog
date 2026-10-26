@@ -16,7 +16,7 @@
       for (let r = 2; r < cells.length; r++) for (let c = 2; c < cells[r].length; c++) {
         const cell = cells[r][c]
         if (!cell || cells[r].indexOf(cell) !== c || (r > 2 && cells[r - 1]?.[c] === cell)) continue
-        for (const original of [...cell.querySelectorAll('a[href]')].filter(classLink)) {
+        for (const original of [...cell.querySelectorAll('a[href]')].filter(link => classLink(link))) {
           const card = element('article'), link = element('a', text(cells[r][1]) || text(cells[r][0]) || tx('原站班級'))
           link.href = original.href; card.append(link)
           const counts = text(original).match(/^(\d+)\s*\/\s*(\d+)\s*\/\s*(\d+)$/)

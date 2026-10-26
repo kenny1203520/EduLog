@@ -9,6 +9,8 @@ interface Option {
 const props = withDefaults(defineProps<{
     modelValue: any
     options: Option[]
+    id?: string
+    ariaLabel?: string
     placeholder?: string
     theme?: 'indigo' | 'emerald' | 'amber' | 'gray' | 'red'
     align?: 'left' | 'right' | 'auto'
@@ -132,7 +134,7 @@ onUnmounted(() => {
 
 <template>
     <div class="relative" :class="widthClass" ref="containerRef">
-        <button @click="toggle" type="button" :disabled="disabled"
+        <button :id="id" :aria-label="ariaLabel || undefined" @click="toggle" type="button" :disabled="disabled"
             class="w-full flex items-center justify-between gap-2 font-bold border border-gray-100 rounded-xl px-3 py-2.5 bg-white hover:bg-gray-50 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-50"
             :class="[themeClasses.ring, isOpen ? 'ring-4' : '', fontSizeClass]">
             <span class="truncate" :class="modelValue !== '' && modelValue !== null && !disabled ? themeClasses.text : 'text-gray-400'">

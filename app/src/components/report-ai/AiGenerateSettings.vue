@@ -107,7 +107,7 @@ function onPreviewToggle(event: Event) {
                 <textarea v-model="focus" rows="3" maxlength="4000"
                     class="mt-1 w-full rounded-lg border px-3 py-2 text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     :class="thinContext ? 'border-amber-400 bg-amber-50' : 'border-gray-300'"
-                    :placeholder="$t('ai.panel.focus_placeholder')"></textarea>
+                    :placeholder="$t('ai.panel.focus_placeholder')" :aria-label="$t('ai.panel.focus_placeholder')"></textarea>
             </label>
             <details v-if="keptSuggestions?.length" class="rounded-lg border border-slate-300 bg-slate-100 p-3" data-testid="ai-kept-suggestions">
                 <summary class="min-h-[44px] cursor-pointer content-center text-sm font-semibold text-slate-800">
@@ -171,7 +171,7 @@ function onPreviewToggle(event: Event) {
                         <span class="text-sm font-semibold text-gray-800">{{ $t('ai.panel.extra_label') }}</span>
                         <textarea v-model="extraInstructions" rows="2" maxlength="2000"
                             class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                            :placeholder="$t('ai.panel.extra_placeholder')"></textarea>
+                            :placeholder="$t('ai.panel.extra_placeholder')" :aria-label="$t('ai.panel.extra_placeholder')"></textarea>
                     </label>
                 </div>
             </div>

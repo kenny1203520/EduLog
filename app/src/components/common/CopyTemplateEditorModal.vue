@@ -39,12 +39,13 @@
                             >
                                 <div class="rounded-2xl border border-blue-200 bg-blue-50/40 p-4 shadow-sm">
                                     <div class="mb-2 flex items-center justify-between gap-3">
-                                        <label class="block text-sm font-bold text-blue-900">{{ field.label }}</label>
+                                        <p class="block text-sm font-bold text-blue-900">{{ field.label }}</p>
                                         <span class="rounded-full bg-blue-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-blue-700">{{ t('editor.template.editor') }}</span>
                                     </div>
                                     <TextEditor
                                         :ref="(el) => setEditorRef(field.id, el)"
                                         :model-value="field.document || field.content"
+                                        :aria-label="field.label"
                                         preset="template"
                                         template-variables
                                         :min-height="144"
@@ -71,12 +72,13 @@
                         <div v-else class="grid grid-cols-1 gap-4 lg:grid-cols-2">
                             <div class="rounded-2xl border border-blue-200 bg-blue-50/40 p-4 shadow-sm">
                                 <div class="mb-2 flex items-center justify-between gap-3">
-                                    <label class="block text-sm font-bold text-blue-900">{{ contentTitle }}</label>
+                                    <p class="block text-sm font-bold text-blue-900">{{ contentTitle }}</p>
                                     <span class="rounded-full bg-blue-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-blue-700">{{ t('editor.template.editor') }}</span>
                                 </div>
                                 <TextEditor
                                     :ref="(el) => setEditorRef('template', el)"
                                     :model-value="templateDocument || templateText || ''"
+                                    :aria-label="contentTitle"
                                     preset="template"
                                     template-variables
                                     :min-height="288"

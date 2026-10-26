@@ -134,7 +134,7 @@ onMounted(load)
         </div>
         <div class="space-y-6 p-6 sm:p-8">
             <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-                <label class="space-y-2">
+                <label class="space-y-2" for="edulog-incompletereportnotificationsettings-9-521">
                     <span class="text-xs font-black uppercase tracking-widest text-gray-400">{{ $t('settings.incomplete_notifications.scope') }}</span>
                     <select v-model="scopeType" class="w-full rounded-xl border-gray-200 bg-gray-50 px-4 py-3 font-bold">
                         <option value="system">{{ $t('settings.incomplete_notifications.system') }}</option>
@@ -144,7 +144,7 @@ onMounted(load)
                 </label>
                 <div v-if="scopeType !== 'system'" class="space-y-2">
                     <span class="text-xs font-black uppercase tracking-widest text-gray-400">{{ $t('classroom.room') }}</span>
-                    <SearchableSelect v-model="classroomId" :options="classroomOptions" :placeholder="$t('common.select_placeholder')" :aria-label="$t('classroom.room')" />
+                    <SearchableSelect v-model="classroomId" :options="classroomOptions" :placeholder="$t('common.select_placeholder')" :aria-label="$t('classroom.room')"  id="edulog-incompletereportnotificationsettings-9-521"/>
                 </div>
                 <div v-if="scopeType === 'class_session'" class="space-y-2">
                     <span class="text-xs font-black uppercase tracking-widest text-gray-400">{{ $t('classroom.session') }}</span>

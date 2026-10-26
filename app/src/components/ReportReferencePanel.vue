@@ -75,7 +75,7 @@
                         <input v-model="searchQuery" type="text"
                             :placeholder="$t('report.reference_panel.search_placeholder')"
                             class="w-full pl-10 pr-4 py-2.5 sm:pl-12 sm:py-3.5 bg-white border border-gray-100 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-medium focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 shadow-sm transition-all placeholder:text-gray-300"
-                            @keyup.enter="refreshData" />
+                            @keyup.enter="refreshData"  :aria-label="$t('report.reference_panel.search_placeholder')"/>
                         <svg xmlns="http://www.w3.org/2000/svg"
                             class="h-4 w-4 sm:h-5 sm:w-5 text-gray-300 absolute left-3.5 sm:left-4.5 top-3 sm:top-4 transition-colors group-focus-within:text-indigo-600"
                             fill="none" viewBox="0 0 24 24" stroke="currentColor">

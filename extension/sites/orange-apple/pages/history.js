@@ -26,7 +26,7 @@
     }
     const table = [...content.querySelectorAll('table')].find(t => site.pattern('學習評估').test(text(t.rows[0])))
     if (table) {
-      const headers = [...table.rows[0].cells].map(text), dateIndex = headers.findIndex(h => site.isTerm(h, '日期'))
+      const headers = [...table.rows[0].cells].map(cell => text(cell)), dateIndex = headers.findIndex(h => site.isTerm(h, '日期'))
       const { tools, rows, refresh } = filterTable(context, table, 'historyQuery', '歷史課堂紀錄', dateIndex < 0 ? null : dateIndex)
       refreshers.push(refresh)
       const newest = element('button', tx('前往最新紀錄')); newest.type = 'button'; tools.append(newest)

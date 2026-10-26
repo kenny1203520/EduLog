@@ -46,7 +46,7 @@ export function toChinese(num: number): string {
     const len = str.length;
     
     for (let i = 0; i < len; i++) {
-        const d = parseInt(str[i]);
+        const d = Number.parseInt(str[i], 10);
         const unitIdx = len - 1 - i;
         
         if (d !== 0) {
@@ -89,7 +89,7 @@ export function toFormalChinese(num: number): string {
     const len = str.length;
     
     for (let i = 0; i < len; i++) {
-        const d = parseInt(str[i]);
+        const d = Number.parseInt(str[i], 10);
         const unitIdx = len - 1 - i;
         
         if (d !== 0) {
@@ -113,8 +113,8 @@ export function toFormalChinese(num: number): string {
  */
 export function formatNumber(num: number | string | undefined, mode: string): string {
     if (num === undefined || num === null || num === '') return '';
-    const n = typeof num === 'string' ? parseInt(num) : num;
-    if (isNaN(n)) return String(num);
+    const n = typeof num === 'string' ? Number.parseInt(num, 10) : num;
+    if (Number.isNaN(n)) return String(num);
 
     switch (mode) {
         case 'roman':

@@ -14,6 +14,12 @@ Deno.test('response envelope carries request and W3C trace identifiers', async (
   assertEquals(result.headers.get('x-request-id'), id)
 })
 
+Deno.test('request IDs longer than the accepted header limit are replaced', () => {
+  const value = 'x'.repeat(129)
+  const request = new Request('https://example.test/api-v1/health', { headers: { 'x-request-id': value } })
+  assert(requestId(request) !== value)
+})
+
 Deno.test('204 and 304 responses have no body or JSON content type', async () => {
   const headers = {
     'Access-Control-Allow-Origin': 'https://app.example.test',

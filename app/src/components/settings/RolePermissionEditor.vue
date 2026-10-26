@@ -213,7 +213,7 @@ onMounted(loadRoles)
         <div class="grid min-w-0 gap-5 lg:grid-cols-[18rem_minmax(0,1fr)]">
             <div class="max-h-64 overflow-y-auto rounded-2xl border border-gray-100 bg-white p-4 lg:sticky lg:top-20 lg:max-h-[70vh]">
                 <div v-if="canEdit && canManageRoleDefinitions" class="mb-3 flex gap-2">
-                    <input v-model="newRoleName" class="min-w-0 flex-1 rounded-lg border px-2 py-2 text-sm" :placeholder="t('rbac.new_role', 'New role')" />
+                    <input v-model="newRoleName" class="min-w-0 flex-1 rounded-lg border px-2 py-2 text-sm" :placeholder="t('rbac.new_role', 'New role')"  :aria-label="t('rbac.new_role', 'New role')"/>
                     <button class="min-h-11 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-bold text-white disabled:opacity-40" :disabled="saving || !newRoleName.trim()" @click="createRole">{{ t('common.add', 'Add') }}</button>
                 </div>
                 <p v-if="loading" class="py-4 text-sm text-gray-400">{{ t('common.loading', 'Loading…') }}</p>

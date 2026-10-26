@@ -35,7 +35,7 @@
     if (!table) return []
     const header = [...table.rows].find(row => row.querySelector('th'))
     const labels = [...(header?.cells || [])].map(cell => collapse(cell.textContent))
-    const column = (test, fallback) => { const index = labels.findIndex(test); return index < 0 ? fallback : index }
+    const column = (test, fallback) => { const index = labels.findIndex(label => test(label)); return index < 0 ? fallback : index }
     const at = {
       name: column(label => site.isTerm(label, '姓名'), 0), contact: column(label => site.pattern('聯絡人').test(label), 1),
       course: column(label => site.isTerm(label, '課程'), 2), order: column(label => site.pattern('訂單狀態').test(label), 3),

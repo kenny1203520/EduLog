@@ -304,18 +304,18 @@ const statusClass: Record<AiCredentialDTO['status'], string> = {
                     <li v-for="model in credential.models" :key="model.id" class="rounded-xl bg-gray-50 px-3 py-2 text-sm">
                         <form v-if="editingId === model.id" class="grid gap-2 py-1" :class="site ? 'sm:grid-cols-[1fr_6rem_7rem_7rem]' : ''"
                             :aria-label="t('ai.settings.edit_model', { name: model.display_name })" @submit.prevent="saveEdit(credential, model)" @keydown.esc="editingId = null">
-                            <label class="block text-xs font-bold text-gray-700">{{ t('ai.settings.display_name') }}
+                            <label class="block text-xs font-bold text-gray-700" for="edulog-aicredentiallist-67-7531">{{ t('ai.settings.display_name') }}
                                 <input v-model="editDraft.display_name" required maxlength="120" class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm" />
                             </label>
                             <template v-if="site">
                                 <label class="block text-xs font-bold text-gray-700">{{ t('ai.settings.quota_weight') }}
-                                    <input v-model.number="editDraft.quota_weight" type="number" min="0" step="0.5" class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm" />
+                                    <input v-model.number="editDraft.quota_weight" type="number" min="0" step="0.5" class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm"  id="edulog-aicredentiallist-67-7531"/>
                                 </label>
                                 <label class="block text-xs font-bold text-gray-700">{{ t('ai.settings.price_input') }}
-                                    <input v-model="editDraft.price_input_per_mtok" type="number" min="0" step="0.01" class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm" :placeholder="t('ai.settings.unpriced')" />
+                                    <input v-model="editDraft.price_input_per_mtok" type="number" min="0" step="0.01" class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm" :placeholder="t('ai.settings.unpriced')"  :aria-label="t('ai.settings.unpriced')"/>
                                 </label>
                                 <label class="block text-xs font-bold text-gray-700">{{ t('ai.settings.price_output') }}
-                                    <input v-model="editDraft.price_output_per_mtok" type="number" min="0" step="0.01" class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm" :placeholder="t('ai.settings.unpriced')" />
+                                    <input v-model="editDraft.price_output_per_mtok" type="number" min="0" step="0.01" class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm" :placeholder="t('ai.settings.unpriced')"  :aria-label="t('ai.settings.unpriced')"/>
                                 </label>
                             </template>
                             <p class="text-xs text-gray-600" :class="site ? 'sm:col-span-4' : ''">{{ t('ai.settings.model_id_fixed', { id: model.model_id }) }}</p>

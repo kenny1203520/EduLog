@@ -27,7 +27,7 @@
             <div class="p-6 md:p-10 overflow-y-auto flex-1 custom-scrollbar">
                 <!-- Strategy Selection -->
                 <div class="mb-10">
-                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-6 ml-1">
+                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-6 ml-1" for="edulog-conflictmodal-30-1717">
                         {{ $t('report.conflict.strategies_label') }}
                     </label>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -37,7 +37,7 @@
                                 ? 'border-emerald-500 bg-emerald-50/30 ring-4 ring-emerald-500/5'
                                 : 'border-gray-50 bg-gray-50/50 hover:bg-white hover:border-emerald-100'">
                             <input type="radio" :value="strategy.value" v-model="selectedStrategy"
-                                class="absolute top-6 right-6 text-emerald-600 focus:ring-0 w-5 h-5 border-gray-200" />
+                                class="absolute top-6 right-6 text-emerald-600 focus:ring-0 w-5 h-5 border-gray-200"  id="edulog-conflictmodal-30-1717"/>
                             <div class="pr-8">
                                 <div
                                     class="font-black text-gray-900 mb-2 group-hover:text-emerald-700 transition-colors uppercase tracking-tight">
@@ -52,9 +52,9 @@
                 <!-- Comparison Section -->
                 <!-- Field Difference Table -->
                 <div v-if="hasFieldDifferences" class="mb-10">
-                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 ml-1">
+                    <p class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 ml-1">
                         {{ $t('report.conflict.field_differences') }}
-                    </label>
+                    </p>
                     <div class="bg-gray-50 border border-gray-100 rounded-[1.5rem] overflow-hidden">
                         <table class="w-full text-left text-sm">
                             <thead
@@ -181,12 +181,12 @@
                         </div>
                     </div>
 
-                    <label v-if="selectedStrategy === 'manual'"
+                    <p v-if="selectedStrategy === 'manual'"
                         class="flex items-center gap-2 text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-4 ml-1">
                         {{ $t('report.conflict.merged_content') }}
-                    </label>
+                    </p>
                     <TextEditor v-if="selectedStrategy === 'manual'" v-model="mergedContactNotes"
-                        preset="merge" :min-height="160" />
+                        :aria-label="$t('report.conflict.merged_content')" preset="merge" :min-height="160" />
                 </div>
 
                 <hr v-if="(serverReport?.class_notes || localReport?.class_notes) && (serverReport?.class_notes != localReport?.class_notes)"
@@ -261,12 +261,12 @@
                         </div>
                     </div>
 
-                    <label v-if="selectedStrategy === 'manual'"
+                    <p v-if="selectedStrategy === 'manual'"
                         class="flex items-center gap-2 text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-4 ml-1">
                         {{ $t('report.conflict.merged_content') }}
-                    </label>
+                    </p>
                     <TextEditor v-if="selectedStrategy === 'manual'" v-model="mergedClassNotes"
-                        preset="merge" :min-height="160" />
+                        :aria-label="$t('report.conflict.merged_content')" preset="merge" :min-height="160" />
                 </div>
 
                 <hr v-if="(serverReport?.content || localReport?.content) && (serverReport?.content != localReport?.content)"
@@ -341,12 +341,13 @@
                         </div>
                     </div>
 
-                    <label v-if="selectedStrategy === 'manual'"
+                    <p v-if="selectedStrategy === 'manual'"
                         class="flex items-center gap-2 text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-4 ml-1">
                         {{ $t('report.conflict.merged_content') }}
-                    </label>
+                    </p>
                     <TextEditor v-if="selectedStrategy === 'manual'" v-model="mergedContent"
                         preset="merge" :min-height="240"
+                        :aria-label="$t('report.conflict.merged_content')"
                         :placeholder="$t('report.conflict.merge_placeholder')" />
                 </div>
             </div>
