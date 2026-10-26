@@ -214,7 +214,12 @@ function resetUserSearchState() {
 }
 
 function isValidEmail(email: string) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    const normalized = email
+    if (!normalized || /\s/.test(normalized)) return false
+    const atIndex = normalized.indexOf('@')
+    if (atIndex <= 0 || atIndex !== normalized.lastIndexOf('@')) return false
+    const domainDot = normalized.indexOf('.', atIndex + 1)
+    return domainDot > atIndex + 1 && domainDot < normalized.length - 1
 }
 
 function isValidUuid(value: string) {
