@@ -43,7 +43,8 @@ function integrationError(error: { message: string; code?: string }) {
 
 export function buildExtensionSettingsUrl(webBaseUrl: string) {
   const url = new URL(webBaseUrl)
-  const basePath = url.pathname.replace(/\/+$/, '')
+  let basePath = url.pathname
+  while (basePath.endsWith('/')) basePath = basePath.slice(0, -1)
   url.pathname = `${basePath}/dashboard/settings`
   url.searchParams.set('tab', 'integrations')
   return url.toString()

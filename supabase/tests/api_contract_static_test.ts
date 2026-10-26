@@ -81,7 +81,11 @@ Deno.test('OpenAPI local references and path parameters resolve', () => {
   assertEquals(missingReferences, [])
 
   for (const [path, pathItem] of Object.entries(openapi.paths) as [string, Record<string, any>][]) {
-    const pathParameters = new Set((path.match(/\{[^}]+\}/g) ?? []).map((parameter) => parameter.slice(1, -1)))
+    const pathParameters = new Set<string>()
+    for (const segment of path.split('{').slice(1)) {
+      const end = segment.indexOf('}')
+      if (end > 0) pathParameters.add(segment.slice(0, end))
+    }
     for (const [method, operation] of Object.entries(pathItem)) {
       if (!['get', 'post', 'patch', 'delete', 'put', 'options', 'head', 'trace'].includes(method)) continue
       const declared = new Set((operation.parameters ?? []).map((parameter: any) => parameter.$ref ? resolve(parameter.$ref) : parameter).filter((parameter: any) => parameter?.in === 'path').map((parameter: any) => parameter.name))

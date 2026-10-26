@@ -52,7 +52,7 @@ export async function authenticate(req: Request, id: string, trace: string, rout
   const serviceRole = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SERVICE_ROLE_KEY')
   const authorization = req.headers.get('authorization')
   const token = authorization && authorization.length <= 8192
-    ? /^Bearer[ \t]+(\S.*)$/i.exec(authorization)?.[1]
+    ? /^Bearer[ \t]+([^ \t\r\n]+)$/i.exec(authorization)?.[1]
     : undefined
   if (!url || !serviceRole) throw new ApiError(500, 'CONFIGURATION_ERROR', 'Supabase server configuration is missing')
   if (!token) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')

@@ -72,22 +72,34 @@ die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 info() { printf '\n==> %s\n' "$*"; }
 warn() { printf 'Warning: %s\n' "$*" >&2; }
 
+add_migration_group() {
+    local container="$1"
+    docker exec "$container" bash -c '
+        migration_gid="$1"
+        migration_group=$(getent group "$migration_gid" | cut -d: -f1 || true)
+        if [[ -z "$migration_group" ]]; then
+            migration_group="edulog_migration_${migration_gid}"
+            groupadd --gid "$migration_gid" "$migration_group"
+        fi
+        usermod -a -G "$migration_group" postgres
+    ' _ "$migration_group_id"
+}
+
 # Temp dir on host for tarball + scripts (mounted into containers)
 staging_dir=""
+staging_uid=""
+staging_gid=""
+migration_group_id=""
 pg_password=""
 current_image=""
 drop_extensions=""
 db_config_vol=""
 
 # Remove leftover containers and staging dir on exit.
-# Uses an alpine container for rm because the tarball build runs as root
-# inside Docker - the resulting files are root-owned and can't be deleted
-# by the host user on macOS.
 cleanup() {
     docker rm -f "$UPGRADE_CONTAINER" >/dev/null 2>&1 || true
     docker rm -f "$COMPLETE_CONTAINER" >/dev/null 2>&1 || true
     if [[ -n "$staging_dir" && -d "$staging_dir" ]]; then
-        docker run --rm -v "$staging_dir:/cleanup" alpine rm -rf /cleanup 2>/dev/null || true
         rm -rf "$staging_dir" 2>/dev/null || true
     fi
 }
@@ -275,9 +287,12 @@ pull_image() {
 build_tarball() {
     local tmpbase="${TMPDIR:-/tmp}"
     staging_dir=$(mktemp -d "${tmpbase%/}/supabase-pg17-upgrade.XXXXXX")
-    # World-writable so Docker containers can write to bind mounts on macOS,
-    # where the VM's root user has no special access to host directories.
-    chmod 777 "$staging_dir"
+    # Keep the directory writable only by the invoking user and let the build
+    # container write as that user, including on macOS Docker bind mounts.
+    staging_uid="${SUDO_UID:-$(id -u)}"
+    staging_gid="${SUDO_GID:-$(id -g)}"
+    chown "$staging_uid:$staging_gid" "$staging_dir"
+    chmod 755 "$staging_dir"
     echo "  Staging directory: $staging_dir"
 
     # Download upgrade scripts from the supabase/postgres repo (pinned to PG17_SCRIPTS_REF).
@@ -286,18 +301,22 @@ build_tarball() {
     local scripts_base="https://raw.githubusercontent.com/supabase/postgres/${PG17_SCRIPTS_REF}/ansible/files/admin_api_scripts/pg_upgrade_scripts"
     mkdir -p "$staging_dir/scripts"
     for script in initiate.sh complete.sh common.sh pgsodium_getkey.sh check.sh prepare.sh; do
-        curl -fsSL "$scripts_base/$script" -o "$staging_dir/scripts/$script" \
+        curl --proto '=https' --proto-redir '=https' -fsSL \
+            "$scripts_base/$script" -o "$staging_dir/scripts/$script" \
             || die "Failed to download $script from GitHub"
     done
+    chmod 755 "$staging_dir/scripts"
+    chmod 644 "$staging_dir"/scripts/*.sh
 
     if [[ -f "$TARBALL_CACHE" ]]; then
         info "Using cached upgrade tarball: $TARBALL_CACHE"
         cp "$TARBALL_CACHE" "$staging_dir/pg_upgrade_bin.tar.gz"
+        chmod 644 "$staging_dir/pg_upgrade_bin.tar.gz"
         return
     fi
 
     info "Building upgrade tarball from Postgres 17 image (first run)"
-    docker run --rm --user root --entrypoint bash \
+    docker run --rm --user "$staging_uid:$staging_gid" --entrypoint bash \
         -v "$staging_dir:/export" \
         "$PG17_UPGRADE_IMAGE" \
         -c '
@@ -377,6 +396,7 @@ build_tarball() {
 
             echo "  Tarball: $(du -sh /export/pg_upgrade_bin.tar.gz | cut -f1)"
         '
+    chmod 644 "$staging_dir/pg_upgrade_bin.tar.gz"
 
     # Cache for next run
     cp "$staging_dir/pg_upgrade_bin.tar.gz" "$TARBALL_CACHE"
@@ -427,13 +447,17 @@ run_upgrade() {
     local abs_data_dir abs_migration_dir
 
     mkdir -p "$MIGRATION_DIR"
-    # World-writable for macOS Docker bind mount compatibility (see build_tarball)
-    chmod 777 "$MIGRATION_DIR"
+    migration_group_id=$(docker run --rm --entrypoint id "$current_image" -g postgres)
+    [[ "$migration_group_id" =~ ^[0-9]+$ ]] || die "Could not determine the Postgres group ID."
+    chgrp "$migration_group_id" "$MIGRATION_DIR"
+    # Restrict output to root and Postgres; setgid preserves group access.
+    chmod 2770 "$MIGRATION_DIR"
     abs_data_dir=$(cd "$DATA_DIR" && pwd)
     abs_migration_dir=$(cd "$MIGRATION_DIR" && pwd)
 
     info "Starting upgrade container"
     docker run -d --name "$UPGRADE_CONTAINER" \
+        --group-add "$migration_group_id" \
         --entrypoint sleep \
         -v "${abs_data_dir}:/mnt/host-pgdata" \
         -v "${abs_migration_dir}:/mnt/host-migration" \
@@ -442,6 +466,8 @@ run_upgrade() {
         -e PGPASSWORD="$pg_password" \
         "$current_image" \
         infinity
+
+    add_migration_group "$UPGRADE_CONTAINER"
 
     info "Preparing upgrade environment"
     docker exec "$UPGRADE_CONTAINER" bash -c '
@@ -515,6 +541,7 @@ run_complete() {
 
     info "Starting PG17 container for complete.sh"
     docker run -d --name "$COMPLETE_CONTAINER" \
+        --group-add "$migration_group_id" \
         --entrypoint sleep \
         -v "${abs_migration_dir}:/mnt/host-migration" \
         -v "${db_config_vol}:/etc/postgresql-custom" \
@@ -522,6 +549,8 @@ run_complete() {
         -e PGPASSWORD="$pg_password" \
         "$PG17_UPGRADE_IMAGE" \
         infinity
+
+    add_migration_group "$COMPLETE_CONTAINER"
 
     info "Preparing complete.sh environment"
     # Save original db-config ownership so we can restore it if complete.sh fails.
