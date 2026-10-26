@@ -103,7 +103,9 @@ export function requestContext(logger: pino.Logger) {
       const outcome = res.statusCode >= 500 ? 'failure' : res.statusCode >= 400 ? 'denied' : 'success'
       const payload = res.getHeader('content-length')
       req.log.info({ status: res.statusCode, latency_ms: Math.round(performance.now() - req.startedAt), outcome, database_calls: req.databaseCalls ?? 0, payload_bytes: typeof payload === 'string' ? Number(payload) : undefined, cache_status: req.cacheStatus ?? 'bypass' }, 'api_request')
-      auditRequest(req, res.statusCode)
+      void auditRequest(req, res.statusCode).catch((error) => {
+        req.log.error({ err: error }, 'audit_request_failed')
+      })
     })
     next()
   }

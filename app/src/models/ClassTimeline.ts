@@ -150,8 +150,8 @@ export function layoutTimeline(data: ClassTimelineData, today: string): Timeline
         ...data.segments.map(segment => segment.effective_to).filter((value): value is string => Boolean(value)),
         ...data.reports.map(report => report.occurrence_date),
     ]
-    const start = dates.length ? dates.reduce((min, value) => value < min ? value : min) : today
-    const end = ends.reduce((max, value) => value > max ? value : max)
+    const start = dates.length ? dates.reduce((min, value) => value < min ? value : min, dates[0] ?? today) : today
+    const end = ends.reduce((max, value) => value > max ? value : max, today)
     const first = dayNumber(start)
     const span = Math.max(dayNumber(end) - first + 1, 1)
     const position = (date: string) => Math.min(Math.max(((dayNumber(date) - first) / span) * 100, 0), 100)

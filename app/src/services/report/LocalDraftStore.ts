@@ -37,15 +37,15 @@ function draftKey(userId: string, reportId: string): string {
 function requestResult<T>(request: IDBRequest<T>): Promise<T> {
     return new Promise((resolve, reject) => {
         request.onsuccess = () => resolve(request.result)
-        request.onerror = () => reject(request.error)
+        request.onerror = () => reject(request.error ?? new Error('Failed to read report draft from IndexedDB'))
     })
 }
 
 function transactionDone(transaction: IDBTransaction): Promise<void> {
     return new Promise((resolve, reject) => {
         transaction.oncomplete = () => resolve()
-        transaction.onerror = () => reject(transaction.error)
-        transaction.onabort = () => reject(transaction.error)
+        transaction.onerror = () => reject(transaction.error ?? new Error('Report draft transaction failed'))
+        transaction.onabort = () => reject(transaction.error ?? new Error('Report draft transaction was aborted'))
     })
 }
 
