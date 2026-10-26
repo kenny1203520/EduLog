@@ -37,12 +37,18 @@ const DEFAULT_BASE: Record<Exclude<AiProvider, 'ollama'>, string> = {
 }
 
 function joinUrl(base: string, path: string): string {
-  return `${base.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`
+  let baseEnd = base.length
+  while (baseEnd > 0 && base[baseEnd - 1] === '/') baseEnd -= 1
+
+  let pathStart = 0
+  while (pathStart < path.length && path[pathStart] === '/') pathStart += 1
+
+  return `${base.slice(0, baseEnd)}/${path.slice(pathStart)}`
 }
 
 /** OpenRouter lists prices as USD per token strings; store USD per million tokens. */
 function perMillion(value: unknown): number | undefined {
-  const parsed = typeof value === 'string' || typeof value === 'number' ? Number(value) : NaN
+  const parsed = typeof value === 'string' || typeof value === 'number' ? Number(value) : Number.NaN
   if (!Number.isFinite(parsed) || parsed < 0) return undefined
   return Math.round(parsed * 1_000_000 * 10_000) / 10_000
 }

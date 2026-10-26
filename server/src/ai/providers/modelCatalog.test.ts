@@ -42,7 +42,7 @@ describe('fetchModelCatalog', () => {
 
   it('lists Ollama models with full IDs, free prices, and the optional Bearer token', async () => {
     const fetchImpl = reply({ models: [{ name: 'qwen3.5:9b' }, { name: 'nomic-embed-text' }] })
-    const catalog = await fetchModelCatalog({ provider: 'ollama', authType: 'api_key', apiKey: 'ollama-token', baseUrl: 'https://ollama.example.test/prefix/' }, fetchImpl)
+    const catalog = await fetchModelCatalog({ provider: 'ollama', authType: 'api_key', apiKey: 'ollama-token', baseUrl: 'https://ollama.example.test/prefix////' }, fetchImpl)
     expect(fetchImpl.mock.calls[0][0]).toBe('https://ollama.example.test/prefix/api/tags')
     expect(fetchImpl.mock.calls[0][1].headers.authorization).toBe('Bearer ollama-token')
     expect(catalog.supported && catalog.models.find((m) => m.id === 'qwen3.5:9b')).toMatchObject({ textCapable: true, priceInputPerMtok: 0 })
