@@ -75,7 +75,9 @@ function createGitHubClient(authToken, fetchImpl) {
     },
     async publishRelease(releaseId, body) {
       if (!Number.isSafeInteger(releaseId) || releaseId <= 0) throw new Error('Invalid GitHub release ID')
-      const response = await fetchImpl(`${apiRoot}/repos/${repository}/releases/${releaseId}`, {
+      const releaseIdSegment = String(releaseId)
+      if (!/^[1-9][0-9]{0,15}$/.test(releaseIdSegment)) throw new Error('Invalid GitHub release ID')
+      const response = await fetchImpl(`${apiRoot}/repos/${repository}/releases/${encodeURIComponent(releaseIdSegment)}`, {
         method: 'PATCH',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
