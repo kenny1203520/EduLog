@@ -1,7 +1,8 @@
 # Envoy override for Kong
-# Usage: docker compose -f docker-compose.yml -f docker-compose.envoy.yml up
-# The direct Envoy port is host-only. Put Envoy behind a TLS reverse proxy for
-# remote access; the Caddy and Nginx overlays provide the dashboard login.
+# For external access, add docker-compose.caddy.yml to the Compose command.
+# Envoy has no published host port; Caddy is the public entry point.
+# Envoy is reachable only from the Compose network. Route public traffic
+# through Caddy so its bcrypt-backed Basic Auth protects the Studio dashboard.
 
 services:
   # Disable the original Kong service
@@ -26,8 +27,6 @@ services:
     container_name: supabase-envoy
     image: envoyproxy/envoy:v1.37.2
     restart: unless-stopped
-    ports:
-      - 127.0.0.1:${KONG_HTTP_PORT}:8000/tcp
     volumes:
       - ./volumes/api/envoy/envoy.yaml:/etc/envoy/envoy.yaml:ro
       - ./volumes/api/envoy/cds.yaml:/etc/envoy/cds.yaml:ro
@@ -55,3 +54,4 @@ services:
         aliases:
           - kong
           - envoy
+
