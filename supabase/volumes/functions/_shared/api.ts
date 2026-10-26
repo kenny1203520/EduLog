@@ -20,7 +20,7 @@ export function traceParent(req: Request) {
 export function traceId(req: Request) { return traceParent(req)?.split('-')[1] ?? crypto.randomUUID().replaceAll('-', '') }
 export function requestId(req: Request) {
   const value = req.headers.get('x-request-id')?.trim()
-  return value && /^[a-zA-Z0-9._:-]{1,128}$/.test(value) ? value : crypto.randomUUID()
+  return value && value.length <= 128 && /^[a-zA-Z0-9._:-]+$/.test(value) ? value : crypto.randomUUID()
 }
 
 export function response(value: unknown, status: number, id: string, headers: HeadersInit = {}) {
@@ -50,7 +50,10 @@ function clientIp(req: Request) { return req.headers.get('x-forwarded-for')?.spl
 export async function authenticate(req: Request, id: string, trace: string, route = new URL(req.url).pathname, startedAt = performance.now()): Promise<ApiContext> {
   const url = Deno.env.get('SUPABASE_URL')
   const serviceRole = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SERVICE_ROLE_KEY')
-  const token = req.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]
+  const authorization = req.headers.get('authorization')
+  const token = authorization && authorization.length <= 8192
+    ? /^Bearer[ \t]+(\S.*)$/i.exec(authorization)?.[1]
+    : undefined
   if (!url || !serviceRole) throw new ApiError(500, 'CONFIGURATION_ERROR', 'Supabase server configuration is missing')
   if (!token) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const adminDb = createClient(url, serviceRole, { auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false } })
