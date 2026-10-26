@@ -143,7 +143,6 @@ test('GitHub publisher creates a draft, uploads verified release files, then pub
     }
 
     await publishExtensionRelease({
-      repository: 'kenny1203520/EduLog',
       releaseTag: 'extension/beta/v0.1.1.1',
       metadataPath: join(directory, 'release.json'),
       token: 'test-token',

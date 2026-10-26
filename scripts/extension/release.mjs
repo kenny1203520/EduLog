@@ -27,7 +27,12 @@ export function validateGitRef(ref) {
 
 export function resolveCommit(ref) {
   const safeRef = validateGitRef(ref)
-  const commit = execFileSync(gitExecutable, ['rev-parse', '--verify', '--end-of-options', `${safeRef}^{commit}`], gitOptions).toString().trim()
+  const resolved = execFileSync(gitExecutable, ['cat-file', '--batch-check=%(objectname) %(objecttype)'], {
+    ...gitOptions,
+    input: `${safeRef}^{commit}\n`,
+  }).toString().trim()
+  const [commit, objectType] = resolved.split(' ')
+  if (objectType !== 'commit') throw new Error('Git reference must resolve to a commit')
   return validateCommit(commit)
 }
 
