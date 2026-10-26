@@ -83,7 +83,7 @@ jobs:
           cache-dependency-path: app/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Run tests
         run: npm test
@@ -94,7 +94,7 @@ jobs:
       - name: Validate API service build and tests
         working-directory: ./server
         run: |
-          npm ci
+          npm ci --ignore-scripts
           npm run typecheck
           npm test -- --run
           npm run build
