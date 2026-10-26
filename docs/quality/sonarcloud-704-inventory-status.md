@@ -6,4 +6,6 @@ The attached SonarCloud export is page 2 of 2 (total=704, pageSize=500) and cont
 
 The 204 rows reconcile to the export counts: 160 Vue accessibility findings, 32 shell conditional findings, 7 TypeScript findings, 2 shell security findings, 2 commented secret placeholders, and 1 Envoy SHA-1 hotspot.
 
-The first page of 500 issue records is not included yet. The screenshots establish the overall 704 count but do not provide machine-readable issue keys and messages at a reliable resolution. This page-2 file is a partial inventory and must not be treated as the completed 704-row checklist.
+The screenshots were reviewed as visual evidence for the first-page findings. The visible groups include GitHub Actions pinning, webhook example secrets, extension input/path handling, Envoy authentication and proxy exposure, shell upgrade scripts, provider parsing and async reliability, Vue form labels, and workspace translations. Corresponding fixes are split across the branch commits.
+
+The issue cards in the screenshots do not expose machine-readable issue keys, and their text is not consistently legible enough to reconcile every one of the first 500 rows individually. The page-2 CSV is the only row-level inventory. Treat the screenshots as coverage evidence, not as a completed 704-row checklist. Duplicate IDs in provider HTML fixtures are retained because those fixtures model external provider markup and the extension tests explicitly exercise that case.
