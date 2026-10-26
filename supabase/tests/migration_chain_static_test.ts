@@ -1,7 +1,8 @@
 import { assert, assertStringIncludes } from 'https://deno.land/std@0.177.1/testing/asserts.ts'
 
 const migrationDir = new URL('../migrations/', import.meta.url)
-const readMigration = (name: string) => Deno.readTextFile(new URL(name, migrationDir))
+const readText = async (url: URL) => (await Deno.readTextFile(url)).replace(/\r\n/g, '\n')
+const readMigration = (name: string) => readText(new URL(name, migrationDir))
 const reconciliation = await readMigration('1000043_teaching_scope_reconciliation.sql')
 const hardening = await readMigration('1000044_rbac_epoch_and_api_contract.sql')
 const compatibility = await readMigration('1000041a_has_api_permission_compatibility.sql')
@@ -68,13 +69,13 @@ const lessonsCourseIdIndex = await readMigration('1000113_lessons_course_id_inde
 const unifiedOccurrenceMakeupRoster = await readMigration('1000114_unified_occurrence_makeup_roster.sql')
 const reportOccurrenceAuthoritativeRoster = await readMigration('1000115_report_occurrence_authoritative_roster.sql')
 const webExtensionIntegrations = await readMigration('1000116_web_extension_integrations.sql')
-const migrationChainIntegration = await Deno.readTextFile(new URL('migration_chain_integration.sql', import.meta.url))
-const sensitiveDataIntegration = await Deno.readTextFile(new URL('sensitive_data_integration.sql', import.meta.url))
-const lifecycleIntegration = await Deno.readTextFile(new URL('report_lifecycle_integration.sql', import.meta.url))
-const upgradeFixture = await Deno.readTextFile(new URL('migration_upgrade_fixture.sql', import.meta.url))
-const coreRls = await Deno.readTextFile(new URL('core_rls_security.sql', import.meta.url))
-const rbacScopeIntegration = await Deno.readTextFile(new URL('rbac_scope_constraint_integration.sql', import.meta.url))
-const rbacScopeLegacyFixture = await Deno.readTextFile(new URL('rbac_scope_constraint_legacy_fixture.sql', import.meta.url))
+const migrationChainIntegration = await readText(new URL('migration_chain_integration.sql', import.meta.url))
+const sensitiveDataIntegration = await readText(new URL('sensitive_data_integration.sql', import.meta.url))
+const lifecycleIntegration = await readText(new URL('report_lifecycle_integration.sql', import.meta.url))
+const upgradeFixture = await readText(new URL('migration_upgrade_fixture.sql', import.meta.url))
+const coreRls = await readText(new URL('core_rls_security.sql', import.meta.url))
+const rbacScopeIntegration = await readText(new URL('rbac_scope_constraint_integration.sql', import.meta.url))
+const rbacScopeLegacyFixture = await readText(new URL('rbac_scope_constraint_legacy_fixture.sql', import.meta.url))
 
 Deno.test('reconciliation migration is present and fail-closed', () => {
   assertStringIncludes(reconciliation, 'CREATE TABLE IF NOT EXISTS public.teachings')
