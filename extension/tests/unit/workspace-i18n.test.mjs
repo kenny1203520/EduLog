@@ -23,6 +23,16 @@ test('workspace locale falls back to browser language when extension storage is 
   dom.window.close()
 })
 
+test('target class labels keep their class-session translation', async()=>{
+  const source=readFileSync(new URL('../../workspace/workspace-i18n.js',import.meta.url),'utf8').replace('export function initWorkspaceI18n','function initWorkspaceI18n')
+  const dom=new JSDOM('<html lang="zh-Hant"><body><select id="workspace-locale"><option value="zh-TW">繁體中文</option><option value="en">English</option></select><p>目標班級</p></body></html>',{runScripts:'outside-only'})
+  dom.window.chrome={storage:{local:{get:async()=>({edulogWorkspaceLocale:'en'}),set:async()=>{}},onChanged:{addListener:()=>{}}}}
+  dom.window.eval(source+';initWorkspaceI18n()')
+  await new Promise(resolve=>setTimeout(resolve,0))
+  assert.equal(dom.window.document.querySelector('p').textContent,'Class session')
+  dom.window.close()
+})
+
 test('dynamic review progress and issue guidance are translated in place',async()=>{
   const source=readFileSync(new URL('../../workspace/workspace-i18n.js',import.meta.url),'utf8').replace('export function initWorkspaceI18n','function initWorkspaceI18n')
   const dom=new JSDOM('<html lang="zh-Hant"><body><select id="workspace-locale"><option value="zh-TW">繁體中文</option><option value="en">English</option></select><p id="count"></p><p id="issue"></p><p id="saved"></p></body></html>',{runScripts:'outside-only'})
