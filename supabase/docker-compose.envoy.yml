@@ -1,5 +1,7 @@
 # Envoy override for Kong
 # Usage: docker compose -f docker-compose.yml -f docker-compose.envoy.yml up
+# The direct Envoy port is host-only. Put Envoy behind a TLS reverse proxy for
+# remote access; the Caddy and Nginx overlays provide the dashboard login.
 
 services:
   # Disable the original Kong service
@@ -13,13 +15,19 @@ services:
       api-gw:
         condition: service_healthy
 
+  # Keep the EduLog API healthy behind the same gateway replacement.
+  api:
+    depends_on: !override
+      api-gw:
+        condition: service_healthy
+
   # Envoy API gateway
   api-gw:
     container_name: supabase-envoy
     image: envoyproxy/envoy:v1.37.2
     restart: unless-stopped
     ports:
-      - ${KONG_HTTP_PORT}:8000/tcp
+      - 127.0.0.1:${KONG_HTTP_PORT}:8000/tcp
     volumes:
       - ./volumes/api/envoy/envoy.yaml:/etc/envoy/envoy.yaml:ro
       - ./volumes/api/envoy/cds.yaml:/etc/envoy/cds.yaml:ro
@@ -35,8 +43,6 @@ services:
       SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
       ANON_KEY_ASYMMETRIC: ${ANON_KEY_ASYMMETRIC:-}
       SERVICE_ROLE_KEY_ASYMMETRIC: ${SERVICE_ROLE_KEY_ASYMMETRIC:-}
-      DASHBOARD_USERNAME: ${DASHBOARD_USERNAME}
-      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD}
     entrypoint: ["/bin/sh", "/docker-entrypoint.sh"]
     healthcheck:
       # Using a TCP port check because this image does not include curl or wget.
