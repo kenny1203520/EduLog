@@ -599,17 +599,17 @@ async function resolveTransferConflict(selections: TransferReportFieldSelections
                         </div>
 
                         <div v-if="transferForm.single_source_mode === 'report'" class="space-y-2">
-                            <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                            <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-transfermodal-168-12251">{{
                                 $t('student.transfer_modal.original_report') }}</label>
                             <SearchableSelect v-model="transferForm.selected_report_id" :options="reportOptions"
-                                :placeholder="isLoadingReports ? $t('common.loading') : $t('student.transfer_modal.original_report_placeholder')" />
+                                :placeholder="isLoadingReports ? $t('common.loading') : $t('student.transfer_modal.original_report_placeholder')"  id="edulog-transfermodal-168-12251"/>
                         </div>
 
                         <div v-else class="space-y-2">
-                            <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                            <label for="transfer-original-date" class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                                 $t('student.transfer_modal.original_date') }}</label>
                             <BaseDatePicker v-model="transferForm.original_date"
-                                theme="amber" :placeholder="$t('student.transfer_modal.original_date')" />
+                                id="transfer-original-date" theme="amber" :placeholder="$t('student.transfer_modal.original_date')" />
                         </div>
 
                         <p v-if="!isLoadingReports && reportOptions.length === 0 && transferForm.single_source_mode === 'report'"
@@ -624,17 +624,17 @@ async function resolveTransferConflict(selections: TransferReportFieldSelections
 
                     <div class="space-y-4">
                         <div class="space-y-2">
-                            <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                            <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-transfermodal-193-14041">{{
                                 $t('student.transfer_modal.classroom_filter') }}</label>
                             <SearchableSelect v-model="selectedClassroomId" :options="classroomOptions"
                                 :placeholder="isLoadingClassrooms ? $t('common.loading') : $t('classroom.all_rooms')"
-                                :disabled="!currentEnrollment" />
+                                :disabled="!currentEnrollment"  id="edulog-transfermodal-193-14041"/>
                         </div>
 
-                        <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                        <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-transfermodal-200-14573">{{
                             $t('student.transfer_modal.to_classroom') }}</label>
                         <SearchableSelect v-model="transferForm.to_session_id" :options="sessionOptions"
-                            :placeholder="$t('common.select_placeholder')" :disabled="!currentEnrollment" />
+                            :placeholder="$t('common.select_placeholder')" :disabled="!currentEnrollment"  id="edulog-transfermodal-200-14573"/>
 
                         <!-- Modular Capacity Progress Bar -->
                         <div v-if="transferForm.to_session_id" class="mt-4 p-4 bg-gray-50 rounded-2xl border border-gray-100 animate-in fade-in duration-500">
@@ -647,14 +647,14 @@ async function resolveTransferConflict(selections: TransferReportFieldSelections
                     </div>
 
                     <div class="space-y-2">
-                        <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                        <label for="transfer-target-date" class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                             transferForm.mode === 'single'
                                 ? $t('student.transfer_modal.target_date')
                                 : $t('student.transfer_modal.effective_date') }}</label>
                         <BaseDatePicker v-if="transferForm.mode === 'single'" v-model="transferForm.target_date"
-                            theme="amber" :placeholder="$t('student.transfer_modal.target_date')" />
+                            id="transfer-target-date" theme="amber" :placeholder="$t('student.transfer_modal.target_date')" />
                         <BaseDatePicker v-else v-model="transferForm.effective_date"
-                            theme="amber" :placeholder="$t('student.transfer_modal.effective_date')" />
+                            id="transfer-target-date" theme="amber" :placeholder="$t('student.transfer_modal.effective_date')" />
                     </div>
 
                     <div v-if="transferForm.mode === 'class'" class="space-y-2">

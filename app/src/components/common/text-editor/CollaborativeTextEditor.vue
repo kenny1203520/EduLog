@@ -43,6 +43,7 @@ import './textEditor.css'
 
 interface Props {
     modelValue?: TextEditorContentInput
+    ariaLabel?: string
     ydoc: Y.Doc
     fieldName: string
     provider?: any
@@ -101,7 +102,7 @@ const editorOptions = {
     extensions,
     editable: effectiveMode.value === 'edit',
     editorProps: {
-        attributes: { class: 'text-editor-tiptap' },
+        attributes: { class: 'text-editor-tiptap', ...(props.ariaLabel ? { 'aria-label': props.ariaLabel } : {}) },
         handleKeyDown: (_: any, event: KeyboardEvent) => {
             if (event.key !== 'Tab') return false
             event.preventDefault()

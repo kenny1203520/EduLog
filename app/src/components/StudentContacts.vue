@@ -209,13 +209,13 @@ async function copyToClipboard(text: string) {
                 <div v-else class="space-y-3">
                     <div class="grid grid-cols-2 gap-3">
                         <input v-model="editContactForm.name" :placeholder="$t('student.contacts.name')"
-                            class="px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm rounded-xl border border-gray-200">
+                            class="px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm rounded-xl border border-gray-200" :aria-label="$t('student.contacts.name')">
                         <input v-model="editContactForm.relation" :placeholder="$t('student.contacts.relation')"
-                            class="px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm rounded-xl border border-gray-200">
+                            class="px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm rounded-xl border border-gray-200" :aria-label="$t('student.contacts.relation')">
                         <input v-model="editContactForm.phone" :placeholder="$t('student.contacts.phone')"
-                            class="px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm rounded-xl border border-gray-200">
+                            class="px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm rounded-xl border border-gray-200" :aria-label="$t('student.contacts.phone')">
                         <input v-model="editContactForm.email" :placeholder="$t('student.contacts.email')"
-                            class="px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm rounded-xl border border-gray-200">
+                            class="px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm rounded-xl border border-gray-200" :aria-label="$t('student.contacts.email')">
                     </div>
                     <div class="flex justify-end space-x-2 pt-2">
                         <button @click="cancelEditContact"
@@ -258,27 +258,27 @@ async function copyToClipboard(text: string) {
                     class="bg-gray-50 p-6 rounded-2xl border border-dashed border-gray-200 hover:border-emerald-200 transition-colors">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <div class="space-y-1">
-                            <label class="text-xs font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.contacts.name') }}</label>
+                            <label class="text-xs font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentcontacts-134-12264">{{ $t('student.contacts.name') }}</label>
                             <input v-model="newContact.name" :placeholder="$t('student.contacts.name')"
-                                class="w-full border-gray-200 rounded-xl px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm">
+                                class="w-full border-gray-200 rounded-xl px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm" id="edulog-studentcontacts-134-12264">
                         </div>
                         <div class="space-y-1">
-                            <label class="text-xs font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.contacts.relation') }}</label>
+                            <label class="text-xs font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentcontacts-139-12795">{{ $t('student.contacts.relation') }}</label>
                             <input v-model="newContact.relation" :placeholder="$t('student.contacts.relation')"
-                                class="w-full border-gray-200 rounded-xl px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm">
+                                class="w-full border-gray-200 rounded-xl px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm" id="edulog-studentcontacts-139-12795">
                         </div>
                         <div class="space-y-1">
-                            <label class="text-xs font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.contacts.phone') }}</label>
+                            <label class="text-xs font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentcontacts-144-13338">{{ $t('student.contacts.phone') }}</label>
                             <input v-model="newContact.phone" :placeholder="$t('student.contacts.phone')"
-                                class="w-full border-gray-200 rounded-xl px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm">
+                                class="w-full border-gray-200 rounded-xl px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm" id="edulog-studentcontacts-144-13338">
                         </div>
                         <div class="space-y-1">
-                            <label class="text-xs font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.contacts.email') }}</label>
+                            <label class="text-xs font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentcontacts-149-13872">{{ $t('student.contacts.email') }}</label>
                             <div class="relative">
                                 <input v-model="newContact.email" type="email" @blur="contactEmailTouched = true"
                                     :placeholder="$t('student.contacts.email')"
                                     class="w-full border-gray-200 rounded-xl px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm"
-                                    :class="{ 'border-red-500 focus:ring-red-500': contactEmailError }">
+                                    :class="{ 'border-red-500 focus:ring-red-500': contactEmailError }" id="edulog-studentcontacts-149-13872">
                                 <p v-if="contactEmailError" class="text-xs text-red-500 mt-1">{{ contactEmailError }}</p>
                             </div>
                         </div>

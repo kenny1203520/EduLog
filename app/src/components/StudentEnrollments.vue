@@ -355,10 +355,10 @@ async function refreshData() {
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
                         <div class="space-y-1">
-                            <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                            <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentenrollments-172-15119">{{
                                 $t("student.enroll_modal.type") }}</label>
                             <select v-model="editEnrollmentForm.enrollment_type"
-                                class="w-full px-4 py-3 text-base font-bold bg-white shadow-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all">
+                                class="w-full px-4 py-3 text-base font-bold bg-white shadow-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all" id="edulog-studentenrollments-172-15119">
                                 <option value="regular">
                                     {{ $t("student.internal_courses.status_regular") }}
                                 </option>
@@ -374,24 +374,24 @@ async function refreshData() {
                             </select>
                         </div>
                         <div class="space-y-1">
-                            <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                            <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentenrollments-191-16456">{{
                                 $t("student.internal_courses.start_date") }}</label>
                             <input type="date" v-model="editEnrollmentForm.start_date"
-                                class="w-full px-4 py-3 text-base font-bold bg-white shadow-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all" />
+                                class="w-full px-4 py-3 text-base font-bold bg-white shadow-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all"  id="edulog-studentenrollments-191-16456"/>
                         </div>
                         <div class="space-y-1">
-                            <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                            <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentenrollments-197-17025">{{
                                 $t("student.internal_courses.external_link") }}</label>
                             <input type="url" v-model="editEnrollmentForm.external_link"
                                 class="w-full px-4 py-3 text-base font-bold bg-white shadow-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                                :placeholder="$t('common.optional')" />
+                                :placeholder="$t('common.optional')"  id="edulog-studentenrollments-197-17025"/>
                         </div>
                         <div class="space-y-1">
-                            <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                            <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentenrollments-204-17668">{{
                                 $t("student.internal_courses.koding_admission_id") }}</label>
                             <input type="text" v-model="editEnrollmentForm.koding_admission_id"
                                 class="w-full px-4 py-3 text-base font-bold bg-white shadow-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                                :placeholder="$t('common.optional')" />
+                                :placeholder="$t('common.optional')"  id="edulog-studentenrollments-204-17668"/>
                         </div>
                         <div class="space-y-1">
                             <TimeZoneSelect v-model="editEnrollmentForm.time_zone" :label="$t('common.time_zone')" />

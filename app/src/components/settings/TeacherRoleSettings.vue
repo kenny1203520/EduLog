@@ -60,7 +60,7 @@ onMounted(loadRoles)
         <div class="space-y-5 p-6 sm:p-8">
             <form class="flex flex-col gap-3 sm:flex-row" @submit.prevent="addRole">
                 <input v-model="newRoleName" :placeholder="$t('settings.teacher_roles.placeholder')"
-                    class="min-w-0 flex-1 rounded-2xl border border-gray-200 bg-gray-50 px-5 py-3 font-bold outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10">
+                    class="min-w-0 flex-1 rounded-2xl border border-gray-200 bg-gray-50 px-5 py-3 font-bold outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10" :aria-label="$t('settings.teacher_roles.placeholder')">
                 <button type="submit" :disabled="!newRoleName.trim()"
                     class="rounded-2xl bg-emerald-600 px-6 py-3 font-black text-white transition hover:bg-emerald-700 disabled:opacity-40">
                     {{ $t('common.add') }}

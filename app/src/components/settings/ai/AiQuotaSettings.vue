@@ -123,24 +123,24 @@ onMounted(async () => {
 
         <form class="grid gap-3 rounded-2xl border border-gray-200 p-5 md:grid-cols-2" @submit.prevent="savePolicy">
             <h3 class="font-black text-gray-900 md:col-span-2">{{ t('ai.settings.quota_edit_title') }}</h3>
-            <label class="block text-sm font-bold text-gray-700">{{ t('ai.settings.quota_applies_to') }}
+            <label class="block text-sm font-bold text-gray-700" for="edulog-aiquotasettings-20-1581">{{ t('ai.settings.quota_applies_to') }}
                 <select v-model="form.scope" class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm" @change="form.target_id = ''">
                     <option v-for="scope in ['default', 'role', 'user']" :key="scope" :value="scope">{{ t(`ai.settings.quota_scope.${scope}`) }}</option>
                 </select>
             </label>
             <div v-if="form.scope === 'role'" class="text-sm font-bold text-gray-700">{{ t('ai.settings.quota_scope.role') }}
-                <SearchableSelect v-model="form.target_id" class="mt-1" :options="roleOptions" :aria-label="t('ai.settings.quota_scope.role')" />
+                <SearchableSelect v-model="form.target_id" class="mt-1" :options="roleOptions" :aria-label="t('ai.settings.quota_scope.role')"  id="edulog-aiquotasettings-20-1581"/>
             </div>
             <div v-else-if="form.scope === 'user'" class="text-sm font-bold text-gray-700">{{ t('ai.settings.quota_scope.user') }}
                 <SearchableSelect v-model="form.target_id" class="mt-1" :options="userOptions" remote-search :loading="userLoading" :aria-label="t('ai.settings.quota_scope.user')" @search="searchUsers" />
             </div>
             <div v-else></div>
-            <label class="block text-sm font-bold text-gray-700">{{ t('ai.settings.quota_one_time_label') }}
-                <input v-model="form.one_time_total" type="number" min="0" step="1" class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 px-3 text-sm" :placeholder="t('ai.settings.quota_none')" />
+            <label class="block text-sm font-bold text-gray-700" for="edulog-aiquotasettings-32-2725">{{ t('ai.settings.quota_one_time_label') }}
+                <input v-model="form.one_time_total" type="number" min="0" step="1" class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 px-3 text-sm" :placeholder="t('ai.settings.quota_none')"  :aria-label="t('ai.settings.quota_none')"/>
             </label>
             <div class="grid grid-cols-2 gap-2">
                 <label class="block text-sm font-bold text-gray-700">{{ t('ai.settings.quota_period_label') }}
-                    <select v-model="form.period" class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm">
+                    <select v-model="form.period" class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm" id="edulog-aiquotasettings-32-2725">
                         <option v-for="period in ['none', 'day', 'week', 'month']" :key="period" :value="period">{{ t(`ai.settings.period.${period}`) }}</option>
                     </select>
                 </label>

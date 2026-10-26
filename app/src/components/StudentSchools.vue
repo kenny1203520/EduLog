@@ -284,63 +284,63 @@ function formatSchoolDate(date: string | null | undefined, timeZone?: string | n
                 <div v-else class="space-y-4">
                     <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                         <div class="min-w-0 space-y-1">
-                            <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                            <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentschools-105-8640">{{
                                 $t('student.schools.name') }}</label>
                             <input v-model="editSchoolForm.name"
-                                class="w-full px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm rounded-xl border border-gray-200">
+                                class="w-full px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm rounded-xl border border-gray-200" id="edulog-studentschools-105-8640">
                         </div>
                         <div class="min-w-0 space-y-1">
-                            <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                            <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentschools-111-9178">{{
                                 $t('student.schools.status') }}</label>
                             <BaseDropdown v-model="editSchoolForm.status" :options="schoolStatusOptions"
-                                theme="emerald" />
+                                theme="emerald"  id="edulog-studentschools-111-9178"/>
                         </div>
                     </div>
 
                     <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                         <div class="min-w-0 space-y-1">
-                            <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                            <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentschools-120-9714">{{
                                 $t('student.schools.school_student_id') }}</label>
                             <input v-model="editSchoolForm.school_student_id"
-                                class="w-full px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm rounded-xl border border-gray-200">
+                                class="w-full px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm rounded-xl border border-gray-200" id="edulog-studentschools-120-9714">
                         </div>
 
                         <div class="grid min-w-0 grid-cols-2 gap-4">
                             <div class="space-y-1">
-                                <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                                <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentschools-128-10348">{{
                                     $t('student.schools.grade') }}</label>
                                 <input v-model="editSchoolForm.grade"
                                     :disabled="editSchoolForm.status !== 'enrolled'"
                                     :placeholder="editSchoolForm.status !== 'enrolled' ? '-' : ''"
-                                    class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-100 disabled:text-gray-400 focus:ring-2 focus:ring-emerald-500 outline-none transition-colors">
+                                    class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-100 disabled:text-gray-400 focus:ring-2 focus:ring-emerald-500 outline-none transition-colors" id="edulog-studentschools-128-10348">
                             </div>
                             <div class="space-y-1">
-                                <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                                <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentschools-136-11106">{{
                                     $t('student.schools.class') }}</label>
                                 <input v-model="editSchoolForm.class"
                                     :disabled="editSchoolForm.status !== 'enrolled'"
                                     :placeholder="editSchoolForm.status !== 'enrolled' ? '-' : ''"
-                                    class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-100 disabled:text-gray-400 focus:ring-2 focus:ring-emerald-500 outline-none transition-colors">
+                                    class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-100 disabled:text-gray-400 focus:ring-2 focus:ring-emerald-500 outline-none transition-colors" id="edulog-studentschools-136-11106">
                             </div>
                         </div>
                     </div>
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="space-y-1">
-                            <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                            <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentschools-148-11987">{{
                                 $t('student.schools.start_date') }}</label>
                             <input type="date" v-model="editSchoolForm.start_date"
-                                class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                                class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white focus:ring-2 focus:ring-emerald-500 outline-none" id="edulog-studentschools-148-11987">
                             <p v-if="editSchoolForm.status === 'enrolled'"
                                 class="text-[10px] text-red-500 text-right mt-0.5">* {{ $t('student.required')
                                 }}</p>
                         </div>
 
                         <div class="space-y-1">
-                            <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                            <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentschools-158-12737">{{
                                 $t('student.schools.end_date') }}</label>
                             <input type="date" v-model="editSchoolForm.end_date"
-                                class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                                class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white focus:ring-2 focus:ring-emerald-500 outline-none" id="edulog-studentschools-158-12737">
                             <p class="text-[10px] text-gray-400 text-right mt-0.5">{{
                                 $t('student.schools.present') }}</p>
                         </div>
@@ -387,59 +387,59 @@ function formatSchoolDate(date: string | null | undefined, timeZone?: string | n
                 class="bg-gray-50 p-4 rounded-xl border border-dashed border-gray-200 hover:border-emerald-200 transition-colors">
                 <div class="grid grid-cols-2 md:grid-cols-2 gap-4 mb-4">
                     <div class="space-y-1">
-                        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{
+                        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide" for="edulog-studentschools-208-16401">{{
                             $t('student.schools.name') }}</label>
                         <input v-model="newSchool.name"
-                            class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                            class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none" id="edulog-studentschools-208-16401">
                     </div>
                     <div class="space-y-1">
-                        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{
+                        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide" for="edulog-studentschools-214-16843">{{
                             $t('student.schools.status') }}</label>
                         <BaseDropdown v-model="newSchool.status" :options="schoolStatusOptions"
-                            theme="emerald" />
+                            theme="emerald"  id="edulog-studentschools-214-16843"/>
                     </div>
 
                     <div class="space-y-1">
-                        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{
+                        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide" for="edulog-studentschools-221-17228">{{
                             $t('student.schools.school_student_id') }}</label>
                         <input v-model="newSchool.school_student_id"
-                            class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                            class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none" id="edulog-studentschools-221-17228">
                     </div>
 
                     <div class="grid grid-cols-2 gap-4">
                         <div class="space-y-1">
-                            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{
+                            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide" for="edulog-studentschools-229-17762">{{
                                 $t('student.schools.grade') }}</label>
                             <input v-model="newSchool.grade" :disabled="newSchool.status !== 'enrolled'"
                                 :placeholder="newSchool.status !== 'enrolled' ? '-' : ''"
-                                class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-100 disabled:text-gray-400 focus:ring-2 focus:ring-emerald-500 outline-none transition-colors">
+                                class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-100 disabled:text-gray-400 focus:ring-2 focus:ring-emerald-500 outline-none transition-colors" id="edulog-studentschools-229-17762">
                         </div>
                         <div class="space-y-1">
-                            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{
+                            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide" for="edulog-studentschools-236-18426">{{
                                 $t('student.schools.class') }}</label>
                             <input v-model="newSchool.class" :disabled="newSchool.status !== 'enrolled'"
                                 :placeholder="newSchool.status !== 'enrolled' ? '-' : ''"
-                                class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-100 disabled:text-gray-400 focus:ring-2 focus:ring-emerald-500 outline-none transition-colors">
+                                class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-100 disabled:text-gray-400 focus:ring-2 focus:ring-emerald-500 outline-none transition-colors" id="edulog-studentschools-236-18426">
                         </div>
                     </div>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                     <div class="space-y-1">
-                        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{
+                        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide" for="edulog-studentschools-247-19206">{{
                             $t('student.schools.start_date') }}</label>
                         <input type="date" v-model="newSchool.start_date"
-                            class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-600 focus:ring-2 focus:ring-emerald-500 outline-none">
+                            class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-600 focus:ring-2 focus:ring-emerald-500 outline-none" id="edulog-studentschools-247-19206">
                         <p v-if="newSchool.status === 'enrolled'"
                             class="text-[10px] text-red-500 text-right mt-0.5">* {{ $t('student.required') }}
                         </p>
                     </div>
 
                     <div class="space-y-1">
-                        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{
+                        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide" for="edulog-studentschools-257-19892">{{
                             $t('student.schools.end_date') }}</label>
                         <input type="date" v-model="newSchool.end_date"
-                            class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-600 focus:ring-2 focus:ring-emerald-500 outline-none">
+                            class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-600 focus:ring-2 focus:ring-emerald-500 outline-none" id="edulog-studentschools-257-19892">
                         <p class="text-[10px] text-gray-400 text-right mt-0.5">{{ $t('student.schools.present')
                         }}</p>
                     </div>

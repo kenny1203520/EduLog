@@ -39,6 +39,7 @@ import './textEditor.css'
 
 interface Props {
     modelValue?: TextEditorContentInput
+    ariaLabel?: string
     placeholder?: string
     mode?: TextEditorMode
     disabled?: boolean
@@ -85,7 +86,7 @@ const editor = new Editor({
     extensions: createTextEditorExtensions({ templateVariables: props.templateVariables }),
     content: createTextEditorContent(props.modelValue, { templateVariables: props.templateVariables }).richText.doc,
     editable: effectiveMode.value === 'edit',
-    editorProps: { attributes: { class: 'text-editor-tiptap' } },
+    editorProps: { attributes: { class: 'text-editor-tiptap', ...(props.ariaLabel ? { 'aria-label': props.ariaLabel } : {}) } },
     onUpdate: () => publishContent('local'),
     onSelectionUpdate: () => { formattingRevision.value++; emitActivity() },
     onFocus: () => { focused.value = true; emitActivity() },

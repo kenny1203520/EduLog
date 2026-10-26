@@ -231,15 +231,15 @@ onMounted(() => {
                 </label>
                 <label class="space-y-1 text-xs font-bold text-gray-600">
                     <span>{{ t('rbac.audit_filter_resource') }}</span>
-                    <input v-model="pendingFilters.resource" type="search" :placeholder="t('rbac.audit_filter_resource_hint')" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600" />
+                    <input v-model="pendingFilters.resource" type="search" :placeholder="t('rbac.audit_filter_resource_hint')" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600"  :aria-label="t('rbac.audit_filter_resource_hint')"/>
                 </label>
                 <label class="space-y-1 text-xs font-bold text-gray-600">
                     <span>{{ t('rbac.audit_filter_action') }}</span>
-                    <input v-model="pendingFilters.action" type="search" :placeholder="t('rbac.audit_filter_action_hint')" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600" />
+                    <input v-model="pendingFilters.action" type="search" :placeholder="t('rbac.audit_filter_action_hint')" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600"  :aria-label="t('rbac.audit_filter_action_hint')"/>
                 </label>
                 <label class="space-y-1 text-xs font-bold text-gray-600 sm:col-span-2 xl:col-span-2">
                     <span>{{ t('rbac.audit_filter_search') }}</span>
-                    <input v-model="pendingFilters.search" type="search" :placeholder="t('rbac.audit_filter_search_hint')" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600" />
+                    <input v-model="pendingFilters.search" type="search" :placeholder="t('rbac.audit_filter_search_hint')" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-normal text-gray-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600"  :aria-label="t('rbac.audit_filter_search_hint')"/>
                 </label>
                 <p v-if="invalidDateRange" role="alert" class="text-sm font-semibold text-rose-700 sm:col-span-2 xl:col-span-4">{{ t('rbac.audit_invalid_date_range') }}</p>
                 <p v-if="invalidActorId" role="alert" class="text-sm font-semibold text-rose-700 sm:col-span-2 xl:col-span-4">{{ t('rbac.audit_invalid_actor_id') }}</p>

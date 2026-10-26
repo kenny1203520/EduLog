@@ -136,7 +136,7 @@
             <div :class="props.compact ? 'mb-4' : 'mb-6'">
                 <div class="flex items-center justify-between mb-2">
                     <div class="flex items-center gap-2">
-                        <label class="block text-sm font-medium text-gray-700">
+                        <label :for="`${editorId}-lesson`" class="block text-sm font-medium text-gray-700">
                             {{ $t('report.editor.lesson_label') }}
                         </label>
                         <button v-if="selectedLessonId" @click="copyCourseInfo"
@@ -172,7 +172,7 @@
                         <span v-if="!props.compact">{{ $t('report.editor.view_external_report') || $t('report.editor.course_folder') }}</span>
                     </a>
                 </div>
-                <BaseDropdown data-collab-field="lesson" v-model="selectedLessonId" :options="lessonOptions" :disabled="disabled"
+                <BaseDropdown :id="`${editorId}-lesson`" data-collab-field="lesson" v-model="selectedLessonId" :options="lessonOptions" :disabled="disabled"
                     theme="emerald" />
                 <section v-if="progressContextLoading || progressContextError || progressGaps.length || previousProgressReport"
                     class="mt-3 rounded-xl border px-3 py-3 sm:px-4"
@@ -222,12 +222,12 @@
 
             <!-- Report External Link Input -->
             <div v-if="!props.compact" class="mb-4">
-                <label class="block text-xs font-medium text-gray-600 mb-1">
+                <label class="block text-xs font-medium text-gray-600 mb-1" for="edulog-reporteditor-225-17005">
                     {{ $t('report.editor.report_link_label') }}
                 </label>
                 <div class="flex gap-2">
                     <input data-collab-field="external_link" type="url" v-model="reportExternalLink" placeholder="https://..."
-                        class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
+                        class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"  id="edulog-reporteditor-225-17005"/>
                     <a v-if="safeExternalHref(reportExternalLink)" :href="safeExternalHref(reportExternalLink) || undefined" target="_blank" rel="noopener noreferrer"
                         class="flex items-center justify-center w-10 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 text-gray-600">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
@@ -273,7 +273,7 @@
 
             <!-- Absence Reason (conditional) -->
             <div v-if="attendanceStatus === 'absent'" class="mt-3">
-                <label class="block text-sm font-medium text-gray-700 mb-2">
+                <label :for="`${editorId}-absence-reason`" class="block text-sm font-medium text-gray-700 mb-2">
                     {{ $t('report.editor.absence_reason_label') }} <span class="text-red-600">*</span>
                 </label>
 
@@ -297,7 +297,7 @@
                 </div>
 
                 <!-- User-selectable absence reason -->
-                <BaseDropdown v-else v-model="absenceReason" :options="absenceReasonOptions" theme="red" />
+                <BaseDropdown v-else :id="`${editorId}-absence-reason`" v-model="absenceReason" :options="absenceReasonOptions" theme="red" />
                 <p v-if="showAbsenceError && !isSystemManagedAbsence" class="mt-1 text-sm text-red-600">{{
                     $t('report.editor.absence_reason_required') }}</p>
             </div>
@@ -305,14 +305,14 @@
 
         <!-- Progress Letter (for lesson chapter record) -->
         <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
-            <label class="block text-sm font-medium text-gray-700 mb-3">
+            <label class="block text-sm font-medium text-gray-700 mb-3" for="edulog-reporteditor-308-22308">
                 {{ $t('report.editor.progress_label') }}
             </label>
 
             <div class="mb-4">
                 <label class="flex items-center gap-2 cursor-pointer w-fit">
                     <input data-collab-field="completion" type="checkbox" v-model="isCompleted"
-                        class="w-5 h-5 text-amber-600 border-gray-300 rounded focus:ring-amber-500" />
+                        class="w-5 h-5 text-amber-600 border-gray-300 rounded focus:ring-amber-500"  id="edulog-reporteditor-308-22308"/>
                     <span class="text-sm font-medium text-gray-700">{{ $t('report.editor.lesson_completed') }}</span>
                 </label>
             </div>
@@ -320,18 +320,18 @@
             <div class="grid grid-cols-2 gap-4">
                 <!-- Start Progress -->
                 <div>
-                    <label class="block text-xs font-medium text-gray-600 mb-1">
+                    <label class="block text-xs font-medium text-gray-600 mb-1" for="edulog-reporteditor-323-23049">
                         {{ $t('report.editor.progress_start_label') }}
                     </label>
-                    <BaseDropdown data-collab-field="progress" v-model="progressStart" :options="progressOptions" theme="amber" />
+                    <BaseDropdown data-collab-field="progress" v-model="progressStart" :options="progressOptions" theme="amber"  id="edulog-reporteditor-323-23049"/>
                 </div>
 
                 <!-- End Progress -->
                 <div>
-                    <label class="block text-xs font-medium text-gray-600 mb-1">
+                    <label class="block text-xs font-medium text-gray-600 mb-1" for="edulog-reporteditor-331-23445">
                         {{ $t('report.editor.progress_end_label') }}
                     </label>
-                    <BaseDropdown data-collab-field="progress" v-model="progressEnd" :options="progressOptions" theme="amber" />
+                    <BaseDropdown data-collab-field="progress" v-model="progressEnd" :options="progressOptions" theme="amber"  id="edulog-reporteditor-331-23445"/>
                 </div>
             </div>
 
@@ -352,17 +352,17 @@
         <!-- Evaluation Section -->
         <div class="flex flex-wrap gap-4 mb-6">
             <div class="flex-1 min-w-[165px]">
-                <label class="block text-sm font-medium text-gray-700 mb-2">
+                <p class="block text-sm font-medium text-gray-700 mb-2">
                     {{ $t('report.editor.class_participation_label') }}
-                </label>
+                </p>
                 <div class="flex items-center gap-2">
                     <RatingInput data-collab-field="class_participation" v-model="classParticipation" :show-value="true" />
                 </div>
             </div>
             <div class="flex-1 min-w-[165px]">
-                <label class="block text-sm font-medium text-gray-700 mb-2">
+                <p class="block text-sm font-medium text-gray-700 mb-2">
                     {{ $t('report.editor.classroom_behavior_label') }}
-                </label>
+                </p>
                 <div class="flex items-center gap-2">
                     <RatingInput data-collab-field="classroom_behavior" v-model="classroomBehavior" :show-value="true" />
                 </div>
@@ -388,7 +388,7 @@
 
         <!-- Contact Notes -->
         <div class="mb-6">
-            <label class="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+            <div class="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
                 <svg class="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
@@ -399,7 +399,7 @@
                     :class="panelUi.toolbars.contact ? 'bg-emerald-50 text-emerald-700' : 'text-gray-500 hover:bg-gray-100'"
                     :aria-pressed="panelUi.toolbars.contact" :aria-label="$t('report.editor.formatting_toggle_label', { field: $t('report.editor.contact_notes_label') })"
                     @click.prevent="panelUi.toolbars.contact = !panelUi.toolbars.contact">{{ $t('report.editor.formatting_toggle') }}</button>
-            </label>
+            </div>
             <CollaborativeTextEditor
                 :key="'collab-contact-notes'"
                 ref="contactNotesEditorRef"
@@ -417,10 +417,12 @@
                 :min-height="120"
                 :user="collaborationUser"
                 :placeholder="$t('report.editor.contact_notes_placeholder')"
+                :aria-label="$t('report.editor.contact_notes_label')"
                 @change="handleTextEditorChange('contactNotes', $event)"
                 @activity="handleCollaborationActivity('contactNotes', $event)" />
             <!-- Fallback standard editor if ydoc not ready -->
             <TextEditor v-else :key="'plain-contact-notes'" ref="contactNotesEditorRef" v-model="contactNotesEditorValue" preset="notes" :disabled="props.disabled"
+                :aria-label="$t('report.editor.contact_notes_label')"
                 :formatting-enabled="preferences.editorSettings.formattingEnabled"
                 :toolbar-visible="toolbarVisible('contact')"
                 :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
@@ -431,7 +433,7 @@
 
         <!-- Class Notes -->
         <div class="mb-6">
-            <label class="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+            <div class="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
                 <svg class="w-5 h-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
@@ -443,7 +445,7 @@
                     :class="panelUi.toolbars.class ? 'bg-emerald-50 text-emerald-700' : 'text-gray-500 hover:bg-gray-100'"
                     :aria-pressed="panelUi.toolbars.class" :aria-label="$t('report.editor.formatting_toggle_label', { field: $t('report.editor.class_notes_label') })"
                     @click.prevent="panelUi.toolbars.class = !panelUi.toolbars.class">{{ $t('report.editor.formatting_toggle') }}</button>
-            </label>
+            </div>
             <CollaborativeTextEditor
                 :key="'collab-class-notes'"
                 ref="classNotesEditorRef"
@@ -462,9 +464,11 @@
                 mono
                 :user="collaborationUser"
                 :placeholder="$t('report.editor.class_notes_placeholder')"
+                :aria-label="$t('report.editor.class_notes_label')"
                 @change="handleTextEditorChange('classNotes', $event)"
                 @activity="handleCollaborationActivity('classNotes', $event)" />
             <TextEditor v-else :key="'plain-class-notes'" ref="classNotesEditorRef" v-model="classNotesEditorValue" preset="notes" :disabled="props.disabled"
+                :aria-label="$t('report.editor.class_notes_label')"
                 :formatting-enabled="preferences.editorSettings.formattingEnabled"
                 :toolbar-visible="toolbarVisible('class')"
                 :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
@@ -475,7 +479,7 @@
 
         <!-- Learning Report (Main Content) -->
         <div class="mb-6">
-            <label class="block text-sm font-medium text-gray-700 mb-2 flex items-center justify-between">
+            <div class="block text-sm font-medium text-gray-700 mb-2 flex items-center justify-between">
                 <span class="flex items-center gap-2">
                     <svg class="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -507,7 +511,7 @@
                         {{ $t('ai.open_button') }}
                     </button>
                 </span>
-            </label>
+            </div>
             <div class="rounded-lg transition-shadow duration-700 motion-reduce:transition-none"
                 :class="aiInsertFlash ? 'ring-2 ring-emerald-400 ring-offset-2' : ''">
             <CollaborativeTextEditor
@@ -528,9 +532,11 @@
                 mono
                 :user="collaborationUser"
                 :placeholder="props.placeholder || $t('report.editor.learning_report_placeholder')"
+                :aria-label="$t('report.editor.learning_report_label')"
                 @change="handleTextEditorChange('content', $event)"
                 @activity="handleCollaborationActivity('content', $event)" />
             <TextEditor v-else :key="'plain-content'" ref="contentEditorRef" v-model="contentEditorValue" preset="report"
+                :aria-label="$t('report.editor.learning_report_label')"
                 :placeholder="props.placeholder || $t('report.editor.learning_report_placeholder')"
                 :disabled="props.disabled"
                 :formatting-enabled="preferences.editorSettings.formattingEnabled"
@@ -590,11 +596,11 @@
                 <div class="rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-3">
                     <div class="flex flex-col gap-2 md:flex-row md:items-end">
                         <div class="flex-1">
-                            <label class="block text-xs font-bold uppercase tracking-wide text-amber-900 mb-1">
+                            <label class="block text-xs font-bold uppercase tracking-wide text-amber-900 mb-1" for="edulog-reporteditor-593-41796">
                                 {{ $t('report.editor.copy_course_template_load_from') }}
                             </label>
                             <BaseDropdown v-model="selectedCourseTemplateLoadKey"
-                                :options="courseTemplateLoadOptionsDropdown" theme="amber" />
+                                :options="courseTemplateLoadOptionsDropdown" theme="amber"  id="edulog-reporteditor-593-41796"/>
                         </div>
                         <button @click="loadSelectedCourseTemplate"
                             class="rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-amber-600"
@@ -621,11 +627,11 @@
                         </div>
 
                         <div v-if="variable.modeOptions?.length" class="space-y-1">
-                            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500" for="edulog-reporteditor-624-43897">
                                 {{ $t('report.editor.copy_course_template_variable_mode_label') }}
                             </label>
                             <BaseDropdown v-model="selectedCourseTemplateModes[variable.key]"
-                                :options="variable.modeOptions || []" theme="emerald" />
+                                :options="variable.modeOptions || []" theme="emerald"  id="edulog-reporteditor-624-43897"/>
                         </div>
 
                         <div>
@@ -660,11 +666,11 @@
                 <div class="rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-3 space-y-3">
                     <div class="grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto_auto] md:items-end">
                         <div>
-                            <label class="block text-xs font-bold uppercase tracking-wide text-amber-900 mb-1">
+                            <label class="block text-xs font-bold uppercase tracking-wide text-amber-900 mb-1" for="edulog-reporteditor-663-46675">
                                 {{ $t('report.editor.template_select_label') }}
                             </label>
                             <BaseDropdown v-model="selectedTemplateId" :options="templateOptionsDropdown" theme="amber"
-                                @change="handleTemplateSelectionChange" />
+                                @change="handleTemplateSelectionChange"  id="edulog-reporteditor-663-46675"/>
                         </div>
                         <button @click="createNewTemplateDraft"
                             class="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 transition hover:bg-gray-100">
@@ -678,12 +684,12 @@
 
                     <div class="grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto] md:items-end">
                         <div>
-                            <label class="block text-xs font-bold uppercase tracking-wide text-amber-900 mb-1">
+                            <label class="block text-xs font-bold uppercase tracking-wide text-amber-900 mb-1" for="edulog-reporteditor-681-47986">
                                 {{ $t('report.editor.template_name_label') }}
                             </label>
                             <input v-model="templateDraftName" type="text"
                                 :placeholder="$t('report.editor.template_name_placeholder')"
-                                class="w-full rounded-xl border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500" />
+                                class="w-full rounded-xl border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"  id="edulog-reporteditor-681-47986"/>
                         </div>
                         <button @click="applyTemplateDraftToReport"
                             class="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-700">
@@ -712,13 +718,13 @@
                                 <div v-for="variable in reportTemplateVariables.filter(v => v.modes?.length)"
                                     :key="variable.key" class="space-y-1">
                                     <label
-                                        class="block text-[10px] font-bold uppercase tracking-wider text-purple-900/60">
+                                        class="block text-[10px] font-bold uppercase tracking-wider text-purple-900/60" for="edulog-reporteditor-714-50404">
                                         {{ variable.label }} {{
                                             $t('report.editor.copy_course_template_variable_mode_label') }}
                                     </label>
                                     <BaseDropdown v-model="selectedReportTemplateModes[variable.key]"
                                         :options="(variable.modes || []).map(m => ({ label: $t(`report.editor.copy_course_template_variable_modes.${m.value}`), value: m.value }))"
-                                        theme="emerald" />
+                                        theme="emerald"  id="edulog-reporteditor-714-50404"/>
                                 </div>
                             </div>
                         </div>
@@ -738,7 +744,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, inject, type WatchStopHandle } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, inject, useId, type WatchStopHandle } from 'vue'
 import { onBeforeRouteLeave, routerViewLocationKey } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAutoSave, type AutoSaveErrorContext } from '@/composables/useAutoSave'
@@ -878,6 +884,7 @@ const props = withDefaults(defineProps<Props>(), {
     initialCreatedAt: '',
     compact: false,
 })
+const editorId = useId()
 
 const emit = defineEmits<{
     'update:content': [content: string]
