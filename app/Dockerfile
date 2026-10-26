@@ -1,7 +1,7 @@
 FROM dhi.io/node:26-alpine-dev AS build
 WORKDIR /app
 COPY package*.json ./
-RUN npm install
+RUN npm ci --ignore-scripts
 COPY . .
 RUN npm run build
 
