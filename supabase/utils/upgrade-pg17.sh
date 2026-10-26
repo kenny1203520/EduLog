@@ -16,6 +16,7 @@
 # Requirements:
 #   - Docker with Docker Compose (docker compose, not docker-compose)
 #   - Running Supabase self-hosted setup with Postgres 15
+#   - setfacl from the system's ACL package (usually named "acl")
 #   - At least 2x current database size + 5 GB free disk space
 #
 # Backup:
@@ -72,24 +73,12 @@ die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 info() { printf '\n==> %s\n' "$*"; }
 warn() { printf 'Warning: %s\n' "$*" >&2; }
 
-add_migration_group() {
-    local container="$1"
-    docker exec "$container" bash -c '
-        migration_gid="$1"
-        migration_group=$(getent group "$migration_gid" | cut -d: -f1 || true)
-        if [[ -z "$migration_group" ]]; then
-            migration_group="edulog_migration_${migration_gid}"
-            groupadd --gid "$migration_gid" "$migration_group"
-        fi
-        usermod -a -G "$migration_group" postgres
-    ' _ "$migration_group_id"
-}
-
 # Temp dir on host for tarball + scripts (mounted into containers)
 staging_dir=""
 staging_uid=""
 staging_gid=""
-migration_group_id=""
+migration_postgres_uids=()
+migration_target_postgres_uid=""
 pg_password=""
 current_image=""
 drop_extensions=""
@@ -153,6 +142,8 @@ wait_for_healthy() {
 # --- Pre-flight checks -----------------------------------------------------
 
 preflight() {
+    local acl_probe
+
     info "Running pre-flight checks"
 
     if [[ "$(id -u)" -ne 0 ]]; then
@@ -161,6 +152,7 @@ preflight() {
 
     docker compose version >/dev/null 2>&1 || die "Docker Compose not found."
     command -v curl >/dev/null 2>&1 || die "curl is required (for downloading upgrade scripts)."
+    command -v setfacl >/dev/null 2>&1 || die "setfacl is required (install the system ACL package, usually named acl)."
     [[ -f docker-compose.yml ]] || die "Run this script from the docker/ directory."
     [[ -f docker-compose.pg17.yml ]] || die "Missing docker-compose.pg17.yml."
     [[ -f .env ]] || die "Missing .env file."
@@ -191,6 +183,15 @@ preflight() {
     status=$(docker inspect "$DB_CONTAINER" --format '{{.State.Status}}')
     [[ "$status" == "running" ]] || die "'$DB_CONTAINER' is not running (status: $status)."
     [[ -d "$DATA_DIR" ]] || die "Data directory not found: $DATA_DIR"
+
+    # Verify the data filesystem supports ACLs before stopping Postgres.
+    acl_probe=$(mktemp -d "${MIGRATION_DIR}.acl-check.XXXXXX") || die "Could not create an ACL preflight directory."
+    if ! setfacl -m "u:65534:rwx" "$acl_probe" >/dev/null 2>&1 \
+        || ! setfacl -d -m "u:65534:rwx" "$acl_probe" >/dev/null 2>&1; then
+        rmdir "$acl_probe"
+        die "The data filesystem must support POSIX ACLs for the migration directory."
+    fi
+    rmdir "$acl_probe"
 
     if [[ -d "$BACKUP_DIR" ]]; then
         warn "Backup directory already exists: $BACKUP_DIR"
@@ -444,20 +445,35 @@ stop_and_backup() {
 # /data_migration) operate on symlinks rather than bind mounts.
 
 run_upgrade() {
-    local abs_data_dir abs_migration_dir
+    local abs_data_dir abs_migration_dir image postgres_uid acl_entries=""
 
     mkdir -p "$MIGRATION_DIR"
-    migration_group_id=$(docker run --rm --entrypoint id "$current_image" -g postgres)
-    [[ "$migration_group_id" =~ ^[0-9]+$ ]] || die "Could not determine the Postgres group ID."
-    chgrp "$migration_group_id" "$MIGRATION_DIR"
-    # Restrict output to root and Postgres; setgid preserves group access.
-    chmod 2770 "$MIGRATION_DIR"
+    migration_target_postgres_uid=$(docker run --rm --entrypoint id "$PG17_TARGET_IMAGE" -u postgres)
+    [[ "$migration_target_postgres_uid" =~ ^[1-9][0-9]*$ ]] || die "Could not determine the target Postgres user ID."
+
+    for image in "$current_image" "$PG17_UPGRADE_IMAGE" "$PG17_TARGET_IMAGE"; do
+        postgres_uid=$(docker run --rm --entrypoint id "$image" -u postgres)
+        [[ "$postgres_uid" =~ ^[1-9][0-9]*$ ]] || die "Could not determine the Postgres user ID in $image."
+        if [[ ! " ${migration_postgres_uids[*]} " =~ " ${postgres_uid} " ]]; then
+            migration_postgres_uids+=("$postgres_uid")
+        fi
+    done
+
+    # Keep the directory private, then grant access only to the Postgres UIDs
+    # used by the source, upgrade, and target images. Default ACLs cover output
+    # created beneath it when the PG15 and PG17 UIDs differ.
+    chmod 0700 "$MIGRATION_DIR"
+    for postgres_uid in "${migration_postgres_uids[@]}"; do
+        if [[ -n "$acl_entries" ]]; then acl_entries+=","; fi
+        acl_entries+="u:${postgres_uid}:rwx"
+    done
+    setfacl -m "$acl_entries" "$MIGRATION_DIR"
+    setfacl -d -m "$acl_entries" "$MIGRATION_DIR"
     abs_data_dir=$(cd "$DATA_DIR" && pwd)
     abs_migration_dir=$(cd "$MIGRATION_DIR" && pwd)
 
     info "Starting upgrade container"
     docker run -d --name "$UPGRADE_CONTAINER" \
-        --group-add "$migration_group_id" \
         --entrypoint sleep \
         -v "${abs_data_dir}:/mnt/host-pgdata" \
         -v "${abs_migration_dir}:/mnt/host-migration" \
@@ -466,8 +482,6 @@ run_upgrade() {
         -e PGPASSWORD="$pg_password" \
         "$current_image" \
         infinity
-
-    add_migration_group "$UPGRADE_CONTAINER"
 
     info "Preparing upgrade environment"
     docker exec "$UPGRADE_CONTAINER" bash -c '
@@ -541,7 +555,6 @@ run_complete() {
 
     info "Starting PG17 container for complete.sh"
     docker run -d --name "$COMPLETE_CONTAINER" \
-        --group-add "$migration_group_id" \
         --entrypoint sleep \
         -v "${abs_migration_dir}:/mnt/host-migration" \
         -v "${db_config_vol}:/etc/postgresql-custom" \
@@ -549,8 +562,6 @@ run_complete() {
         -e PGPASSWORD="$pg_password" \
         "$PG17_UPGRADE_IMAGE" \
         infinity
-
-    add_migration_group "$COMPLETE_CONTAINER"
 
     info "Preparing complete.sh environment"
     # Save original db-config ownership so we can restore it if complete.sh fails.
@@ -618,6 +629,16 @@ run_complete() {
 
     info "complete.sh finished successfully"
     docker rm -f "$COMPLETE_CONTAINER" >/dev/null 2>&1 || true
+
+    # Once PG17 has completed, only the Postgres UID of the target image needs
+    # access to the migrated data. Remove temporary grants to the other image UIDs.
+    local postgres_uid
+    for postgres_uid in "${migration_postgres_uids[@]}"; do
+        if [[ "$postgres_uid" != "$migration_target_postgres_uid" ]]; then
+            setfacl -R -x "u:${postgres_uid}" "$MIGRATION_DIR"
+            setfacl -R -d -x "u:${postgres_uid}" "$MIGRATION_DIR"
+        fi
+    done
 }
 
 # --- Step 7: Swap data directories -----------------------------------------
