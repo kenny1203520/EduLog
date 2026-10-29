@@ -5,7 +5,7 @@ on:
     branches: [develop, master]
     paths: ['extension/**', 'scripts/extension/**', 'server/**', 'supabase/**', 'app/package*.json', 'package*.json', '.github/workflows/extension-*.yml', 'docs/deployment/extension-*.md', 'CHROMEWEBSTORE.md']
   push:
-    branches: [develop]
+    branches: [develop, master]
     tags: ['extension/beta/v*', 'extension/stable/v*']
     paths: ['extension/**', 'scripts/extension/**', 'server/**', 'supabase/**', 'app/package*.json', 'package*.json', '.github/workflows/extension-*.yml', 'docs/deployment/extension-*.md', 'CHROMEWEBSTORE.md']
 
