@@ -74,6 +74,7 @@ describe('Express API boundary', () => {
     expect(api.headers['x-trace-id']).toBeTruthy()
     expect(api.headers['server-timing']).toMatch(/total;dur=/)
     expect(api.headers['cache-control']).toBe('private, no-store')
+    expect(api.headers['content-security-policy']).toContain("default-src 'self'")
   })
 
   it('never returns SPA HTML or allows an unauthenticated resource request', async () => {

@@ -56,7 +56,7 @@ export function createApp(env: NodeJS.ProcessEnv = process.env) {
   const clients = createSupabaseClients(config)
   const app = express()
   app.disable('x-powered-by')
-  app.use(helmet({ contentSecurityPolicy: false }))
+  app.use(helmet())
   app.use(cookieParser())
   app.use(requestContext(logger))
   // Authenticated responses must not enter a browser, proxy, or CDN shared
