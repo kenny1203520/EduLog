@@ -75,14 +75,14 @@ onMounted(load)
                         <option value="class_session">{{ t('rbac.scope.class_session') }}</option>
                     </select>
                 </label>
-                <label v-if="scopeMode === 'classroom' || scopeMode === 'class_session'" class="space-y-2">
+                <div v-if="scopeMode === 'classroom' || scopeMode === 'class_session'" class="space-y-2">
                     <span class="text-xs font-black uppercase tracking-wider text-gray-500">{{ t('rbac.scope.classroom') }}</span>
                     <SearchableSelect v-model="classroomId" :options="classroomOptions" :placeholder="t('common.select_placeholder')" :aria-label="t('rbac.scope.classroom')" />
-                </label>
-                <label v-if="scopeMode === 'class_session'" class="space-y-2">
+                </div>
+                <div v-if="scopeMode === 'class_session'" class="space-y-2">
                     <span class="text-xs font-black uppercase tracking-wider text-gray-500">{{ t('rbac.scope.class_session') }}</span>
                     <SearchableSelect v-model="sessionId" :options="sessionOptions" :placeholder="t('common.select_placeholder')" :aria-label="t('rbac.scope.class_session')" />
-                </label>
+                </div>
             </div>
             <p v-if="loading" class="py-8 text-center text-sm font-bold text-gray-400">{{ t('common.loading') }}</p>
             <RolePermissionEditor v-else-if="contextReady" domain="teaching"

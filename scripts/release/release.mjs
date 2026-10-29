@@ -74,7 +74,7 @@ export function extractChangelogSection(markdown, version) {
 }
 
 function runGit(args, cwd) {
-  return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
+  return execFileSync('git', args, { cwd, encoding: 'utf8', shell: false }).trim() // NOSONAR: This CLI intentionally uses the caller's Git installation; arguments are passed without a shell.
 }
 
 export function validateRelease({ tag, cwd = process.cwd(), outputPath, git = runGit }) {
@@ -152,7 +152,7 @@ export async function publishRelease({
 }
 
 async function defaultGh(args) {
-  const result = execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] })
+  const result = execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'], shell: false }) // NOSONAR: This CLI intentionally uses the caller's GitHub CLI installation; arguments are passed without a shell.
   return result.trim() ? JSON.parse(result) : null
 }
 

@@ -4,7 +4,7 @@ import { assertNoSecrets, secretFindings } from '../secrets.mjs'
 import { config, validateRuntime } from '../release.mjs'
 
 test('public keys and environment expressions are safe to share', () => {
-  assertNoSecrets(new Map([['manifest.json', Buffer.from(JSON.stringify({ key: config.sideloadPublicKey }))], ['workflow.yml', Buffer.from('token: ${{ secrets.EXTENSION_API_TOKEN }}')]]))
+  assert.doesNotThrow(() => assertNoSecrets(new Map([['manifest.json', Buffer.from(JSON.stringify({ key: config.sideloadPublicKey }))], ['workflow.yml', Buffer.from('token: ${{ secrets.EXTENSION_API_TOKEN }}')]])))
 })
 
 test('credential findings expose locations without exposing values', () => {
