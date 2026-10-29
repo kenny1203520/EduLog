@@ -8,7 +8,7 @@ on:
       - 'app/**'
       - '.github/workflows/backend-security.yml'
   push:
-    branches: [develop, main]
+    branches: [develop, main, master]
 
 permissions:
   contents: read
