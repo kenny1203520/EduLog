@@ -13,7 +13,7 @@ on:
       - 'supabase/tests/**'
       - '.github/workflows/api-contract-security.yml'
   push:
-    branches: [develop, main]
+    branches: [develop, main, master]
 
 permissions:
   contents: read
