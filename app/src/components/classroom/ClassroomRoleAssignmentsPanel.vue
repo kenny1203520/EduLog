@@ -278,15 +278,15 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
                 <button type="button" class="min-h-11 min-w-11 rounded-lg px-3 text-sm font-bold text-gray-500 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600" @click="clearForm">{{ t('common.cancel') }}</button>
             </div>
             <div class="grid gap-4 sm:grid-cols-2">
-                <label class="min-w-0 space-y-2">
+                <div class="min-w-0 space-y-2">
                     <span class="text-sm font-bold text-gray-700">{{ t('classroom.role_assignments.account') }}</span>
                     <SearchableSelect v-model="selectedUserId" :options="userOptions.map(user => ({ value: user.id, label: userLabel(user), searchText: `${user.email} ${user.display_name ?? ''}` }))" remote-search :loading="userSearchLoading" :no-results-text="!userSearchQuery ? t('classroom.role_assignments.user_search_hint') : userSearchError ? t('classroom.role_assignments.user_search_failed') : t('classroom.role_assignments.no_users_found')" :loading-text="t('common.loading')" :placeholder="t('classroom.role_assignments.search_account')" :aria-label="t('classroom.role_assignments.account')" @search="searchAccounts" />
                     <span class="block text-xs leading-5 text-gray-500">{{ t('classroom.role_assignments.account_search_hint') }}</span>
-                </label>
-                <label class="min-w-0 space-y-2">
+                </div>
+                <div class="min-w-0 space-y-2">
                     <span class="text-sm font-bold text-gray-700">{{ t('classroom.role_assignments.role') }}</span>
                     <SearchableSelect v-model="selectedRoleId" :options="roleOptions" :placeholder="t('classroom.role_assignments.select_role')" :aria-label="t('classroom.role_assignments.role')" :no-results-text="t('classroom.role_assignments.no_roles')" />
-                </label>
+                </div>
                 <label class="space-y-2">
                     <span class="text-sm font-bold text-gray-700">{{ t('classroom.role_assignments.effective_from') }}</span>
                     <input v-model="effectiveFrom" type="date" required class="min-h-11 w-full rounded-xl border-gray-300 focus:border-emerald-600 focus:ring-emerald-600">
