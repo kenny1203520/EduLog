@@ -104,7 +104,7 @@ export function attachRealtimeProxy(
   const upstreamConnectTimeoutMs = timeouts.upstreamConnectMs ?? UPSTREAM_CONNECT_TIMEOUT_MS
   const socketServer = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 })
   server.on('upgrade', async (request: IncomingMessage, socket: Socket, head: Buffer) => {
-    const url = new URL(request.url ?? '/', 'http://edulog.local')
+    const url = new URL(request.url ?? '/', 'https://edulog.local')
     if (url.pathname !== '/api/realtime') return
     const connectionId = randomUUID()
     const requestStartedAt = Date.now()

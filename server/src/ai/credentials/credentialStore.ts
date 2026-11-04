@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { isIP } from 'node:net'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { generateText, type LanguageModel } from 'ai'
 import { z } from 'zod'
@@ -7,14 +8,26 @@ import { classifyProviderFailure, providerErrorDetail, type ProviderErrorDetail,
 import { createLanguageModel, AI_PROVIDERS, type AiProvider, type ModelTarget } from '../providers/providerRegistry.js'
 import { credentialAssociatedData } from '../report/reportGenerationService.js'
 import { maskSecret, type SecretCipher } from './secretCipher.js'
+import { isPublicIpAddress } from '../providers/publicOllamaTransport.js'
 
-/** Providers a teacher may add personally. Ollama and custom endpoints are site-only (no server-side requests to user-chosen hosts). */
-export const PERSONAL_PROVIDERS = ['anthropic', 'openai', 'google', 'openrouter'] as const
+/** Personal endpoints are server-side requested only through the public HTTPS policy. */
+export const PERSONAL_PROVIDERS = ['anthropic', 'openai', 'google', 'openrouter', 'ollama'] as const
 
 export const CREDENTIAL_FIELDS = 'id,scope,owner_user_id,provider,auth_type,secret_hint,base_url,label,status,last_verified_at,created_at,updated_at'
 export const MODEL_FIELDS = 'id,credential_id,model_id,display_name,enabled,is_default,quota_weight,price_input_per_mtok,price_output_per_mtok,supports_structured_output,created_at,updated_at'
 
 const httpUrl = z.url().refine((value) => /^https?:\/\//.test(value), 'Only http(s) URLs are allowed').max(2048)
+const personalOllamaUrl = z.string().trim().min(1).max(2048).url().superRefine((value, ctx) => {
+  try {
+    const url = new URL(value)
+    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) throw new Error()
+    if (url.hostname === 'localhost' || url.hostname.endsWith('.localhost')) throw new Error()
+    const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '')
+    if (isIP(hostname) && !isPublicIpAddress(hostname)) throw new Error()
+  } catch {
+    ctx.addIssue({ code: 'custom', message: 'Personal Ollama requires a public HTTPS base URL without credentials, query, or fragment' })
+  }
+})
 
 export const siteCredentialInput = z.object({
   provider: z.enum(AI_PROVIDERS),
@@ -29,12 +42,27 @@ export const siteCredentialInput = z.object({
 export const personalCredentialInput = z.object({
   provider: z.enum(PERSONAL_PROVIDERS),
   label: z.string().trim().min(1).max(120),
-  secret: z.string().trim().min(1).max(4096),
+  secret: z.string().trim().min(1).max(4096).optional(),
+  base_url: personalOllamaUrl.optional(),
+}).strict().superRefine((input, ctx) => {
+  if (input.provider === 'ollama') {
+    if (!input.base_url) ctx.addIssue({ code: 'custom', path: ['base_url'], message: 'Ollama needs a public HTTPS base URL' })
+  } else {
+    if (!input.secret) ctx.addIssue({ code: 'custom', path: ['secret'], message: 'An API key is required' })
+    if (input.base_url !== undefined) ctx.addIssue({ code: 'custom', path: ['base_url'], message: 'Custom endpoints are only supported for Ollama' })
+  }
+})
+
+export const personalCredentialPatchInput = z.object({
+  label: z.string().trim().min(1).max(120).optional(),
+  secret: z.string().trim().min(1).max(4096).nullable().optional(),
+  base_url: personalOllamaUrl.optional(),
+  status: z.enum(['active', 'disabled']).optional(),
 }).strict()
 
 export const credentialPatchInput = z.object({
   label: z.string().trim().min(1).max(120).optional(),
-  secret: z.string().trim().min(1).max(4096).optional(),
+  secret: z.string().trim().min(1).max(4096).nullable().optional(),
   base_url: httpUrl.nullable().optional(),
   status: z.enum(['active', 'disabled']).optional(),
 }).strict()
@@ -92,8 +120,21 @@ export async function updateCredential(db: Db, cipher: SecretCipher | null, id: 
   if (patch.base_url !== undefined) update.base_url = patch.base_url
   if (patch.status !== undefined) update.status = patch.status
   if (patch.secret !== undefined) {
-    update.secret_ciphertext = requireCipher(cipher).encrypt(patch.secret, credentialAssociatedData(id))
-    update.secret_hint = maskSecret(patch.secret)
+    if (patch.secret === null) {
+      update.secret_ciphertext = null
+      update.secret_hint = null
+      // The database constraint requires Ollama's no-token state to be atomic.
+      const current = await db.from('ai_credentials').select('provider').eq('id', id).maybeSingle()
+      if (current.error) throw mapDatabaseError(current.error)
+      if (current.data?.provider !== 'ollama') throw new ApiError(400, 'INVALID_CREDENTIAL', 'Only Ollama credentials may remove their secret')
+      update.auth_type = 'none'
+    } else {
+      update.secret_ciphertext = requireCipher(cipher).encrypt(patch.secret, credentialAssociatedData(id))
+      update.secret_hint = maskSecret(patch.secret)
+      const current = await db.from('ai_credentials').select('provider').eq('id', id).maybeSingle()
+      if (current.error) throw mapDatabaseError(current.error)
+      if (current.data?.provider === 'ollama') update.auth_type = 'api_key'
+    }
     update.status = patch.status ?? 'active'
   }
   const result = await db.from('ai_credentials').update(update).eq('id', id).select(CREDENTIAL_FIELDS).maybeSingle()
@@ -108,6 +149,7 @@ export type TokenResolver = (credential: { provider: string, authType: string, c
 export interface UsableCredential {
   id: string
   provider: AiProvider
+  credentialScope: 'site' | 'user'
   authType: 'api_key' | 'oauth' | 'none'
   baseUrl: string | null
   apiKey: string | undefined
@@ -115,14 +157,14 @@ export interface UsableCredential {
 
 /** Load a credential and turn its stored secret into something a provider call can use. */
 export async function loadUsableCredential(db: Db, cipher: SecretCipher | null, credentialId: string, resolveToken?: TokenResolver): Promise<UsableCredential> {
-  const row = await db.from('ai_credentials').select('id,provider,auth_type,secret_ciphertext,base_url').eq('id', credentialId).maybeSingle()
+  const row = await db.from('ai_credentials').select('id,scope,provider,auth_type,secret_ciphertext,base_url').eq('id', credentialId).maybeSingle()
   if (row.error) throw mapDatabaseError(row.error)
   if (!row.data) throw new ApiError(404, 'NOT_FOUND', 'Credential was not found')
   const token = await resolveToken?.({ provider: row.data.provider, authType: row.data.auth_type, credentialId })
   const apiKey = token ?? (row.data.auth_type === 'none' || !row.data.secret_ciphertext
     ? undefined
     : requireCipher(cipher).decrypt(row.data.secret_ciphertext, credentialAssociatedData(credentialId)))
-  return { id: credentialId, provider: row.data.provider, authType: row.data.auth_type, baseUrl: row.data.base_url ?? null, apiKey }
+  return { id: credentialId, credentialScope: row.data.scope, provider: row.data.provider, authType: row.data.auth_type, baseUrl: row.data.base_url ?? null, apiKey }
 }
 
 /**
@@ -134,7 +176,7 @@ export async function testCredential(db: Db, cipher: SecretCipher | null, creden
   resolveToken?: TokenResolver
 } = {}) {
   const credential = await loadUsableCredential(db, cipher, credentialId, options.resolveToken)
-  const model = (options.createModel ?? createLanguageModel)({ provider: credential.provider, modelId, apiKey: credential.apiKey, baseUrl: credential.baseUrl ?? undefined })
+  const model = (options.createModel ?? createLanguageModel)({ provider: credential.provider, modelId, apiKey: credential.apiKey, baseUrl: credential.baseUrl ?? undefined, credentialScope: credential.credentialScope })
   let ok = false
   let errorName: string | null = null
   let detail: ProviderErrorDetail | null = null

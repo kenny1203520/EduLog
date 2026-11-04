@@ -35,6 +35,7 @@ function testFailureDetail(result: CredentialTestResult) {
     return [result.status ? `HTTP ${result.status}` : null, result.message].filter(Boolean).join(' – ') || null
 }
 const replacing = ref<Record<string, string>>({})
+const baseUrls = ref<Record<string, string>>({})
 const newModel = reactive<Record<string, { model_id: string, display_name: string, quota_weight: number, price_input_per_mtok: string, price_output_per_mtok: string }>>({})
 const pendingDelete = ref<{ kind: 'credential' | 'model', id: string, label: string } | null>(null)
 
@@ -43,7 +44,7 @@ const site = props.mode === 'site'
 type ModelEdit = { display_name: string, quota_weight: number, price_input_per_mtok: string, price_output_per_mtok: string }
 const editingId = ref<string | null>(null)
 const editDraft = reactive<ModelEdit>({ display_name: '', quota_weight: 1, price_input_per_mtok: '', price_output_per_mtok: '' })
-const pickers = ref<Record<string, { reset: () => void } | null>>({})
+const pickers = ref<Record<string, { reset: () => void, reload: () => Promise<unknown> } | null>>({})
 
 const priceString = (value: number | string | null | undefined) => (value == null || value === '' ? '' : String(value))
 const priceValue = (value: string | number) => (value === '' || value == null ? null : Number(value))
@@ -111,6 +112,18 @@ function replaceCredential(updated: AiCredentialDTO) {
     credentials.value = credentials.value.map((item) => item.id === updated.id ? { ...updated, models: item.models } : item)
 }
 
+function baseUrlFor(credential: AiCredentialDTO) {
+    return baseUrls.value[credential.id] ?? credential.base_url ?? ''
+}
+
+function resetAndReloadPicker(credentialId: string) {
+    const draft = draftFor(credentialId)
+    draft.model_id = ''
+    draft.display_name = ''
+    pickers.value[credentialId]?.reset()
+    void pickers.value[credentialId]?.reload()
+}
+
 /** Model chosen for each credential's test; the first model until the teacher picks another. */
 const testModelId = ref<Record<string, string>>({})
 
@@ -150,6 +163,27 @@ async function saveSecret(credential: AiCredentialDTO) {
             : await AiSettingsService.updateMyCredential(credential.id, { secret }))
         const { [credential.id]: _removed, ...rest } = replacing.value
         replacing.value = rest
+        resetAndReloadPicker(credential.id)
+        success('ai.settings.saved')
+    })
+}
+
+async function removeOllamaToken(credential: AiCredentialDTO) {
+    await run(`secret:${credential.id}`, async () => {
+        replaceCredential(await AiSettingsService.updateMyCredential(credential.id, { secret: null }))
+        resetAndReloadPicker(credential.id)
+        success('ai.settings.saved')
+    })
+}
+
+async function saveBaseUrl(credential: AiCredentialDTO) {
+    const base_url = baseUrlFor(credential).trim()
+    if (!base_url || base_url === credential.base_url) return
+    await run(`endpoint:${credential.id}`, async () => {
+        const updated = await AiSettingsService.updateMyCredential(credential.id, { base_url })
+        replaceCredential(updated)
+        baseUrls.value = { ...baseUrls.value, [credential.id]: updated.base_url ?? base_url }
+        resetAndReloadPicker(credential.id)
         success('ai.settings.saved')
     })
 }
@@ -249,11 +283,19 @@ const statusClass: Record<AiCredentialDTO['status'], string> = {
                 </div>
             </div>
 
-            <form v-if="credential.auth_type === 'api_key'" class="mt-3 flex flex-wrap gap-2" @submit.prevent="saveSecret(credential)">
-                <label class="sr-only" :for="`replace-${credential.id}`">{{ t('ai.settings.replace_key') }}</label>
+            <form v-if="credential.auth_type === 'api_key' || credential.provider === 'ollama'" class="mt-3 flex flex-wrap gap-2" @submit.prevent="saveSecret(credential)">
+                <label class="sr-only" :for="`replace-${credential.id}`">{{ credential.provider === 'ollama' ? t('ai.settings.api_key_optional') : t('ai.settings.replace_key') }}</label>
                 <input :id="`replace-${credential.id}`" v-model="replacing[credential.id]" type="password" autocomplete="off" maxlength="4096"
-                    class="min-h-11 min-w-0 flex-1 rounded-xl border border-gray-200 px-3 text-sm" :placeholder="t('ai.settings.replace_key')" />
+                    class="min-h-11 min-w-0 flex-1 rounded-xl border border-gray-200 px-3 text-sm" :placeholder="credential.provider === 'ollama' ? t('ai.settings.api_key_optional') : t('ai.settings.replace_key')" />
                 <button type="submit" class="min-h-11 rounded-xl bg-gray-800 px-3 text-sm font-bold text-white disabled:opacity-50" :disabled="!replacing[credential.id] || busy !== null">{{ t('ai.settings.save') }}</button>
+                <button v-if="credential.provider === 'ollama' && credential.auth_type === 'api_key'" type="button" class="min-h-11 rounded-xl border border-gray-200 px-3 text-sm font-bold text-gray-700 disabled:opacity-50" :disabled="busy !== null" @click="removeOllamaToken(credential)">{{ t('ai.settings.remove_token') }}</button>
+            </form>
+            <form v-if="credential.provider === 'ollama' && !site" class="mt-2 flex flex-wrap gap-2" @submit.prevent="saveBaseUrl(credential)">
+                <label class="sr-only" :for="`ollama-url-${credential.id}`">{{ t('ai.settings.base_url') }}</label>
+                <input :id="`ollama-url-${credential.id}`" :value="baseUrlFor(credential)" type="url" required pattern="https://.+" maxlength="2048"
+                    class="min-h-11 min-w-0 flex-1 rounded-xl border border-gray-200 px-3 text-sm" placeholder="https://ollama.example.com"
+                    @input="baseUrls = { ...baseUrls, [credential.id]: ($event.target as HTMLInputElement).value }" />
+                <button type="submit" class="min-h-11 rounded-xl border border-gray-200 px-3 text-sm font-bold text-gray-700 disabled:opacity-50" :disabled="busy !== null || baseUrlFor(credential).trim() === credential.base_url">{{ t('ai.settings.save') }}</button>
             </form>
 
             <div class="mt-4 border-t border-gray-100 pt-4">
@@ -309,7 +351,7 @@ const statusClass: Record<AiCredentialDTO['status'], string> = {
                 </ul>
                 <form class="mt-3 space-y-2 rounded-xl border border-dashed border-gray-300 p-3" @submit.prevent="addModel(credential)">
                     <p class="text-xs font-bold text-gray-700">{{ t('ai.settings.add_model') }}</p>
-                    <ModelPicker :ref="(el) => { pickers[credential.id] = el as unknown as { reset: () => void } | null }" :scope="mode" :credential-id="credential.id"
+                    <ModelPicker :ref="(el) => { pickers[credential.id] = el as unknown as { reset: () => void, reload: () => Promise<unknown> } | null }" :scope="mode" :credential-id="credential.id"
                         @pick="onPick(credential.id, $event)" />
                     <div class="grid gap-2" :class="site ? 'sm:grid-cols-[1fr_5rem_6rem_6rem_auto]' : 'sm:grid-cols-[1fr_auto]'">
                         <input v-model="draftFor(credential.id).display_name" maxlength="120" class="min-h-11 rounded-xl border border-gray-200 px-3 text-sm" :placeholder="t('ai.settings.display_name')" :aria-label="t('ai.settings.display_name')" />

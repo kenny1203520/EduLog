@@ -54,9 +54,34 @@ function perMillion(value: unknown): number | undefined {
 }
 
 async function getJson(url: string, headers: Record<string, string>, fetchImpl: typeof fetch): Promise<Record<string, unknown>> {
-  const response = await fetchImpl(url, { headers: { accept: 'application/json', ...headers }, signal: AbortSignal.timeout(15_000) })
-  if (!response.ok) throw new Error(`HTTP ${response.status}`)
-  return await response.json() as Record<string, unknown>
+  const response = await fetchImpl(url, { headers: { accept: 'application/json', ...headers }, signal: AbortSignal.timeout(15_000), redirect: 'manual' })
+  if (!response.ok) {
+    await response.body?.cancel()
+    throw new Error(`HTTP ${response.status}`)
+  }
+  const declaredLength = Number(response.headers.get('content-length'))
+  if (Number.isFinite(declaredLength) && declaredLength > 2 * 1024 * 1024) {
+    await response.body?.cancel()
+    throw new Error('Model list response exceeds 2 MiB')
+  }
+  if (!response.body) throw new Error('Model list response is empty')
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let size = 0
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    size += value.byteLength
+    if (size > 2 * 1024 * 1024) {
+      await reader.cancel()
+      throw new Error('Model list response exceeds 2 MiB')
+    }
+    chunks.push(value)
+  }
+  const bytes = new Uint8Array(size)
+  let offset = 0
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength }
+  return JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>
 }
 
 const asArray = (value: unknown): Array<Record<string, unknown>> => (Array.isArray(value) ? value as Array<Record<string, unknown>> : [])
@@ -120,7 +145,7 @@ async function listModels(target: CatalogTarget, fetchImpl: typeof fetch): Promi
       })
     }
     case 'ollama': {
-      const body = await getJson(joinUrl(target.baseUrl ?? 'http://localhost:11434', 'api/tags'), {}, fetchImpl)
+      const body = await getJson(joinUrl(target.baseUrl ?? 'http://localhost:11434', 'api/tags'), target.apiKey ? { authorization: `Bearer ${target.apiKey}` } : {}, fetchImpl)
       return asArray(body.models).map((row) => {
         const id = String(row.name ?? row.model)
         // Local models cost nothing to call.

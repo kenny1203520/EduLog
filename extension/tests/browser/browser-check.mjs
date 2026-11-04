@@ -287,7 +287,7 @@ for (const [browserName, launchOptions] of executables) {
         // 內部紀錄 fields (textarea and select) get the themed field style inside the dialog.
         for (const selector of ['#lesson_report_comment', '#admission_lesson_report_learning_status']) {
           const field = page.locator(selector); if (!await field.count()) continue
-          const style = await field.evaluate(el => { const c = getComputedStyle(el); return { border: c.borderTopWidth + ' ' + c.borderTopStyle, padding: parseFloat(c.paddingLeft), radius: parseFloat(c.borderTopLeftRadius) } })
+          const style = await field.evaluate(el => { const c = getComputedStyle(el); return { border: c.borderTopWidth + ' ' + c.borderTopStyle, padding: Number.parseFloat(c.paddingLeft), radius: Number.parseFloat(c.borderTopLeftRadius) } })
           assert.ok(style.border === '1px solid' && style.padding >= 8 && style.radius >= 6, `${browserName} ${width}: ${selector} uses the themed field style ${JSON.stringify(style)}`)
         }
         assert.equal(await page.locator('[data-edulog-submit-region]').evaluate(el=>getComputedStyle(el).position), 'static')

@@ -247,6 +247,7 @@ export class ReportGenerationService {
       modelId: resolved.modelId,
       apiKey,
       baseUrl: resolved.baseUrl ?? undefined,
+      credentialScope: resolved.credentialScope,
     })
     return { request, context, resolved, model, quotaCost, quota }
   }

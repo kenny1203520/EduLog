@@ -1,5 +1,7 @@
 # EduLog
 
+AI provider configuration, model catalogs, and personal Ollama endpoint requirements are documented in [docs/ai-provider-settings.md](docs/ai-provider-settings.md).
+
 EduLog 是一套為家教/補教場景設計的學習報告系統，提供比傳統後台更快的撰寫體驗，並支援跨裝置、即時同步與歷史報告參照。
 
 ## 核心功能

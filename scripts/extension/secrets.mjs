@@ -42,7 +42,7 @@ export function assertNoSecrets(files) {
 
 export function scanSource(repository = fileURLToPath(new URL('../..', import.meta.url))) {
   // Scan current source (including staged/new files), never ignored .env or browser profiles.
-  const names = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', 'extension/', 'scripts/extension/', '.github/workflows/extension-release.yml', '.github/workflows/extension-store-status.yml'], { cwd: repository }).toString().split('\0').filter(Boolean)
+  const names = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', 'extension/', 'scripts/extension/', '.github/workflows/extension-release.yml', '.github/workflows/extension-store-status.yml'], { cwd: repository, shell: false }).toString().split('\0').filter(Boolean) // NOSONAR: This local source scanner intentionally uses the caller's Git installation.
   const files = new Map([...new Set(names)].filter(name => /\.(?:[cm]?js|json|html|css|ya?ml|md)$/.test(name)).map(name => [name, readFileSync(resolve(repository, name))]))
   assertNoSecrets(files)
   return files.size

@@ -24,7 +24,7 @@ try{
      const a=document.querySelector('#reports a');a.addEventListener('click',e=>e.preventDefault());a.click()
      window.originalForm=document.querySelector('form');window.originalForm.sentinel='native';window.submitCount=0;window.editorCalls=[];window.editorDelayed=[];window.delayDetails=false
      const body=originalForm.parentElement,wrapper=document.createElement('div'),inner=document.createElement('div');wrapper.className='report-body';body.append(wrapper);wrapper.append(inner);inner.append(originalForm)
-     originalForm.addEventListener('submit',e=>{e.preventDefault();submitCount++})
+     window.originalForm.addEventListener('submit',e=>{e.preventDefault();window.submitCount++})
      const completion=document.querySelector('#dt_admission_lesson_report_completion_status');completion.append(new Option('未完成','not_done'),new Option('未填值',''));completion.value=''
      const student='00000000-0000-4000-8000-000000000001',enrollment='00000000-0000-4000-8000-000000000002',course='00000000-0000-4000-8000-000000000003'
      const make=(n,date)=>({id:`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`,version:4,student_id:student,student_name:'學生甲',enrollment_id:enrollment,course_id:course,course_name:'同一課程',class_name:'週日班級',lesson_name:'測試課程 Lesson 1',occurrence_date:date,is_completed:false,attendance_status:'present',content:'<p>第一段</p><p>第二段</p>',class_notes:'內部內容',completeness:{isMissing:false},date_difference:date==='2026-10-03'?-1:1,external_link:'https://corp.orangeapple.co/dt_admissions/301/reports/401/edit'})
@@ -36,7 +36,7 @@ try{
       if(m.operation==='lookup')return{data:{connected:true,form,target:{studentId:student,enrollmentId:enrollment,courseId:course,studentName:'學生甲',courseName:'同一課程',className:'週日班級'},reports:[],settingsUrl:'https://web.example:8443/edulog/dashboard/settings?tab=integrations',capabilities:{nearest_report_candidates:true}}}
       if(m.operation==='supplement')return{data:{form:await edulogSourceIntegration.supplementForm(document,{...m.input,formId:m.formId,fingerprint:m.fingerprint})}}
       if(m.operation==='candidates')return{data:{reports:m.query.group==='other-course'?[]:reports,next_cursor:null}}
-      if(m.operation==='detail'){if(delayDetails)await new Promise(r=>editorDelayed.push(r));return{data:reports.find(r=>r.id===m.reportId)}}
+      if(m.operation==='detail'){if(window.delayDetails)await new Promise(r=>window.editorDelayed.push(r));return{data:reports.find(r=>r.id===m.reportId)}}
       if(m.operation==='apply'){const result=await edulogSourceIntegration.applyForm(document,{formId:form.formId,reportId:form.reportId,fingerprint:m.fingerprint,fields:m.input.fields});return{data:{...result,recordSaved:true}}}
       return{data:{reports:[],items:[],next_cursor:null}}
      }}
@@ -81,8 +81,8 @@ try{
     assert.equal(await shadow('[data-key=content]').inputValue(),'助手草稿\n保留段落')
     await page.evaluate(()=>edulogUi.setLocale('zh-TW'));await frames()
     if(width===390){
-      await page.evaluate(()=>{delayDetails=true});const ids=await page.evaluate(()=>[reports[1].id,reports[0].id]);void fill(ids[0]);void fill(ids[1])
-      await page.waitForFunction(()=>editorDelayed.length===2);await page.evaluate(()=>editorDelayed[1]());await page.evaluate(()=>{editorDelayed[0]();delayDetails=false})
+      await page.evaluate(()=>{window.delayDetails=true});const ids=await page.evaluate(()=>[reports[1].id,reports[0].id]);void fill(ids[0]);void fill(ids[1])
+      await page.waitForFunction(()=>window.editorDelayed.length===2);await page.evaluate(()=>window.editorDelayed[1]());await page.evaluate(()=>{window.editorDelayed[0]();window.delayDetails=false})
       await page.waitForFunction(()=>document.querySelector('aside').shadowRoot.querySelector('.review h3')?.textContent.includes('2026-10-03'))
       await frames()
       assert.equal(await shadow('[data-key=content]').inputValue(),'助手草稿\n保留段落','late response cannot replace selected report or draft')
@@ -94,7 +94,7 @@ try{
     await shadow('.field[data-field-key=content] [data-include]').check();await shadow('[data-mismatch]').check()
     await shadow('[data-apply]').click()
     await page.waitForFunction(()=>document.querySelector('aside').shadowRoot.querySelector('[role=status]').textContent.includes('已套用'))
-    assert.equal(await page.locator('#lesson_report_feedback').inputValue(),'助手草稿\n保留段落');assert.equal(await page.locator('#nothing').isChecked(),false);assert.equal(await page.evaluate(()=>submitCount),0)
+    assert.equal(await page.locator('#lesson_report_feedback').inputValue(),'助手草稿\n保留段落');assert.equal(await page.locator('#nothing').isChecked(),false);assert.equal(await page.evaluate(()=>window.submitCount),0)
     assert.equal(await page.locator('#lesson_report_comment').inputValue(),'')
     assert.equal(await state(),'applied')
     assert.equal(await page.evaluate(()=>document.querySelector('#lesson_report_feedback').closest('[data-edulog-filled]')?.dataset.edulogFilled),'ok','filled site fields are marked')

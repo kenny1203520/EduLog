@@ -104,7 +104,8 @@ function displayValue(value: unknown) {
         <button type="button" class="rounded-lg px-3 py-2 text-slate-500 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600" @click="emit('close')">{{ t('common.close') }}</button>
       </header>
       <div class="space-y-5 p-5">
-        <div class="block text-sm font-semibold text-slate-700">{{ t('teacher.account_link.target_account') }}
+        <div class="block text-sm font-semibold text-slate-700">
+          <span>{{ t('teacher.account_link.target_account') }}</span>
           <div class="mt-2 flex gap-2">
             <SearchableSelect v-model="selectedAccountId" class="min-w-0 flex-1" :options="options" remote-search :loading="loading" :placeholder="t('teacher.account_link.search_account')" :aria-label="t('teacher.account_link.target_account')" :no-results-text="!query.trim() ? t('teacher.account_link.search_hint') : t('teacher.account_link.no_accounts')" @search="searchAccounts" />
             <button v-if="selectedAccountId" type="button" class="rounded-lg border border-slate-300 px-3 text-sm hover:bg-slate-50" @click="selectedAccountId = null">{{ t('teacher.account_link.unlink') }}</button>

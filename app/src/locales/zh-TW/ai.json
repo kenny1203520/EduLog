@@ -127,11 +127,11 @@
     "openai": "OpenAI",
     "google": "Google Gemini",
     "openrouter": "OpenRouter",
-    "ollama": "Ollama（本機模型）"
+    "ollama": "Ollama"
   },
   "settings": {
     "personal_title": "我的 AI 憑證",
-    "personal_description": "加入自己的 API 金鑰或登入 OpenRouter，就能用自己的額度產生報告，不會扣站台額度。內容一樣會先去識別化。",
+    "personal_description": "加入自己的 API 金鑰、公開 Ollama 伺服器或登入 OpenRouter，就能用自己的額度產生報告，不會扣站台額度。內容一樣會先去識別化。",
     "storage_unavailable": "伺服器尚未設定 AI_SECRET_KEY，暫時無法儲存金鑰。",
     "openrouter_title": "用 OpenRouter 帳號登入",
     "openrouter_description": "登入後會建立一把只屬於你的金鑰，費用從你的 OpenRouter 額度扣除，可使用 Claude、GPT、Gemini 等模型。",
@@ -143,6 +143,8 @@
     "label": "名稱",
     "api_key": "API 金鑰",
     "api_key_optional": "API 金鑰（選填）",
+    "ollama_public_help": "請使用公開 HTTPS Ollama 端點。系統會封鎖私人網路與 localhost 位址；反向代理若有驗證，可設定 Bearer token。",
+    "remove_token": "移除 token",
     "key_storage_note": "金鑰會加密保存，之後只會顯示末四碼。",
     "add_key": "加入",
     "no_credentials": "尚未加入任何憑證。",
@@ -282,6 +284,7 @@
     "picker_price": "輸入 ${input}／輸出 ${output}（每百萬 token）",
     "picker_no_results": "清單中找不到，請選「其他」手動輸入",
     "picker_refresh": "重新取得模型清單",
+    "picker_retry": "重試載入模型",
     "picker_show_all": "顯示全部（含 {n} 個非文字模型）",
     "picker_manual_chatgpt": "ChatGPT 方案沒有提供模型清單，請手動輸入模型 ID。",
     "picker_manual_unavailable": "暫時取不到這個來源的模型清單，請手動輸入模型 ID。",

@@ -21,7 +21,7 @@ const probes = [], editorRequests = []
 const json = (res, body, status = 200) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)) }
 const cookies = req => Object.fromEntries((req.headers.cookie || '').split('; ').filter(Boolean).map(part => part.split('=')))
 const server = createServer((req, res) => {
-  const url = new URL(req.url, 'http://local')
+  const url = new URL(req.url, 'https://local.invalid')
   const api = url.pathname.replace(/^\/api\/extension\/v1/, '')
   if (url.pathname.startsWith('/api/extension/v1/')) {
     if (req.headers.authorization !== `Bearer ${'a'.repeat(64)}`) return json(res, { error: { code: 'EXTENSION_AUTH_INVALID', message: 'x' } }, 401)

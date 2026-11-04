@@ -3,6 +3,13 @@ services:
   # By default, Kong is used as the API gateway and its ports/env are reset
   # below so Caddy can terminate TLS in front of it.
   #
+  # To use Caddy with Envoy, include both overlays as shown below.
+  #   docker compose -f docker-compose.yml -f supabase/docker-compose.envoy.yml \
+  #                  -f supabase/docker-compose.caddy.yml up -d
+  # The Envoy overlay provides a kong hostname alias for its API gateway.
+  # The optional Kong dependency also supports Envoy mode.
+
+
   kong:
     ports: !reset []
     environment:
@@ -20,6 +27,9 @@ services:
       - "443:443"
       - "443:443/udp"
     depends_on:
+      kong:
+        condition: service_healthy
+        required: false
       studio:
         condition: service_healthy
       edulog:
@@ -33,7 +43,8 @@ services:
       PROXY_AUTH_USERNAME: ${DASHBOARD_USERNAME}
       PROXY_AUTH_PASSWORD: ${DASHBOARD_PASSWORD}
     networks:
-      - edulog
+      - net
+      - frontend
     command:
       - /bin/sh
       - -c
@@ -41,14 +52,10 @@ services:
         PROXY_AUTH_PASSWORD=$$(caddy hash-password --plaintext "$$PROXY_AUTH_PASSWORD") && \
         caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
     volumes:
-      - ./volumes/proxy/caddy:/etc/caddy
+      - ./supabase/volumes/proxy/caddy:/etc/caddy
       - caddy_data:/data
       - caddy_config:/config
 
 volumes:
   caddy_data:
   caddy_config:
-
-networks:
-  edulog:
-    external: false
