@@ -1,12 +1,12 @@
 import { appendFileSync } from 'node:fs'
-import { git, parseTag, extensionId, config } from './release.mjs'
+import { assertReleaseBranchAncestry, parseTag, extensionId, config } from './release.mjs'
 
 try {
   const tagged = process.env.GITHUB_REF_TYPE === 'tag'
   const release = tagged ? parseTag(process.env.GITHUB_REF_NAME) : { channel: 'beta', version: '0.0.0.1' }
   if (tagged) {
     const branch = release.channel === 'beta' ? 'develop' : 'master'
-    git(['merge-base', '--is-ancestor', 'HEAD', 'origin/' + branch])
+    assertReleaseBranchAncestry(branch)
     if (release.channel === 'stable' && process.env.STABLE_ENABLED !== 'true') throw new Error('Stable store channel has not been enabled')
   }
   const distribution = tagged ? (release.channel === 'stable' ? 'store' : process.env.BETA_DISTRIBUTION || 'zip') : 'zip'

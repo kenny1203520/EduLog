@@ -10,13 +10,68 @@ export { repoRoot }
 
 export const config = JSON.parse(readFileSync(new URL('./config.json', import.meta.url), 'utf8'))
 export const sha256 = data => createHash('sha256').update(data).digest('hex')
-export function git(args, options = {}) { return execFileSync('git', args, { cwd: repoRoot, maxBuffer: 20 * 1024 * 1024, ...options, shell: false }) }
+const gitExecutable = process.platform === 'win32' ? 'C:\\Program Files\\Git\\cmd\\git.exe' : '/usr/bin/git'
+const gitOptions = { cwd: repoRoot, maxBuffer: 20 * 1024 * 1024, shell: false }
+
+function validateCommit(commit) {
+  if (typeof commit !== 'string' || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(commit)) throw new Error('Invalid Git commit ID')
+  return commit
+}
 
 export function validateGitRef(ref) {
   if (typeof ref !== 'string' || !/^(?:HEAD|[a-f0-9]{40}|[a-f0-9]{64}|[A-Za-z0-9][A-Za-z0-9._/-]{0,127})$/.test(ref) || /(?:\.\.|\/\/|\/(?:\.|\.\.)\/|\/$|\.$)/.test(ref)) {
     throw new Error('Invalid Git reference')
   }
   return ref
+}
+
+export function resolveCommit(ref) {
+  const safeRef = validateGitRef(ref)
+  const resolved = execFileSync(gitExecutable, ['cat-file', '--batch-check=%(objectname) %(objecttype)'], {
+    ...gitOptions,
+    input: `${safeRef}^{commit}\n`,
+  }).toString().trim()
+  const [commit, objectType] = resolved.split(' ')
+  if (objectType !== 'commit') throw new Error('Git reference must resolve to a commit')
+  return validateCommit(commit)
+}
+
+function listExtensionTree(commit) {
+  const safeCommit = validateCommit(commit)
+  return execFileSync(gitExecutable, ['ls-tree', '-r', '-z', safeCommit, '--', 'extension/'], gitOptions).toString().split('\0').filter(Boolean).map(entry => {
+    const separator = entry.indexOf('\t')
+    if (separator < 0) throw new Error('Invalid Git tree entry')
+    const [mode, type, objectId] = entry.slice(0, separator).split(' ')
+    const path = entry.slice(separator + 1)
+    safePath(path)
+    if (!path.startsWith('extension/') || type !== 'blob' || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(objectId)) throw new Error('Invalid extension tree entry')
+    return { mode, objectId, path }
+  })
+}
+
+function readGitBlob(objectId) {
+  if (typeof objectId !== 'string' || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(objectId)) throw new Error('Invalid Git object ID')
+  return execFileSync(gitExecutable, ['cat-file', 'blob', objectId], gitOptions)
+}
+
+export function readExtensionFileAtCommit(commit, path) {
+  const safeCommit = validateCommit(commit)
+  const safeFilePath = safePath(path)
+  if (!safeFilePath.startsWith('extension/')) throw new Error('File must be inside the extension directory')
+  const entry = listExtensionTree(safeCommit).find(file => file.path === safeFilePath)
+  if (!entry) throw new Error('Extension file does not exist at the selected commit')
+  if (entry.mode !== '100644' && entry.mode !== '100755') throw new Error(`Unsupported runtime file mode: ${safeFilePath}`)
+  return readGitBlob(entry.objectId)
+}
+
+function readCommitDate(commit) {
+  const safeCommit = validateCommit(commit)
+  return execFileSync(gitExecutable, ['show', '-s', '--format=%cI', safeCommit], gitOptions).toString().trim()
+}
+
+export function assertReleaseBranchAncestry(branch) {
+  if (branch !== 'develop' && branch !== 'master') throw new Error('Invalid release branch')
+  execFileSync(gitExecutable, ['merge-base', '--is-ancestor', 'HEAD', `origin/${branch}`], gitOptions)
 }
 
 export function parseVersion(version, channel) {
@@ -71,20 +126,17 @@ export function validateRuntime(files) {
   }
   return manifest
 }
-export function buildRelease({ ref = 'HEAD', channel = 'beta', version, distribution = 'zip', publicKey, repository = repoRoot }) {
-  const readGit = args => git(args, { cwd: repository })
+export function buildRelease({ ref = 'HEAD', channel = 'beta', version, distribution = 'zip', publicKey }) {
   const parsed = parseVersion(version, channel)
   if (!['zip', 'store'].includes(distribution)) throw new Error('Distribution must be zip or store')
   if (channel === 'stable' && distribution !== 'store') throw new Error('Stable releases require a configured store item')
-  const commit = readGit(['rev-parse', '--verify', '--end-of-options', `${validateGitRef(ref)}^{commit}`]).toString().trim()
-  if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(commit)) throw new Error('Git returned an invalid commit ID')
+  const commit = resolveCommit(ref)
   const files = new Map()
-  const entries = readGit(['ls-tree', '-r', '-z', commit, '--', 'extension/']).toString().split('\0').filter(Boolean)
-  for (const entry of entries) {
-    const [header, fullPath] = entry.split('\t'), name = fullPath.slice('extension/'.length)
+  for (const { mode, objectId, path: fullPath } of listExtensionTree(commit)) {
+    const name = fullPath.slice('extension/'.length)
     if (!runtimePath(name)) continue
-    if (!header.startsWith('100644 ') && !header.startsWith('100755 ')) throw new Error(`Unsupported runtime file mode: ${fullPath}`)
-    files.set(name, readGit(['show', `${commit}:${fullPath}`]))
+    if (mode !== '100644' && mode !== '100755') throw new Error(`Unsupported runtime file mode: ${fullPath}`)
+    files.set(name, readGitBlob(objectId))
   }
   if (!files.has('manifest.json')) throw new Error('Selected commit does not contain an extension manifest')
   const manifest = JSON.parse(files.get('manifest.json').toString())
@@ -100,7 +152,7 @@ export function buildRelease({ ref = 'HEAD', channel = 'beta', version, distribu
   const filename = `EduLog-Teaching-Tools-${channel}-${version}.zip`
   const metadata = {
     schemaVersion: 1, channel, distribution, ...parsed, commit,
-    sourceDate: readGit(['show', '-s', '--format=%cI', commit]).toString().trim(),
+    sourceDate: readCommitDate(commit),
     extensionId: extensionId(key), archive: filename, sha256: sha256(archive),
     minimumMigration: config.minimumMigration, requiredCapabilities: config.requiredCapabilities,
     files: Object.fromEntries([...unpacked].map(([name, data]) => [name, sha256(data)])),

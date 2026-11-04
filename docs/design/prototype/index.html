@@ -475,11 +475,13 @@ const choiceSeg = (id, a, b, la = '對應既有', lb = '新建') =>
   `<div class="seg" role="group" aria-label="處理方式"><button aria-pressed="${st.choice[id]===a}" data-choice="${id}:${a}">${I('link')}${la}</button><button aria-pressed="${st.choice[id]===b}" data-choice="${id}:${b}">${I('plus')}${lb}</button></div>`
 function textWithoutTags(markup){
   const text=[]
-  for(let index=0;index<markup.length;index++){
-    if(markup[index]!=='<'){text.push(markup[index]);continue}
-    const closing=markup.indexOf('>',index+1)
-    if(closing<=index+1){text.push('<');continue}
-    index=closing
+  let index=0
+  while(index<markup.length){
+    if(markup[index]!=='<'){text.push(markup[index]);index+=1;continue}
+    let closing=index+1
+    while(closing<markup.length && markup[closing]!=='>') closing+=1
+    if(closing===index+1 || closing===markup.length){text.push('<');index+=1;continue}
+    index=closing+1
   }
   return text.join('')
 }
