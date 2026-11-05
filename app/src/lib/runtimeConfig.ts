@@ -11,27 +11,23 @@ function normalizeConfigValue(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined
 }
 
-function readRuntimeConfig(): EduLogRuntimeConfig {
-  // Nginx injects window.__EDULOG_CONFIG__ for the production container.
-  // Vite dev/preview does not load that script, so use the build-time Vite
-  // values as a fallback.  Runtime injection remains authoritative and this
-  // fallback exposes only public routing/mode configuration, never Supabase
-  // credentials.
+/**
+ * Nginx injects window.__EDULOG_CONFIG__ for the production container.
+ * Vite dev/preview does not load that script, so the build-time Vite value is
+ * the fallback.  A runtime value wins only when it is non-empty: the container
+ * writes "" for unset keys, and an empty value means unset everywhere.  Only
+ * public routing/mode values live here, never Supabase credentials.
+ */
+export function getRuntimeConfigValue(key: RuntimeConfigKey): string {
   const runtime = typeof window === 'undefined' ? {} : (window.__EDULOG_CONFIG__ ?? {})
-  const buildTime: EduLogRuntimeConfig = import.meta.env.MODE === 'test'
-    ? {}
-    : {
-        VITE_API_V1_MODE: import.meta.env.VITE_API_V1_MODE,
-        VITE_LEGACY_API_BASE_URL: import.meta.env.VITE_LEGACY_API_BASE_URL,
-      }
-  return {
-    VITE_API_V1_MODE: runtime.VITE_API_V1_MODE ?? buildTime.VITE_API_V1_MODE,
-    VITE_LEGACY_API_BASE_URL: runtime.VITE_LEGACY_API_BASE_URL ?? buildTime.VITE_LEGACY_API_BASE_URL,
-  }
+  return normalizeConfigValue(runtime[key]) ?? normalizeConfigValue(import.meta.env[key]) ?? ''
 }
 
-export function getRuntimeConfigValue(key: RuntimeConfigKey): string {
-  return normalizeConfigValue(readRuntimeConfig()[key]) ?? ''
+export const DEFAULT_LEGACY_API_BASE_URL = '/api'
+
+/** Base URL for `legacy` API mode. */
+export function getLegacyApiBaseUrl(): string {
+  return getRuntimeConfigValue('VITE_LEGACY_API_BASE_URL') || DEFAULT_LEGACY_API_BASE_URL
 }
 
 export type ApiMode = NonNullable<EduLogRuntimeConfig['VITE_API_V1_MODE']>
