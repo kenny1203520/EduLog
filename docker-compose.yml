@@ -479,6 +479,7 @@ services:
       # EduLog edge-function settings (read in supabase/volumes/functions/_shared/env.ts).
       API_ALLOWED_ORIGINS: ${EDULOG_ALLOWED_ORIGINS:-}
       ENVIRONMENT: ${EDULOG_FUNCTIONS_ENVIRONMENT:-production}
+      API_RATE_LIMIT_PER_MINUTE: ${EDULOG_API_RATE_LIMIT_PER_MINUTE:-120}
     command: 
       [
         "start",

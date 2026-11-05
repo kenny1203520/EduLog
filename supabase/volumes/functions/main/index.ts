@@ -1,11 +1,11 @@
 import * as jose from 'https://deno.land/x/jose@v4.14.4/index.ts'
-import { env, workerEnvVars } from '../_shared/env.ts'
+import { env, routerEnv, workerEnvVars } from '../_shared/env.ts'
 
 console.log('main function started')
 
-const JWT_SECRET = Deno.env.get('JWT_SECRET')
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
-const VERIFY_JWT = Deno.env.get('VERIFY_JWT') === 'true'
+const JWT_SECRET = routerEnv.jwtSecret
+const SUPABASE_URL = env.supabaseUrl
+const VERIFY_JWT = routerEnv.verifyJwt
 
 // Create JWKS for ES256/RS256 tokens (newer tokens)
 let SUPABASE_JWT_KEYS: ReturnType<typeof jose.createRemoteJWKSet> | null = null

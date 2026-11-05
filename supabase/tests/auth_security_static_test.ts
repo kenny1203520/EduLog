@@ -19,10 +19,15 @@ Deno.test('edge env is read in one module and fails closed', () => {
 })
 
 Deno.test('the main router forwards only allowlisted env vars to user workers', () => {
-  assert(!mainSource.includes('Deno.env.toObject()'))
+  assert(!mainSource.includes('Deno.env'), 'main/index.ts must read configuration through _shared/env.ts')
   assertStringIncludes(mainSource, 'workerEnvVars()')
-  for (const secret of ['JWT_SECRET', 'SUPABASE_DB_URL', 'POSTGRES_PASSWORD', 'SUPABASE_SECRET_KEYS']) {
-    assert(!envSource.includes(`'${secret}'`), `${secret} must not be forwarded to user workers`)
+  const workerKeys = envSource.match(/export const WORKER_ENV_KEYS = \[([^\]]*)\]/)?.[1]
+  assert(workerKeys, 'WORKER_ENV_KEYS must be a literal array')
+  for (const secret of ['JWT_SECRET', 'VERIFY_JWT', 'SUPABASE_DB_URL', 'POSTGRES_PASSWORD', 'SUPABASE_SECRET_KEYS']) {
+    assert(!workerKeys.includes(`'${secret}'`), `${secret} must not be forwarded to user workers`)
+  }
+  for (const secret of ['SUPABASE_DB_URL', 'POSTGRES_PASSWORD', 'SUPABASE_SECRET_KEYS']) {
+    assert(!envSource.includes(`'${secret}'`), `${secret} must not be read by EduLog edge code`)
   }
 })
 
