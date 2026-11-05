@@ -3,11 +3,11 @@ name: Extension CI and release
 on:
   pull_request:
     branches: [develop, master]
-    paths: ['extension/**', 'scripts/extension/**', 'server/**', 'supabase/**', 'app/package*.json', 'package*.json', '.github/workflows/extension-*.yml', 'docs/deployment/extension-*.md', 'CHROMEWEBSTORE.md']
+    paths: ['extension/**', 'scripts/extension/**', 'scripts/lib/**', 'server/**', 'supabase/**', 'app/package*.json', 'package*.json', '.github/workflows/extension-*.yml', 'docs/deployment/extension-*.md', 'CHROMEWEBSTORE.md']
   push:
     branches: [develop, master]
     tags: ['extension/beta/v*', 'extension/stable/v*']
-    paths: ['extension/**', 'scripts/extension/**', 'server/**', 'supabase/**', 'app/package*.json', 'package*.json', '.github/workflows/extension-*.yml', 'docs/deployment/extension-*.md', 'CHROMEWEBSTORE.md']
+    paths: ['extension/**', 'scripts/extension/**', 'scripts/lib/**', 'server/**', 'supabase/**', 'app/package*.json', 'package*.json', '.github/workflows/extension-*.yml', 'docs/deployment/extension-*.md', 'CHROMEWEBSTORE.md']
 
 permissions:
   contents: read
