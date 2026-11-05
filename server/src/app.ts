@@ -6,6 +6,7 @@ import type { ApiConfig } from './config/config.js'
 import { requestContext } from './http/context.js'
 import { errorHandler, ApiError } from './http/errors.js'
 import { createSupabaseClients, type SupabaseClients } from './infra/supabase.js'
+import { createAiServices } from './ai/aiServices.js'
 import { createAuthRouter, csrfProtection, requireAuth } from './auth/auth.js'
 import { createResourceRouter } from './routes/rest/resourceRouter.js'
 import { createRpcRouter } from './routes/rest/rpcRouter.js'
@@ -36,7 +37,8 @@ import { createRealtimeTicketRouter } from './routes/rest/realtimeTicketRouter.j
 /** Builds the Express app from an already-validated config (see `loadConfig`). */
 export function createApp(config: ApiConfig, clients: SupabaseClients = createSupabaseClients(config)) {
   const allowedOrigins = config.corsOrigins
-  const logger = pino({ level: config.NODE_ENV === 'production' ? 'info' : 'debug', redact: ['req.headers.authorization', 'access_token', 'refresh_token', 'password', 'cookie', '*.token', '*.secret'] })
+  const ai = createAiServices(config)
+  const logger = pino({ level: config.NODE_ENV === 'production' ? 'info' : 'debug', redact: ['req.headers.authorization', 'req.headers.cookie', 'access_token', 'refresh_token', 'password', 'cookie', '*.token', '*.secret', '*.clientSecret', '*.apiKey', '*.serviceRoleKey'] })
   const app = express()
   app.disable('x-powered-by')
   app.use(helmet())
@@ -67,10 +69,10 @@ export function createApp(config: ApiConfig, clients: SupabaseClients = createSu
   protectedApi.use(createRbacRouter())
   protectedApi.use(createEnrollmentRouter())
   protectedApi.use(createReportRouter())
-  protectedApi.use(createAiReportAssistRouter(defaultAiReportAssistDeps(config)))
-  protectedApi.use(createAiMeRouter(config))
-  protectedApi.use(createAiAdminRouter(config))
-  protectedApi.use(createAiDeidRouter(config))
+  protectedApi.use(createAiReportAssistRouter(defaultAiReportAssistDeps(ai)))
+  protectedApi.use(createAiMeRouter(config, ai))
+  protectedApi.use(createAiAdminRouter(ai))
+  protectedApi.use(createAiDeidRouter(ai.presidio))
   protectedApi.use(createOccurrenceRouter())
   protectedApi.use(createTransferRouter())
   protectedApi.use(createSyncRouter())

@@ -5,7 +5,7 @@ import type { ApiConfig } from '../config/config.js'
 import { ApiError } from './errors.js'
 import { measureRequestPhase } from './context.js'
 
-export function rateLimitMiddleware(config: ApiConfig, adminClient: SupabaseClient) {
+export function rateLimitMiddleware(config: Pick<ApiConfig, 'API_RATE_LIMIT_PER_MINUTE' | 'RATE_LIMIT_STORE'>, adminClient: SupabaseClient) {
   const memory = new Map<string, { count: number; resetAt: number }>()
   return async (req: Request, res: Response, next: NextFunction) => {
     const identity = req.user?.id ?? req.ip ?? 'anonymous'

@@ -1,9 +1,9 @@
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod'
 import type { ApiConfig } from '../../config/config.js'
+import type { AiServices } from '../../ai/aiServices.js'
 import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { setAuditContext } from '../../http/context.js'
-import { SecretCipher } from '../../ai/credentials/secretCipher.js'
 import {
   createCredential,
   credentialPatchInput,
@@ -30,9 +30,8 @@ import {
   ChatGptOAuthError,
   createOAuthState,
   exchangeChatGptCode,
-  siwcClientFromConfig,
 } from '../../ai/credentials/chatgptPlanOAuth.js'
-import { isChatGptPlanCredential, sharedChatGptPlanTokens, type ChatGptPlanTokens } from '../../ai/credentials/chatgptPlanTokens.js'
+import { isChatGptPlanCredential } from '../../ai/credentials/chatgptPlanTokens.js'
 
 const uuid = z.string().uuid()
 const personalModelInput = modelInput.pick({ model_id: true, display_name: true, enabled: true }).strict()
@@ -77,17 +76,13 @@ async function ownCredential(req: Request, id: string) {
  * - POST   /ai/me/openrouter/exchange             turn the returned code into a credential
  */
 export function createAiMeRouter(
-  config: ApiConfig,
+  config: Pick<ApiConfig, 'EDULOG_WEB_BASE_URL' | 'API_ALLOWED_ORIGINS' | 'NODE_ENV'>,
+  { cipher, siwc, chatgptTokens }: Pick<AiServices, 'cipher' | 'siwc' | 'chatgptTokens'>,
   pending = new PendingPkceStore(),
   fetchImpl: typeof fetch = fetch,
   chatgptPending = new PendingPkceStore(),
-  chatgptTokensOverride?: ChatGptPlanTokens,
   createOllamaFetch: (baseUrl: string) => typeof fetch = createPublicOllamaFetch,
 ) {
-  const cipher = config.AI_SECRET_KEY ? SecretCipher.fromBase64(config.AI_SECRET_KEY) : null
-  // "Sign in with ChatGPT" stays hidden until an OpenAI-approved client is configured.
-  const siwc = siwcClientFromConfig(config)
-  const chatgptTokens = chatgptTokensOverride ?? (siwc && cipher ? sharedChatGptPlanTokens(siwc, cipher) : null)
   const resolveTokenFor = (req: Request) => async (credential: { provider: string, authType: string, credentialId: string }) =>
     chatgptTokens && isChatGptPlanCredential(credential) ? chatgptTokens.getAccessToken(req.adminDb!, credential.credentialId) : undefined
   const chatgptCallback = () => {

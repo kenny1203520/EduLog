@@ -5,6 +5,7 @@ import { errorHandler } from '../../http/errors.js'
 import { PendingPkceStore } from '../../ai/credentials/openRouterOAuth.js'
 import type { ApiConfig } from '../../config/config.js'
 import { createAiMeRouter, openRouterReturnOrigin } from './aiMeRouter.js'
+import { createAiServices } from '../../ai/aiServices.js'
 
 type Row = Record<string, unknown>
 
@@ -53,7 +54,7 @@ function app(tables: Record<string, Row[]>, userId = 'u1', fetchImpl: typeof fet
     req.auditContext = {} as never
     next()
   })
-  instance.use('/api', createAiMeRouter(routerConfig, pending, fetchImpl, chatgptPending, undefined, ollamaFetchFactory))
+  instance.use('/api', createAiMeRouter(routerConfig, createAiServices(routerConfig), pending, fetchImpl, chatgptPending, ollamaFetchFactory))
   instance.use(errorHandler)
   return instance
 }
