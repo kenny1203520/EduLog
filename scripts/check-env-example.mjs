@@ -3,12 +3,13 @@
 //  1. every `${VAR}` used by the root Compose files is documented in it,
 //  2. every EduLog key in it is actually used by a Compose file,
 //  3. its Supabase upstream section has exactly the keys of `supabase/.env.example`.
-// Usage: node scripts/check-env-example.mjs [repoRoot]
+// Usage: node scripts/check-env-example.mjs
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const root = path.resolve(process.argv[2] ?? path.join(path.dirname(fileURLToPath(import.meta.url)), '..'))
+const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
+const sorted = (values) => [...values].sort((a, b) => a.localeCompare(b))
 const read = (file) => readFileSync(path.join(root, file), 'utf8')
 
 const ROOT_COMPOSE = ['docker-compose.yml', 'docker-compose.prod.yml']
@@ -32,7 +33,7 @@ function composeVars(files) {
 
 /** Keys defined as `KEY=` or documented as commented-out `# KEY=`. */
 function envKeys(text, { includeCommented = true } = {}) {
-  const pattern = includeCommented ? /^\s*#?\s*([A-Z][A-Z0-9_]*)=/ : /^\s*([A-Z][A-Z0-9_]*)=/
+  const pattern = includeCommented ? /^\s*(?:#\s*)?([A-Z][A-Z0-9_]*)=/ : /^\s*([A-Z][A-Z0-9_]*)=/
   const keys = new Set()
   for (const line of text.split(/\r?\n/)) {
     const match = pattern.exec(line)
@@ -54,19 +55,19 @@ const edulogKeys = envKeys(edulogPart, { includeCommented: false })
 const supabaseKeys = envKeys(read('supabase/.env.example'))
 
 const used = composeVars(ROOT_COMPOSE)
-for (const name of [...used].sort()) {
+for (const name of sorted(used)) {
   if (!SHELL_VARS.has(name) && !allKeys.has(name)) problems.push(`${name} is used by ${ROOT_COMPOSE.join('/')} but missing from .env.example`)
 }
 
 const usedAnywhere = new Set([...used, ...composeVars(OVERLAY_COMPOSE)])
-for (const name of [...edulogKeys].sort()) {
+for (const name of sorted(edulogKeys)) {
   if (!usedAnywhere.has(name)) problems.push(`${name} is in the EduLog section of .env.example but no Compose file uses it`)
 }
 
-for (const name of [...supabaseKeys].sort()) {
+for (const name of sorted(supabaseKeys)) {
   if (!upstreamKeys.has(name)) problems.push(`${name} is in supabase/.env.example but missing from the upstream section of .env.example`)
 }
-for (const name of [...upstreamKeys].sort()) {
+for (const name of sorted(upstreamKeys)) {
   if (!supabaseKeys.has(name)) problems.push(`${name} is in the upstream section of .env.example but not in supabase/.env.example`)
 }
 
