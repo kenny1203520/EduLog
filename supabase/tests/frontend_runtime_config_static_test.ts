@@ -10,7 +10,7 @@ Deno.test('container runtime config exposes same-origin API rollout settings onl
     assertStringIncludes(runtimeConfig, key)
     assertStringIncludes(appTypes, key)
   }
-  assertStringIncludes(entrypoint, 'VITE_API_V1_MODE:-mock')
+  assertStringIncludes(entrypoint, 'VITE_API_V1_MODE:-v1')
   for (const secretKey of ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY', 'VITE_SUPABASE_FUNCTIONS_BASE_URL']) {
     if (entrypoint.includes(secretKey) || runtimeConfig.includes(secretKey) || appTypes.includes(secretKey)) {
       throw new Error(`Browser runtime must not expose ${secretKey}`)
