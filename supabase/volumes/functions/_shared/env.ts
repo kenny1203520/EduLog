@@ -1,6 +1,6 @@
 /**
  * The single place EduLog edge functions read their environment.  Values are
- * read once when the worker module loads; request handlers use `env`, never
+ * read once, on first use; request handlers use `env`, never
  * `Deno.env` directly.  Missing values stay `undefined` so callers can answer
  * with a proper API error instead of crashing the worker.
  *
@@ -38,21 +38,35 @@ function positiveInt(value: string | undefined, fallback: number) {
 
 export type EdgeEnvironment = 'development' | 'production'
 
-export const env = Object.freeze({
-  supabaseUrl: read('SUPABASE_URL'),
-  serviceRoleKey: read('SUPABASE_SERVICE_ROLE_KEY') ?? read('SERVICE_ROLE_KEY'),
-  anonKey: read('SUPABASE_ANON_KEY') ?? read('SUPABASE_PUBLISHABLE_KEY'),
-  /** Comma-separated exact origins. */
-  allowedOrigins: Object.freeze((read('API_ALLOWED_ORIGINS') ?? '').split(',').map((origin) => origin.trim()).filter(Boolean)),
-  /** Fails closed: anything other than an explicit `development` is production. */
-  environment: (read('ENVIRONMENT') === 'development' ? 'development' : 'production') as EdgeEnvironment,
-  rateLimitPerMinute: positiveInt(read('API_RATE_LIMIT_PER_MINUTE'), DEFAULT_RATE_LIMIT_PER_MINUTE),
-  legacyApiSunset: read('LEGACY_API_SUNSET') ?? DEFAULT_LEGACY_API_SUNSET,
-  otlpEndpoints: Object.freeze({
-    log: read('OTEL_EXPORTER_OTLP_LOGS_ENDPOINT'),
-    span: read('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT'),
-    metric: read('OTEL_EXPORTER_OTLP_METRICS_ENDPOINT'),
-  }),
+function loadEnv() {
+  return Object.freeze({
+    supabaseUrl: read('SUPABASE_URL'),
+    serviceRoleKey: read('SUPABASE_SERVICE_ROLE_KEY') ?? read('SERVICE_ROLE_KEY'),
+    anonKey: read('SUPABASE_ANON_KEY') ?? read('SUPABASE_PUBLISHABLE_KEY'),
+    /** Comma-separated exact origins. */
+    allowedOrigins: Object.freeze((read('API_ALLOWED_ORIGINS') ?? '').split(',').map((origin) => origin.trim()).filter(Boolean)),
+    /** Fails closed: anything other than an explicit `development` is production. */
+    environment: (read('ENVIRONMENT') === 'development' ? 'development' : 'production') as EdgeEnvironment,
+    rateLimitPerMinute: positiveInt(read('API_RATE_LIMIT_PER_MINUTE'), DEFAULT_RATE_LIMIT_PER_MINUTE),
+    legacyApiSunset: read('LEGACY_API_SUNSET') ?? DEFAULT_LEGACY_API_SUNSET,
+    otlpEndpoints: Object.freeze({
+      log: read('OTEL_EXPORTER_OTLP_LOGS_ENDPOINT'),
+      span: read('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT'),
+      metric: read('OTEL_EXPORTER_OTLP_METRICS_ENDPOINT'),
+    }),
+  })
+}
+
+type EdgeEnv = ReturnType<typeof loadEnv>
+let loaded: EdgeEnv | undefined
+
+/**
+ * Read on first property access, then cached.  Importing this module touches
+ * no environment, so modules that only import helpers (and their tests) need
+ * no env permission.
+ */
+export const env: EdgeEnv = new Proxy({} as EdgeEnv, {
+  get: (_target, key) => (loaded ??= loadEnv())[key as keyof EdgeEnv],
 })
 
 /** The variables `main` forwards to a user worker: only those listed above. */
