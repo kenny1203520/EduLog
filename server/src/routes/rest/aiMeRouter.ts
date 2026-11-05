@@ -297,7 +297,6 @@ export function openRouterReturnOrigin(config: Pick<ApiConfig, 'EDULOG_WEB_BASE_
     return base
   }
   if (parsed.origin !== origin) return base
-  const configured = config.API_ALLOWED_ORIGINS.split(',').map((value) => value.trim()).filter(Boolean)
   const localDevelopment = config.NODE_ENV !== 'production' && parsed.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(parsed.hostname)
-  return origin === base || configured.includes(origin) || localDevelopment ? origin : base
+  return origin === base || config.API_ALLOWED_ORIGINS.includes(origin) || localDevelopment ? origin : base
 }

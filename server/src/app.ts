@@ -2,10 +2,10 @@ import express, { Router } from 'express'
 import cookieParser from 'cookie-parser'
 import helmet from 'helmet'
 import pino from 'pino'
-import { loadConfig } from './config/config.js'
+import type { ApiConfig } from './config/config.js'
 import { requestContext } from './http/context.js'
 import { errorHandler, ApiError } from './http/errors.js'
-import { createSupabaseClients } from './infra/supabase.js'
+import { createSupabaseClients, type SupabaseClients } from './infra/supabase.js'
 import { createAuthRouter, csrfProtection, requireAuth } from './auth/auth.js'
 import { createResourceRouter } from './routes/rest/resourceRouter.js'
 import { createRpcRouter } from './routes/rest/rpcRouter.js'
@@ -33,27 +33,10 @@ import { createAiAdminRouter } from './routes/rest/aiAdminRouter.js'
 import { createAiDeidRouter } from './routes/rest/aiDeidRouter.js'
 import { createRealtimeTicketRouter } from './routes/rest/realtimeTicketRouter.js'
 
-const LOCAL_DEVELOPMENT_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://[::1]:5173']
-
-export function resolveAllowedOrigins(config: Pick<ReturnType<typeof loadConfig>, 'API_ALLOWED_ORIGINS' | 'API_EXTENSION_ALLOWED_ORIGINS' | 'NODE_ENV'>) {
-  const configuredOrigins = config.API_ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean)
-  const extensionOrigins = config.API_EXTENSION_ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean)
-  if (extensionOrigins.some((origin) => !/^chrome-extension:\/\/[a-p]{32}$/.test(origin))) {
-    throw new Error('API_EXTENSION_ALLOWED_ORIGINS must contain exact Chrome extension origins')
-  }
-  if (configuredOrigins.length) {
-    if (configuredOrigins.includes('*')) throw new Error('API_ALLOWED_ORIGINS cannot contain wildcard origins')
-    if (configuredOrigins.some((origin) => origin.includes('*'))) throw new Error('API_ALLOWED_ORIGINS must contain exact origins')
-    return [...new Set([...configuredOrigins, ...extensionOrigins])]
-  }
-  if (config.NODE_ENV === 'production') throw new Error('Production requires explicit API_ALLOWED_ORIGINS')
-  return [...new Set([...LOCAL_DEVELOPMENT_ORIGINS, ...extensionOrigins])]
-}
-
-export function createApp(env: NodeJS.ProcessEnv = process.env) {
-  const config = loadConfig(env)
+/** Builds the Express app from an already-validated config (see `loadConfig`). */
+export function createApp(config: ApiConfig, clients: SupabaseClients = createSupabaseClients(config)) {
+  const allowedOrigins = config.corsOrigins
   const logger = pino({ level: config.NODE_ENV === 'production' ? 'info' : 'debug', redact: ['req.headers.authorization', 'access_token', 'refresh_token', 'password', 'cookie', '*.token', '*.secret'] })
-  const clients = createSupabaseClients(config)
   const app = express()
   app.disable('x-powered-by')
   app.use(helmet())
@@ -65,7 +48,6 @@ export function createApp(env: NodeJS.ProcessEnv = process.env) {
   app.use((_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next() })
   app.use(express.json({ limit: config.API_BODY_LIMIT, strict: true }))
   app.use((req, res, next) => {
-    const allowedOrigins = resolveAllowedOrigins(config)
     const origin = req.header('origin')
     if (origin && !allowedOrigins.includes(origin)) return next(new ApiError(403, 'ORIGIN_FORBIDDEN', 'Origin is not allowed'))
     res.setHeader('Vary', 'Origin')

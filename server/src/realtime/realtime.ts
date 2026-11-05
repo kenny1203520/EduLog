@@ -5,7 +5,6 @@ import { createHash, randomUUID } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ApiConfig } from '../config/config.js'
 import { createUserClient, validateAccessToken } from '../infra/supabase.js'
-import { resolveAllowedOrigins } from '../app.js'
 import { monitorRealtimeSocket } from './realtimeHeartbeat.js'
 import { redeemTicket } from './realtimeTicket.js'
 
@@ -115,7 +114,7 @@ export function attachRealtimeProxy(
       ...fields,
     }))
     const origin = request.headers.origin
-    if (origin && !resolveAllowedOrigins(config).includes(origin)) { log('realtime_upgrade_rejected', { phase: 'origin', outcome: 'denied' }); rejectUpgrade(socket, 403, 'Forbidden'); return }
+    if (origin && !config.corsOrigins.includes(origin)) { log('realtime_upgrade_rejected', { phase: 'origin', outcome: 'denied' }); rejectUpgrade(socket, 403, 'Forbidden'); return }
     const cookieToken = cookieValue(request.headers.cookie, 'edulog_access')
     const ticket = url.searchParams.get('ticket')
     const classSessionId = url.searchParams.get('class_session')

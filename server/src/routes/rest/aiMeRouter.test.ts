@@ -163,8 +163,6 @@ describe('Sign in with ChatGPT', () => {
     ...config,
     OPENAI_SIWC_CLIENT_ID: 'oaiapp_edulog',
     OPENAI_SIWC_CLIENT_SECRET: 'client-secret',
-    OPENAI_SIWC_AUTHORIZE_URL: 'https://auth.openai.com/api/accounts/authorize',
-    OPENAI_SIWC_TOKEN_URL: 'https://auth.openai.com/api/accounts/oauth/token',
   } as ApiConfig
 
   it('is hidden and refused until an approved client is configured', async () => {
@@ -254,7 +252,7 @@ describe('personal models and catalog', () => {
 })
 
 describe('openRouterReturnOrigin', () => {
-  const config = { EDULOG_WEB_BASE_URL: 'https://edulog.example', API_ALLOWED_ORIGINS: 'https://edulog.example,https://staging.edulog.example', NODE_ENV: 'development' as const }
+  const config = { EDULOG_WEB_BASE_URL: 'https://edulog.example', API_ALLOWED_ORIGINS: ['https://edulog.example', 'https://staging.edulog.example'], NODE_ENV: 'development' as const }
 
   it('returns to the page that started the sign-in when its origin is trusted', () => {
     expect(openRouterReturnOrigin(config, 'https://staging.edulog.example')).toBe('https://staging.edulog.example')
