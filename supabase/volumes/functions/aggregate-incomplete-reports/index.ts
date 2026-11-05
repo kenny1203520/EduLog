@@ -5,6 +5,7 @@ import {
   isTeacherPresentForScope,
   type PermissionDecision,
 } from './policy.ts'
+import { env } from '../_shared/env.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -24,8 +25,8 @@ serve(async (req: Request) => {
   const daysBack = Number(url.searchParams.get('daysBack') || '90')
   const requestedScope = url.searchParams.get('scope')
   const scope = requestedScope === 'my_present' || requestedScope === 'my_notifications' ? requestedScope : 'all'
-  const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SERVICE_ROLE_KEY') ?? ''
+  const supabaseUrl = env.supabaseUrl ?? ''
+  const serviceRoleKey = env.serviceRoleKey ?? ''
 
   if (!supabaseUrl || !serviceRoleKey) {
     return new Response(JSON.stringify({ error: 'Missing Supabase configuration' }), { status: 500, headers: jsonHeaders })

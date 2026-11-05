@@ -476,6 +476,9 @@ services:
       SUPABASE_DB_URL: postgresql://postgres:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
       # TODO: Allow configuring VERIFY_JWT per function.
       VERIFY_JWT: "${FUNCTIONS_VERIFY_JWT}"
+      # EduLog edge-function settings (read in supabase/volumes/functions/_shared/env.ts).
+      API_ALLOWED_ORIGINS: ${EDULOG_ALLOWED_ORIGINS:-}
+      ENVIRONMENT: ${EDULOG_FUNCTIONS_ENVIRONMENT:-production}
     command: 
       [
         "start",
