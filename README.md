@@ -41,8 +41,11 @@ EduLog/
 
 ```bash
 cp .env.example .env
+# 至少填入 EDULOG_COOKIE_SECRET、EDULOG_WEB_BASE_URL、EDULOG_ALLOWED_ORIGINS，並重新產生 Supabase 密鑰
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
+
+所有環境變數、預設值與 Compose 改名對照請見 [docs/deployment/environment.md](docs/deployment/environment.md)。
 
 正式流量只由 Nginx frontend container 對外提供；`/api/*` 由 Nginx 轉送到 Express，Express 再使用 user JWT client 或受限的 server-side service-role client 存取 Supabase。Production Compose 不公開 Kong、Auth、Realtime、Storage 或 Postgres port。
 

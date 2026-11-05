@@ -8,7 +8,9 @@ on:
       - 'app/**'
       - 'docker-compose.yml'
       - 'docker-compose.prod.yml'
+      - '.env.example'
       - 'supabase/.env.example'
+      - 'scripts/check-env-example.mjs'
       - 'supabase/docker-compose.caddy.yml'
       - 'supabase/docker-compose.envoy.yml'
       - 'supabase/volumes/proxy/caddy/**'
@@ -16,6 +18,7 @@ on:
       - '.github/workflows/api-service.yml'
       - '.github/workflows/docker-publish.yml'
       - 'scripts/release/**'
+      - 'scripts/lib/**'
       - '.github/releases/**'
       - 'CHANGELOG.md'
   pull_request:
@@ -24,7 +27,9 @@ on:
       - 'app/**'
       - 'docker-compose.yml'
       - 'docker-compose.prod.yml'
+      - '.env.example'
       - 'supabase/.env.example'
+      - 'scripts/check-env-example.mjs'
       - 'supabase/docker-compose.caddy.yml'
       - 'supabase/docker-compose.envoy.yml'
       - 'supabase/volumes/proxy/caddy/**'
@@ -32,6 +37,7 @@ on:
       - '.github/workflows/api-service.yml'
       - '.github/workflows/docker-publish.yml'
       - 'scripts/release/**'
+      - 'scripts/lib/**'
       - '.github/releases/**'
       - 'CHANGELOG.md'
 
@@ -65,7 +71,9 @@ jobs:
         with:
           node-version: 26
       - name: Test tag release automation
-        run: node --test scripts/release/release.test.mjs
+        run: node --test scripts/release/release.test.mjs scripts/lib/env.test.mjs
+      - name: Check .env.example matches the Compose files
+        run: node scripts/check-env-example.mjs
       - name: Validate production compose
         env:
           EDULOG_COOKIE_SECRET: 0123456789abcdef0123456789abcdef
