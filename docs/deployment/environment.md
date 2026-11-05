@@ -40,20 +40,30 @@ The root `.env` key on the left becomes the container variable on the right.
 | `API_EXTENSION_ALLOWED_ORIGINS` | `API_EXTENSION_ALLOWED_ORIGINS` | fallback for `EDULOG_FRAME_ANCESTORS` | |
 | `ANON_KEY` (Supabase) | `SUPABASE_ANON_KEY` | | `SUPABASE_ANON_KEY` |
 | `SERVICE_ROLE_KEY` (Supabase) | `SUPABASE_SERVICE_ROLE_KEY` | | `SUPABASE_SERVICE_ROLE_KEY` |
-| `JWT_SECRET` (Supabase) | `SUPABASE_JWT_SECRET` | | `JWT_SECRET` (main router only, not forwarded to workers) |
+| `JWT_SECRET` (Supabase) | `SUPABASE_JWT_SECRET` | | `JWT_SECRET` (`routerEnv`, main router only, not forwarded to workers) |
 | `EDULOG_SUPABASE_INTERNAL_URL` (`http://kong:8000`) | `SUPABASE_URL` | | |
 | `EDULOG_SUPABASE_REALTIME_URL` | `SUPABASE_REALTIME_URL` | | |
 | `EDULOG_COOKIE_SECURE` (`true`) | `COOKIE_SECURE` | | |
 | `NODE_ENV` (`production`) | `NODE_ENV` | | |
 | `RATE_LIMIT_STORE` (`supabase`) | `RATE_LIMIT_STORE` | | |
 | `EDULOG_API_BODY_LIMIT` (`1mb`) | `API_BODY_LIMIT` | `EDULOG_API_BODY_LIMIT` (converted to nginx units) | |
-| `EDULOG_API_RATE_LIMIT_PER_MINUTE` (`120`) | `API_RATE_LIMIT_PER_MINUTE` | | |
+| `EDULOG_API_RATE_LIMIT_PER_MINUTE` (`120`) | `API_RATE_LIMIT_PER_MINUTE` | | `API_RATE_LIMIT_PER_MINUTE` |
 | `EDULOG_AI_SECRET_KEY` | `AI_SECRET_KEY` | | |
 | `EDULOG_PRESIDIO_ANALYZER_URL` | `PRESIDIO_ANALYZER_URL` | | |
 | `EDULOG_OPENAI_SIWC_CLIENT_ID` / `_SECRET` | `OPENAI_SIWC_CLIENT_ID` / `_SECRET` | | |
 | `EDULOG_FUNCTIONS_ENVIRONMENT` (`production`) | | | `ENVIRONMENT` |
 | `VITE_API_V1_MODE` (`v1`) | | `VITE_API_V1_MODE` | |
 | `EDULOG_API_UPSTREAM` (`api:3000`) | | `EDULOG_API_UPSTREAM` | |
+
+These root `.env` keys configure Compose itself (images, ports, mounts, build arguments) or only the optional proxy overlays:
+
+| Root `.env` | Used for |
+|---|---|
+| `EDULOG_PORT` (`4173`) | host port published for the frontend; nginx always listens on 4173 inside the container |
+| `EDULOG_IMAGE_TAG` (`latest`), `EDULOG_API_IMAGE` | image references for the frontend and API services |
+| `EDULOG_SSL_DIR` (`./ssl`) | host directory mounted at `/app/ssl` for TLS certificates |
+| `EDULOG_PROXY_DOMAIN`, `EDULOG_PROXY_UPSTREAM_URL` | passed to the proxy container of the optional Caddy/nginx overlays under `supabase/` |
+| `EDULOG_PRESIDIO_LANGUAGES` (`zh,en`) | build argument: languages the Presidio analyzer image is built with |
 
 Supabase uses more aliases for its own services. For example, `SERVICE_ROLE_KEY` reaches Studio and Kong as `SUPABASE_SERVICE_KEY` and Storage as `SERVICE_KEY`. Those are upstream and are not changed here.
 
@@ -103,10 +113,12 @@ Test-only variables (suites skip when they are unset): `PRESIDIO_ANALYZER_URL`, 
 
 ## Edge functions (`_shared/env.ts`)
 
-`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (fallback `SERVICE_ROLE_KEY`), `SUPABASE_ANON_KEY` (fallback `SUPABASE_PUBLISHABLE_KEY`), `API_ALLOWED_ORIGINS`, `ENVIRONMENT` (default `production`), `API_RATE_LIMIT_PER_MINUTE` (`120`), `LEGACY_API_SUNSET` (`Wed, 31 Dec 2026 23:59:59 GMT`), and `OTEL_EXPORTER_OTLP_{LOGS,TRACES,METRICS}_ENDPOINT`.
+`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`, `API_ALLOWED_ORIGINS`, `ENVIRONMENT` (default `production`), `API_RATE_LIMIT_PER_MINUTE` (`120`, shared with the API through `EDULOG_API_RATE_LIMIT_PER_MINUTE`), `LEGACY_API_SUNSET` (`Wed, 31 Dec 2026 23:59:59 GMT`), and `OTEL_EXPORTER_OTLP_{LOGS,TRACES,METRICS}_ENDPOINT`.
 
-The `main` router forwards **only these keys** to user workers (`WORKER_ENV_KEYS`). A new variable that a worker needs must be added there. The router itself also reads `JWT_SECRET` and `VERIFY_JWT`.
+Values are read on first use, so importing a module never needs env access. The `main` router forwards **only these keys** to user workers (`WORKER_ENV_KEYS`). A new variable that a worker needs must be added there. The router's own `JWT_SECRET` and `VERIFY_JWT` are read through `routerEnv` in the same module and are never forwarded. Upstream keys that Compose also sets on the `functions` container (`SUPABASE_DB_URL`, `SUPABASE_SECRET_KEYS`, `SUPABASE_PUBLISHABLE_KEYS`) are not read by EduLog code and never reach workers.
 
 ## CI and release scripts
 
-These run in GitHub Actions, and their names are set in the workflow files: `RELEASE_TAG`, `RELEASE_SHA`, `FRONTEND_DIGEST`, `API_DIGEST`, `GH_TOKEN`/`GITHUB_TOKEN`, `GITHUB_REPOSITORY`, `GITHUB_OUTPUT`, `CWS_*`, `BETA_*`/`STABLE_*`, `EXTENSION_*`. See `docs/deployment/release.md` and `docs/deployment/extension-release.md`.
+These run in GitHub Actions, and their names are set in the workflow files: `RELEASE_TAG`, `RELEASE_SHA`, `FRONTEND_DIGEST`, `API_DIGEST`, `GH_TOKEN`/`GITHUB_TOKEN`, `GITHUB_REPOSITORY`, `GITHUB_OUTPUT`, `CWS_*`, `BETA_*`/`STABLE_*`, `EXTENSION_*`. Actions also provides `GITHUB_SERVER_URL`, `GITHUB_REF_TYPE` and `GITHUB_REF_NAME`.
+
+The workflow token reaches the scripts under two names: `github-release.mjs` reads `GH_TOKEN` (the name the `gh` CLI expects), and `store.mjs` reads `GITHUB_TOKEN`. Both are set from `github.token` at step level only. See `docs/deployment/release.md` and `docs/deployment/extension-release.md`.
