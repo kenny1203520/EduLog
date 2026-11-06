@@ -5,7 +5,6 @@ This page is the one reference for EduLog's environment variables. Each layer re
 | Layer | Reads env in | Validated |
 |---|---|---|
 | API (Express, `server/`) | `server/src/config/config.ts` (`loadConfig`, once at startup) | zod schema; the API refuses to start on bad config |
-| Frontend app (browser) | `app/src/lib/runtimeConfig.ts` (`window.__EDULOG_CONFIG__` first, then build-time `VITE_*`) | typed; unknown API modes fall back with a warning |
 | Frontend dev server | `app/vite.config.ts` → `app/vite.security.ts` | parsed in code |
 | Frontend container (nginx) | `app/nginx/docker-entrypoint.d/05-edulog-runtime.envsh` | shell, at container start |
 | Edge functions (Deno) | `supabase/volumes/functions/_shared/env.ts` (once per worker) | missing values answer with a configuration error |
@@ -52,7 +51,6 @@ The root `.env` key on the left becomes the container variable on the right.
 | `EDULOG_PRESIDIO_ANALYZER_URL` | `PRESIDIO_ANALYZER_URL` | | |
 | `EDULOG_OPENAI_SIWC_CLIENT_ID` / `_SECRET` | `OPENAI_SIWC_CLIENT_ID` / `_SECRET` | | |
 | `EDULOG_FUNCTIONS_ENVIRONMENT` (`production`) | | | `ENVIRONMENT` |
-| `VITE_API_V1_MODE` (`v1`) | | `VITE_API_V1_MODE` | |
 | `EDULOG_API_UPSTREAM` (`api:3000`) | | `EDULOG_API_UPSTREAM` | |
 
 These root `.env` keys configure Compose itself (images, ports, mounts, build arguments) or only the optional proxy overlays:
@@ -101,8 +99,6 @@ Test-only variables (suites skip when they are unset): `PRESIDIO_ANALYZER_URL`, 
 
 | Variable | Where | Default | Notes |
 |---|---|---|---|
-| `VITE_API_V1_MODE` | runtime config / build | `v1` in production builds and the nginx image, `mock` in dev | `mock` \| `legacy` \| `v1` |
-| `VITE_LEGACY_API_BASE_URL` | runtime config / build | `/api` | used by `legacy` mode |
 | `EDULOG_API_DEV_TARGET` | Vite dev server | `http://localhost:3000` | `/api` proxy target |
 | `EDULOG_ALLOWED_HOSTS` | dev server + nginx | | comma-separated Host allowlist |
 | `EDULOG_CSP_HEADER`, `EDULOG_HSTS_HEADER` | dev server + nginx | built-in policies (kept identical by `DockerRuntimeContract.spec.ts`) | |

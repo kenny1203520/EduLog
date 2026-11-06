@@ -53,14 +53,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 ### 2. 前端環境變數
 
-前端不設定 `VITE_SUPABASE_URL`、`VITE_SUPABASE_ANON_KEY` 或 Functions URL。`app/.env` 只需：
-
-```env
-VITE_API_V1_MODE=mock
-VITE_LEGACY_API_BASE_URL=/api
-```
-
-Production 由 Nginx runtime config 設定 `VITE_API_V1_MODE=v1`，瀏覽器透過同源 `/api/*` 與 HttpOnly session cookie 呼叫 Express。
+前端不讀取任何 `VITE_*` 變數，也不設定 Supabase URL、anon key 或 Functions URL。瀏覽器一律透過同源 `/api/*` 與 HttpOnly session cookie 呼叫 Express；開發時由 Vite 代理 `/api`（`EDULOG_API_DEV_TARGET`，預設 `http://localhost:3000`）。
 
 ### 3. 安裝與啟動前端/後端
 
@@ -76,7 +69,7 @@ npm run build
 npm run preview
 ```
 
-正式 Docker image 以 Nginx 服務 Vue 靜態檔；Express API image 獨立建置並只在 server container 讀取 Supabase secrets。Nginx 啟動時僅產生 API mode runtime config，不會把 Supabase key 注入瀏覽器。
+正式 Docker image 以 Nginx 服務 Vue 靜態檔；Express API image 獨立建置並只在 server container 讀取 Supabase secrets。瀏覽器不會取得任何 Supabase key 或執行期設定。
 
 ## 資料庫 Migration
 
