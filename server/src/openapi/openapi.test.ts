@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { permissionForResource } from '../auth/authorization.js'
 import { buildOpenApi } from './openapi.js'
 import { resources } from '../routes/rest/resources.js'
-import { allowedRpcs } from '../routes/rest/rpcContract.js'
-import { isAllowedRpc as routerAllowsRpc } from '../routes/rest/rpcRouter.js'
 
 describe('generated API contract', () => {
   it('documents blank email clearing for student and contact mutations', () => {
@@ -130,14 +128,19 @@ describe('generated API contract', () => {
   it('documents specialized nested resource scope parameters and permissions', () => {
     const spec = buildOpenApi() as { paths: Record<string, Record<string, { 'x-permission'?: string; parameters?: Array<{ name?: string }> } | undefined>> }
     expect(spec.paths['/api/class-sessions/{sessionId}/teachers'].get?.parameters?.some((parameter) => parameter.name === 'sessionId')).toBe(true)
-    expect(spec.paths['/api/class-sessions/{sessionId}/teachers/{assignmentId}'].patch?.['x-permission']).toBe('teaching.class_sessions.update')
-    expect(spec.paths['/api/class-sessions/{sessionId}/teachers/{assignmentId}'].patch?.parameters?.some((parameter) => parameter.name === 'assignmentId')).toBe(true)
+    expect(spec.paths).not.toHaveProperty('/api/class-sessions/{sessionId}/teachers/{assignmentId}')
     expect(spec.paths).not.toHaveProperty('/api/teachings/{teachingId}/members')
     expect(spec.paths['/api/teaching-role-assignments'].post?.['x-permission']).toBe('teaching.roles.manage')
     expect(spec.paths['/api/teaching-role-assignments/scoped'].get?.parameters?.some((parameter) => parameter.name === 'scope_type')).toBe(true)
-    expect(spec.paths['/api/teaching-role-assignments/scoped/{id}'].patch?.['x-permission']).toBe('teaching.roles.manage')
+    expect(spec.paths['/api/teaching-role-assignments/scoped/{id}'].delete?.['x-permission']).toBe('teaching.roles.manage')
+    expect(spec.paths['/api/teaching-role-assignments/scoped/{id}'].patch).toBeUndefined()
     expect(spec.paths['/api/teaching-role-exclusions'].post?.['x-permission']).toBe('teaching.roles.manage')
-    expect(spec.paths['/api/teaching-role-exclusions/{id}'].patch?.['x-permission']).toBe('teaching.roles.manage')
+    expect(spec.paths['/api/teaching-role-exclusions/{id}'].delete?.['x-permission']).toBe('teaching.roles.manage')
+    expect(spec.paths['/api/teaching-role-exclusions/{id}'].patch).toBeUndefined()
+    expect(spec.paths['/api/system-role-assignments/{id}'].patch).toBeUndefined()
+    expect(spec.paths['/api/teaching-role-assignments/{id}'].patch).toBeUndefined()
+    expect(spec.paths).not.toHaveProperty('/api/roles/{id}/parent')
+    expect(spec.paths).not.toHaveProperty('/api/rbac/effective-permissions')
     expect(spec.paths['/api/class-sessions/{id}'].delete?.parameters?.some((parameter) => parameter.name === 'id')).toBe(true)
   })
 
@@ -226,7 +229,6 @@ describe('generated API contract', () => {
         if (operation['x-self-service'] === true) continue
         const hasPermission = typeof operation['x-permission'] === 'string'
           || (Array.isArray(operation['x-permissions']) && operation['x-permissions'].length > 0)
-          || (Array.isArray(operation['x-rpc-allowlist']) && operation['x-rpc-allowlist'].length > 0)
         const authorizationModel = operation['x-authorization-model']
         if (!hasPermission && !authorizationModels.has(authorizationModel)) withoutFeaturePermission.push(`${method.toUpperCase()} ${path} (${operation.operationId})`)
         if (authorizationModel !== undefined) expect(authorizationModels.has(authorizationModel), `${method.toUpperCase()} ${path}`).toBe(true)
@@ -358,11 +360,12 @@ describe('generated API contract', () => {
     expect(spec.components.schemas.EnrollmentPeak.properties.max_enrollment.description).toContain('compatibility')
   })
 
-  it('keeps RPC exposure, runtime guard, and OpenAPI metadata in sync', () => {
-    const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined> }
-    expect(spec.paths['/api/rpc/{name}']?.post?.['x-rpc-allowlist']).toEqual([...allowedRpcs])
-    for (const name of allowedRpcs) expect(routerAllowsRpc(name)).toBe(true)
-    expect(routerAllowsRpc('arbitrary_postgres_function')).toBe(false)
+  it('names the enrollment history operations instead of exposing a generic RPC endpoint', () => {
+    const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined>; components: { schemas: Record<string, any> } }
+    expect(Object.keys(spec.paths).filter((path) => path.startsWith('/api/rpc'))).toEqual([])
+    const operation = spec.paths['/api/enrollment-history/{operation}']?.post
+    expect(operation?.parameters?.[0]?.schema?.enum).toEqual(['list', 'candidates', 'bind-preview', 'bind-apply'])
+    expect(spec.components.schemas.EnrollmentHistoryInput.additionalProperties).toBe(false)
   })
 
   it('declares valid cookie and bearer security schemes', () => {
@@ -392,7 +395,7 @@ describe('generated API contract', () => {
     for (const [path, pathItem] of Object.entries(spec.paths)) {
       for (const [method, operation] of Object.entries(pathItem ?? {})) {
         const schema = operation?.requestBody?.content?.['application/json']?.schema
-        if (schema?.additionalProperties === true && path !== '/api/rpc/{name}') unrestricted.push(`${method.toUpperCase()} ${path}`)
+        if (schema?.additionalProperties === true) unrestricted.push(`${method.toUpperCase()} ${path}`)
       }
     }
     expect(unrestricted).toEqual([])

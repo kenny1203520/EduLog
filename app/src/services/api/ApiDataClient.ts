@@ -24,10 +24,6 @@ function sanitizeWritePayload(resource: string, payload: unknown): unknown {
 }
 
 async function invokeCanonicalRpc<T>(name: string, args: Record<string, unknown>): Promise<{ data: T; error: null } | null> {
-  if (name === 'enrollment_history_access') {
-    const response = await apiV1Client.post<T>('/rpc/enrollment_history_access', args)
-    return { data: response.data, error: null }
-  }
   // The database RPC uses p_occurrence_report_id while the older report
   // helpers used p_occurrence_id.  Both identify the report resource at the
   // REST boundary; accepting both prevents collaboration saves from falling

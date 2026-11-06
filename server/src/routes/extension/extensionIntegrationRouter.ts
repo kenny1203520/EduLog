@@ -108,17 +108,6 @@ export function createExtensionIntegrationRouter(clients: SupabaseClients, confi
     return res.status(201).json(envelope(req, { id: created.data.id, authorize_url: buildExtensionApprovalUrl(config.EDULOG_WEB_BASE_URL, created.data.id), expires_at: created.data.expires_at }))
   }))
 
-  // Status can be polled before approval; origin and PKCE verifier are checked again at claim.
-  router.get('/pair-requests/:id', wrap(async (req, res) => {
-    const id = uuid.parse(req.params.id)
-    const origin = req.header('origin')
-    if (!allowedExtensionOrigin(config, origin)) throw new ApiError(403, 'EXTENSION_ORIGIN_FORBIDDEN', 'This extension origin is not enabled')
-    const result = await admin.from('web_extension_pairing_requests').select('status,expires_at,extension_origin').eq('id', id).maybeSingle()
-    if (result.error) throw mapDatabaseError(result.error)
-    if (!result.data || result.data.extension_origin !== origin || result.data.expires_at <= new Date().toISOString()) throw new ApiError(404, 'PAIRING_REQUEST_EXPIRED', 'Pairing request was not found or expired')
-    return res.json(envelope(req, { status: result.data.status, expires_at: result.data.expires_at }))
-  }))
-
   router.post('/pair-requests/:id/claim', wrap(async (req, res) => {
     const id = uuid.parse(req.params.id)
     const origin = req.header('origin')

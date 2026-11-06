@@ -1,15 +1,14 @@
 import { z } from 'zod'
 import { resources, resourceSchemas } from '../routes/rest/resources.js'
-import { enrollmentBodySchema, enrollmentCreateSchema } from '../routes/rest/enrollmentRouter.js'
+import { enrollmentBodySchema, enrollmentCreateSchema, enrollmentHistoryInput, enrollmentHistoryOperations } from '../routes/rest/enrollmentRouter.js'
 import { occurrenceBodySchema, occurrenceGenerationSchema } from '../routes/rest/occurrenceRouter.js'
 import { reportCreateSchema, reportUpdateSchema, reportCollaborationSchema } from '../routes/rest/reportRouter.js'
 import { sessionSchema } from '../routes/rest/sessionRouter.js'
 import { suspensionCreateSchema, suspensionUpdateSchema } from '../routes/rest/suspensionRouter.js'
 import { holidayCreateSchema, holidayUpdateSchema } from '../routes/rest/holidayRouter.js'
-import { teacherAssignmentCreateSchema, teacherAssignmentUpdateSchema } from '../routes/rest/teacherAssignmentRouter.js'
+import { teacherAssignmentCreateSchema } from '../routes/rest/teacherAssignmentRouter.js'
 import { conflictBody, transferBody, repairBody, cancelBody } from '../routes/rest/transferRouter.js'
 import { permissionForResource } from '../auth/authorization.js'
-import { allowedRpcs } from '../routes/rest/rpcContract.js'
 import { installationBody, pairStartBody, pairClaimBody, connectionNameBody } from '../routes/extension/extensionIntegrationRouter.js'
 import { importBatch, importJob, pendingPush, sourceMapping, jobStatus, catalogQuery, catalogResolve, memoryConfirmation, fieldMappingResolve, fieldMappingConfirm } from '../routes/extension/extensionWorkspaceRouter.js'
 
@@ -91,7 +90,6 @@ export function buildOpenApi() {
   const extensionResponse = { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses }
   const extensionBody = (schema: z.ZodType) => ({ required: true, content: { 'application/json': { schema: runtimeDocument(schema) } } })
   paths['/api/extension/pair-requests'] = { post: { operationId: 'extensionPairStart', parameters: [extensionOrigin], requestBody: extensionBody(pairStartBody), description: 'Installation metadata is optional for older clients; supply all five metadata fields together. A random installation UUID identifies a browser profile, not a physical device.', responses: { '201': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } }
-  paths['/api/extension/pair-requests/{id}'] = { get: { operationId: 'extensionPairStatus', parameters: [extensionId, extensionOrigin], responses: extensionResponse } }
   paths['/api/extension/pair-requests/{id}/claim'] = { post: { operationId: 'extensionPairClaim', parameters: [extensionId, extensionOrigin], requestBody: extensionBody(pairClaimBody), description: 'Atomically claims an approved request and replaces prior authorizations for the same user, extension origin and known installation. Plaintext token is returned once.', responses: extensionResponse } }
   paths['/api/extension/pair-requests/{id}/approval'] = { get: { operationId: 'extensionPairApproval', security: [{ cookieAuth: [] }], parameters: [extensionId], description: 'Includes approval status and claimed token ID so the UI can wait for claim. Approved and claimed requests are restricted to their approving user.', responses: extensionResponse } }
   paths['/api/extension/pair-requests/{id}/approve'] = { post: { operationId: 'extensionPairApprove', security: [{ cookieAuth: [] }], parameters: [extensionId], requestBody: extensionBody(connectionNameBody.partial()), responses: extensionResponse } }
@@ -227,7 +225,6 @@ export function buildOpenApi() {
     ['put', 'class_session_teachers_replace', 'teaching.class_sessions.update & teaching.roles.manage', '200'],
     ['delete', 'class_session_teachers_delete', 'teaching.class_sessions.update', '200'],
   ] as const) addSpecialized('/api/class-sessions/{sessionId}/teachers', method, operationId, permission, status, [pathParam('sessionId'), ...(method === 'get' ? [teacherAssignmentDateParameter] : method === 'delete' ? [...teacherAssignmentRemoveParameters, mutationParam] : [mutationParam])], method === 'post' || method === 'put' ? refBody('TeacherAssignmentMutation') : undefined)
-  addSpecialized('/api/class-sessions/{sessionId}/teachers/{assignmentId}', 'patch', 'class_session_teachers_update', 'teaching.class_sessions.update', '200', [pathParam('sessionId'), pathParam('assignmentId'), mutationParam], refBody('TeacherAssignmentUpdateMutation'))
   addSpecialized('/api/class-sessions/{sessionId}/teachers/{teacherId}', 'delete', 'class_session_teachers_delete_teacher', 'teaching.class_sessions.update', '200', [pathParam('sessionId'), pathParam('teacherId'), mutationParam])
   paths['/api/class-sessions'] = {
     get: { operationId: 'class_sessions_list', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.class_sessions.list', parameters: [{ $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Offset' }, { $ref: '#/components/parameters/Sort' }, { $ref: '#/components/parameters/Search' }, { $ref: '#/components/parameters/Filters' }, { $ref: '#/components/parameters/classroom_id' }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
@@ -436,14 +433,15 @@ export function buildOpenApi() {
     ],
     responses: { '200': pageResponse('PageClassSessionWorkspaceData'), ...errorResponses },
   } }
-  paths['/api/rpc/{name}'] = {
+  paths['/api/enrollment-history/{operation}'] = {
     post: {
-      operationId: 'invoke_allowed_rpc',
-      summary: 'Invoke an allowlisted business RPC through the authenticated user-JWT client',
+      operationId: 'enrollment_history_access',
+      summary: 'List enrollment history reports, find matching occurrences, or preview/apply a version-checked binding',
+      description: 'Runs the enrollment_history_access RPC with the caller user JWT; the RPC enforces enrollment scope and permissions. bind-preview and bind-apply are idempotent by the body key.',
       security: [{ cookieAuth: [] }],
-      'x-rpc-allowlist': [...allowedRpcs],
-      parameters: [{ name: 'name', in: 'path', required: true, schema: { type: 'string' } }, { $ref: '#/components/parameters/IdempotencyKey' }],
-      requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/RpcInvocation' } } } },
+      'x-authorization-model': 'database-rls',
+      parameters: [{ name: 'operation', in: 'path', required: true, schema: { type: 'string', enum: [...enrollmentHistoryOperations] } }, { $ref: '#/components/parameters/IdempotencyKey' }],
+      requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/EnrollmentHistoryInput' } } } },
       responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses },
     },
   }
@@ -503,16 +501,9 @@ export function buildOpenApi() {
     patch: { ...pageBase, operationId: 'role_update', 'x-permission': 'system.roles.manage | teaching.roles.manage', parameters: [idParam, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/RoleUpdateMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
     delete: { ...pageBase, operationId: 'role_delete', 'x-permission': 'system.roles.manage | teaching.roles.manage', parameters: [idParam, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/RoleDeleteMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
-  paths['/api/roles/{id}/parent'] = {
-    get: { ...pageBase, operationId: 'role_parent_get', 'x-permission': 'system.roles.read | teaching.roles.read', parameters: [idParam], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
-    put: { ...pageBase, operationId: 'role_parent_replace', 'x-permission': 'system.roles.manage | teaching.roles.manage', parameters: [idParam, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/RoleParentMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
-  }
   paths['/api/roles/{id}/permissions'] = {
     get: { ...pageBase, operationId: 'role_permissions_get', 'x-permission': 'system.roles.read | teaching.roles.read', parameters: [idParam, { name: 'scope_type', in: 'query', required: true, schema: { type: 'string', enum: ['system', 'classroom', 'class_session'] } }, { name: 'scope_id', in: 'query', schema: { type: 'string', format: 'uuid' } }], responses: { '200': { description: 'Permission matrix rows', content: { 'application/json': { schema: { $ref: '#/components/schemas/RolePermissionMatrixEnvelope' } } } }, ...errorResponses } },
     put: { ...pageBase, operationId: 'role_permissions_replace', 'x-permission': 'system.roles.manage | teaching.roles.manage', parameters: [idParam, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/RolePermissionSetMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
-  }
-  paths['/api/rbac/effective-permissions'] = {
-    get: { ...pageBase, operationId: 'rbac_effective_permissions', summary: 'Preview local, inherited and effective permissions for a role', 'x-authorization-model': 'role-scope-permission', parameters: [{ name: 'role_id', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } }, { name: 'scope_type', in: 'query', required: true, schema: { type: 'string', enum: ['system', 'classroom', 'class_session'] } }, { name: 'scope_id', in: 'query', schema: { type: 'string', format: 'uuid' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
   paths['/api/rbac/scoped-capability'] = {
     get: { ...pageBase, operationId: 'rbac_scoped_capability', summary: 'Check whether the current user can manage a role policy at a scope', 'x-authorization-model': 'permission-probe', parameters: [{ name: 'scope_type', in: 'query', required: true, schema: { type: 'string', enum: ['system', 'classroom', 'class_session'] } }, { name: 'scope_id', in: 'query', description: 'Required for classroom and class_session; omit for platform-wide teaching policy', schema: { type: 'string', format: 'uuid' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
@@ -522,7 +513,6 @@ export function buildOpenApi() {
     post: { ...pageBase, operationId: 'system_role_assignment_create', 'x-permission': 'system.role_assignments.manage', parameters: [mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/SystemRoleAssignmentMutation' } } } }, responses: { '201': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
   paths['/api/system-role-assignments/{id}'] = {
-    patch: { ...pageBase, operationId: 'system_role_assignment_update', 'x-permission': 'system.role_assignments.manage', parameters: [idParam, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/SystemRoleAssignmentMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
     delete: { ...pageBase, operationId: 'system_role_assignment_delete', 'x-permission': 'system.role_assignments.manage', parameters: [idParam, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/AssignmentDeleteMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
   paths['/api/classrooms/{classroomId}/role-assignments'] = {
@@ -538,7 +528,6 @@ export function buildOpenApi() {
     post: { ...pageBase, operationId: 'platform_teaching_role_assignment_create', 'x-permission': 'teaching.roles.manage', parameters: [mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/TeachingRoleAssignmentMutation' } } } }, responses: { '201': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
   paths['/api/teaching-role-assignments/{id}'] = {
-    patch: { ...pageBase, operationId: 'platform_teaching_role_assignment_update', 'x-permission': 'teaching.roles.manage', parameters: [idParam, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/TeachingRoleAssignmentMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
     delete: { ...pageBase, operationId: 'platform_teaching_role_assignment_delete', 'x-permission': 'teaching.roles.manage', parameters: [idParam, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/AssignmentDeleteMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
   paths['/api/teaching-role-assignments/scoped'] = {
@@ -546,7 +535,6 @@ export function buildOpenApi() {
     post: { ...pageBase, operationId: 'scoped_teaching_role_assignment_create', 'x-permission': 'teaching.roles.manage', parameters: [mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/ScopedTeachingRoleAssignmentMutation' } } } }, responses: { '201': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
   paths['/api/teaching-role-assignments/scoped/{id}'] = {
-    patch: { ...pageBase, operationId: 'scoped_teaching_role_assignment_update', 'x-permission': 'teaching.roles.manage', parameters: [idParam, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/ScopedTeachingRoleAssignmentMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
     delete: { ...pageBase, operationId: 'scoped_teaching_role_assignment_delete', 'x-permission': 'teaching.roles.manage', parameters: [idParam, { name: 'scope_type', in: 'query', required: true, schema: { type: 'string', enum: ['classroom', 'class_session'] } }, { name: 'scope_id', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } }, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/AssignmentDeleteMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
   paths['/api/teaching-role-assignments/effective'] = {
@@ -562,7 +550,6 @@ export function buildOpenApi() {
     post: { ...pageBase, operationId: 'teaching_role_exclusion_create', 'x-permission': 'teaching.roles.manage', parameters: [mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/TeachingRoleExclusionMutation' } } } }, responses: { '201': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
   paths['/api/teaching-role-exclusions/{id}'] = {
-    patch: { ...pageBase, operationId: 'teaching_role_exclusion_update', 'x-permission': 'teaching.roles.manage', parameters: [idParam, { name: 'scope_type', in: 'query', required: true, schema: { type: 'string', enum: ['classroom', 'class_session'] } }, { name: 'scope_id', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } }, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/TeachingRoleExclusionMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
     delete: { ...pageBase, operationId: 'teaching_role_exclusion_delete', 'x-permission': 'teaching.roles.manage', parameters: [idParam, { name: 'scope_type', in: 'query', required: true, schema: { type: 'string', enum: ['classroom', 'class_session'] } }, { name: 'scope_id', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } }, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/AssignmentDeleteMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
   paths['/api/users/{id}/status'] = {
@@ -609,10 +596,6 @@ export function buildOpenApi() {
     RoleDeleteMutation: {
       type: 'object', additionalProperties: false, required: ['expected_epoch'],
       properties: { expected_epoch: { type: 'integer', minimum: 1 } },
-    },
-    RoleParentMutation: {
-      type: 'object', additionalProperties: false, required: ['expected_epoch'],
-      properties: { parent_role_id: { type: ['string', 'null'], format: 'uuid' }, expected_epoch: { type: 'integer', minimum: 1 } },
     },
     RolePermissionMatrixRow: {
       type: 'object', additionalProperties: false,
@@ -664,6 +647,7 @@ export function buildOpenApi() {
       properties: { status: { type: 'string', enum: ['active', 'disabled'] }, reason: { type: ['string', 'null'], minLength: 3, maxLength: 500 }, expected_epoch: { type: 'integer', minimum: 1 } },
     },
     EnrollmentCreateMutation: runtimeDocument(enrollmentCreateSchema),
+    EnrollmentHistoryInput: runtimeDocument(enrollmentHistoryInput),
     EnrollmentUpdateMutation: runtimeDocument(enrollmentBodySchema),
     ReportCreateMutation: runtimeDocument(reportCreateSchema),
     ReportUpdateMutation: runtimeDocument(reportUpdateSchema),
@@ -674,7 +658,6 @@ export function buildOpenApi() {
     HolidayUpdateMutation: runtimeDocument(holidayUpdateSchema),
     ReportCollaborationMutation: runtimeDocument(reportCollaborationSchema),
     TeacherAssignmentMutation: runtimeDocument(teacherAssignmentCreateSchema),
-    TeacherAssignmentUpdateMutation: runtimeDocument(teacherAssignmentUpdateSchema),
     TransferMutation: runtimeDocument(transferBody),
     // Zod's JSON Schema emitter represents nullable fields conservatively and
     // can omit them from `required`; the runtime validator still requires
@@ -702,11 +685,6 @@ export function buildOpenApi() {
         occurrences: { type: 'array', items: { type: 'object' } },
       },
     },
-    RpcInvocation: { oneOf: [
-      { type: 'object', required: ['class_occurrence_id'], additionalProperties: false, properties: { class_occurrence_id: { type: 'string', format: 'uuid' } } },
-      { type: 'object', required: ['enrollment_id'], additionalProperties: false, properties: { enrollment_id: { type: 'string', format: 'uuid' } } },
-      { type: 'object', required: ['user_id', 'permission_key'], additionalProperties: false, properties: { user_id: { type: 'string', format: 'uuid' }, permission_key: { type: 'string', minLength: 1, maxLength: 200 }, teaching_id: { type: 'string', format: 'uuid' }, classroom_id: { type: 'string', format: 'uuid' }, class_session_id: { type: 'string', format: 'uuid' } } },
-    ] },
   }
   const pageResponseSchemas = {
     SettingsOverviewData: {

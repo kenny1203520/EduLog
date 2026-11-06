@@ -65,8 +65,6 @@ export const memoryConfirmation = z.object({
 // Source rows without a reportId are attendance evidence: date, count and class only.
 const evidenceCount = z.number().int().min(0).max(20)
 export const attendanceEvidence = z.object({ source_origin: source, items: z.array(z.object({ enrollment_id: uuid, source_admission_id: z.string().regex(/^\d+$/).max(40), source_class_id: z.string().regex(/^\d+$/).max(40).optional(), evidence_date: date, attendance_count: evidenceCount.min(1), present_count: evidenceCount.default(0), absent_count: evidenceCount.default(0) }).strict().refine(item => item.present_count + item.absent_count <= item.attendance_count, 'Attendance counts exceed the row count')).min(1).max(50) }).strict()
-const attendanceEvidenceQuery = z.object({ enrollment_id: uuid, before_date: date.optional(), limit: z.coerce.number().int().min(1).max(100).default(100) }).strict()
-export const sourceReportConflictsQuery = z.object({ action: z.enum(['kept','superseded','archived_evidence','occurrence_backfilled','occurrence_conflict','link_conflict']).optional(), cursor: uuid.optional(), limit: z.coerce.number().int().min(1).max(50).default(50) }).strict()
 const wrap = (fn: (req: Request, res: Response) => Promise<unknown>) => (req: Request, res: Response, next: NextFunction) => void fn(req, res).catch(next)
 const mappingField = z.enum(['attendance_status','absence_reason','is_completed','class_participation','classroom_behavior','lesson_id','progress_start','progress_end'])
 const fieldReference = z.object({ field_key: mappingField, course_id: uuid.optional(), class_session_id: uuid.optional(), options_signature: z.string().min(2).max(16000).refine(value => {
@@ -213,8 +211,6 @@ export function createExtensionWorkspaceRouter(admin: SupabaseClient) {
   router.get('/history-reports/:id/candidates', wrap(async (req,res) => reply(req,res,await run(req,'candidates',{ history_id: uuid.parse(req.params.id), ...z.object({cursor:uuid.optional(),limit:z.coerce.number().int().min(1).max(50).default(50)}).strict().parse(req.query) },'web_extension_history'))))
   for (const action of ['preview','apply'] as const) router.post(`/history-reports/:id/bind/${action}`,wrap(async (req,res) => reply(req,res,await run(req,`bind-${action}`,{history_id:uuid.parse(req.params.id),...historyBinding.parse(req.body)},'web_extension_history'))))
   router.post('/attendance-evidence', wrap(async (req, res) => reply(req, res, await run(req, 'record', attendanceEvidence.parse(req.body), 'web_extension_attendance_evidence'))))
-  router.get('/attendance-evidence', wrap(async (req, res) => reply(req, res, await run(req, 'list', attendanceEvidenceQuery.parse(req.query), 'web_extension_attendance_evidence'))))
-  router.get('/source-report-conflicts', wrap(async (req, res) => reply(req, res, await run(req, 'list', sourceReportConflictsQuery.parse(req.query), 'web_extension_source_report_conflicts'))))
   router.get('/reports', wrap(async (req, res) => {
     const summary = z.enum(['true','false']).default('false').parse(req.query.summary) === 'true'
     const search = req.query.search === undefined ? null : z.string().trim().max(80).parse(req.query.search)

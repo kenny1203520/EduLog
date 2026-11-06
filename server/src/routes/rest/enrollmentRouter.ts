@@ -211,5 +211,30 @@ async function remove(req: Request, res: Response) {
   const result = await req.db.from('enrollments').delete().eq('id', id).select(fields).maybeSingle(); if (result.error) throw mapDatabaseError(result.error); if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found')
   const envelope = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, envelope); return res.json(envelope)
 }
-export function createEnrollmentRouter() { const router = Router(); router.post('/enrollments', wrap(create)); router.patch('/enrollments/:id', wrap(update)); router.get('/enrollments/:id/start-date-impact', wrap(startDateImpact)); router.delete('/enrollments/:id', wrap(remove)); return router }
+// Enrollment history browsing and binding are authorized inside the
+// SECURITY DEFINER `enrollment_history_access` RPC, which runs with the caller's
+// user JWT. The BFF only names the operation; it never widens the RPC surface.
+export const enrollmentHistoryOperations = ['list', 'candidates', 'bind-preview', 'bind-apply'] as const
+const enrollmentHistoryOperation = z.enum(enrollmentHistoryOperations)
+const historyText = z.string().max(200)
+const historyDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+/** Every key the RPC reads from p_input; unknown keys are rejected before the database call. */
+export const enrollmentHistoryInput = z.object({
+  id: z.string().uuid(), student_id: z.string().uuid(), enrollment_id: z.string().uuid(), course_id: z.string().uuid(),
+  history_id: z.string().uuid(), history_version: z.number().int(), class_occurrence_id: z.string().uuid(), key: z.string().uuid(),
+  cursor: historyText, limit: z.number().int().min(1).max(100), sort: historyText, unlinked_only: z.boolean(),
+  anchor_date: historyDate, date_from: historyDate, date_to: historyDate, dates: z.array(historyDate).max(100),
+  source_admission_id: historyText, overwrite: z.array(historyText).max(50), include_internal: z.boolean(), include_fields: z.array(historyText).max(50),
+}).partial().strict()
+async function enrollmentHistory(req: Request, res: Response) {
+  if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
+  const operation = enrollmentHistoryOperation.safeParse(req.params.operation)
+  if (!operation.success) throw new ApiError(404, 'NOT_FOUND', 'Route was not found')
+  const input = enrollmentHistoryInput.parse(req.body ?? {})
+  const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
+  const { data, error } = await req.db.rpc('enrollment_history_access', { p_operation: operation.data, p_input: input })
+  if (error) throw mapDatabaseError(error)
+  const body = { data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, body); return res.json(body)
+}
+export function createEnrollmentRouter() { const router = Router(); router.post('/enrollments', wrap(create)); router.patch('/enrollments/:id', wrap(update)); router.get('/enrollments/:id/start-date-impact', wrap(startDateImpact)); router.delete('/enrollments/:id', wrap(remove)); router.post('/enrollment-history/:operation', wrap(enrollmentHistory)); return router }
 

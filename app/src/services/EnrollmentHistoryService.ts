@@ -1,11 +1,11 @@
-import { apiDataClient } from './api/ApiDataClient'
+import { apiV1Client } from './api/ApiV1Client'
 import type { EnrollmentHistoryReport, HistoryOccurrenceCandidate, HistoryBindingPreview } from '@/models/EnrollmentHistoryReport'
 
+type EnrollmentHistoryOperation = 'list'|'candidates'|'bind-preview'|'bind-apply'
+
 export class EnrollmentHistoryService {
-  private static async invoke<T>(operation: string, input: Record<string,unknown>): Promise<T> {
-    const response = await apiDataClient.rpc<T>('enrollment_history_access', {p_operation: operation,p_input: input})
-    if (response.error) throw new Error(response.error.message)
-    return response.data as T
+  private static async invoke<T>(operation: EnrollmentHistoryOperation, input: Record<string,unknown>): Promise<T> {
+    return (await apiV1Client.post<T>(`/enrollment-history/${operation}`, input)).data
   }
   /** Read one permission-scoped page, excluding histories already shown as occurrence reports. */
   static list(scope: {student_id?: string;enrollment_id?: string}, cursor?: string) {
