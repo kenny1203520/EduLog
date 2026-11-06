@@ -1,7 +1,7 @@
 import { markRaw } from 'vue'
 import { useToast } from 'vue-toastification'
 import { useI18n } from 'vue-i18n'
-import ErrorToast from '@/components/feedback/ErrorToast.vue'
+import ErrorToast from '@/components/ui/ErrorToast.vue'
 import { describeError, PERSISTENT_ERROR_KEYS, TOAST_TIMEOUTS } from '@/services/errors/describeError'
 
 type I18nParams = Record<string, unknown>

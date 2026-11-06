@@ -1,7 +1,7 @@
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import { computed, getCurrentScope, isRef, onScopeDispose, reactive, ref, watch, type Ref } from 'vue'
 import i18n from '@/i18n'
-import { DateUtils } from '@/utils/DateUtils'
+import { DateUtils } from '@/utils/dateUtils'
 import { isBrowserOffline, isNetworkError } from '@/utils/networkErrors'
 
 export interface AutoSaveResult {

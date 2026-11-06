@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-const editor = readFileSync(resolve(process.cwd(), 'src/components/ReportEditor.vue'), 'utf8')
+const editor = readFileSync(resolve(process.cwd(), 'src/components/report/ReportEditor.vue'), 'utf8')
 
 describe('report editor offline protection contracts', () => {
     it('writes a device-local draft for every local edit and drops it once saved', () => {

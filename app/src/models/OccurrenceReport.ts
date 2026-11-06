@@ -3,9 +3,9 @@
  * Supports versioning for conflict resolution and auto-save functionality.
  */
 
-import { DateUtils } from '@/utils/DateUtils'
-import { calculateTextEditorMetrics, createTextEditorContent } from '@/components/common/text-editor/content'
-import type { RichTextDocumentV1 } from '@/components/common/text-editor/types'
+import { DateUtils } from '@/utils/dateUtils'
+import { calculateTextEditorMetrics, createTextEditorContent } from '@/components/text-editor/content'
+import type { RichTextDocumentV1 } from '@/components/text-editor/types'
 import type { SourceReportIdentity } from '@/utils/sourceReportLink'
 
 export interface OccurrenceReportDTO {

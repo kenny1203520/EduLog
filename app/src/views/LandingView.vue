@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useAuthStore } from '@/stores/useAuthStore'
 import { computed } from 'vue'
-import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
+import LanguageSwitcher from '@/components/ui/LanguageSwitcher.vue'
 import { useAccountIdentity } from '@/composables/useAccountIdentity'
 
 const auth = useAuthStore()

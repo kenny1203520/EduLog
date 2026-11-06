@@ -1,5 +1,5 @@
 import { Classroom, type ClassroomDTO, type ClassroomScheduleDTO } from '@/models/Classroom'
-import { VisibilityPreferenceService } from '../VisibilityPreferenceService'
+import { VisibilityPreferenceService } from '../preference/VisibilityPreferenceService'
 import { apiResourceClient } from '../api/ApiResourceClient'
 
 export type ClassroomVisibilityFilterMode = 'all' | 'visible' | 'hidden'

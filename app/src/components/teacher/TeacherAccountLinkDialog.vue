@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import SearchableSelect from '@/components/common/SearchableSelect.vue'
+import SearchableSelect from '@/components/ui/SearchableSelect.vue'
 import { apiV1Client } from '@/services/api/ApiV1Client'
 
 type Profile = { id: string; auth_user_id: string | null; profile_version: number; full_name: string | null; nickname: string | null; contact_email: string | null; phone: string | null; government_id: string | null; address: string | null; mailing_address: string | null; birthday: string | null; bio: string | null; bio_document: unknown }

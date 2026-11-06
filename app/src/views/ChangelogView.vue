@@ -2,7 +2,7 @@
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { computed } from 'vue'
-import BasePageHeader from '@/components/common/BasePageHeader.vue'
+import BasePageHeader from '@/components/ui/BasePageHeader.vue'
 
 const router = useRouter()
 const { tm } = useI18n()

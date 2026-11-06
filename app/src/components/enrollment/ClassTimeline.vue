@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { useFeedback } from '@/composables/useFeedback'
-import { DateUtils } from '@/utils/DateUtils'
+import { DateUtils } from '@/utils/dateUtils'
 import PlacementBadge from '@/components/enrollment/PlacementBadge.vue'
 import {
     classColorIndex,

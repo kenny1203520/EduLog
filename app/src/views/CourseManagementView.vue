@@ -7,12 +7,12 @@ import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import { useFeedback } from '@/composables/useFeedback'
 
-import ConfirmModal from '../components/common/ConfirmModal.vue'
-import BasePageHeader from '@/components/common/BasePageHeader.vue'
-import TextEditor from '@/components/common/text-editor/TextEditor.vue'
-import RichTextViewer from '@/components/common/text-editor/RichTextViewer.vue'
-import { createTextEditorContent } from '@/components/common/text-editor/content'
-import type { TextEditorContent } from '@/components/common/text-editor/types'
+import ConfirmModal from '../components/ui/ConfirmModal.vue'
+import BasePageHeader from '@/components/ui/BasePageHeader.vue'
+import TextEditor from '@/components/text-editor/TextEditor.vue'
+import RichTextViewer from '@/components/text-editor/RichTextViewer.vue'
+import { createTextEditorContent } from '@/components/text-editor/content'
+import type { TextEditorContent } from '@/components/text-editor/types'
 
 const { t } = useI18n()
 const toast = useToast()

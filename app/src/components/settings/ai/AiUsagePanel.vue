@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Pagination from '@/components/common/Pagination.vue'
+import Pagination from '@/components/ui/Pagination.vue'
 import { useFeedback } from '@/composables/useFeedback'
 import { AiSettingsService, type GenerationLogRow, type UsageReport } from '@/services/ai/AiSettingsService'
 import { copyToClipboard } from '@/utils/clipboard'

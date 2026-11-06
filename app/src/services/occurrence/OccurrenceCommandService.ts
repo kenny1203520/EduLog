@@ -1,6 +1,6 @@
 import { ClassOccurrence, type ClassOccurrenceDTO } from '@/models/ClassOccurrence'
 import { OccurrenceQueryService } from './OccurrenceQueryService'
-import { DateUtils } from '@/utils/DateUtils'
+import { DateUtils } from '@/utils/dateUtils'
 import { apiResourceClient } from '@/services/api/ApiResourceClient'
 import { apiV1Client } from '@/services/api/ApiV1Client'
 

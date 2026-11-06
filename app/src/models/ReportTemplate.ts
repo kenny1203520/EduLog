@@ -1,5 +1,5 @@
-import type { RichTextDocumentV1 } from '@/components/common/text-editor/types'
-import { createTextEditorContent } from '@/components/common/text-editor/content'
+import type { RichTextDocumentV1 } from '@/components/text-editor/types'
+import { createTextEditorContent } from '@/components/text-editor/content'
 
 /**
  * ReportTemplate represents a reusable template for learning reports.

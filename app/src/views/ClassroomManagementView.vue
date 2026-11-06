@@ -2,9 +2,9 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { ClassroomService } from '@/services/classroom/ClassroomService'
-import { AggregateService } from '@/services/AggregateService'
+import { AggregateService } from '@/services/api/AggregateService'
 import { SessionService } from '@/services/session/SessionService'
-import { VisibilityPreferenceService } from '@/services/VisibilityPreferenceService'
+import { VisibilityPreferenceService } from '@/services/preference/VisibilityPreferenceService'
 import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
 import { TeacherService } from '@/services/teacher/TeacherService'
 import { RoleService } from '@/services/rbac/RoleService'
@@ -26,19 +26,19 @@ import { Course } from '@/models/Course'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import { useFeedback } from '@/composables/useFeedback'
-import Pagination from '@/components/common/Pagination.vue'
-import SearchableSelect from '@/components/common/SearchableSelect.vue'
+import Pagination from '@/components/ui/Pagination.vue'
+import SearchableSelect from '@/components/ui/SearchableSelect.vue'
 import EffectiveTeachingRoles from '@/components/rbac/EffectiveTeachingRoles.vue'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
-import { DateUtils } from '@/utils/DateUtils'
+import { DateUtils } from '@/utils/dateUtils'
 import { paginateTeacherAssignments, partitionTeacherAssignments } from '@/utils/teacherAssignmentHistory'
 import { buildSessionScheduleDisplayItems } from '@/utils/sessionScheduleDisplay'
 
-import ConfirmModal from '../components/common/ConfirmModal.vue'
+import ConfirmModal from '../components/ui/ConfirmModal.vue'
 
-import BaseDropdown from '@/components/common/BaseDropdown.vue'
-import BasePageHeader from '@/components/common/BasePageHeader.vue'
-import BaseSkeletonCard from '@/components/common/BaseSkeletonCard.vue'
+import BaseDropdown from '@/components/ui/BaseDropdown.vue'
+import BasePageHeader from '@/components/ui/BasePageHeader.vue'
+import BaseSkeletonCard from '@/components/ui/BaseSkeletonCard.vue'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -1356,13 +1356,6 @@ function clearTeacherSelection() {
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500" id="edulog-classroommanagementview-436-34711">
                     </div>
 
-                    <!-- <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{
-                            $t('student.internal_courses.lesson_number') }}</label>
-                        <input type="number" v-model.number="newSession.lesson_number"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500"
-                            placeholder="1">
-                    </div> -->
 
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5" for="edulog-classroommanagementview-451-35602">{{ $t('common.start_date') }}

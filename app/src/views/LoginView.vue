@@ -5,8 +5,8 @@ import { useRouter } from 'vue-router'
 import { useRoute } from 'vue-router'
 import { getSafePostLoginTarget } from '@/router/authRedirect'
 import { useI18n } from 'vue-i18n'
-import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
-import PasswordInput from '@/components/common/PasswordInput.vue'
+import LanguageSwitcher from '@/components/ui/LanguageSwitcher.vue'
+import PasswordInput from '@/components/ui/PasswordInput.vue'
 
 const { t } = useI18n()
 

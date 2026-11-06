@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Pagination from '@/components/common/Pagination.vue'
-import SearchableSelect from '@/components/common/SearchableSelect.vue'
+import Pagination from '@/components/ui/Pagination.vue'
+import SearchableSelect from '@/components/ui/SearchableSelect.vue'
 import { useFeedback } from '@/composables/useFeedback'
 import type { ApiMeta } from '@/services/api/ApiV1Client'
 import { apiV1Client } from '@/services/api/ApiV1Client'
-import { DateUtils } from '@/utils/DateUtils'
+import { DateUtils } from '@/utils/dateUtils'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { buildAuditEventQuery, type AuditEventFilters } from '@/services/audit/AuditEventQuery'
 

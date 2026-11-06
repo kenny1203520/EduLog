@@ -1,7 +1,7 @@
-import type { TextEditorContentInput } from '@/components/common/text-editor/types'
+import type { TextEditorContentInput } from '@/components/text-editor/types'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import type { TransferConflictDisplayContext } from '@/services/enrollment/EnrollmentTransferQueryService'
-import { DateUtils } from '@/utils/DateUtils'
+import { DateUtils } from '@/utils/dateUtils'
 import { absenceReasonLabel } from '@/utils/absenceReason'
 import type { TransferReportField } from './ReportFieldConflictService'
 

@@ -1,6 +1,6 @@
 import { Student, type StudentDTO, type StudentSchoolCreate, type StudentSchoolUpdate } from '@/models/Student'
-import { DateUtils } from '@/utils/DateUtils'
-import { createTextEditorContent } from '@/components/common/text-editor/content'
+import { DateUtils } from '@/utils/dateUtils'
+import { createTextEditorContent } from '@/components/text-editor/content'
 import { apiResourceClient } from '@/services/api/ApiResourceClient'
 
 /**

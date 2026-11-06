@@ -1,6 +1,6 @@
 import { ref, computed, watch } from 'vue'
 import { SessionService } from '@/services/session/SessionService'
-import { DateUtils } from '@/utils/DateUtils'
+import { DateUtils } from '@/utils/dateUtils'
 
 export function useCapacityCheck(sessionIdRef: { value: string }, startDateRef: { value: string }, generateCountRef: { value: number }) {
     const maxEnrollment = ref(0)

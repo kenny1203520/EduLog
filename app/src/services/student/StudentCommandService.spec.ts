@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
 }))
 vi.mock('@/services/api/ApiResourceClient', () => ({ apiResourceClient: { create: mocks.create, update: mocks.update } }))
 vi.mock('@/services/enrollment/EnrollmentService', () => ({ EnrollmentService: {} }))
-vi.mock('@/utils/DateUtils', () => ({ DateUtils: {
+vi.mock('@/utils/dateUtils', () => ({ DateUtils: {
     isValidTimeZone: (value: string) => value === 'Asia/Taipei', getDefaultTimeZone: () => 'Asia/Taipei'
 } }))
 

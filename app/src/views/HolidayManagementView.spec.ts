@@ -1,7 +1,7 @@
 import { mount, flushPromises } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import HolidayManagementView from '@/views/HolidayManagementView.vue'
-import { AggregateService } from '@/services/AggregateService'
+import { AggregateService } from '@/services/api/AggregateService'
 import { SessionService } from '@/services/session/SessionService'
 import { TeacherService } from '@/services/teacher/TeacherService'
 import { HolidayService } from '@/services/holiday/HolidayService'
@@ -32,7 +32,7 @@ vi.mock('@/stores/usePreferencesStore', () => ({
   })
 }))
 
-vi.mock('@/services/AggregateService', () => ({
+vi.mock('@/services/api/AggregateService', () => ({
   AggregateService: {
     getHolidaysAggregate: vi.fn(),
     getAllClassroomsOverview: vi.fn()

@@ -4,8 +4,8 @@ import {
     type SaveReportResult
 } from '@/models/OccurrenceReport'
 import { ReportQueryService } from './ReportQueryService'
-import type { RichTextDocumentV1 } from '@/components/common/text-editor/types'
-import { createTextEditorContent } from '@/components/common/text-editor/content'
+import type { RichTextDocumentV1 } from '@/components/text-editor/types'
+import { createTextEditorContent } from '@/components/text-editor/content'
 import { safeExternalHref } from '@/utils/safeExternalHref'
 import { ApiV1Error, apiV1Client } from '@/services/api/ApiV1Client'
 import { isBrowserOffline, isNetworkError } from '@/utils/networkErrors'
