@@ -44,13 +44,6 @@ vi.mock('@/stores/usePreferencesStore', () => ({
     })
 }))
 
-vi.mock('@/services/api/ApiDataClient', () => ({
-    apiDataClient: {
-        channel: vi.fn(),
-        removeChannel: vi.fn()
-    }
-}))
-
 describe('StudentReportsView scheduled report filter', () => {
     it('is enabled by default and can be toggled off and on', async () => {
         const wrapper = mount(StudentReportsView, {

@@ -1,14 +1,12 @@
 import { computed, isRef, onBeforeUnmount, reactive, ref, shallowRef, watch, type Ref } from 'vue'
 import i18n from '@/i18n'
 import {
-    SupabaseProvider,
+    CollaborationProvider,
     type ReportCollabConnectionStatus,
     type ReportCollabInitialState,
     type ReportCollabPeer,
-    type SupabaseProviderOptions
-} from '@/services/report/SupabaseProvider'
-import { apiDataClient } from '@/services/api/ApiDataClient'
-import { getApiV1Mode } from '@/services/api/ApiModeClient'
+    type CollaborationProviderOptions
+} from '@/services/report/CollaborationProvider'
 import * as Y from 'yjs'
 import { useAuthStore } from '@/stores/useAuthStore'
 
@@ -27,8 +25,8 @@ export interface ReportCollaborationOptions extends Partial<ReportCollaborationC
         reportId: string,
         reportVersion: number,
         userId: string,
-        options: SupabaseProviderOptions
-    ) => SupabaseProvider
+        options: CollaborationProviderOptions
+    ) => CollaborationProvider
 }
 
 type MaybeRef<T> = T | Ref<T>
@@ -52,7 +50,7 @@ export function useReportCollab(
     })
     const providerFactory = initialOptions.providerFactory || defaultProviderFactory
     const ydoc = shallowRef<Y.Doc | null>(null)
-    const provider = shallowRef<SupabaseProvider | null>(null)
+    const provider = shallowRef<CollaborationProvider | null>(null)
     const ready = ref(false)
     const status = ref<ReportCollaborationStatus>(configuration.enabled ? 'connecting' : 'disabled')
     const error = ref<string | null>(null)
@@ -275,11 +273,9 @@ function defaultProviderFactory(
     reportId: string,
     reportVersion: number,
     userId: string,
-    options: SupabaseProviderOptions
-): SupabaseProvider {
-    // In production v1 mode the browser must use the authenticated same-origin
-    // WebSocket proxy. Passing the Supabase client here would expose a direct
-    // Realtime transport and bypass the Express room authorization boundary.
-    const transport = getApiV1Mode() === 'v1' ? undefined : apiDataClient
-    return new SupabaseProvider(transport, doc, reportId, reportVersion, userId, options)
+    options: CollaborationProviderOptions
+): CollaborationProvider {
+    // The browser always uses the authenticated same-origin WebSocket proxy, so
+    // room authorization stays behind the Express boundary.
+    return new CollaborationProvider(undefined, doc, reportId, reportVersion, userId, options)
 }

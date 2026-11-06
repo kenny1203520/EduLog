@@ -29,7 +29,7 @@ const migration = readFileSync(resolve(repoRoot, 'supabase/migrations/1000037_ed
         expect(insertRlsFix).toContain('SET search_path = public')
     })
     it('keeps collaboration channels private and payloads bounded', () => {
-        const provider = readFileSync(resolve(repoRoot, 'app/src/services/report/SupabaseProvider.ts'), 'utf8')
+        const provider = readFileSync(resolve(repoRoot, 'app/src/services/report/CollaborationProvider.ts'), 'utf8')
         expect(provider).toContain('private: true')
         expect(provider).toContain('MAX_YJS_UPDATE_BYTES')
         expect(provider).toContain('MAX_SNAPSHOT_BYTES')
@@ -38,9 +38,8 @@ const migration = readFileSync(resolve(repoRoot, 'supabase/migrations/1000037_ed
 
     it('uses optimistic concurrency for restore and conflict resolution', () => {
         const command = readFileSync(resolve(repoRoot, 'app/src/services/report/ReportCommandService.ts'), 'utf8')
-        expect(command).toContain(".eq('occurrence_report_id', reportId)")
-        expect(command).toContain(".eq('version', currentVersion)")
+        expect(command).toContain('/restore`, { expected_version: currentVersion }')
+        expect(command).toContain('/conflicts/resolve`, { expected_version: expectedVersion')
         expect(command).toContain('expectedVersion is required')
-        expect(command).toContain('authenticatedUserId')
     })
 })

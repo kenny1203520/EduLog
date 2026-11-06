@@ -17,7 +17,6 @@ describe('v1.7 report visibility and hierarchical policy workflow', () => {
         expect(globalIncompleteReports).not.toContain('my_present')
         expect(globalIncompleteReports).toContain('incompleteReports.value = []')
         expect(globalIncompleteReports).toContain('selectedReport.value = null')
-        expect(read('src/services/report/ReportQueryService.ts')).toContain("if (scope === 'my_notifications') throw error")
         expect(read('src/services/AggregateService.ts')).toContain("if (scope === 'my_notifications') return fetchReports()")
         expect(read('src/services/AggregateService.ts')).toContain("request.cache = 'no-store'")
         expect(read('../supabase/volumes/functions/aggregate-incomplete-reports/index.ts'))

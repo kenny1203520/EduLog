@@ -1,18 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ReportQueryService, normalizeEnrollmentReportRelations } from './ReportQueryService'
 
-const { fromMock, apiModeMock, getEnrollmentReportsMock, apiV1GetMock } = vi.hoisted(() => ({
-    fromMock: vi.fn(),
-    apiModeMock: vi.fn(() => 'legacy'),
+const { getEnrollmentReportsMock, apiV1GetMock } = vi.hoisted(() => ({
     getEnrollmentReportsMock: vi.fn(),
     apiV1GetMock: vi.fn()
 }))
 
-vi.mock('@/services/api/ApiDataClient', () => ({ apiDataClient: { from: fromMock } }))
-vi.mock('@/services/api/ApiModeClient', async (importOriginal) => ({
-    ...await importOriginal<typeof import('@/services/api/ApiModeClient')>(),
-    getApiV1Mode: apiModeMock
-}))
 vi.mock('@/services/api/PageApiService', async (importOriginal) => ({
     ...await importOriginal<typeof import('@/services/api/PageApiService')>(),
     PageApiService: { ...(await importOriginal<typeof import('@/services/api/PageApiService')>()).PageApiService, getEnrollmentReports: getEnrollmentReportsMock }
@@ -24,32 +17,20 @@ vi.mock('@/services/api/ApiV1Client', async (importOriginal) => {
 
 beforeEach(() => {
     vi.clearAllMocks()
-    apiModeMock.mockReturnValue('legacy')
 })
-
-function selectQuery(result: { data?: any; error?: any }) {
-    const chain: Record<string, any> = {}
-    chain.select = vi.fn(() => chain)
-    chain.in = vi.fn(() => Promise.resolve(result))
-    return chain
-}
 
 describe('ReportQueryService.getProgressSummaryReportsByEnrollments', () => {
     it('groups reports by enrollment_id in one request instead of one per enrollment', async () => {
-        const query = selectQuery({
-            data: [
-                { id: 'r1', enrollment_id: 'e1', lesson_id: 'l1', is_completed: true, progress_letter: 'A', attendance_status: 'present', class_occurrence: { occurrence_date: '2026-01-01' } },
-                { id: 'r2', enrollment_id: 'e1', lesson_id: 'l2', is_completed: false, progress_letter: 'B', attendance_status: 'present', class_occurrence: { occurrence_date: '2026-01-08' } },
-                { id: 'r3', enrollment_id: 'e2', lesson_id: 'l1', is_completed: true, progress_letter: 'A', attendance_status: 'absent', class_occurrence: { occurrence_date: '2026-01-01' } }
-            ],
-            error: null
-        })
-        fromMock.mockReturnValueOnce(query)
+        apiV1GetMock.mockResolvedValueOnce({ data: [
+            { id: 'r1', enrollment_id: 'e1', lesson_id: 'l1', is_completed: true, progress_letter: 'A', attendance_status: 'present', class_occurrences: { occurrence_date: '2026-01-01' } },
+            { id: 'r2', enrollment_id: 'e1', lesson_id: 'l2', is_completed: false, progress_letter: 'B', attendance_status: 'present', class_occurrences: { occurrence_date: '2026-01-08' } },
+            { id: 'r3', enrollment_id: 'e2', lesson_id: 'l1', is_completed: true, progress_letter: 'A', attendance_status: 'absent', class_occurrences: { occurrence_date: '2026-01-01' } }
+        ] })
 
         const result = await ReportQueryService.getProgressSummaryReportsByEnrollments(['e1', 'e2'])
 
-        expect(fromMock).toHaveBeenCalledTimes(1)
-        expect(query.in).toHaveBeenCalledWith('enrollment_id', ['e1', 'e2'])
+        expect(apiV1GetMock).toHaveBeenCalledTimes(1)
+        expect(apiV1GetMock).toHaveBeenCalledWith('/reports/progress-summary?enrollment_ids=e1%2Ce2&limit=1000&sort=-created_at')
         expect(result.get('e1')).toHaveLength(2)
         expect(result.get('e2')).toHaveLength(1)
         expect(result.get('e1')?.[0]?.lessonId).toBe('l1')
@@ -59,15 +40,14 @@ describe('ReportQueryService.getProgressSummaryReportsByEnrollments', () => {
     it('returns an empty map without querying when given no enrollment ids', async () => {
         const result = await ReportQueryService.getProgressSummaryReportsByEnrollments([])
 
-        expect(fromMock).not.toHaveBeenCalled()
+        expect(apiV1GetMock).not.toHaveBeenCalled()
         expect(result.size).toBe(0)
     })
 
-    it('throws a descriptive error when the query fails', async () => {
-        fromMock.mockReturnValueOnce(selectQuery({ data: null, error: { message: 'boom' } }))
+    it('surfaces API failures', async () => {
+        apiV1GetMock.mockRejectedValueOnce(new Error('boom'))
 
-        await expect(ReportQueryService.getProgressSummaryReportsByEnrollments(['e1']))
-            .rejects.toThrow('Failed to fetch progress summary reports: boom')
+        await expect(ReportQueryService.getProgressSummaryReportsByEnrollments(['e1'])).rejects.toThrow('boom')
     })
 })
 
@@ -83,7 +63,6 @@ describe('ReportQueryService.getEnrollmentReportProgressContext', () => {
 
 describe('ReportQueryService.getProgressGapsByEnrollments', () => {
     it('requests authorized batch summaries without loading report bodies', async () => {
-        apiModeMock.mockReturnValue('v1')
         apiV1GetMock.mockResolvedValueOnce({ data: [
             { enrollment_id: 'enrollment-1', gaps: [{ id: 'lesson-6', sequence: 6, title: 'Lesson 6' }] },
             { enrollment_id: 'enrollment-2', gaps: [] }
@@ -92,13 +71,11 @@ describe('ReportQueryService.getProgressGapsByEnrollments', () => {
         const result = await ReportQueryService.getProgressGapsByEnrollments('occurrence-1', ['enrollment-1', 'enrollment-2'])
 
         expect(apiV1GetMock).toHaveBeenCalledWith('/occurrences/occurrence-1/report-progress-gaps?enrollment_ids=enrollment-1%2Cenrollment-2')
-        expect(fromMock).not.toHaveBeenCalled()
         expect(result.get('enrollment-1')).toEqual([{ id: 'lesson-6', sequence: 6, title: 'Lesson 6' }])
         expect(result.get('enrollment-2')).toEqual([])
     })
 
     it('splits large rosters into bounded API batches', async () => {
-        apiModeMock.mockReturnValue('v1')
         apiV1GetMock.mockResolvedValue({ data: [] })
         const ids = Array.from({ length: 101 }, (_, index) => `enrollment-${index}`)
 
@@ -113,7 +90,6 @@ describe('ReportQueryService.getProgressGapsByEnrollments', () => {
 
 describe('ReportQueryService.getReportsByOccurrence', () => {
     it('reads every page of the authorized occurrence report list in v1 mode', async () => {
-        apiModeMock.mockReturnValue('v1')
         apiV1GetMock
             .mockResolvedValueOnce({ data: Array.from({ length: 100 }, (_, index) => ({ id: `report-${index + 1}`, enrollment_id: `active-${index + 1}`, class_occurrence_id: 'occurrence-1', attendance_status: 'pending', version: 1 })), meta: { total: 101 } })
             .mockResolvedValueOnce({ data: [{ id: 'report-2', enrollment_id: 'completed', class_occurrence_id: 'occurrence-1', attendance_status: 'present', version: 4 }], meta: { total: 101 } })
@@ -132,7 +108,6 @@ describe('ReportQueryService.getReportsByOccurrence', () => {
 
 describe('ReportQueryService.getReportsWithDetails', () => {
     it('normalizes the plural API relation shape for the report list', async () => {
-        apiModeMock.mockReturnValue('v1')
         getEnrollmentReportsMock.mockResolvedValue({
             data: {
                 reports: [{

@@ -66,13 +66,13 @@ function decodeBoundedBase64(value: string, maxBytes: number): Uint8Array {
     return decoded
 }
 
-export interface SupabaseProviderOptions {
+export interface CollaborationProviderOptions {
     snapshotDebounceMs?: number
     presenceEnabled?: boolean
     onStatus?: (status: ReportCollabConnectionStatus, detail?: string) => void
 }
 
-export class SupabaseProvider {
+export class CollaborationProvider {
     public awareness: Awareness
     public ready: Promise<void>
     private channel: any
@@ -131,7 +131,7 @@ export class SupabaseProvider {
         roomId: string,
         baseReportVersion: number,
         userId?: string,
-        options: SupabaseProviderOptions = {}
+        options: CollaborationProviderOptions = {}
     ) {
         this.injectedTransport = _transport as any
         this.doc = doc
@@ -147,8 +147,8 @@ export class SupabaseProvider {
             this.rejectReady = reject
         })
         // ApiRealtimeChannel owns socket-open and Phoenix join deadlines and
-        // retries. Keep a fallback deadline only for the legacy injected
-        // transport, whose subscription lifecycle is managed by supabase-js.
+        // retries. Keep a fallback deadline only for an injected channel
+        // factory (used by tests), whose subscription lifecycle it does not own.
         if (this.injectedTransport) {
             this.readyTimer = setTimeout(() => {
                 this.failReady(new Error('Realtime collaboration subscription timed out'))
@@ -161,7 +161,7 @@ export class SupabaseProvider {
             : new ApiRealtimeChannel(this.roomId, presenceKey)
 
         this.setupYjs()
-        this.setupSupabase()
+        this.setupChannel()
         this.onStatus?.('connecting')
 
         this.channel.subscribe(async (status: string, detail?: string) => {
@@ -227,7 +227,7 @@ export class SupabaseProvider {
         if (this.presenceEnabled) this.awareness.on('update', this.awarenessUpdateHandler)
     }
 
-    private setupSupabase() {
+    private setupChannel() {
         this.channel.on('broadcast', { event: 'sync-update' }, (payload: any) => {
             if (this.isDestroyed) return
             const encodedUpdate = payload.payload?.update
@@ -308,17 +308,6 @@ export class SupabaseProvider {
 
     private async loadInitialState() {
         try {
-            if (this.injectedTransport?.from) {
-                const result = await this.injectedTransport.from('report_collab_docs').select('snapshot_base64, base_report_version').eq('occurrence_report_id', this.roomId).maybeSingle()
-                if (result.error) throw new Error(result.error.message || 'Failed to load collaboration state')
-                const data = result.data
-                if (!data?.snapshot_base64) { this.initialState = 'none'; return }
-                if (data.base_report_version === null || data.base_report_version === undefined) { this.initialState = 'legacy'; return }
-                if (Number(data.base_report_version) !== this.baseReportVersion) { this.initialState = 'stale'; return }
-                Y.applyUpdate(this.doc, decodeBoundedBase64(data.snapshot_base64, MAX_SNAPSHOT_BYTES), this)
-                this.initialState = 'loaded'
-                return
-            }
             const response = await apiV1Client.get<{ snapshot_base64: string | null; base_report_version: number | null }>(`/reports/${this.roomId}/collaboration`)
             const data = response.data
             if (!data?.snapshot_base64) { this.initialState = 'none'; return }
@@ -381,10 +370,6 @@ export class SupabaseProvider {
 
     private async persistSnapshot(payload: { key: string; state: string; version: number }): Promise<boolean> {
         try {
-            if (this.injectedTransport?.rpc) {
-                const result = await this.injectedTransport.rpc('save_report_collab_snapshot', { p_occurrence_report_id: this.roomId, p_base_report_version: payload.version, p_snapshot_base64: payload.state })
-                return result?.error ? false : result?.data === true
-            }
             const response = await apiV1Client.post<{ saved: boolean }>(`/reports/${this.roomId}/collaboration`, { snapshot_base64: payload.state, base_report_version: payload.version })
             return response.data?.saved === true
         } catch (error) {

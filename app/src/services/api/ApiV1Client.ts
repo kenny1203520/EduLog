@@ -1,5 +1,3 @@
-import { getApiMode, getLegacyApiBaseUrl } from '@/lib/runtimeConfig'
-
 export type ApiMeta = Record<string, unknown> | null
 export type ApiEnvelope<T> = { data: T; meta?: ApiMeta; request_id: string; trace_id: string }
 export type ApiErrorBody = { error: { code: string; message: string; request_id: string; trace_id: string; fields?: Record<string, string[]>; details?: { reason?: string } } }
@@ -124,4 +122,4 @@ export class ApiV1Client {
   patch<T>(path: string, body: unknown, options?: Omit<ApiRequestOptions, 'method' | 'body'> & { idempotencyKey?: string }) { return this.request<T>(path, { ...options, method: 'PATCH', body }) }
   delete<T>(path: string, body: unknown = {}, options?: Omit<ApiRequestOptions, 'method' | 'body'> & { idempotencyKey?: string }) { return this.request<T>(path, { ...options, method: 'DELETE', body }) }
 }
-export const apiV1Client = new ApiV1Client(getApiMode() === 'legacy' ? getLegacyApiBaseUrl() : '/api')
+export const apiV1Client = new ApiV1Client('/api')

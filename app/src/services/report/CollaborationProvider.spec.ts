@@ -1,18 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as Y from 'yjs'
 import {
-    SupabaseProvider,
+    CollaborationProvider,
     uint8ArrayToBase64
-} from './SupabaseProvider'
+} from './CollaborationProvider'
 
-function createSupabaseMock(row: Record<string, unknown> | null = null) {
-    const query = {
-        select: vi.fn(),
-        eq: vi.fn(),
-        maybeSingle: vi.fn().mockResolvedValue({ data: row, error: null })
-    }
-    query.select.mockReturnValue(query)
-    query.eq.mockReturnValue(query)
+const { getMock, postMock } = vi.hoisted(() => ({ getMock: vi.fn(), postMock: vi.fn() }))
+vi.mock('@/services/api/ApiV1Client', async importOriginal => ({
+    ...await importOriginal<typeof import('@/services/api/ApiV1Client')>(),
+    apiV1Client: { get: getMock, post: postMock }
+}))
+
+function createTransportMock(row: Record<string, unknown> | null = null) {
+    getMock.mockReset().mockResolvedValue({ data: row })
+    postMock.mockReset().mockResolvedValue({ data: { saved: true } })
 
     const channel = {
         on: vi.fn(),
@@ -29,16 +30,12 @@ function createSupabaseMock(row: Record<string, unknown> | null = null) {
         return channel
     })
 
-    const rpc = vi.fn().mockResolvedValue({ data: true, error: null })
-    const supabase = {
+    const transport = {
         channel: vi.fn().mockReturnValue(channel),
-        from: vi.fn().mockReturnValue(query),
-        rpc,
-        removeChannel: vi.fn(),
-        realtime: { isConnected: vi.fn().mockReturnValue(true) }
+        removeChannel: vi.fn()
     }
 
-    return { supabase, channel, query, rpc }
+    return { transport, channel }
 }
 
 function encodedTextSnapshot(value: string) {
@@ -52,14 +49,14 @@ function encodedTextSnapshot(value: string) {
 afterEach(() => {
     vi.restoreAllMocks()
 })
-describe('report SupabaseProvider snapshot versioning', () => {
+describe('report CollaborationProvider snapshot versioning', () => {
     it('loads a snapshot only when its base report version matches', async () => {
-        const { supabase } = createSupabaseMock({
+        const { transport } = createTransportMock({
             snapshot_base64: encodedTextSnapshot('matching draft'),
             base_report_version: 7
         })
         const doc = new Y.Doc()
-        const provider = new SupabaseProvider(supabase as any, doc, 'report-1', 7, 'user-1')
+        const provider = new CollaborationProvider(transport as any, doc, 'report-1', 7, 'user-1')
 
         await provider.ready
 
@@ -69,12 +66,12 @@ describe('report SupabaseProvider snapshot versioning', () => {
     })
 
     it('ignores stale snapshots', async () => {
-        const { supabase } = createSupabaseMock({
+        const { transport } = createTransportMock({
             snapshot_base64: encodedTextSnapshot('stale draft'),
             base_report_version: 6
         })
         const doc = new Y.Doc()
-        const provider = new SupabaseProvider(supabase as any, doc, 'report-1', 7, 'user-1')
+        const provider = new CollaborationProvider(transport as any, doc, 'report-1', 7, 'user-1')
 
         await provider.ready
 
@@ -84,12 +81,12 @@ describe('report SupabaseProvider snapshot versioning', () => {
     })
 
     it('ignores legacy snapshots without a base version', async () => {
-        const { supabase } = createSupabaseMock({
+        const { transport } = createTransportMock({
             snapshot_base64: encodedTextSnapshot('legacy draft'),
             base_report_version: null
         })
         const doc = new Y.Doc()
-        const provider = new SupabaseProvider(supabase as any, doc, 'report-1', 7, 'user-1')
+        const provider = new CollaborationProvider(transport as any, doc, 'report-1', 7, 'user-1')
 
         await provider.ready
 
@@ -98,47 +95,45 @@ describe('report SupabaseProvider snapshot versioning', () => {
         await provider.destroy()
     })
 
-    it('saves through the version-gated RPC using the latest canonical version', async () => {
-        const { supabase, rpc } = createSupabaseMock()
+    it('saves through the version-gated endpoint using the latest canonical version', async () => {
+        const { transport } = createTransportMock()
         const doc = new Y.Doc()
-        const provider = new SupabaseProvider(supabase as any, doc, 'report-1', 7, 'user-1')
+        const provider = new CollaborationProvider(transport as any, doc, 'report-1', 7, 'user-1')
         await provider.ready
         provider.setBaseReportVersion(8)
 
         await expect(provider.saveSnapshot()).resolves.toBe(true)
 
-        expect(rpc).toHaveBeenCalledWith('save_report_collab_snapshot', expect.objectContaining({
-            p_occurrence_report_id: 'report-1',
-            p_base_report_version: 8,
-            p_snapshot_base64: expect.any(String)
-        }))
+        expect(postMock).toHaveBeenCalledWith('/reports/report-1/collaboration', {
+            snapshot_base64: expect.any(String),
+            base_report_version: 8
+        })
         await provider.destroy()
     })
     it('does not mark a stale snapshot as saved or advance its guarded report version', async () => {
-        const { supabase, rpc } = createSupabaseMock()
-        rpc.mockResolvedValue({ data: false, error: null })
+        const { transport } = createTransportMock()
+        postMock.mockResolvedValue({ data: { saved: false } })
         const doc = new Y.Doc()
-        const provider = new SupabaseProvider(supabase as any, doc, 'report-1', 7, 'user-1')
+        const provider = new CollaborationProvider(transport as any, doc, 'report-1', 7, 'user-1')
         await provider.ready
         doc.getText('content').insert(0, 'local draft')
 
         await expect(provider.saveSnapshot()).resolves.toBe(false)
         await expect(provider.saveSnapshot()).resolves.toBe(false)
 
-        expect(rpc).toHaveBeenCalledTimes(2)
-        expect(rpc).toHaveBeenLastCalledWith('save_report_collab_snapshot', expect.objectContaining({
-            p_occurrence_report_id: 'report-1',
-            p_base_report_version: 7,
-            p_snapshot_base64: expect.any(String)
-        }))
+        expect(postMock).toHaveBeenCalledTimes(2)
+        expect(postMock).toHaveBeenLastCalledWith('/reports/report-1/collaboration', {
+            snapshot_base64: expect.any(String),
+            base_report_version: 7
+        })
         expect(doc.getText('content').toString()).toBe('local draft')
         await provider.destroy()
     })
     it('rejects ready when the collaboration document cannot be loaded', async () => {
-        const { supabase, query } = createSupabaseMock()
-        query.maybeSingle.mockResolvedValue({ data: null, error: { message: 'permission denied' } })
+        const { transport } = createTransportMock()
+        getMock.mockRejectedValue(new Error('permission denied'))
         const statuses: string[] = []
-        const provider = new SupabaseProvider(supabase as any, new Y.Doc(), 'report-1', 7, 'user-1', {
+        const provider = new CollaborationProvider(transport as any, new Y.Doc(), 'report-1', 7, 'user-1', {
             onStatus: status => statuses.push(status)
         })
 
@@ -149,14 +144,14 @@ describe('report SupabaseProvider snapshot versioning', () => {
     })
 
     it('keeps transient channel recovery alive and reloads the snapshot and presence after resubscribe', async () => {
-        const { supabase, channel, query } = createSupabaseMock({ snapshot_base64: encodedTextSnapshot('recovered draft'), base_report_version: 7 })
+        const { transport, channel } = createTransportMock({ snapshot_base64: encodedTextSnapshot('recovered draft'), base_report_version: 7 })
         let notify: ((status: string, detail?: string) => void) | undefined
         channel.subscribe.mockImplementation((callback: (status: string, detail?: string) => void) => {
             notify = callback
             return channel
         })
         const statuses: string[] = []
-        const provider = new SupabaseProvider(supabase as any, new Y.Doc(), 'report-1', 7, 'user-1', {
+        const provider = new CollaborationProvider(transport as any, new Y.Doc(), 'report-1', 7, 'user-1', {
             onStatus: status => statuses.push(status)
         })
 
@@ -165,14 +160,14 @@ describe('report SupabaseProvider snapshot versioning', () => {
         expect(statuses).toContain('reconnecting')
         notify?.('SUBSCRIBED')
         await provider.ready
-        expect(query.maybeSingle).toHaveBeenCalledOnce()
+        expect(getMock).toHaveBeenCalledOnce()
         expect(channel.track).toHaveBeenCalledOnce()
 
         notify?.('OFFLINE')
         notify?.('SUBSCRIBED')
         await Promise.resolve()
         await Promise.resolve()
-        expect(query.maybeSingle).toHaveBeenCalledTimes(2)
+        expect(getMock).toHaveBeenCalledTimes(2)
         expect(channel.track).toHaveBeenCalledTimes(2)
         await provider.destroy()
     })

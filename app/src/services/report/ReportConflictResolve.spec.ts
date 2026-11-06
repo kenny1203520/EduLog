@@ -4,10 +4,6 @@ import { ReportCommandService, toReportPatch } from './ReportCommandService'
 
 const { postMock } = vi.hoisted(() => ({ postMock: vi.fn() }))
 
-vi.mock('@/services/api/ApiModeClient', async (importOriginal) => ({
-    ...(await importOriginal<typeof import('@/services/api/ApiModeClient')>()),
-    getApiV1Mode: () => 'v1',
-}))
 vi.mock('@/services/api/ApiV1Client', async (importOriginal) => ({
     ...(await importOriginal<typeof import('@/services/api/ApiV1Client')>()),
     apiV1Client: { post: postMock },

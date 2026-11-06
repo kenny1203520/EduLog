@@ -1,13 +1,8 @@
-import { apiDataClient } from '@/services/api/ApiDataClient'
 import { ClassOccurrence, type ClassOccurrenceDTO } from '@/models/ClassOccurrence'
 import { OccurrenceQueryService } from './OccurrenceQueryService'
-import { HolidayService } from '../holiday/HolidayService'
-import { TeacherService } from '../teacher/TeacherService'
 import { DateUtils } from '@/utils/DateUtils'
-import { ClassSessionFactory } from '@/models/ClassSession'
 import { apiResourceClient } from '@/services/api/ApiResourceClient'
 import { apiV1Client } from '@/services/api/ApiV1Client'
-import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 export class OccurrenceCommandService {
     private static formatDate(date: Date): string {
@@ -20,170 +15,15 @@ export class OccurrenceCommandService {
         endDate: Date,
         options: { skipExistingDates?: Set<string> } = {}
     ): Promise<ClassOccurrence[]> {
-        if (getApiV1Mode() === 'v1') {
-            const response = await apiV1Client.post<any>('/occurrences/generate', { class_session_id: sessionId, start_date: this.formatDate(startDate), end_date: this.formatDate(endDate), skip_existing_dates: options.skipExistingDates ? [...options.skipExistingDates] : undefined })
-            return (response.data || []).map((dto: any) => new ClassOccurrence(dto))
-        }
-        const { data: session, error: sessionError } = await apiDataClient
-            .from('class_sessions')
-            .select('*, class_session_schedule_rules(*)')
-            .eq('id', sessionId)
-            .single()
-
-        if (sessionError) throw new Error(`Failed to fetch session: ${sessionError.message}`)
-        const sessionModel = ClassSessionFactory.create({
-            ...(session as any),
-            schedule_rules: (session as any).class_session_schedule_rules || []
-        })
-        const timeZone = sessionModel.timeZone
-        const plannedOccurrences = sessionModel
-            .plannedOccurrences(startDate, endDate)
-            .filter(planned => !options.skipExistingDates?.has(planned.occurrenceDate))
-
-        if (plannedOccurrences.length === 0) return []
-
-        // Fetch all session teachers with their effective periods
-        let sessionTeachers: any[] = []
-        try {
-            sessionTeachers = await TeacherService.getSessionTeachers(sessionId)
-        } catch (e) {
-            console.error('Failed to fetch session teachers for occurrence generation:', e)
-        }
-
-        // Fetch existing occurrences to preserve attendance status
-        const { data: existingOccs } = await apiDataClient
-            .from('class_occurrences')
-            .select('occurrence_date, teacher_attendance, time_zone')
-            .eq('class_session_id', sessionId)
-            .gte('occurrence_date', this.formatDate(startDate))
-            .lte('occurrence_date', this.formatDate(endDate))
-
-        const existingOccurrenceMap: Record<string, any> = {}
-        if (existingOccs) {
-            existingOccs.forEach((occ: any) => {
-                existingOccurrenceMap[occ.occurrence_date] = occ
-            })
-        }
-
-        const occurrences: Partial<ClassOccurrenceDTO>[] = plannedOccurrences.map(planned => {
-            const dateStr = planned.occurrenceDate
-            
-            // Find teachers active on this date
-            const activeTeachers = sessionTeachers.filter(st => {
-                const effectiveFrom = st.effective_from
-                const effectiveTo = st.effective_to
-                if (dateStr < effectiveFrom) return false
-                if (effectiveTo && dateStr > effectiveTo) return false
-                return true
-            })
-            
-            let teacherIds = [...new Set(activeTeachers.map(t => t.id))]
-            // Fallback to session owner if no teachers assigned
-            if (teacherIds.length === 0 && (session as any).user_id) {
-                teacherIds = [(session as any).user_id]
-            }
-
-            // Merge with existing attendance if it exists
-            const existingOccurrence = existingOccurrenceMap[dateStr]
-            const existingAttendance = existingOccurrence?.teacher_attendance || {}
-            const updatedAttendance: Record<string, boolean> = { ...existingAttendance }
-
-            teacherIds.forEach((id: string) => {
-                if (existingAttendance.hasOwnProperty(id)) {
-                    // Preserve existing status (true/false)
-                    updatedAttendance[id] = existingAttendance[id]
-                } else {
-                    // New teacher for this occurrence, default to present (true)
-                    updatedAttendance[id] = true
-                }
-            })
-
-            return {
-                class_session_id: sessionId,
-                occurrence_date: dateStr,
-                status: 'scheduled',
-                original_start_time: planned.startTime,
-                original_end_time: planned.endTime,
-                time_zone: DateUtils.isValidTimeZone(existingOccurrence?.time_zone) ? existingOccurrence.time_zone : timeZone,
-                is_conducted: true,
-                teacher_ids: teacherIds,
-                teacher_attendance: updatedAttendance
-            }
-        })
-
-        const { data, error } = await apiDataClient
-            .from('class_occurrences')
-            .upsert(occurrences, { onConflict: 'class_session_id,occurrence_date' })
-            .select()
-
-        if (error) throw new Error(`Failed to create occurrences: ${error.message}`)
-
-        return (data as any[]).map((dto: any) => new ClassOccurrence(dto))
+        const response = await apiV1Client.post<any>('/occurrences/generate', { class_session_id: sessionId, start_date: this.formatDate(startDate), end_date: this.formatDate(endDate), skip_existing_dates: options.skipExistingDates ? [...options.skipExistingDates] : undefined })
+        return (response.data || []).map((dto: any) => new ClassOccurrence(dto))
     }
 
     static async updateOccurrence(
         occurrenceId: string,
         updates: Partial<ClassOccurrenceDTO>
     ): Promise<ClassOccurrence> {
-        if (getApiV1Mode() === 'v1') { const response = await apiResourceClient.update<any>('occurrences', occurrenceId, updates, 'v1'); return new ClassOccurrence(response.data) }
-        // Guard: check if occurrence is within a holiday period
-        const occurrence = await OccurrenceQueryService.getOccurrenceById(occurrenceId)
-        const occurrenceDateStr = occurrence.occurrenceDate instanceof Date
-            ? DateUtils.formatLocalDate(occurrence.occurrenceDate)
-            : occurrence.occurrenceDate
-        const { data: sessionInfo } = await apiDataClient
-            .from('class_sessions')
-            .select('classroom_id')
-            .eq('id', occurrence.classSessionId)
-            .maybeSingle()
-        const classroomId = sessionInfo?.classroom_id || undefined
-        const isHoliday = await HolidayService.isHoliday(
-            occurrenceDateStr,
-            classroomId,
-            occurrence.classSessionId
-        )
-
-        if (isHoliday) {
-            // If marked as holiday, reject attempts to set is_conducted=true or any teacher_attendance=true
-            if (updates.is_conducted === true) {
-                throw new Error('Cannot set is_conducted=true for an occurrence during a holiday period.')
-            }
-
-            if (updates.teacher_attendance) {
-                const hasAnyTrueAttendance = Object.values(updates.teacher_attendance).some(v => v === true)
-                if (hasAnyTrueAttendance) {
-                    throw new Error('Cannot set teacher attendance to present (true) for an occurrence during a holiday period.')
-                }
-            }
-        }
-
-        if (updates.teacher_attendance) {
-            for (const [teacherId, isPresent] of Object.entries(updates.teacher_attendance)) {
-                if (!isPresent) continue
-
-                const isOnLeave = await HolidayService.isTeacherOnLeave(
-                    occurrenceDateStr,
-                    teacherId,
-                    classroomId,
-                    occurrence.classSessionId
-                )
-
-                if (isOnLeave) {
-                    throw new Error('Cannot set teacher attendance to present (true) while the teacher is on leave.')
-                }
-            }
-        }
-
-        const { data, error } = await apiDataClient
-            .from('class_occurrences')
-            .update(updates)
-            .eq('id', occurrenceId)
-            .select()
-            .single()
-
-        if (error) throw new Error(`Failed to update occurrence: ${error.message}`)
-
-        return new ClassOccurrence(data)
+        const response = await apiResourceClient.update<any>('occurrences', occurrenceId, updates); return new ClassOccurrence(response.data)
     }
 
     static async completeOccurrence(occurrenceId: string): Promise<ClassOccurrence> {
@@ -208,13 +48,7 @@ export class OccurrenceCommandService {
     }
 
     static async deleteOccurrence(occurrenceId: string): Promise<void> {
-        if (getApiV1Mode() === 'v1') { await apiResourceClient.remove('occurrences', occurrenceId, 'v1'); return }
-        const { error } = await apiDataClient
-            .from('class_occurrences')
-            .delete()
-            .eq('id', occurrenceId)
-
-        if (error) throw new Error(error.message)
+        await apiResourceClient.remove('occurrences', occurrenceId); return
     }
 
     static async generateOccurrencesForAllSessions(
@@ -222,39 +56,15 @@ export class OccurrenceCommandService {
         endDate: Date,
         sessionIds?: string[]
     ): Promise<number> {
-        if (getApiV1Mode() === 'v1') {
-            let totalGenerated = 0
-            for (let page = 1; ; page += 1) {
-                const response = await apiResourceClient.list<any>('class-sessions', { page, perPage: 100, mode: 'v1' })
-                for (const session of response.data || []) {
-                    if (sessionIds && sessionIds.length > 0 && !sessionIds.includes(session.id)) continue
-                    totalGenerated += (await this.generateOccurrences(session.id, startDate, endDate)).length
-                }
-                if (!response.data?.length || (response.meta?.total !== undefined && page * 100 >= Number(response.meta.total)) || (response.data?.length ?? 0) < 100) break
-            }
-            return totalGenerated
-        }
-        let query = apiDataClient.from('class_sessions').select('id')
-
-        if (sessionIds && sessionIds.length > 0) {
-            query = query.in('id', sessionIds)
-        }
-
-        const { data: sessions, error } = await query
-
-        if (error) throw new Error(error.message)
-
         let totalGenerated = 0
-
-        for (const session of sessions || []) {
-            const occurrences = await this.generateOccurrences(
-                (session as any).id,
-                startDate,
-                endDate
-            )
-            totalGenerated += occurrences.length
+        for (let page = 1; ; page += 1) {
+            const response = await apiResourceClient.list<any>('class-sessions', { page, perPage: 100 })
+            for (const session of response.data || []) {
+                if (sessionIds && sessionIds.length > 0 && !sessionIds.includes(session.id)) continue
+                totalGenerated += (await this.generateOccurrences(session.id, startDate, endDate)).length
+            }
+            if (!response.data?.length || (response.meta?.total !== undefined && page * 100 >= Number(response.meta.total)) || (response.data?.length ?? 0) < 100) break
         }
-
         return totalGenerated
     }
 }

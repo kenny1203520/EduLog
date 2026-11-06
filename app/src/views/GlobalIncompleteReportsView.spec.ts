@@ -50,12 +50,6 @@ vi.mock('@/stores/usePreferencesStore', () => ({
     })
 }))
 
-vi.mock('@/services/api/ApiDataClient', () => ({
-    apiDataClient: {
-        from: vi.fn()
-    }
-}))
-
 vi.mock('@/services/report/ReportQueryService', () => ({
     ReportQueryService: {
         getGlobalIncompleteReportsPage: vi.fn()

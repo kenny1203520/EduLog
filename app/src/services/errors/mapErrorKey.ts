@@ -27,12 +27,12 @@ function extractMessage(error: unknown): string | undefined {
 }
 
 /**
- * Maps a Supabase/PostgREST error (or anything error-shaped) to a translated,
+ * Maps an API or database error (or anything error-shaped) to a translated,
  * user-safe i18n key. Never returns raw database text -- an RLS rejection, a
  * constraint name, or "new row violates row-level security policy ..." must
  * never reach the UI verbatim.
  */
-export function mapSupabaseError(error: unknown): MappedError {
+export function mapErrorKey(error: unknown): MappedError {
     if (hasCode(error) && PG_CODE_KEYS[error.code]) {
         return { i18nKey: PG_CODE_KEYS[error.code] }
     }

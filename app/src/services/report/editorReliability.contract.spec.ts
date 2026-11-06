@@ -18,7 +18,7 @@ describe('editor reliability contracts', () => {
         const sessionService = readFileSync(resolve(repoRoot, 'app/src/services/session/SessionService.ts'), 'utf8')
         const referencePanel = readFileSync(resolve(repoRoot, 'app/src/components/ReportReferencePanel.vue'), 'utf8')
         expect(courseService).toContain("apiResourceClient.list<CourseDTO>")
-        expect(sessionService).toMatch(/getClassSessionOptions[\s\S]*?select\('id, name, classroom_id, course_ids'/)
+        expect(sessionService).toMatch(/getClassSessionOptions[\s\S]*?apiResourceClient\.list<ClassSessionOption>\('class-sessions'/)
         const optionsBlock = sessionService.slice(sessionService.indexOf('getClassSessionOptions'), sessionService.indexOf('createClassSession', sessionService.indexOf('getClassSessionOptions')))
         expect(optionsBlock).not.toContain('lessons')
         expect(optionsBlock).not.toContain('schedule_rules')
@@ -74,8 +74,8 @@ describe('editor reliability contracts', () => {
     })
     it('routes production collaboration through the same-origin API WebSocket', () => {
         const collab = readFileSync(resolve(repoRoot, 'app/src/composables/useReportCollab.ts'), 'utf8')
-        expect(collab).toContain("getApiV1Mode() === 'v1' ? undefined : apiDataClient")
-        expect(collab).toContain('ApiModeClient')
+        expect(collab).toContain('new CollaborationProvider(undefined, doc')
+        expect(collab).not.toContain('apiDataClient')
     })
 
     it('does not reintroduce wildcard editor hot-path queries', () => {
@@ -87,11 +87,9 @@ describe('editor reliability contracts', () => {
             'app/src/services/course/CourseCatalogService.ts'
         ]
         const sources = files.map(file => readFileSync(resolve(repoRoot, file), 'utf8'))
-        expect(sources[0]).toMatch(/getReport[\s\S]*?select\(REPORT_EDITOR_COLUMNS\)/)
         expect(sources[1]).not.toMatch(/\.select\(\)\s*\.single\(\)/)
         expect(sources[2]).not.toMatch(/\.select\(['\"]\*['\"]\)/)
         expect(sources[3]).not.toMatch(/\.select\(['\"]\*['\"]\)/)
         expect(sources[4]).toContain("'lessons'")
-        expect(sources[3]).toContain('COPY_TEMPLATE_COLUMNS')
     })
 })
