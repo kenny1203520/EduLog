@@ -5,7 +5,7 @@ import { sendData } from '../../http/response.js'
 import { genericOperationsOf, listQuerySchema, resources, type ResourceDefinition } from './resources.js'
 import { authorizeCollection, authorizeResource, permissionForResource } from '../../auth/authorization.js'
 import { setAuditContext } from '../../http/context.js'
-import { applyListOrder } from './relationOrder.js'
+import { applyListOrder } from '../../services/relationOrder.js'
 
 const mutationMethods = ['POST', 'PATCH', 'DELETE']
 const serviceOnlyViews = new Set(['users', 'teachers'])

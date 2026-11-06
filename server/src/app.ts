@@ -11,7 +11,7 @@ import { createAuthRouter, csrfProtection, requireAuth } from './auth/auth.js'
 import { createResourceRouter } from './routes/rest/resourceRouter.js'
 import { rateLimitMiddleware } from './http/rateLimit.js'
 import { buildOpenApi } from './openapi/openapi.js'
-import { createUserSearchRouter } from './routes/rest/userSearch.js'
+import { createUserSearchRouter } from './routes/rest/userSearchRouter.js'
 import { createRbacRouter } from './routes/rest/rbacRouter.js'
 import { createEnrollmentRouter } from './routes/rest/enrollmentRouter.js'
 import { createReportRouter } from './routes/rest/reportRouter.js'
@@ -25,7 +25,8 @@ import { createHolidayRouter } from './routes/rest/holidayRouter.js'
 import { createAggregateRouter } from './routes/pages/aggregateRouter.js'
 import { createTeacherAssignmentRouter } from './routes/rest/teacherAssignmentRouter.js'
 import { createTeacherAccountLinkRouter } from './routes/rest/teacherAccountLinkRouter.js'
-import { createDomainRouter } from './routes/rest/domainRouter.js'
+import { createTeacherRouter } from './routes/rest/teacherRouter.js'
+import { createCopyTemplateRouter } from './routes/rest/copyTemplateRouter.js'
 import { createExtensionIntegrationRouter } from './routes/extension/extensionIntegrationRouter.js'
 import { createAiReportAssistRouter, defaultAiReportAssistDeps } from './routes/rest/aiReportAssistRouter.js'
 import { createAiMeRouter } from './routes/rest/aiMeRouter.js'
@@ -85,7 +86,8 @@ export function createApp(config: ApiConfig, clients: SupabaseClients = createSu
   protectedApi.use(createStudentRouter())
   // Domain routes must precede the generic registry so page/workflow commands
   // retain their explicit validation, scope resolution, and idempotency rules.
-  protectedApi.use(createDomainRouter())
+  protectedApi.use(createTeacherRouter())
+  protectedApi.use(createCopyTemplateRouter())
   protectedApi.use(createResourceRouter())
   app.use('/api', protectedApi)
   app.use((_req, _res, next) => next(new ApiError(404, 'NOT_FOUND', 'Route was not found')))

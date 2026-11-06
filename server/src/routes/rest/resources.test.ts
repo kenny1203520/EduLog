@@ -72,7 +72,7 @@ describe('student API resource boundaries', () => {
   })
 
   it('leaves routes served by earlier domain routers out of the generic registry', () => {
-    // rbacRouter serves every /roles route; domainRouter serves GET /occurrences and /occurrences/:id;
+    // rbacRouter serves every /roles route; occurrenceRouter serves GET /occurrences and /occurrences/:id;
     // sessionRouter serves GET /class-sessions/:id; studentRouter serves DELETE /students/:id.
     expect(resources).not.toHaveProperty('roles')
     expect(resources).not.toHaveProperty('occurrences')

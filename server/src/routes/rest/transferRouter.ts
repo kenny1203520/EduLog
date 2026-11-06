@@ -107,7 +107,7 @@ async function assertPermission(req: Request, sessionId: string | null, action: 
   requireAuthorizationDecision(req, result, { permission: `teaching.enrollments.${action}`, stage: 'transfer_enrollment_scope_permission', message: 'You do not have permission to access this enrollment', scopeId: sessionId, scopeType: 'class_session' })
 }
 
-async function assertOccurrencePermission(req: Request, occurrenceId: string, action: 'read' | 'update') {
+export async function assertOccurrencePermission(req: Request, occurrenceId: string, action: 'read' | 'update') {
   if (!req.db) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const occurrence = await req.db.from('class_occurrences').select('class_session_id').eq('id', occurrenceId).maybeSingle()
   if (occurrence.error) throw mapDatabaseError(occurrence.error)
@@ -213,16 +213,6 @@ async function occurrenceTransfers(req: Request, res: Response) {
   return res.json({ data, meta: { limit: data.length, offset: 0, total: data.length, sort: '-direction,student_name' }, request_id: req.requestId, trace_id: req.traceId })
 }
 
-async function roster(req: Request, res: Response) {
-  const id = typeof req.params.id === 'string' ? req.params.id : undefined
-  if (!id) throw new ApiError(400, 'INVALID_ID', 'Occurrence id is required')
-  await assertOccurrencePermission(req, id, 'read')
-  const result = await req.db!.rpc('get_effective_occurrence_enrollment_ids', { p_occurrence_id: id })
-  if (result.error) throw transferRpcError(result.error)
-  const data = ((result.data ?? []) as Array<{ enrollment_id: string }>).map((row) => row.enrollment_id)
-  return res.json({ data, meta: { limit: data.length, offset: 0, total: data.length, sort: 'enrollment_id' }, request_id: req.requestId, trace_id: req.traceId })
-}
-
 export function createTransferRouter() {
   const router = Router()
   router.get('/enrollments/:id/transfer-history', wrap(history))
@@ -231,7 +221,6 @@ export function createTransferRouter() {
   router.post('/enrollment-transfers/single-lesson', wrap(singleLesson))
   router.post('/enrollment-transfers/conflicts/resolve', wrap(resolveConflict))
   router.post('/enrollment-transfers/cancel', wrap(cancel))
-  router.get('/occurrences/:id/roster', wrap(roster))
   router.get('/occurrences/:id/lesson-transfers', wrap(occurrenceTransfers))
   return router
 }

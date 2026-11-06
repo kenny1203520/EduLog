@@ -4,7 +4,10 @@ import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { setAuditContext } from '../../http/context.js'
 import { requireAuthorizationDecision, requireAuthorizationRpcDecision } from '../../auth/authorization.js'
-import { fillPlannedLessons } from './lessonProvisioning.js'
+import { ensurePlannedLessons, fillPlannedLessons } from '../../services/lessonProvisioning.js'
+import { orderByRelation } from '../../services/relationOrder.js'
+import { transferRpcError } from './transferRouter.js'
+import { envelope, permission, uuid } from './domainAccess.js'
 
 const fields = 'id,student_id,course_id,classroom_id,class_session_id,status,start_date,lesson_number,external_link,time_zone,koding_admission_id,user_id,created_at,updated_at,courses(subject,stage,display_name),classrooms(name,address),class_sessions(id,name,day_of_week,start_time,end_time,capacity,time_zone,session_type,schedule_mode,class_session_schedule_rules(id,schedule_kind,day_of_week,day_of_month,occurrence_date,start_time,end_time)),students(name)'
 const mutable = ['student_id', 'course_id', 'classroom_id', 'class_session_id', 'status', 'start_date', 'lesson_number', 'external_link', 'time_zone', 'koding_admission_id'] as const
@@ -211,6 +214,162 @@ async function remove(req: Request, res: Response) {
   const result = await req.db.from('enrollments').delete().eq('id', id).select(fields).maybeSingle(); if (result.error) throw mapDatabaseError(result.error); if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found')
   const envelope = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, envelope); return res.json(envelope)
 }
+// Enrollment progress, class transfer and roster read models.
+async function enrollmentReportProgressContext(req: Request, res: Response) {
+  const enrollmentId = uuid.parse(req.params.id)
+  const query = z.object({
+    occurrence_id: uuid,
+    report_id: uuid,
+  }).strict().parse(req.query)
+  const enrollment = await req.db!.from('enrollments').select('id,course_id').eq('id', enrollmentId).maybeSingle()
+  if (enrollment.error) throw mapDatabaseError(enrollment.error)
+  if (!enrollment.data) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found')
+  const occurrence = await req.db!.from('class_occurrences').select('id,class_session_id,occurrence_date').eq('id', query.occurrence_id).maybeSingle()
+  if (occurrence.error) throw mapDatabaseError(occurrence.error)
+  if (!occurrence.data) throw new ApiError(404, 'NOT_FOUND', 'Occurrence was not found')
+  await permission(req, 'teaching.reports.list', occurrence.data.class_session_id)
+
+  const currentReport = await req.db!.from('occurrence_reports').select('id,enrollment_id,class_occurrence_id').eq('id', query.report_id).maybeSingle()
+  if (currentReport.error) throw mapDatabaseError(currentReport.error)
+  if (currentReport.data?.enrollment_id !== enrollmentId || currentReport.data.class_occurrence_id !== occurrence.data.id) {
+    throw new ApiError(404, 'NOT_FOUND', 'Report was not found')
+  }
+
+  const lessons = await req.db!.from('lessons').select('id,sequence,title').eq('course_id', enrollment.data.course_id).order('sequence', { ascending: true })
+  if (lessons.error) throw mapDatabaseError(lessons.error)
+
+  const reports: Array<Record<string, any>> = []
+  const pageSize = 500
+  for (let offset = 0; ; offset += pageSize) {
+    let builder = req.db!.from('occurrence_reports')
+      .select('id,lesson_id,is_completed,progress_letter,attendance_status,class_occurrences!inner(occurrence_date,actual_start_time,original_start_time)')
+      .eq('enrollment_id', enrollmentId)
+      .eq('attendance_status', 'present')
+      .not('lesson_id', 'is', null)
+      .lt('class_occurrences.occurrence_date', occurrence.data.occurrence_date)
+    builder = orderByRelation(builder.neq('id', query.report_id), 'class_occurrences', 'occurrence_date', true).order('id', { ascending: true })
+    const result = await builder.range(offset, offset + pageSize - 1)
+    if (result.error) throw mapDatabaseError(result.error)
+    const page = (result.data ?? []) as Array<Record<string, any>>
+    reports.push(...page)
+    if (page.length < pageSize) break
+  }
+
+  const lessonById = new Map((lessons.data ?? []).map((lesson) => [lesson.id, lesson]))
+  const summaries = reports
+    .filter((report) => lessonById.has(report.lesson_id))
+    .map((report) => ({
+      id: report.id,
+      lesson_id: report.lesson_id,
+      is_completed: report.is_completed,
+      progress_letter: report.progress_letter,
+      attendance_status: report.attendance_status,
+      occurrence_date: Array.isArray(report.class_occurrences) ? report.class_occurrences[0]?.occurrence_date : report.class_occurrences?.occurrence_date,
+    }))
+  const latestPriorReport = summaries.at(-1) ?? null
+  return res.json(envelope(req, { enrollment_id: enrollmentId, occurrence_date: occurrence.data.occurrence_date, lessons: lessons.data ?? [], reports: summaries, latest_prior_report: latestPriorReport }))
+}
+
+async function enrollmentProgress(req: Request, res: Response) {
+  const enrollmentId = uuid.parse(req.params.id)
+  const enrollment = await req.db!.from('enrollments').select('id,course_id,lesson_number,status,class_session_id').eq('id', enrollmentId).maybeSingle()
+  if (enrollment.error) throw mapDatabaseError(enrollment.error)
+  if (!enrollment.data) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found')
+  await permission(req, 'teaching.enrollments.read', enrollment.data.class_session_id)
+  const lessons = await req.db!.from('lessons').select('id,sequence,title').eq('course_id', enrollment.data.course_id).order('sequence', { ascending: true })
+  const reports = await req.db!.from('occurrence_reports').select('lesson_id,is_completed').eq('enrollment_id', enrollmentId).not('lesson_id', 'is', null)
+  if (lessons.error) throw mapDatabaseError(lessons.error); if (reports.error) throw mapDatabaseError(reports.error)
+  const completed = new Set((reports.data ?? []).filter((row) => row.is_completed).map((row) => row.lesson_id))
+  const nextLesson = (lessons.data ?? []).find((lesson) => !completed.has(lesson.id)) ?? null
+  return res.json(envelope(req, { enrollment_id: enrollmentId, current_lesson_number: enrollment.data.lesson_number, next_lesson: nextLesson, completed_lesson_ids: [...completed] }))
+}
+
+async function recalculateProgress(req: Request, res: Response) {
+  const enrollmentId = uuid.parse(req.params.id)
+  const enrollment = await req.db!.from('enrollments').select('id,course_id,lesson_number,class_session_id').eq('id', enrollmentId).maybeSingle()
+  if (enrollment.error) throw mapDatabaseError(enrollment.error); if (!enrollment.data) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found')
+  await permission(req, 'teaching.enrollments.update', enrollment.data.class_session_id)
+  const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
+  const [lessons, reports] = await Promise.all([
+    req.db!.from('lessons').select('id,sequence').eq('course_id', enrollment.data.course_id).order('sequence', { ascending: true }),
+    req.db!.from('occurrence_reports').select('lesson_id,is_completed').eq('enrollment_id', enrollmentId).not('lesson_id', 'is', null),
+  ])
+  if (lessons.error) throw mapDatabaseError(lessons.error); if (reports.error) throw mapDatabaseError(reports.error)
+  const completed = new Set((reports.data ?? []).filter((row) => row.is_completed).map((row) => row.lesson_id))
+  const lessonNumber = (lessons.data ?? []).find((lesson) => !completed.has(lesson.id))?.sequence ?? enrollment.data.lesson_number ?? 1
+  const updated = await req.db!.from('enrollments').update({ lesson_number: lessonNumber }).eq('id', enrollmentId).select('id,lesson_number').single()
+  if (updated.error) throw mapDatabaseError(updated.error)
+  const body = envelope(req, updated.data); await complete(req, 200, body); return res.json(body)
+}
+
+async function transferClass(req: Request, res: Response) {
+  const enrollmentId = uuid.parse(req.params.id)
+  const input = z.object({
+    target_class_session_id: uuid,
+    transfer_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    note: z.string().trim().max(200).nullable().optional(),
+  }).strict().parse(req.body)
+  const current = await req.db!.from('enrollments').select('id,course_id,class_session_id,start_date').eq('id', enrollmentId).maybeSingle()
+  if (current.error) throw mapDatabaseError(current.error); if (!current.data) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found')
+  if (!current.data.class_session_id) throw new ApiError(422, 'TRANSFER_INVALID', 'Enrollment has no current class session')
+  await permission(req, 'teaching.enrollments.update', current.data.class_session_id)
+  const target = await req.db!.from('class_sessions').select('id,classroom_id,course_ids,teaching_id').eq('id', input.target_class_session_id).maybeSingle()
+  if (target.error) throw mapDatabaseError(target.error); if (!target.data) throw new ApiError(404, 'NOT_FOUND', 'Target class session was not found')
+  const courseIds = Array.isArray(target.data.course_ids) ? target.data.course_ids : []
+  if (!courseIds.includes(current.data.course_id)) throw new ApiError(422, 'COURSE_MISMATCH', 'The target class session does not contain the enrollment course')
+  await permission(req, 'teaching.enrollments.update', target.data.id)
+  const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
+  // Generate the target class's lessons first so the student keeps the same
+  // number of reports: one per report on/after the date, plus the target
+  // lessons that cannot hold one (cancelled or rescheduled).
+  const effectiveDate = current.data.start_date && current.data.start_date > input.transfer_date ? current.data.start_date : input.transfer_date
+  const [later, unusable] = await Promise.all([
+    req.db!.from('occurrence_reports').select('id,class_occurrences!inner(occurrence_date)', { count: 'exact', head: true }).eq('enrollment_id', enrollmentId).gte('class_occurrences.occurrence_date', effectiveDate),
+    req.db!.from('class_occurrences').select('id', { count: 'exact', head: true }).eq('class_session_id', target.data.id).gte('occurrence_date', effectiveDate).in('status', ['cancelled', 'rescheduled']),
+  ])
+  if (later.error) throw mapDatabaseError(later.error); if (unusable.error) throw mapDatabaseError(unusable.error)
+  await ensurePlannedLessons(req, target.data.id, effectiveDate, (later.count ?? 0) + (unusable.count ?? 0))
+  // The RPC runs with the caller JWT and re-checks both class permissions. It
+  // rewrites the class history from the date, keeps reports with content in
+  // place, moves blank placeholders, keeps the report count and logs the
+  // transfer in enrollment_class_transfers.
+  const transferred = await req.db!.rpc('transfer_enrollment_class', { p_enrollment_id: enrollmentId, p_target_session_id: target.data.id, p_effective_date: input.transfer_date, p_note: input.note || null })
+  if (transferred.error) throw transferRpcError(transferred.error)
+  const summary = (transferred.data ?? {}) as { transfer_id?: string; effective_date?: string; moved_reports?: number; created_reports?: number; removed_placeholders?: number; retained_reports?: unknown[]; missing_count?: number }
+  const updated = await req.db!.from('enrollments').select('id,student_id,course_id,classroom_id,class_session_id,status,lesson_number,updated_at').eq('id', enrollmentId).single()
+  if (updated.error) throw mapDatabaseError(updated.error)
+  const body = envelope(req, updated.data, { transfer_id: summary.transfer_id ?? null, transfer_date: summary.effective_date ?? input.transfer_date, moved_reports: summary.moved_reports ?? 0, created_reports: summary.created_reports ?? 0, removed_placeholders: summary.removed_placeholders ?? 0, retained_reports: summary.retained_reports ?? [], missing_count: summary.missing_count ?? 0 })
+  await complete(req, 200, body); return res.json(body)
+}
+
+/** Class history, transfer log, single-lesson transfers and report placements for one enrollment. */
+async function enrollmentClassTimeline(req: Request, res: Response) {
+  const enrollmentId = uuid.parse(req.params.id)
+  const enrollment = await req.db!.from('enrollments').select('id,class_session_id').eq('id', enrollmentId).maybeSingle()
+  if (enrollment.error) throw mapDatabaseError(enrollment.error); if (!enrollment.data) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found')
+  await permission(req, 'teaching.enrollments.read', enrollment.data.class_session_id)
+  const result = await req.db!.rpc('get_enrollment_class_timeline', { p_enrollment_id: enrollmentId })
+  if (result.error) throw transferRpcError(result.error)
+  return res.json(envelope(req, result.data))
+}
+
+const rosterFlagsQuery = z.object({
+  start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  end: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+}).strict()
+
+/** Students who joined or left a class lesson by transfer within a date range (at most 120 days). */
+async function classSessionRosterFlags(req: Request, res: Response) {
+  const sessionId = uuid.parse(req.params.id)
+  const query = rosterFlagsQuery.parse(req.query)
+  if (query.start > query.end) throw new ApiError(422, 'INVALID_DATE_RANGE', 'end must not be before start')
+  if ((Date.parse(query.end) - Date.parse(query.start)) / 86400000 > 120) throw new ApiError(422, 'INVALID_DATE_RANGE', 'The range must not exceed 120 days')
+  await permission(req, 'teaching.class_sessions.read', sessionId)
+  const result = await req.db!.rpc('get_class_session_roster_flags', { p_session_id: sessionId, p_start: query.start, p_end: query.end })
+  if (result.error) throw transferRpcError(result.error)
+  return res.json(envelope(req, result.data ?? [], { start: query.start, end: query.end }))
+}
+
 // Enrollment history browsing and binding are authorized inside the
 // SECURITY DEFINER `enrollment_history_access` RPC, which runs with the caller's
 // user JWT. The BFF only names the operation; it never widens the RPC surface.
@@ -236,5 +395,19 @@ async function enrollmentHistory(req: Request, res: Response) {
   if (error) throw mapDatabaseError(error)
   const body = { data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, body); return res.json(body)
 }
-export function createEnrollmentRouter() { const router = Router(); router.post('/enrollments', wrap(create)); router.patch('/enrollments/:id', wrap(update)); router.get('/enrollments/:id/start-date-impact', wrap(startDateImpact)); router.delete('/enrollments/:id', wrap(remove)); router.post('/enrollment-history/:operation', wrap(enrollmentHistory)); return router }
+export function createEnrollmentRouter() {
+  const router = Router()
+  router.post('/enrollments', wrap(create))
+  router.patch('/enrollments/:id', wrap(update))
+  router.get('/enrollments/:id/start-date-impact', wrap(startDateImpact))
+  router.delete('/enrollments/:id', wrap(remove))
+  router.post('/enrollment-history/:operation', wrap(enrollmentHistory))
+  router.get('/enrollments/:id/report-progress-context', wrap(enrollmentReportProgressContext))
+  router.get('/enrollments/:id/progress', wrap(enrollmentProgress))
+  router.post('/enrollments/:id/progress/recalculate', wrap(recalculateProgress))
+  router.post('/enrollments/:id/transfers/class', wrap(transferClass))
+  router.get('/enrollments/:id/class-timeline', wrap(enrollmentClassTimeline))
+  router.get('/class-sessions/:id/roster-flags', wrap(classSessionRosterFlags))
+  return router
+}
 

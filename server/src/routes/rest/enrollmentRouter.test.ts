@@ -77,3 +77,51 @@ describe('enrollment history access route', () => {
     expect(response.status).toBe(403)
   })
 })
+
+describe('enrollment report-progress context contract', () => {
+  it('exposes a report-progress context limited to the authorized enrollment and earlier attended summaries', () => {
+    const source = readFileSync(new URL('./enrollmentRouter.ts', import.meta.url), 'utf8')
+
+    expect(source).toContain("router.get('/enrollments/:id/report-progress-context'")
+    expect(source).toContain("permission(req, 'teaching.reports.list', occurrence.data.class_session_id)")
+    expect(source).toContain(".eq('attendance_status', 'present')")
+    expect(source).toContain(".lt('class_occurrences.occurrence_date', occurrence.data.occurrence_date)")
+    expect(source).toContain(".neq('id', query.report_id)")
+    expect(source).toContain('latest_prior_report: latestPriorReport')
+    expect(source).not.toContain("select('id,lesson_id,is_completed,progress_letter,attendance_status,class_occurrences!inner(occurrence_date),content")
+  })
+})
+
+describe('class transfer contract', () => {
+  it('generates the target lessons before the transfer and forwards the note', () => {
+    const source = readFileSync(new URL('./enrollmentRouter.ts', import.meta.url), 'utf8')
+    const handler = source.slice(source.indexOf('async function transferClass'), source.indexOf('async function enrollmentClassTimeline'))
+    expect(handler).toContain('note: z.string().trim().max(200)')
+    expect(handler).not.toContain('original_last_date')
+    expect(handler.indexOf('await ensurePlannedLessons(')).toBeGreaterThan(0)
+    expect(handler.indexOf('await ensurePlannedLessons(')).toBeLessThan(handler.indexOf("rpc('transfer_enrollment_class'"))
+    expect(handler).toContain('p_note: input.note || null')
+    expect(handler).toContain('missing_count: summary.missing_count ?? 0')
+  })
+
+  it('exposes the class timeline and roster flags read models behind read permissions', () => {
+    const source = readFileSync(new URL('./enrollmentRouter.ts', import.meta.url), 'utf8')
+    expect(source).toContain("router.get('/enrollments/:id/class-timeline', wrap(enrollmentClassTimeline))")
+    expect(source).toContain("router.get('/class-sessions/:id/roster-flags', wrap(classSessionRosterFlags))")
+    expect(source).toContain("permission(req, 'teaching.enrollments.read', enrollment.data.class_session_id)")
+    expect(source).toContain("permission(req, 'teaching.class_sessions.read', sessionId)")
+    expect(source).toContain("rpc('get_enrollment_class_timeline'")
+    expect(source).toContain("rpc('get_class_session_roster_flags'")
+  })
+})
+
+describe('class transfer contract', () => {
+  it('moves the enrollment through the date-effective RPC instead of a direct update', () => {
+    const source = readFileSync(new URL('./enrollmentRouter.ts', import.meta.url), 'utf8')
+    const handler = source.slice(source.indexOf('async function transferClass'), source.indexOf('async function enrollmentClassTimeline'))
+    expect(handler).toContain("rpc('transfer_enrollment_class'")
+    expect(handler).toContain('p_effective_date: input.transfer_date')
+    expect(handler).toContain('retained_reports')
+    expect(handler).not.toContain(".from('enrollments').update(")
+  })
+})
