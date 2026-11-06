@@ -495,7 +495,7 @@ let refreshRequestId = 0
 watch(() => [props.show, props.focusedReportId] as const, ([isOpen, reportId]) => {
     if (!isOpen) return
     if (reportId) activeTab.value = 'history'
-    refreshData()
+    void refreshData()
 })
 
 // Tab handling
@@ -504,7 +504,7 @@ function switchTab(tab: 'peer' | 'history') {
     activeTab.value = tab
     currentPage.value = 1
     // Don't clear search query, but we reset filtering?
-    refreshData()
+    void refreshData()
 }
 
 async function loadFilterOptions() {
@@ -609,25 +609,25 @@ async function refreshData() {
 
 function handleClassroomChange() {
     filterSession.value = '' // Reset session filter when classroom changes
-    refreshData()
+    void refreshData()
 }
 
 function handlePageSizeChange() {
     currentPage.value = 1
-    refreshData()
+    void refreshData()
 }
 
 function prevPage() {
     if (currentPage.value > 1) {
         currentPage.value--
-        refreshData()
+        void refreshData()
     }
 }
 
 function nextPage() {
     if (currentPage.value < totalPages.value) {
         currentPage.value++
-        refreshData()
+        void refreshData()
     }
 }
 

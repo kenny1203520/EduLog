@@ -30,12 +30,12 @@ async function open() {
 }
 function close(restoreFocus = true) {
     isOpen.value = false
-    if (restoreFocus) nextTick(() => trigger.value?.focus())
+    if (restoreFocus) void nextTick(() => trigger.value?.focus())
 }
-function toggle() { isOpen.value ? close() : open() }
+function toggle() { if (isOpen.value) close(); else void open() }
 function select(locale: SupportedLocale) { preferences.locale = locale; close() }
 function onTriggerKeydown(event: KeyboardEvent) {
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); open() }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); void open() }
     else if (event.key === 'Escape' && isOpen.value) { event.preventDefault(); close() }
 }
 function onDialogKeydown(event: KeyboardEvent) {

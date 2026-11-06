@@ -302,7 +302,7 @@ const isValid = computed(() => {
 })
 
 onMounted(() => {
-    loadSuspensions()
+    void loadSuspensions()
 })
 
 async function loadSuspensions() {

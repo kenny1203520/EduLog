@@ -142,7 +142,7 @@ watch(() => enrollForm.value.class_session_id, (sessionId) => {
 
 watch(() => props.isOpen, (val) => {
     if (val) {
-        fetchOptions()
+        void fetchOptions()
         selectedClassroomId.value = ''
         enrollForm.value = {
             course_catalog_id: '',

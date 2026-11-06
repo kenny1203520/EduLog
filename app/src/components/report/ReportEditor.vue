@@ -1736,7 +1736,7 @@ async function handleDeleteReport() {
 }
 
 onMounted(() => {
-    loadTemplates()
+    void loadTemplates()
 })
 
 // Collab logic

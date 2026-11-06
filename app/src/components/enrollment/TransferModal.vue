@@ -259,9 +259,9 @@ watch(() => props.isOpen, (val) => {
         selectedClassroomId.value = ''
         transferConflict.value = null
         classSummary.value = null
-        fetchClassrooms()
-        fetchSessions()
-        fetchReports()
+        void fetchClassrooms()
+        void fetchSessions()
+        void fetchReports()
         transferForm.value = {
             mode: 'class',
             single_source_mode: 'report',
@@ -272,7 +272,7 @@ watch(() => props.isOpen, (val) => {
             target_date: DateUtils.todayString(preferences.timeZone),
             note: ''
         }
-        fetchCurrentEnrollment()
+        void fetchCurrentEnrollment()
     }
 })
 
