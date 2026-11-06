@@ -360,7 +360,7 @@ describe('generated API contract', () => {
     expect(operation?.['x-response-fields']).toContain('max_occupancy')
     expect(operation?.['x-response-fields']).toContain('roster_count')
     expect(operation?.responses?.['200']?.content?.['application/json']?.schema?.allOf?.[1]?.properties?.data?.$ref).toBe('#/components/schemas/EnrollmentPeak')
-    expect(spec.components.schemas.EnrollmentPeak.properties.max_enrollment.description).toContain('compatibility')
+    expect(spec.components.schemas.EnrollmentPeak.properties).not.toHaveProperty('max_enrollment')
   })
 
   it('names the enrollment history operations instead of exposing a generic RPC endpoint', () => {

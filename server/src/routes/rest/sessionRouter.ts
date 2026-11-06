@@ -188,7 +188,6 @@ async function readEnrollmentPeak(req: Request, res: Response) {
   return sendDetails(req, res, {
     ...occupancy,
     max_occupancy: maxOccupancy,
-    max_enrollment: maxOccupancy,
   })
 }
 

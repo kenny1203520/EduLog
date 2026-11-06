@@ -244,7 +244,7 @@ export function buildOpenApi() {
     get: {
       operationId: 'class_sessions_enrollment_peak', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.class_sessions.read',
       'x-permissions': ['teaching.class_sessions.read', 'teaching.enrollments.list', 'teaching.occurrences.list', 'teaching.reports.list'],
-      'x-response-fields': ['roster_count', 'occupied_count', 'absent_count', 'available_capacity', 'max_occupancy', 'max_roster', 'max_absent', 'max_enrollment', 'capacity', 'occurrences'],
+      'x-response-fields': ['roster_count', 'occupied_count', 'absent_count', 'available_capacity', 'max_occupancy', 'max_roster', 'max_absent', 'capacity', 'occurrences'],
       parameters: [pathParam('id'), { name: 'start_date', in: 'query', required: true, schema: { type: 'string', format: 'date' } }, { name: 'end_date', in: 'query', required: true, schema: { type: 'string', format: 'date' } }],
       responses: {
         '200': { description: 'Roster and occupancy counts. Absence remains in the roster but is excluded from occupied capacity.', content: { 'application/json': { schema: { allOf: [{ $ref: '#/components/schemas/Envelope' }, { type: 'object', properties: { data: { $ref: '#/components/schemas/EnrollmentPeak' } } }] } } } },
@@ -672,10 +672,9 @@ export function buildOpenApi() {
     TransferCancelMutation: runtimeDocument(cancelBody),
     EnrollmentPeak: {
       type: 'object', additionalProperties: false,
-      required: ['max_occupancy', 'max_enrollment', 'roster_count', 'occupied_count', 'absent_count', 'available_capacity', 'capacity', 'occurrences'],
+      required: ['max_occupancy', 'roster_count', 'occupied_count', 'absent_count', 'available_capacity', 'capacity', 'occurrences'],
       properties: {
         max_occupancy: { type: 'integer', minimum: 0 },
-        max_enrollment: { type: 'integer', minimum: 0, description: 'Deprecated compatibility alias for max_occupancy' },
         max_roster: { type: 'integer', minimum: 0 },
         max_absent: { type: 'integer', minimum: 0 },
         roster_count: { type: 'integer', minimum: 0, description: 'Roster count for the selected occurrence; absent students remain included' },
