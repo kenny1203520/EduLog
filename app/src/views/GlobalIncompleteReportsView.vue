@@ -418,7 +418,7 @@ import BasePageHeader from '@/components/ui/BasePageHeader.vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import { useFeedback } from '@/composables/useFeedback'
-import { apiResourceClient } from '@/services/api/ApiResourceClient'
+import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { DateUtils } from '@/utils/dateUtils'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { useRoute, useRouter } from 'vue-router'
@@ -610,8 +610,7 @@ watch(selectedReport, async (newVal) => {
 
     editorLoading.value = true
     try {
-        const response = await apiResourceClient.list<any>('lessons', { courseId: newVal.courseId, sort: 'sequence', perPage: 100 })
-        activeLessons.value = response.data || []
+        activeLessons.value = await CourseCatalogService.getLessonsByCourse(newVal.courseId)
     } catch (e) {
         console.error('Failed to load lessons for report context', e)
         activeLessons.value = []

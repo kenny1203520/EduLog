@@ -2,11 +2,8 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { apiV1Client } from '@/services/api/ApiV1Client'
+import { WebExtensionService, type ExtensionDevice as Device, type ExtensionPairApproval as PairApproval, type ExtensionToken } from '@/services/extension/WebExtensionService'
 
-type Device = { installation_id?: string | null; device_name?: string | null; browser_name?: string | null; platform_name?: string | null }
-type PairApproval = Device & { id: string; status: 'pending' | 'approved' | 'claimed'; extension_origin: string; expires_at: string; token_id?: string | null }
-type ExtensionToken = Device & { id: string; extension_origin: string; created_at: string; last_used_at: string | null; expires_at: string; revoked_at: string | null }
 const route = useRoute(), router = useRouter()
 const { t, locale } = useI18n()
 const pairRequestId = computed(() => typeof route.query.extension_pair === 'string' ? route.query.extension_pair : '')
@@ -34,16 +31,13 @@ async function load(force = false) {
   inFlight = true; refreshing.value = true
   try {
     const [tokenResult, pairResult] = await Promise.all([
-      apiV1Client.get<ExtensionToken[]>('/extension/tokens', { signal, cache: 'no-store' }),
-      requestId ? apiV1Client.get<PairApproval>(`/extension/pair-requests/${encodeURIComponent(requestId)}/approval`, { signal, cache: 'no-store' }).catch(cause => {
-        if (cause?.status === 404 || cause?.status === 410) return null
-        throw cause
-      }) : Promise.resolve(null),
+      WebExtensionService.listTokens(signal),
+      requestId ? WebExtensionService.getPairApproval(requestId, signal) : Promise.resolve(null),
     ])
     if (!mounted || sequence !== generation) return
-    tokens.value = tokenResult.data ?? []; now.value = Date.now(); updatedAt.value = new Date().toISOString(); error.value = ''
+    tokens.value = tokenResult; now.value = Date.now(); updatedAt.value = new Date().toISOString(); error.value = ''
     const previous = pair.value?.id
-    pair.value = pairResult?.data ?? null
+    pair.value = pairResult
     pairExpired.value = Boolean(requestId && (!pair.value || (pair.value.status !== 'claimed' && new Date(pair.value.expires_at).getTime() <= now.value)))
     if (pair.value && previous !== pair.value.id) pairName.value = pair.value.device_name || device(pair.value) || t('settings.extension.default_name')
     if (pair.value?.status === 'claimed' && tokens.value.some(token => token.id === pair.value?.token_id)) {
@@ -62,7 +56,7 @@ async function approve() {
   if (!value || value.length > 80) { error.value = t('settings.extension.name_required'); return }
   busy.value = true; error.value = ''
   try {
-    await apiV1Client.post(`/extension/pair-requests/${encodeURIComponent(pair.value.id)}/approve`, { device_name: value })
+    await WebExtensionService.approvePair(pair.value.id, value)
     pair.value.status = 'approved'; notice.value = t('settings.extension.approved')
     await load(true)
   } catch { error.value = t('settings.extension.approve_failed') }
@@ -82,7 +76,7 @@ async function rename(token: ExtensionToken) {
   if (!value || value.length > 80) { error.value = t('settings.extension.name_required'); return }
   busy.value = true; error.value = ''
   try {
-    await apiV1Client.patch(`/extension/tokens/${encodeURIComponent(token.id)}`, { device_name: value })
+    await WebExtensionService.renameToken(token.id, value)
     editingId.value = ''; notice.value = t('settings.extension.renamed'); await load(true)
     await nextTick(); document.getElementById(`extension-rename-${token.id}`)?.focus()
   } catch { error.value = t('settings.extension.rename_failed') }
@@ -96,7 +90,7 @@ async function revoke() {
   if (!target || busy.value) return
   busy.value = true; error.value = ''
   try {
-    await apiV1Client.delete(`/extension/tokens/${encodeURIComponent(target.id)}`)
+    await WebExtensionService.revokeToken(target.id)
     tokens.value = tokens.value.filter(token => token.id !== target.id)
     notice.value = t('settings.extension.revoked'); dialog.value?.close(); revokeTarget.value = null
     await load(true); await nextTick(); refreshButton.value?.focus()

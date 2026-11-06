@@ -4,26 +4,11 @@ import { useI18n } from 'vue-i18n'
 import Pagination from '@/components/ui/Pagination.vue'
 import SearchableSelect from '@/components/ui/SearchableSelect.vue'
 import { useFeedback } from '@/composables/useFeedback'
-import type { ApiMeta } from '@/services/api/ApiV1Client'
-import { apiV1Client } from '@/services/api/ApiV1Client'
 import { DateUtils } from '@/utils/dateUtils'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
-import { buildAuditEventQuery, type AuditEventFilters } from '@/services/audit/AuditEventQuery'
+import type { AuditEventFilters } from '@/services/audit/AuditEventQuery'
+import { AuditEventService, type AuditEvent, type AuditUser } from '@/services/audit/AuditEventService'
 
-type AuditEvent = {
-    id: string
-    actor_user_id?: string | null
-    action?: string | null
-    domain?: string | null
-    resource?: string | null
-    resource_id?: string | null
-    scope_id?: string | null
-    request_id?: string | null
-    outcome?: string | null
-    metadata?: Record<string, unknown> | null
-    created_at?: string | null
-}
-type AuditUser = { id: string; display_name?: string | null; email?: string | null }
 
 const { t, te } = useI18n()
 const { errorKey, reportError, success } = useFeedback()
@@ -100,11 +85,9 @@ async function loadEvents() {
     loading.value = true
     loadError.value = false
     try {
-        const query = buildAuditEventQuery(appliedFilters.value, pagination.page, pagination.perPage, preferences.timeZone)
-        const result = await apiV1Client.get<AuditEvent[]>(`/audit-events?${query}`)
-        events.value = result.data ?? []
-        const total = Number((result.meta as ApiMeta & { total?: number } | undefined)?.total)
-        totalItems.value = Number.isFinite(total) ? total : events.value.length
+        const result = await AuditEventService.listEvents(appliedFilters.value, pagination.page, pagination.perPage, preferences.timeZone)
+        events.value = result.events
+        totalItems.value = result.total
         loaded.value = true
     } catch (error) {
         loadError.value = true
@@ -117,18 +100,7 @@ async function loadEvents() {
 async function loadAuditUsers() {
     actorLoading.value = true
     try {
-        const limit = 100
-        const resultUsers: AuditUser[] = []
-        let offset = 0
-        let total = Number.POSITIVE_INFINITY
-        while (offset < total) {
-            const response = await apiV1Client.get<AuditUser[]>(`/users?limit=${limit}&offset=${offset}&sort=display_name`)
-            const page = response.data ?? []
-            resultUsers.push(...page)
-            total = Number((response.meta as ApiMeta & { total?: number } | undefined)?.total ?? resultUsers.length)
-            if (!page.length) break
-            offset += page.length
-        }
+        const resultUsers = await AuditEventService.listUsers()
         auditUsers.value = resultUsers
         actorLookupAvailable.value = resultUsers.length > 0
     } catch {
