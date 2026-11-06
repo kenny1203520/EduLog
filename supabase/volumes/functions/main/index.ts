@@ -1,10 +1,11 @@
 import * as jose from 'https://deno.land/x/jose@v4.14.4/index.ts'
+import { env, routerEnv, workerEnvVars } from '../_shared/env.ts'
 
 console.log('main function started')
 
-const JWT_SECRET = Deno.env.get('JWT_SECRET')
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
-const VERIFY_JWT = Deno.env.get('VERIFY_JWT') === 'true'
+const JWT_SECRET = routerEnv.jwtSecret
+const SUPABASE_URL = env.supabaseUrl
+const VERIFY_JWT = routerEnv.verifyJwt
 
 // Create JWKS for ES256/RS256 tokens (newer tokens)
 let SUPABASE_JWT_KEYS: ReturnType<typeof jose.createRemoteJWKSet> | null = null
@@ -145,8 +146,8 @@ Deno.serve(async (req: Request) => {
   const workerTimeoutMs = 1 * 60 * 1000
   const noModuleCache = false
   const importMapPath = null
-  const envVarsObj = Deno.env.toObject()
-  const envVars = Object.keys(envVarsObj).map((k) => [k, envVarsObj[k]])
+  // Forward only the allowlisted keys: workers must not see JWT_SECRET, the DB URL, or other router-only secrets.
+  const envVars = workerEnvVars()
 
   try {
     const worker = await EdgeRuntime.userWorkers.create({
@@ -163,8 +164,7 @@ Deno.serve(async (req: Request) => {
     const legacyHeaders = new Headers(workerResponse.headers)
     legacyHeaders.set('Deprecation', 'true')
     legacyHeaders.set('Link', '</api/v1>; rel="successor-version"')
-    const sunset = Deno.env.get('LEGACY_API_SUNSET')
-    if (sunset) legacyHeaders.set('Sunset', sunset)
+    legacyHeaders.set('Sunset', env.legacyApiSunset)
     return new Response(workerResponse.body, {
       status: workerResponse.status,
       statusText: workerResponse.statusText,
@@ -173,8 +173,7 @@ Deno.serve(async (req: Request) => {
   } catch (e) {
     console.error(JSON.stringify({ type: 'legacy_function_error', outcome: 'failure', message: e instanceof Error ? e.message : 'unknown' }))
     const errorHeaders = new Headers({ 'Content-Type': 'application/json', 'Deprecation': 'true', 'Link': '</api/v1>; rel="successor-version"' })
-    const sunset = Deno.env.get('LEGACY_API_SUNSET')
-    if (sunset) errorHeaders.set('Sunset', sunset)
+    errorHeaders.set('Sunset', env.legacyApiSunset)
     return new Response(JSON.stringify({ error: { code: 'LEGACY_FUNCTION_ERROR', message: 'Legacy function failed' } }), {
       status: 500,
       headers: errorHeaders,

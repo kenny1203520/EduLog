@@ -1,7 +1,6 @@
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod'
 import { AI_PERMISSIONS, requireAuthorizationRpcDecision } from '../../auth/authorization.js'
-import type { ApiConfig } from '../../config/config.js'
 import { setAuditContext } from '../../http/context.js'
 import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import {
@@ -17,7 +16,6 @@ import type { KnownEntity } from '../../ai/deidentify/knownEntities.js'
 import {
   DeidentificationUnavailableError,
   PRESIDIO_LANGUAGES,
-  PresidioClient,
   PresidioRequestError,
   type TextAnalyzer,
 } from '../../ai/deidentify/presidioClient.js'
@@ -127,10 +125,7 @@ function unavailable(error: unknown): never {
  * exception words and a test bench. Rules apply to the next request; the
  * test bench never writes anything.
  */
-export function createAiDeidRouter(config: ApiConfig, analyzerOverride?: DeidAnalyzer | null) {
-  const analyzer: DeidAnalyzer | null = analyzerOverride !== undefined
-    ? analyzerOverride
-    : config.PRESIDIO_ANALYZER_URL ? new PresidioClient(config.PRESIDIO_ANALYZER_URL) : null
+export function createAiDeidRouter(analyzer: DeidAnalyzer | null) {
   const router = Router()
 
   function requireAnalyzer(): DeidAnalyzer {

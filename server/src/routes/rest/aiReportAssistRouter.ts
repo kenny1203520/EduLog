@@ -1,19 +1,16 @@
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod'
 import { AI_PERMISSIONS, requireAuthorizationRpcDecision } from '../../auth/authorization.js'
-import type { ApiConfig } from '../../config/config.js'
+import type { AiServices } from '../../ai/aiServices.js'
 import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { setAuditContext } from '../../http/context.js'
-import { SecretCipher } from '../../ai/credentials/secretCipher.js'
 import { Deidentifier } from '../../ai/deidentify/deidentifier.js'
-import { PresidioClient } from '../../ai/deidentify/presidioClient.js'
 import { REPORT_LENGTHS, REPORT_TONES, assessReportContext } from '../../ai/report/reportPrompt.js'
 import type { ReportAssistRepository } from '../../ai/report/reportAssistRepository.js'
 import { GenerationRegistry, sharedGenerationRegistry } from '../../ai/report/generationRegistry.js'
 import { adoptionSnapshot, ReportGenerationService, type GenerationHistoryEntry } from '../../ai/report/reportGenerationService.js'
 import { SupabaseReportAssistRepository } from '../../ai/report/supabaseReportAssistRepository.js'
-import { siwcClientFromConfig } from '../../ai/credentials/chatgptPlanOAuth.js'
-import { isChatGptPlanCredential, sharedChatGptPlanTokens } from '../../ai/credentials/chatgptPlanTokens.js'
+import { isChatGptPlanCredential } from '../../ai/credentials/chatgptPlanTokens.js'
 
 const uuid = z.string().uuid()
 
@@ -50,12 +47,9 @@ export interface AiReportAssistDeps {
   registry: GenerationRegistry
 }
 
-/** Production wiring: Presidio and the secret cipher come from config; either may be absent. */
-export function defaultAiReportAssistDeps(config: ApiConfig): AiReportAssistDeps {
-  const deidentifier = config.PRESIDIO_ANALYZER_URL ? new Deidentifier(new PresidioClient(config.PRESIDIO_ANALYZER_URL)) : null
-  const cipher = config.AI_SECRET_KEY ? SecretCipher.fromBase64(config.AI_SECRET_KEY) : null
-  const siwc = siwcClientFromConfig(config)
-  const chatgpt = siwc && cipher ? sharedChatGptPlanTokens(siwc, cipher) : null
+/** Production wiring: Presidio and the secret cipher come from the app's AI services; either may be absent. */
+export function defaultAiReportAssistDeps({ presidio, cipher, chatgptTokens: chatgpt }: Pick<AiServices, 'presidio' | 'cipher' | 'chatgptTokens'>): AiReportAssistDeps {
+  const deidentifier = presidio ? new Deidentifier(presidio) : null
   return {
     repository: (req) => new SupabaseReportAssistRepository(req.db!, req.adminDb!),
     registry: sharedGenerationRegistry,

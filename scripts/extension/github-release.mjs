@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url'
 import { parseTag, verifyRelease, sha256, repoRoot } from './release.mjs'
 import { compareVersions } from './store.mjs'
 import { resolveReleaseArchive } from './paths.mjs'
+import { optionalEnv } from '../lib/env.mjs'
 
 const apiRoot = 'https://api.github.com'
 const apiVersion = '2022-11-28'
@@ -88,9 +89,9 @@ function createGitHubClient(authToken, fetchImpl) {
 }
 
 export async function publishExtensionRelease({
-  releaseTag = process.env.RELEASE_TAG || '',
+  releaseTag = optionalEnv('RELEASE_TAG', ''),
   metadataPath = join(repoRoot, 'extension/dist/release/release.json'),
-  token: tokenValue = process.env.GH_TOKEN,
+  token: tokenValue = optionalEnv('GH_TOKEN'),
   fetchImpl = fetch,
 } = {}) {
   const client = createGitHubClient(token(tokenValue), fetchImpl)

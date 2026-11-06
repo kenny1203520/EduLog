@@ -76,18 +76,6 @@ export class ChatGptPlanTokens {
   }
 }
 
-const shared = new Map<string, ChatGptPlanTokens>()
-
-/** One token manager per process and client, so routes and generation share the cache. */
-export function sharedChatGptPlanTokens(client: SiwcClient, cipher: SecretCipher): ChatGptPlanTokens {
-  let tokens = shared.get(client.clientId)
-  if (!tokens) {
-    tokens = new ChatGptPlanTokens(client, cipher)
-    shared.set(client.clientId, tokens)
-  }
-  return tokens
-}
-
 /** True for credentials created by "Sign in with ChatGPT" (OpenAI + OAuth). */
 export function isChatGptPlanCredential(credential: { provider: string, authType?: string, auth_type?: string }): boolean {
   return credential.provider === 'openai' && (credential.authType ?? credential.auth_type) === 'oauth'

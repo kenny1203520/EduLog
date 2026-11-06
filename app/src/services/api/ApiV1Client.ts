@@ -1,4 +1,4 @@
-import { getRuntimeConfigValue } from '@/lib/runtimeConfig'
+import { getApiMode, getLegacyApiBaseUrl } from '@/lib/runtimeConfig'
 
 export type ApiMeta = Record<string, unknown> | null
 export type ApiEnvelope<T> = { data: T; meta?: ApiMeta; request_id: string; trace_id: string }
@@ -32,7 +32,6 @@ function dispatchRequestActivity(event: 'start' | 'end') {
 function randomHex(length: number) { const bytes = new Uint8Array(Math.ceil(length / 2)); crypto.getRandomValues(bytes); return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('').slice(0, length) }
 export function createRequestId() { return `edulog-${randomHex(24)}` }
 export function createTraceparent() { return `00-${randomHex(32)}-${randomHex(16)}-01` }
-function legacyBaseUrl() { return getRuntimeConfigValue('VITE_LEGACY_API_BASE_URL') || '/api' }
 function readCookie(name: string) { if (typeof document === 'undefined') return ''; const value = document.cookie.split('; ').find((item) => item.startsWith(`${name}=`))?.slice(name.length + 1); return value ? decodeURIComponent(value) : '' }
 // Inside the EduLog extension side panel this page is a frame of an extension page. Its requests
 // still carry the session cookies, but its scripts cannot read them, so the double-submit token is
@@ -125,4 +124,4 @@ export class ApiV1Client {
   patch<T>(path: string, body: unknown, options?: Omit<ApiRequestOptions, 'method' | 'body'> & { idempotencyKey?: string }) { return this.request<T>(path, { ...options, method: 'PATCH', body }) }
   delete<T>(path: string, body: unknown = {}, options?: Omit<ApiRequestOptions, 'method' | 'body'> & { idempotencyKey?: string }) { return this.request<T>(path, { ...options, method: 'DELETE', body }) }
 }
-export const apiV1Client = new ApiV1Client(getRuntimeConfigValue('VITE_API_V1_MODE') === 'legacy' ? legacyBaseUrl() : '/api')
+export const apiV1Client = new ApiV1Client(getApiMode() === 'legacy' ? getLegacyApiBaseUrl() : '/api')

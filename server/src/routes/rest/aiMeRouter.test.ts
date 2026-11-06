@@ -5,6 +5,7 @@ import { errorHandler } from '../../http/errors.js'
 import { PendingPkceStore } from '../../ai/credentials/openRouterOAuth.js'
 import type { ApiConfig } from '../../config/config.js'
 import { createAiMeRouter, openRouterReturnOrigin } from './aiMeRouter.js'
+import { createAiServices } from '../../ai/aiServices.js'
 
 type Row = Record<string, unknown>
 
@@ -53,7 +54,7 @@ function app(tables: Record<string, Row[]>, userId = 'u1', fetchImpl: typeof fet
     req.auditContext = {} as never
     next()
   })
-  instance.use('/api', createAiMeRouter(routerConfig, pending, fetchImpl, chatgptPending, undefined, ollamaFetchFactory))
+  instance.use('/api', createAiMeRouter(routerConfig, createAiServices(routerConfig), pending, fetchImpl, chatgptPending, ollamaFetchFactory))
   instance.use(errorHandler)
   return instance
 }
@@ -163,8 +164,6 @@ describe('Sign in with ChatGPT', () => {
     ...config,
     OPENAI_SIWC_CLIENT_ID: 'oaiapp_edulog',
     OPENAI_SIWC_CLIENT_SECRET: 'client-secret',
-    OPENAI_SIWC_AUTHORIZE_URL: 'https://auth.openai.com/api/accounts/authorize',
-    OPENAI_SIWC_TOKEN_URL: 'https://auth.openai.com/api/accounts/oauth/token',
   } as ApiConfig
 
   it('is hidden and refused until an approved client is configured', async () => {
@@ -254,7 +253,7 @@ describe('personal models and catalog', () => {
 })
 
 describe('openRouterReturnOrigin', () => {
-  const config = { EDULOG_WEB_BASE_URL: 'https://edulog.example', API_ALLOWED_ORIGINS: 'https://edulog.example,https://staging.edulog.example', NODE_ENV: 'development' as const }
+  const config = { EDULOG_WEB_BASE_URL: 'https://edulog.example', API_ALLOWED_ORIGINS: ['https://edulog.example', 'https://staging.edulog.example'], NODE_ENV: 'development' as const }
 
   it('returns to the page that started the sign-in when its origin is trusted', () => {
     expect(openRouterReturnOrigin(config, 'https://staging.edulog.example')).toBe('https://staging.edulog.example')

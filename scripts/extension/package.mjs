@@ -3,6 +3,7 @@ import { resolve, join, dirname } from 'node:path'
 import { parseArgs } from 'node:util'
 import { buildRelease, repoRoot, verifyRelease } from './release.mjs'
 import { resolveProjectPath, resolveReleaseArchive } from './paths.mjs'
+import { optionalEnv } from '../lib/env.mjs'
 
 try {
   const { values } = parseArgs({ options: {
@@ -18,7 +19,7 @@ try {
     console.log('Extension package verified')
   } else {
     if (!values.version) throw new Error('--version is required')
-    const { archive, metadata } = buildRelease({ ...values, publicKey: process.env.CWS_PUBLIC_KEY })
+    const { archive, metadata } = buildRelease({ ...values, publicKey: optionalEnv('CWS_PUBLIC_KEY') })
     mkdirSync(output, { recursive: true })
     const archivePath = resolveReleaseArchive(output, metadata.archive)
     // Metadata is written last, after the bytes on disk have passed verification.

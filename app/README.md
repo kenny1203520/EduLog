@@ -33,7 +33,11 @@ cp .env.example .env
 ```env
 VITE_API_V1_MODE=mock
 VITE_LEGACY_API_BASE_URL=/api
+# 開發伺服器 /api 代理目標
+EDULOG_API_DEV_TARGET=http://localhost:3000
 ```
+
+完整變數說明請見 `../docs/deployment/environment.md`。
 ## 開發
 
 ```bash
@@ -70,5 +74,3 @@ Production Docker image 使用 Nginx 服務 `dist` 靜態檔，不使用 `vite p
 ## 相關文件
 
 請優先參考專案根目錄的 `../README.md` 取得完整啟動流程（含 Supabase 與 Migration）。
-
-EDULOG_API_DEV_TARGET=http://localhost:3000

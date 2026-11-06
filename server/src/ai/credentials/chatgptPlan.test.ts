@@ -17,7 +17,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 
 describe('ChatGPT OAuth', () => {
   it('stays off without a client id', () => {
-    expect(siwcClientFromConfig({ OPENAI_SIWC_AUTHORIZE_URL: client.authorizeUrl, OPENAI_SIWC_TOKEN_URL: client.tokenUrl })).toBeNull()
+    expect(siwcClientFromConfig({})).toBeNull()
   })
 
   it('asks for plan usage on the OpenAI API resource with PKCE', () => {

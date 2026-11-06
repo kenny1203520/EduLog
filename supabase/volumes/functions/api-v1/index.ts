@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.177.1/http/server.ts'
 import { ApiError, type ApiContext, audit, authenticate, beginIdempotency, corsHeaders, emitTelemetry, enforceRateLimit, handleError, requestId, response, traceId } from '../_shared/api.ts'
 import { ValidationError } from '../_shared/validation.ts'
+import { env } from '../_shared/env.ts'
 import { handleResourceRoutes } from './controllers/resourceController.ts'
 import { handleSystemRoutes } from './controllers/systemController.ts'
 import { handleTeachingMemberRoutes } from './controllers/teachingMembersController.ts'
@@ -35,7 +36,7 @@ async function dispatch(ctx: ApiContext, req: Request, url: URL, path: string, i
 serve(async (req) => {
   const id = requestId(req)
   const trace = traceId(req)
-  const headers = { ...corsHeaders(req), 'X-Trace-Id': trace, Deprecation: 'true', Sunset: Deno.env.get('LEGACY_API_SUNSET') ?? 'Wed, 31 Dec 2026 23:59:59 GMT', Link: '</api>; rel="successor-version"' }
+  const headers = { ...corsHeaders(req), 'X-Trace-Id': trace, Deprecation: 'true', Sunset: env.legacyApiSunset, Link: '</api>; rel="successor-version"' }
   const started = performance.now()
   const url = new URL(req.url)
   const path = normalizedPath(url)

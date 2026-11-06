@@ -3,6 +3,7 @@ import { dirname } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { extensionId, parseTag, verifyRelease } from './release.mjs'
 import { resolveProjectPath, resolveReleaseArchive } from './paths.mjs'
+import { optionalEnv, requireEnv } from '../lib/env.mjs'
 
 const liveStates = new Set(['PUBLISHED', 'PUBLISHED_TO_TESTERS'])
 const versions = revision => (revision?.distributionChannels || []).map(c => c.crxVersion).filter(Boolean)
@@ -116,8 +117,8 @@ export function githubApiUrl(repository, endpoint) {
 }
 
 function githubClient() {
-  const repository = process.env.GITHUB_REPOSITORY, token = process.env.GITHUB_TOKEN
-  if (!token) throw new Error('GITHUB_REPOSITORY and GITHUB_TOKEN required for durable release state')
+  // Durable release state lives on the GitHub release.
+  const repository = requireEnv('GITHUB_REPOSITORY'), token = requireEnv('GITHUB_TOKEN')
   return async (endpoint, body) => {
     const response = await fetch(githubApiUrl(repository, endpoint), {
       method: body === undefined ? 'GET' : 'PATCH', redirect: 'error', signal: AbortSignal.timeout(30000),
@@ -129,7 +130,7 @@ function githubClient() {
   }
 }
 async function main() {
-  const gh = githubClient(), token = process.env.CWS_ACCESS_TOKEN, publisher = process.env.CWS_PUBLISHER_ID
+  const gh = githubClient(), token = optionalEnv('CWS_ACCESS_TOKEN'), publisher = optionalEnv('CWS_PUBLISHER_ID')
   if (process.argv[2] === 'monitor') {
     // Follow all historical pending submissions, not just the most recent page.
     for (let page = 1; ; page++) {
@@ -151,8 +152,8 @@ async function main() {
   }
   const metadataPath = resolveProjectPath(process.argv[2], 'Release metadata path')
   const metadata = JSON.parse(readFileSync(metadataPath, 'utf8'))
-  const archive = readFileSync(resolveReleaseArchive(dirname(metadataPath), metadata.archive)), item = process.env.CWS_EXTENSION_ID
-  const releaseTag = process.env.RELEASE_TAG || ''
+  const archive = readFileSync(resolveReleaseArchive(dirname(metadataPath), metadata.archive)), item = optionalEnv('CWS_EXTENSION_ID')
+  const releaseTag = optionalEnv('RELEASE_TAG', '')
   parseTag(releaseTag)
   const release = await gh({ kind: 'tag', tag: releaseTag })
   const client = createStoreClient({ publisher, item, token })

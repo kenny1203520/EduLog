@@ -1,11 +1,10 @@
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod'
 import { AI_PERMISSIONS, requireAuthorizationRpcDecision } from '../../auth/authorization.js'
-import type { ApiConfig } from '../../config/config.js'
+import type { AiServices } from '../../ai/aiServices.js'
 import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { setAuditContext } from '../../http/context.js'
 import { aggregateUsage, type UsageAdoptionRow, type UsageGenerationRow } from '../../ai/admin/usageStats.js'
-import { SecretCipher } from '../../ai/credentials/secretCipher.js'
 import {
   createCredential,
   credentialPatchInput,
@@ -108,8 +107,7 @@ async function teacherNames(req: Request, userIds: string[]): Promise<Record<str
  * overview, settings, site credentials and models, prompt overrides, quota
  * policies and grants, usage statistics and the generation log.
  */
-export function createAiAdminRouter(config: ApiConfig) {
-  const cipher = config.AI_SECRET_KEY ? SecretCipher.fromBase64(config.AI_SECRET_KEY) : null
+export function createAiAdminRouter({ cipher, presidio }: Pick<AiServices, 'cipher' | 'presidio'>) {
   const router = Router()
 
   router.get('/ai/admin/overview', wrap(async (req, res) => {
@@ -127,7 +125,7 @@ export function createAiAdminRouter(config: ApiConfig) {
     return res.json(envelope(req, {
       settings: settings.data,
       secret_storage_available: cipher !== null,
-      deidentification_available: Boolean(config.PRESIDIO_ANALYZER_URL),
+      deidentification_available: Boolean(presidio),
       credentials: (credentials.data ?? []).map((credential) => ({ ...credential, models: models.filter((model) => model.credential_id === credential.id) })),
       prompt: { key: REPORT_SYSTEM_PROMPT_KEY, default_body: DEFAULT_REPORT_SYSTEM_RULES, versions: prompts.data ?? [] },
       quota_policies: policies.data ?? [],

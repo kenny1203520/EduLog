@@ -58,7 +58,7 @@ export function buildExtensionApprovalUrl(webBaseUrl: string, pairingRequestId: 
 
 function allowedExtensionOrigin(config: ApiConfig, origin: string | undefined) {
   if (!origin || !/^chrome-extension:\/\/[a-p]{32}$/.test(origin)) return false
-  return config.API_EXTENSION_ALLOWED_ORIGINS.split(',').map((item) => item.trim()).filter(Boolean).includes(origin)
+  return config.API_EXTENSION_ALLOWED_ORIGINS.includes(origin)
 }
 
 function requireExtensionToken(adminClient: SupabaseClient, config: ApiConfig) {

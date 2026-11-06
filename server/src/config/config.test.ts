@@ -7,6 +7,7 @@ const requiredEnv = {
   SUPABASE_ANON_KEY: 'anon-test-key',
   SUPABASE_SERVICE_ROLE_KEY: 'service-role-test-key',
   COOKIE_SECRET: 'a'.repeat(32),
+  API_ALLOWED_ORIGINS: 'https://edulog.example.test',
 }
 
 describe('EduLog web base URL configuration', () => {
@@ -81,5 +82,54 @@ describe('AI configuration', () => {
 
   it('rejects a malformed Presidio URL', () => {
     expect(() => loadConfig({ ...base, PRESIDIO_ANALYZER_URL: 'presidio' })).toThrow(/Invalid API configuration: PRESIDIO_ANALYZER_URL/)
+  })
+})
+
+describe('optional values', () => {
+  const base = { ...requiredEnv, NODE_ENV: 'test', EDULOG_WEB_BASE_URL: 'http://localhost:7183' }
+
+  it('treats every empty optional value from an env file as unset', () => {
+    const config = loadConfig({ ...base, SUPABASE_JWT_SECRET: '', SUPABASE_JWT_ISSUER: '', SUPABASE_REALTIME_URL: '', OPENAI_SIWC_CLIENT_ID: '', OPENAI_SIWC_CLIENT_SECRET: '' })
+    expect(config.SUPABASE_JWT_SECRET).toBeUndefined()
+    expect(config.SUPABASE_JWT_ISSUER).toBeUndefined()
+    expect(config.SUPABASE_REALTIME_URL).toBeUndefined()
+    expect(config.OPENAI_SIWC_CLIENT_ID).toBeUndefined()
+  })
+})
+
+describe('CORS origin configuration', () => {
+  const base = { ...requiredEnv, NODE_ENV: 'test', EDULOG_WEB_BASE_URL: 'http://localhost:7183' }
+  const extensionOrigin = `chrome-extension://${'a'.repeat(32)}`
+
+  it('parses comma-separated origins once, trimmed and de-duplicated', () => {
+    const config = loadConfig({ ...base, API_ALLOWED_ORIGINS: ' https://a.example , https://b.example,https://a.example ', API_EXTENSION_ALLOWED_ORIGINS: extensionOrigin })
+    expect(config.API_ALLOWED_ORIGINS).toEqual(['https://a.example', 'https://b.example'])
+    expect(config.API_EXTENSION_ALLOWED_ORIGINS).toEqual([extensionOrigin])
+    expect(config.corsOrigins).toEqual(['https://a.example', 'https://b.example', extensionOrigin])
+  })
+
+  it('allows the local Vite browser origins in development without an allowlist', () => {
+    expect(loadConfig({ ...base, NODE_ENV: 'development', API_ALLOWED_ORIGINS: '' }).corsOrigins).toEqual([
+      'http://localhost:5173',
+      'http://127.0.0.1:5173',
+      'http://[::1]:5173',
+    ])
+  })
+
+  it('rejects wildcard origins instead of combining them with credentials', () => {
+    expect(() => loadConfig({ ...base, API_ALLOWED_ORIGINS: '*' })).toThrow(/API_ALLOWED_ORIGINS \(API_ALLOWED_ORIGINS cannot contain wildcard/)
+  })
+
+  it('rejects origins with a path', () => {
+    expect(() => loadConfig({ ...base, API_ALLOWED_ORIGINS: 'https://a.example/' })).toThrow(/exact origins/)
+  })
+
+  it('accepts only exact Chrome extension origins', () => {
+    expect(() => loadConfig({ ...base, API_EXTENSION_ALLOWED_ORIGINS: 'chrome-extension://*' })).toThrow(/exact Chrome extension origins/)
+  })
+
+  it('fails at startup when production has no explicit origin allowlist', () => {
+    expect(() => loadConfig({ ...base, NODE_ENV: 'production', RATE_LIMIT_STORE: 'supabase', EDULOG_WEB_BASE_URL: 'https://edulog.example.test', API_ALLOWED_ORIGINS: '' }))
+      .toThrow(/explicit API_ALLOWED_ORIGINS/)
   })
 })

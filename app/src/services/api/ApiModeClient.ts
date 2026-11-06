@@ -1,12 +1,12 @@
-import { getRuntimeConfigValue } from '@/lib/runtimeConfig'
+import { getApiMode, getLegacyApiBaseUrl, type ApiMode } from '@/lib/runtimeConfig'
 import { ApiV1Client, type ApiEnvelope, type ApiRequestOptions } from './ApiV1Client'
 
-export type ApiV1Mode = 'mock' | 'legacy' | 'v1'
+export type ApiV1Mode = ApiMode
 export type ApiRequestTransport = Pick<ApiV1Client, 'request'>
 
+/** Resolved once per page load; see `getApiMode`. */
 export function getApiV1Mode(): ApiV1Mode {
-  const configured = getRuntimeConfigValue('VITE_API_V1_MODE')
-  return configured === 'legacy' || configured === 'v1' ? configured : 'mock'
+  return getApiMode()
 }
 
 function mockEnvelope<T>(): ApiEnvelope<T> {
@@ -14,8 +14,7 @@ function mockEnvelope<T>(): ApiEnvelope<T> {
 }
 
 function defaultLegacyClient() {
-  const baseUrl = getRuntimeConfigValue('VITE_LEGACY_API_BASE_URL')
-  return new ApiV1Client(baseUrl || undefined)
+  return new ApiV1Client(getLegacyApiBaseUrl())
 }
 
 export class ApiModeClient {

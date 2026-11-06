@@ -3,7 +3,7 @@ import { once } from 'node:events'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { WebSocket, WebSocketServer } from 'ws'
-import type { ApiConfig } from '../config/config.js'
+import { testConfig } from '../test/testConfig.js'
 
 const supabaseMocks = vi.hoisted(() => ({
   createUserClient: vi.fn(),
@@ -105,15 +105,12 @@ describe('realtime proxy upgrade-to-join flow', () => {
     })
 
     apiServer = createServer()
-    const config = {
-      NODE_ENV: 'test',
-      EDULOG_WEB_BASE_URL: 'http://localhost:4173',
+    const config = testConfig({
       API_ALLOWED_ORIGINS: '',
-      API_EXTENSION_ALLOWED_ORIGINS: '',
       SUPABASE_REALTIME_URL: `ws://127.0.0.1:${upstreamPort}/socket/websocket`,
       SUPABASE_ANON_KEY: 'test-anon-key',
       COOKIE_SECRET,
-    } as ApiConfig
+    })
     attachRealtimeProxy(apiServer, {} as never, config, options.proxyTimeouts)
     const apiPort = await listen(apiServer)
     return `ws://127.0.0.1:${apiPort}/api/realtime`

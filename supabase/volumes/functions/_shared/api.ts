@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient, type User } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
 import { ValidationError, assertJsonObject } from './validation.ts'
 import { configureTelemetryExporter, exportTelemetry, OtlpTelemetryExporter } from './telemetry.ts'
+import { env } from './env.ts'
 
 export type ApiContext = {
   requestId: string; traceId: string; traceparent?: string; route: string; method: string
@@ -41,15 +42,15 @@ export function response(value: unknown, status: number, id: string, headers: He
 
 export function corsHeaders(req: Request): HeadersInit {
   const origin = req.headers.get('origin')
-  const allowed = Deno.env.get('API_ALLOWED_ORIGINS')?.split(',').map((x) => x.trim()).filter(Boolean) ?? []
-  const allowOrigin = origin && (allowed.includes(origin) || (allowed.length === 0 && Deno.env.get('ENVIRONMENT') !== 'production')) ? origin : allowed[0] ?? 'null'
+  const allowed = env.allowedOrigins
+  // Without an allowlist, only an explicit ENVIRONMENT=development reflects the caller's origin.
+  const allowOrigin = origin && (allowed.includes(origin) || (allowed.length === 0 && env.environment === 'development')) ? origin : allowed[0] ?? 'null'
   return { 'Access-Control-Allow-Origin': allowOrigin, 'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-request-id, traceparent, idempotency-key', 'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS', Vary: 'Origin' }
 }
 function clientIp(req: Request) { return req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? req.headers.get('cf-connecting-ip') ?? 'unknown' }
 
 export async function authenticate(req: Request, id: string, trace: string, route = new URL(req.url).pathname, startedAt = performance.now()): Promise<ApiContext> {
-  const url = Deno.env.get('SUPABASE_URL')
-  const serviceRole = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SERVICE_ROLE_KEY')
+  const { supabaseUrl: url, serviceRoleKey: serviceRole } = env
   const authorization = req.headers.get('authorization')
   const token = authorization && authorization.length <= 8192
     ? /^Bearer[ \t]+([^ \t\r\n]+)$/i.exec(authorization)?.[1]
@@ -57,7 +58,7 @@ export async function authenticate(req: Request, id: string, trace: string, rout
   if (!url || !serviceRole) throw new ApiError(500, 'CONFIGURATION_ERROR', 'Supabase server configuration is missing')
   if (!token) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const adminDb = createClient(url, serviceRole, { auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false } })
-  const userKey = Deno.env.get('SUPABASE_ANON_KEY') ?? Deno.env.get('SUPABASE_PUBLISHABLE_KEY')
+  const userKey = env.anonKey
   if (!userKey) throw new ApiError(500, 'CONFIGURATION_ERROR', 'Supabase public API key is missing')
   const db = createClient(url, userKey, { auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false }, global: { headers: { Authorization: 'Bearer ' + token } } })
   const { data, error } = await adminDb.auth.getUser(token)
@@ -111,9 +112,7 @@ let rateLimitConfigured = false
 export function configureRateLimitStore(store: RateLimitStore) { rateLimitStore = store; rateLimitConfigured = true }
 async function ensureRateLimitStore() {
   if (rateLimitConfigured) return
-  const environment = Deno.env.get('ENVIRONMENT') ?? 'development'
-  const url = Deno.env.get('SUPABASE_URL')
-  const serviceRole = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SERVICE_ROLE_KEY')
+  const { supabaseUrl: url, serviceRoleKey: serviceRole, environment } = env
   if (url && serviceRole) {
     configureRateLimitStore(new SupabaseRateLimitStore(createClient(url, serviceRole, { auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false } })))
     return
@@ -128,7 +127,7 @@ async function rateLimitBucketKey(req: Request, route: string) {
 }
 export async function enforceRateLimit(req: Request, route: string) {
   await ensureRateLimitStore()
-  const limit = Math.max(Number(Deno.env.get('API_RATE_LIMIT_PER_MINUTE') ?? 120), 1)
+  const limit = env.rateLimitPerMinute
   const current = await rateLimitStore.consume(await rateLimitBucketKey(req, route), limit, 60_000)
   if (!current.allowed) throw new ApiError(429, 'RATE_LIMITED', 'Too many requests', undefined, Math.max(1, Math.ceil((current.resetAt - Date.now()) / 1000)))
 }
@@ -153,5 +152,5 @@ export function handleError(error: unknown, id: string, trace: string) { const k
 
 export type TelemetryEvent = { request_id: string; trace_id: string; traceparent?: string; user_id?: string; teaching_id?: string; resource?: string; route: string; method: string; status?: number; latency_ms: number; outcome: 'success' | 'denied' | 'failure' }
 let telemetryConfigured = false
-function configureOtlpFromEnvironment() { if (telemetryConfigured) return; telemetryConfigured = true; const endpoints = { log: Deno.env.get('OTEL_EXPORTER_OTLP_LOGS_ENDPOINT'), span: Deno.env.get('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT'), metric: Deno.env.get('OTEL_EXPORTER_OTLP_METRICS_ENDPOINT') }; if (Object.values(endpoints).some(Boolean)) configureTelemetryExporter(new OtlpTelemetryExporter(endpoints)) }
+function configureOtlpFromEnvironment() { if (telemetryConfigured) return; telemetryConfigured = true; const endpoints = env.otlpEndpoints; if (Object.values(endpoints).some(Boolean)) configureTelemetryExporter(new OtlpTelemetryExporter(endpoints)) }
 export async function emitTelemetry(event: TelemetryEvent) { configureOtlpFromEnvironment(); const attributes = Object.fromEntries(Object.entries(event).filter(([, value]) => value !== undefined)) as Record<string, string | number | boolean>; console.log(JSON.stringify({ type: 'api_telemetry', ...attributes })); const timestamp = Date.now(); const eventAttributes = event.traceparent ? { ...attributes, traceparent: event.traceparent } : attributes; await Promise.all([exportTelemetry({ signal: 'log', name: 'api.request', attributes: eventAttributes, timestamp, endTimestamp: timestamp }), exportTelemetry({ signal: 'span', name: 'api.request', attributes: eventAttributes, timestamp, endTimestamp: Date.now(), traceparent: event.traceparent }), exportTelemetry({ signal: 'metric', name: 'api.request.count', attributes: eventAttributes, timestamp, endTimestamp: Date.now(), traceparent: event.traceparent })]) }

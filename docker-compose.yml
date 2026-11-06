@@ -476,6 +476,10 @@ services:
       SUPABASE_DB_URL: postgresql://postgres:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
       # TODO: Allow configuring VERIFY_JWT per function.
       VERIFY_JWT: "${FUNCTIONS_VERIFY_JWT}"
+      # EduLog edge-function settings (read in supabase/volumes/functions/_shared/env.ts).
+      API_ALLOWED_ORIGINS: ${EDULOG_ALLOWED_ORIGINS:-}
+      ENVIRONMENT: ${EDULOG_FUNCTIONS_ENVIRONMENT:-production}
+      API_RATE_LIMIT_PER_MINUTE: ${EDULOG_API_RATE_LIMIT_PER_MINUTE:-120}
     command: 
       [
         "start",
@@ -748,7 +752,6 @@ services:
       EDULOG_API_BODY_LIMIT: ${EDULOG_API_BODY_LIMIT:-1mb}
       VITE_API_V1_MODE: ${VITE_API_V1_MODE:-v1}
       EDULOG_ALLOWED_HOSTS: ${EDULOG_ALLOWED_HOSTS:-}
-      EDULOG_PORT: ${EDULOG_PORT:-4173}
       EDULOG_HTTPS_PORT: ${EDULOG_HTTPS_PORT:-4174}
       EDULOG_HSTS_HEADER: "${EDULOG_HSTS_HEADER:-}"
       EDULOG_CSP_HEADER: "${EDULOG_CSP_HEADER:-}"
