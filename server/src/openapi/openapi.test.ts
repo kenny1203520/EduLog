@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { permissionForResource } from '../auth/authorization.js'
 import { buildOpenApi } from './openapi.js'
-import { resources } from '../routes/rest/resources.js'
+import { genericOperationsOf, resources } from '../routes/rest/resources.js'
 
 describe('generated API contract', () => {
   it('documents blank email clearing for student and contact mutations', () => {
@@ -84,7 +84,7 @@ describe('generated API contract', () => {
     expect(studentCreate.properties.birthday).toEqual(expect.objectContaining({ anyOf: expect.arrayContaining([expect.objectContaining({ type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' })]) }))
     expect(studentUpdate).toMatchObject({ type: 'object', additionalProperties: false })
     expect(studentUpdate.required).toBeUndefined()
-    expect(spec.paths['/api/roles']?.post?.['x-request-schema-source']).toBe('resource-registry')
+    expect(spec.paths['/api/roles']?.post?.['x-request-schema-source']).toBeUndefined()
   })
 
   it('documents blank classroom external links as a nullable clear operation', () => {
@@ -96,33 +96,36 @@ describe('generated API contract', () => {
   })
 
   it('keeps generated generic methods and permissions aligned with the registry', () => {
-    const spec = buildOpenApi() as { paths: Record<string, Record<string, { 'x-permission'?: string } | undefined>> }
+    const spec = buildOpenApi() as { paths: Record<string, Record<string, { 'x-permission'?: string; operationId?: string } | undefined>> }
     const specialized = new Map([
       ['enrollments:post', 'teaching.enrollments.create'], ['enrollments:patch', 'teaching.enrollments.update'], ['enrollments:delete', 'teaching.enrollments.delete'],
       ['reports:post', 'teaching.reports.create'], ['reports:patch', 'teaching.reports.update'], ['reports:delete', 'teaching.reports.delete'],
       ['occurrences:patch', 'teaching.occurrences.update'], ['occurrences:delete', 'teaching.occurrences.delete'],
       ['student-suspensions:post', 'teaching.students.update'], ['student-suspensions:patch', 'teaching.students.update'], ['student-suspensions:delete', 'teaching.students.update'],
       ['holidays:post', 'teaching.holidays.create'], ['holidays:patch', 'teaching.holidays.update'], ['holidays:delete', 'teaching.holidays.delete'],
+      ['students:delete', 'teaching.students.delete'],
     ])
     for (const def of Object.values(resources)) {
-      if (def.route === 'roles') continue
-      const methods = new Set(def.genericMethods ?? ['GET', 'POST', 'PATCH', 'DELETE'])
+      const operations = genericOperationsOf(def)
       const collection = spec.paths[`/api/${def.route}`]
       const item = spec.paths[`/api/${def.route}/{id}`]
-      if (methods.has('GET')) {
-        expect(collection?.get?.['x-permission']).toBe(def.selfAuthorization ? undefined : permissionForResource(def, 'list'))
-        expect(item?.get?.['x-permission']).toBe(def.selfAuthorization ? undefined : permissionForResource(def, 'read'))
-      } else {
-        expect(collection?.get).toBeUndefined()
-        expect(item?.get).toBeUndefined()
-      }
-      if (methods.has('POST')) expect(collection?.post?.['x-permission']).toBe(def.selfAuthorization ? undefined : permissionForResource(def, 'create'))
+      if (operations.has('list')) expect(collection?.get?.['x-permission']).toBe(def.selfAuthorization ? undefined : permissionForResource(def, 'list'))
+      else if (def.route !== 'class-sessions') expect(collection?.get).toBeUndefined()
+      if (operations.has('read')) expect(item?.get?.['x-permission']).toBe(def.selfAuthorization ? undefined : permissionForResource(def, 'read'))
+      else if (def.route !== 'class-sessions') expect(item?.get).toBeUndefined()
+      if (operations.has('create')) expect(collection?.post?.['x-permission']).toBe(def.selfAuthorization ? undefined : permissionForResource(def, 'create'))
       else if (def.route !== 'class-sessions') expect(collection?.post?.['x-permission']).toBe(specialized.get(`${def.route}:post`))
-      if (methods.has('PATCH')) expect(item?.patch?.['x-permission']).toBe(def.selfAuthorization ? undefined : permissionForResource(def, 'update'))
+      if (operations.has('update')) expect(item?.patch?.['x-permission']).toBe(def.selfAuthorization ? undefined : permissionForResource(def, 'update'))
       else if (def.route !== 'class-sessions') expect(item?.patch?.['x-permission']).toBe(specialized.get(`${def.route}:patch`))
-      if (methods.has('DELETE')) expect(item?.delete?.['x-permission']).toBe(def.selfAuthorization ? undefined : permissionForResource(def, 'delete'))
+      if (operations.has('delete')) expect(item?.delete?.['x-permission']).toBe(def.selfAuthorization ? undefined : permissionForResource(def, 'delete'))
       else if (def.route !== 'class-sessions') expect(item?.delete?.['x-permission']).toBe(specialized.get(`${def.route}:delete`))
     }
+    // Routes owned by domain routers are documented from those handlers, not the registry.
+    expect(spec.paths['/api/class-sessions/{id}']?.get?.operationId).toBe('class_sessions_get')
+    expect(spec.paths['/api/occurrences']?.get?.operationId).toBe('occurrences_list_scoped')
+    expect(spec.paths['/api/occurrences/{id}']?.get?.operationId).toBe('occurrences_get')
+    expect(spec.paths['/api/roles/{id}']?.get?.operationId).toBe('role_get')
+    expect(spec.paths).not.toHaveProperty('/api/class-session-schedule-rules')
   })
 
   it('documents specialized nested resource scope parameters and permissions', () => {

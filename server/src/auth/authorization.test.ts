@@ -85,7 +85,7 @@ describe('resource-aware authorization', () => {
     const rpc = vi.fn().mockResolvedValue({ data: true, error: null })
     await authorizeResource(
       requestWithRpc(rpc),
-      resources['class-session-schedule-rules'],
+      resources['class-session-teachers'],
       'teaching.class_sessions.read',
       '00000000-0000-4000-8000-000000000011',
       { class_session_id: '00000000-0000-4000-8000-000000000012' },

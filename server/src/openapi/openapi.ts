@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { resources, resourceSchemas } from '../routes/rest/resources.js'
+import { genericOperationsOf, resources, resourceSchemas } from '../routes/rest/resources.js'
 import { enrollmentBodySchema, enrollmentCreateSchema, enrollmentHistoryInput, enrollmentHistoryOperations } from '../routes/rest/enrollmentRouter.js'
 import { occurrenceBodySchema, occurrenceGenerationSchema } from '../routes/rest/occurrenceRouter.js'
 import { reportCreateSchema, reportUpdateSchema, reportCollaborationSchema } from '../routes/rest/reportRouter.js'
@@ -121,21 +121,21 @@ export function buildOpenApi() {
   for (const def of Object.values(resources)) {
     const collection = `/api/${def.route}`
     const item = `${collection}/{id}`
-    const methods = new Set(def.genericMethods ?? ['GET', 'POST', 'PATCH', 'DELETE'])
+    const operations = genericOperationsOf(def)
     const name = def.route.replaceAll('-', '_')
     const base = { security: [{ cookieAuth: [] }], ...(def.selfAuthorization ? { 'x-authorization-model': 'owner-identity' } : {}), responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } }
     const collectionPath: Record<string, unknown> = {}
     const permission = (action: 'create' | 'read' | 'update' | 'delete' | 'list') => def.selfAuthorization ? undefined : permissionForResource(def, action)
     const filterableFields = def.filterable ?? []
     const queryParameters = [{ $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Offset' }, { name: 'sort', in: 'query', schema: { type: 'string', enum: def.sortable.flatMap((field) => [field, `-${field}`]), default: def.sortable[0] } }, { $ref: '#/components/parameters/Search' }, { $ref: '#/components/parameters/Filters' }, { $ref: '#/components/parameters/Or' }, ...(filterableFields.includes('status') ? [{ $ref: '#/components/parameters/Status' }] : []), ...['teaching_id', 'course_id', 'classroom_id', 'class_session_id', 'class_occurrence_id', 'lesson_id', 'student_id', 'teacher_id', 'instructor_id', 'user_id', 'enrollment_id', 'occurrence_report_id', 'entity_type', 'entity_id', 'entity_ids', 'template_type', 'scope_type', 'scope_entity_id'].filter((field) => filterableFields.includes(field)).map((field) => ({ $ref: `#/components/parameters/${field}` }))]
-    if (methods.has('GET')) collectionPath.get = { ...base, operationId: `${name}_list`, ...(permission('list') ? { 'x-permission': permission('list') } : {}), 'x-readable-fields': def.listFields ?? def.fields, 'x-sortable-fields': def.sortable, 'x-searchable-fields': def.searchable, parameters: queryParameters }
-    if (methods.has('POST')) collectionPath.post = { ...base, operationId: `${name}_create`, ...(permission('create') ? { 'x-permission': permission('create') } : {}), 'x-writable-fields': def.writable, 'x-compatibility-fields': def.compatibilityFields ?? [], 'x-request-schema-source': 'resource-registry', parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }], requestBody: { required: true, content: { 'application/json': { schema: mutationSchema(def, 'create') } } }, responses: { '201': { $ref: '#/components/responses/Envelope' }, ...errorResponses } }
-    paths[collection] = collectionPath
+    if (operations.has('list')) collectionPath.get = { ...base, operationId: `${name}_list`, ...(permission('list') ? { 'x-permission': permission('list') } : {}), 'x-readable-fields': def.listFields ?? def.fields, 'x-sortable-fields': def.sortable, 'x-searchable-fields': def.searchable, parameters: queryParameters }
+    if (operations.has('create')) collectionPath.post = { ...base, operationId: `${name}_create`, ...(permission('create') ? { 'x-permission': permission('create') } : {}), 'x-writable-fields': def.writable, 'x-compatibility-fields': def.compatibilityFields ?? [], 'x-request-schema-source': 'resource-registry', parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }], requestBody: { required: true, content: { 'application/json': { schema: mutationSchema(def, 'create') } } }, responses: { '201': { $ref: '#/components/responses/Envelope' }, ...errorResponses } }
+    if (Object.keys(collectionPath).length) paths[collection] = collectionPath
     const itemPath: Record<string, unknown> = {}
-    if (methods.has('GET')) itemPath.get = { ...base, operationId: `${name}_get`, ...(permission('read') ? { 'x-permission': permission('read') } : {}), 'x-readable-fields': def.itemFields ?? def.fields, parameters: [{ $ref: '#/components/parameters/ResourceId' }] }
-    if (methods.has('PATCH')) itemPath.patch = { ...base, operationId: `${name}_update`, ...(permission('update') ? { 'x-permission': permission('update') } : {}), 'x-writable-fields': def.writable, 'x-compatibility-fields': def.compatibilityFields ?? [], 'x-request-schema-source': 'resource-registry', parameters: [{ $ref: '#/components/parameters/ResourceId' }, { $ref: '#/components/parameters/IdempotencyKey' }], requestBody: { required: true, content: { 'application/json': { schema: mutationSchema(def, 'update') } } } }
-    if (methods.has('DELETE')) itemPath.delete = { ...base, operationId: `${name}_delete`, ...(permission('delete') ? { 'x-permission': permission('delete') } : {}), 'x-writable-fields': [], parameters: [{ $ref: '#/components/parameters/ResourceId' }, { $ref: '#/components/parameters/IdempotencyKey' }] }
-    paths[item] = itemPath
+    if (operations.has('read')) itemPath.get = { ...base, operationId: `${name}_get`, ...(permission('read') ? { 'x-permission': permission('read') } : {}), 'x-readable-fields': def.itemFields ?? def.fields, parameters: [{ $ref: '#/components/parameters/ResourceId' }] }
+    if (operations.has('update')) itemPath.patch = { ...base, operationId: `${name}_update`, ...(permission('update') ? { 'x-permission': permission('update') } : {}), 'x-writable-fields': def.writable, 'x-compatibility-fields': def.compatibilityFields ?? [], 'x-request-schema-source': 'resource-registry', parameters: [{ $ref: '#/components/parameters/ResourceId' }, { $ref: '#/components/parameters/IdempotencyKey' }], requestBody: { required: true, content: { 'application/json': { schema: mutationSchema(def, 'update') } } } }
+    if (operations.has('delete')) itemPath.delete = { ...base, operationId: `${name}_delete`, ...(permission('delete') ? { 'x-permission': permission('delete') } : {}), 'x-writable-fields': [], parameters: [{ $ref: '#/components/parameters/ResourceId' }, { $ref: '#/components/parameters/IdempotencyKey' }] }
+    if (Object.keys(itemPath).length) paths[item] = itemPath
   }
   paths['/api/students/{id}/credentials'] = {
     get: {
@@ -187,6 +187,8 @@ export function buildOpenApi() {
     const method = action === 'create' ? 'post' : action === 'update' ? 'patch' : 'delete'
     addSpecialized(`/api${route}`, method, `${route.slice(1).replaceAll('/', '_').replaceAll('{id}', 'id')}_${action}`, permission, status, action === 'create' ? [mutationParam] : [idParam, mutationParam], action === 'delete' ? undefined : bodyFor(route, action as 'create' | 'update'))
   }
+  addSpecialized('/api/occurrences/{id}', 'get', 'occurrences_get', 'teaching.occurrences.read', '200', [idParam])
+  addSpecialized('/api/students/{id}', 'delete', 'students_delete', 'teaching.students.delete', '200', [idParam, mutationParam])
   addSpecialized('/api/occurrences/generate', 'post', 'occurrences_generate', 'teaching.occurrences.create', '200', [mutationParam], refBody('OccurrenceGenerationMutation'))
   paths['/api/occurrences'] = {
     get: { operationId: 'occurrences_list_scoped', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.occurrences.list', parameters: [
@@ -490,7 +492,6 @@ export function buildOpenApi() {
       ...pageBase,
       operationId: 'roles_create_by_domain',
       'x-permission': 'system.roles.manage | teaching.roles.manage',
-      'x-request-schema-source': 'resource-registry',
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }],
       requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/RoleCreateMutation' } } } },
       responses: { '201': { $ref: '#/components/responses/Envelope' }, ...errorResponses },
