@@ -61,9 +61,10 @@ export function createApp(config: ApiConfig, clients: SupabaseClients = createSu
   app.get('/api/openapi.json', (_req, res) => res.json(buildOpenApi()))
   app.use('/api/auth', csrfProtection, rateLimitMiddleware(config, clients.adminClient), createAuthRouter(clients, config))
   app.use('/api/extension', rateLimitMiddleware(config, clients.adminClient), createExtensionIntegrationRouter(clients, config))
-  app.use('/api/users', csrfProtection, requireAuth(clients, config), rateLimitMiddleware(config, clients.adminClient), createUserSearchRouter())
   const protectedApi = Router()
   protectedApi.use(csrfProtection, requireAuth(clients, config), rateLimitMiddleware(config, clients.adminClient))
+  // Must precede the generic registry so /users/search is not read as /users/:id.
+  protectedApi.use('/users', createUserSearchRouter())
   protectedApi.use(createRealtimeTicketRouter(config))
   protectedApi.use(createRbacRouter())
   protectedApi.use(createEnrollmentRouter())
