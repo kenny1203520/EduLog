@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useCapabilityStore } from '@/stores/useCapabilityStore'
 import { computed, ref, onMounted } from 'vue'
 import { ClassroomService } from '@/services/classroom/ClassroomService'
 import { AggregateService } from '@/services/api/AggregateService'
@@ -32,6 +33,7 @@ interface TeacherLeaveGroup {
 
 const { t } = useI18n()
 const toast = useToast()
+const capabilities = useCapabilityStore()
 const { reportError, errorKey } = useFeedback()
 const preferences = usePreferencesStore()
 const holidays = ref<Holiday[]>([])
@@ -520,7 +522,7 @@ function closeModal() {
                     </div>
                 </div>
 
-                <button @click="openAddModal()"
+                <button v-if="capabilities.can('teaching.holidays.create')" @click="openAddModal()"
                     class="bg-emerald-600 text-white px-6 py-3 rounded-2xl hover:bg-emerald-700 transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-200 font-bold active:scale-95 w-full lg:w-auto shrink-0">
                     <span class="text-xl leading-none">+</span>
                     {{ activeTab === 'teacherLeaves' ? t('holiday.add_teacher_leave') : t('holiday.add_closure') }}
@@ -589,7 +591,7 @@ function closeModal() {
                         </div>
 
                         <div class="flex gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all">
-                            <button @click="openEditModal(holiday)"
+                            <button v-if="capabilities.can('teaching.holidays.update')" @click="openEditModal(holiday)"
                                 class="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"
                                 :title="$t('common.edit')">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20"
@@ -598,7 +600,7 @@ function closeModal() {
                                         d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
                                 </svg>
                             </button>
-                            <button @click="handleDeleteHoliday(holiday.id!)"
+                            <button v-if="capabilities.can('teaching.holidays.delete')" @click="handleDeleteHoliday(holiday.id!)"
                                 class="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
                                 :title="$t('common.delete')">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20"
@@ -802,7 +804,7 @@ function closeModal() {
                                 </div>
 
                                 <div class="flex gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all">
-                                    <button @click="openEditModal(holiday)"
+                                    <button v-if="capabilities.can('teaching.holidays.update')" @click="openEditModal(holiday)"
                                         class="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"
                                         :title="$t('common.edit')">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20"
@@ -811,7 +813,7 @@ function closeModal() {
                                                 d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
                                         </svg>
                                     </button>
-                                    <button @click="handleDeleteHoliday(holiday.id!)"
+                                    <button v-if="capabilities.can('teaching.holidays.delete')" @click="handleDeleteHoliday(holiday.id!)"
                                         class="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
                                         :title="$t('common.delete')">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20"
