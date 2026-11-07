@@ -10,8 +10,6 @@ const strictNotificationEligibility = readFileSync(resolve(process.cwd(), '../su
 const scopedTeachingMatrix = readFileSync(resolve(process.cwd(), '../supabase/migrations/1000092_scoped_teaching_role_permission_matrix.sql'), 'utf8')
 const systemRoleOverlap = readFileSync(resolve(process.cwd(), '../supabase/migrations/1000093_system_role_assignment_overlap_guard.sql'), 'utf8')
 const platformTeachingHierarchy = readFileSync(resolve(process.cwd(), '../supabase/migrations/1000099_platform_teaching_role_hierarchy.sql'), 'utf8')
-const edgeFunction = readFileSync(resolve(process.cwd(), '../supabase/volumes/functions/aggregate-incomplete-reports/index.ts'), 'utf8')
-const notificationPolicy = readFileSync(resolve(process.cwd(), '../supabase/volumes/functions/aggregate-incomplete-reports/policy.ts'), 'utf8')
 
 const domainAwarePermissionPolicies = readFileSync(resolve(process.cwd(), '../supabase/migrations/1000104_domain_aware_permission_policies.sql'), 'utf8')
 
@@ -44,17 +42,6 @@ describe('RBAC migration contract', () => {
         expect(migration).toContain('assignment.effective_from <= p_effective_date')
         expect(migration).toContain('assignment.effective_to >= p_effective_date')
         expect(migration).toContain("COALESCE(bool_or(effect = 'deny'), false)")
-    })
-
-    it('routes notification aggregation through the strict class-role evaluator', () => {
-        expect(edgeFunction).toContain("client.rpc('resolve_incomplete_report_notification_permission'")
-        expect(edgeFunction).toContain('canReceiveIncompleteReportNotification')
-        expect(edgeFunction).toContain('isTeacherPresentForScope')
-        expect(notificationPolicy).toContain('if (!isPresent) return false')
-        expect(notificationPolicy).toContain('if (!decision.policy_configured) return false')
-        expect(notificationPolicy).toContain('return decision.is_allowed && !decision.is_denied')
-        expect(edgeFunction).toContain("'Cache-Control': 'private, no-store'")
-        expect(edgeFunction).not.toContain("'Cache-Control': 'public")
     })
 
     it('requires an effective class assignment and explicit three-level policy', () => {

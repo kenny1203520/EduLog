@@ -1,4 +1,4 @@
-import { Router, type NextFunction, type Request, type Response } from 'express'
+import { Router, type Request, type Response } from 'express'
 import { z } from 'zod'
 import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { complete, idempotency } from './resourceRouter.js'
@@ -6,7 +6,7 @@ import { initialReportAttendance } from '../../domain/reportSemantics.js'
 import { setAuditContext } from '../../http/context.js'
 import { requireAuthorizationDecision } from '../../auth/authorization.js'
 import { measureReportAdoptions } from '../../ai/adoption/adoptionTracker.js'
-import { envelope, permission, uuid } from './domainAccess.js'
+import { envelope, permission, uuid, wrap } from './domainAccess.js'
 
 const fields = 'id,enrollment_id,class_occurrence_id,lesson_id,is_completed,progress_letter,attendance_status,absence_reason,class_participation,classroom_behavior,contact_notes,contact_notes_document,class_notes,class_notes_document,content,content_document,external_link,source_origin,source_admission_id,source_report_id,version,last_edited_by,last_edited_at,created_at,updated_at'
 const writable = ['lesson_id', 'is_completed', 'progress_letter', 'attendance_status', 'absence_reason', 'class_participation', 'classroom_behavior', 'contact_notes', 'contact_notes_document', 'class_notes', 'class_notes_document', 'content', 'content_document', 'external_link'] as const
@@ -48,7 +48,6 @@ type MutationContext = {
 export function firstUncompletedSequence(lessons: Array<{ id: string; sequence: number }>, representedLessonIds: Set<string>, currentLessonNumber: number) {
   return lessons.find((lesson) => !representedLessonIds.has(lesson.id))?.sequence ?? currentLessonNumber
 }
-function wrap(handler: (req: Request, res: Response) => Promise<unknown>) { return (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res)).catch(next) }
 function reportId(req: Request) {
   const id = typeof req.params.id === 'string' ? req.params.id : undefined
   if (!id || !z.string().uuid().safeParse(id).success) throw new ApiError(400, 'INVALID_ID', 'Report id is invalid')
@@ -220,16 +219,7 @@ async function saveCollaboration(req: Request, res: Response) {
   return res.json(body)
 }
 // Report version restore, conflict resolution and progress summaries.
-const reportPatchFields = ['lesson_id', 'is_completed', 'progress_letter', 'attendance_status', 'absence_reason', 'class_participation', 'classroom_behavior', 'contact_notes', 'contact_notes_document', 'class_notes', 'class_notes_document', 'content', 'content_document', 'external_link'] as const
-
-const reportPatch = z.object({
-  lesson_id: uuid.nullable().optional(), is_completed: z.boolean().optional(), progress_letter: z.string().regex(/^[A-Z](-[A-Z])?$/).max(32).nullable().optional(),
-  attendance_status: z.enum(['present', 'absent', 'pending']).optional(), absence_reason: z.string().max(64).nullable().optional(),
-  class_participation: z.number().min(0).max(5).nullable().optional(), classroom_behavior: z.number().min(0).max(5).nullable().optional(),
-  contact_notes: z.string().max(10000).nullable().optional(), contact_notes_document: z.record(z.string(), z.unknown()).nullable().optional(),
-  class_notes: z.string().max(10000).nullable().optional(), class_notes_document: z.record(z.string(), z.unknown()).nullable().optional(),
-  content: z.string().max(10000).nullable().optional(), content_document: z.record(z.string(), z.unknown()).nullable().optional(), external_link: z.string().max(2048).nullable().optional(),
-}).strict()
+const reportPatch = reportBodySchema.omit({ enrollment_id: true, class_occurrence_id: true, expected_version: true })
 
 async function reportMutation(req: Request, reportId: string, patch: Record<string, unknown>, expectedVersion: number, res: Response) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
@@ -254,7 +244,7 @@ async function restoreVersion(req: Request, res: Response) {
   if (version.error) throw mapDatabaseError(version.error)
   if (!version.data) throw new ApiError(404, 'NOT_FOUND', 'Report version was not found')
   const snapshot: Record<string, unknown> = version.data.snapshot && typeof version.data.snapshot === 'object' ? version.data.snapshot as Record<string, unknown> : { content: version.data.content }
-  const patch = Object.fromEntries(reportPatchFields.filter((field) => field in snapshot).map((field) => [field, snapshot[field]]))
+  const patch = Object.fromEntries(writable.filter((field) => field in snapshot).map((field) => [field, snapshot[field]]))
   return reportMutation(req, reportId, reportPatch.parse(patch), input.expected_version, res)
 }
 

@@ -23,7 +23,6 @@ DECLARE
   dates date[];
   v_report public.occurrence_reports%ROWTYPE;
 BEGIN
-  SELECT id INTO v_teaching_id FROM public.teachings WHERE is_global LIMIT 1;
   INSERT INTO auth.users(id, email) VALUES (owner_id, 'transfer-log-owner@example.test');
   INSERT INTO public.classrooms(id, name, user_id, teaching_id) VALUES (v_classroom_id, 'Log classroom', owner_id, v_teaching_id);
   INSERT INTO public.courses(id, subject, stage, user_id, teaching_id) VALUES (v_course_id, 'Log course', 'primary', owner_id, v_teaching_id);

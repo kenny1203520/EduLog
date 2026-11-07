@@ -1,4 +1,4 @@
-import type { Request } from 'express'
+import type { NextFunction, Request, Response } from 'express'
 import { z } from 'zod'
 import { ApiError } from '../../http/errors.js'
 import { setAuditContext } from '../../http/context.js'
@@ -7,6 +7,11 @@ import { requireAuthorizationDecision } from '../../auth/authorization.js'
 // Shared by the occurrence, report, enrollment, teacher and copy-template
 // workflow routes.
 export const uuid = z.string().uuid()
+
+/** Forwards a rejected async handler to Express error handling. */
+export function wrap(handler: (req: Request, res: Response) => Promise<unknown>) {
+  return (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res)).catch(next)
+}
 
 export function envelope(req: Request, data: unknown, meta: Record<string, unknown> = {}) {
   return { data, meta, request_id: req.requestId, trace_id: req.traceId }

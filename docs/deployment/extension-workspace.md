@@ -6,13 +6,13 @@
 
 工作台依實際核對與交易進度呈現「讀取與核對 → 處理例外 → 摘要並同步 → 結果」。共用設定集中收合、左右差異與逐段 diff、已提交與待處理分開統計。已有未完成工作可繼續；功能與中英切換保留草稿及選取。工作紀錄依可靠 job ID 合併並提供狀態篩選，單側讀取失敗不抹除另一側資料。
 
-側載更新後，先保存來源草稿，重新載入擴充套件、來源分頁與工作台，再檢查配對。教學表單仍由老師確認並人工送出。自動、已安裝瀏覽器離線樣本與真實側載分開記錄，詳見 `extension/tests/ACCEPTANCE-workflow-redesign.md`；原生 200% 縮放與真實站讀寫尚待驗收。
+側載更新後，先保存來源草稿，重新載入擴充套件、來源分頁與工作台，再檢查配對。教學表單仍由老師確認並人工送出。自動、已安裝瀏覽器離線樣本與真實側載分開記錄，詳見 `extension/tests/acceptance/ACCEPTANCE-workflow-redesign.md`；原生 200% 縮放與真實站讀寫尚待驗收。
 
-跨批次歷史預覽依賴需先套用 `1000130_import_preview_dependencies_and_diagnostics.sql` 並更新 API。部署與驗收狀態見 `extension/tests/ACCEPTANCE-1000130-preview-dependencies.md`。未完成前，舊伺服器會安全阻擋相依預覽，不放寬參照驗證。
+跨批次歷史預覽依賴需先套用 `1000130_import_preview_dependencies_and_diagnostics.sql` 並更新 API。部署與驗收狀態見 `extension/tests/acceptance/ACCEPTANCE-1000130-preview-dependencies.md`。未完成前，舊伺服器會安全阻擋相依預覽，不放寬參照驗證。
 
 ## 既有資料能力：1000127 共用映射與同步欄位偏好
 
-部署至 **1000127**，並一起更新 API、主站與側載擴充套件。新增跨課程共用語意映射、帳號同步欄位偏好及歷史綁定欄位遮罩；教材仍限定已確認的課程。最新流程與驗收見 `extension/tests/ACCEPTANCE-1000127.md`。歷史報告資料保留和逐課次生命週期沿用 [完整歷史同步部署](extension-enrollment-history.md)。
+部署至 **1000127**，並一起更新 API、主站與側載擴充套件。新增跨課程共用語意映射、帳號同步欄位偏好及歷史綁定欄位遮罩；教材仍限定已確認的課程。最新流程與驗收見 `extension/tests/acceptance/ACCEPTANCE-1000127.md`。歷史報告資料保留和逐課次生命週期沿用 [完整歷史同步部署](extension-enrollment-history.md)。
 
 老師確認摘要後，合法課次逐堂綁定，其餘先存歷史；不改寫報名關係、調課或自動送出原站表單。
 
@@ -39,7 +39,7 @@
 
 助手結構與清晰主題視覺分離。1200px 以上原站／助手約 56／44 並排，兩區獨立捲動；較窄視窗預設原站表單，顯示助手狀態摘要與切換入口。收合後還原原站容器；展開、RWD、主題切換、重查保留節點、草稿、游標與捲動。套用依原生連動順序重新檢查實際選項；部分套用會顯示已變更欄位並要求核對，不自動重試或送出。
 
-最新側載包：`extension/dist/EduLog-Teaching-Tools-0.1.0-field-mappings-history.zip`。包含 runtime、文件及 1000118–1000124，封裝時檢查 manifest 與本地 JS／HTML 相依檔。API 程式碼須隨專案部署，側載包不會執行 SQL。驗收細節見 `extension/tests/ACCEPTANCE.md`；隔離自動測試與真實側載分開記錄。
+最新側載包：`extension/dist/EduLog-Teaching-Tools-0.1.0-field-mappings-history.zip`。包含 runtime、文件及 1000118–1000124，封裝時檢查 manifest 與本地 JS／HTML 相依檔。API 程式碼須隨專案部署，側載包不會執行 SQL。驗收細節見 `extension/tests/acceptance/ACCEPTANCE.md`；隔離自動測試與真實側載分開記錄。
 
 ## 啟用
 
@@ -156,7 +156,7 @@ PGlite 已加入 server 的開發依賴與 lockfile。`web_extension_workspace.m
 
 目前側載包：`EduLog-Teaching-Tools-0.1.0-import-verification.zip`。包含 `extension/` runtime、部署與驗收文件、1000118–1000122；API 原始碼須由專案一併部署。現有資料庫只需依已套用版本補上後續 migration，不重跑舊 migration。更新 API、重新載入擴充套件並強制重新檢查連線，才能取得新能力。
 
-本輪驗收詳見 `extension/tests/ACCEPTANCE.md`：合成資料的瀏覽器與 PGlite 檢查已通過；實際 Chrome／Edge 側載、桌面原生 200% 縮放及指定測試資料的讀寫仍待驗收。實站報告不自動提交。
+本輪驗收詳見 `extension/tests/acceptance/ACCEPTANCE.md`：合成資料的瀏覽器與 PGlite 檢查已通過；實際 Chrome／Edge 側載、桌面原生 200% 縮放及指定測試資料的讀寫仍待驗收。實站報告不自動提交。
 
 ## 1000122 匯入結果、有效名單與報告預填
 
@@ -189,8 +189,8 @@ PGlite 已隔離執行 1000118–1000122，覆蓋完整批次核驗、權限、�
 測試：`node extension/tests/editor-date-browser-check.mjs <playwright/index.mjs>`。此測試在 Chrome／Edge 的 360、390、768、1024、1200、1440、1920px 使用隔離合成原站表單與 mock broker，涵蓋補問、版面幾何、欄位套用、草稿／焦點／游標、遲到回應及 Turbo 還原。PGlite 實際執行 1000118–1000123，包含超過 50 筆候選、最近日期排序、等距排序、游標範圍及權限。實際網站側載、原生 200% 縮放、軟鍵盤及指定測試資料仍是人工發布驗收項目；未向實站提交教學紀錄。
 # Latest extension update (0.1.0): skipped report review and lesson ordering
 
-Package: `extension/dist/EduLog-Teaching-Tools-0.1.0-skip-review-reconfirm.zip`. Apply migration `1000132_extension_report_skip_decisions.sql` after 1000131 and deploy the matching API to enable cross-device skip memory. Successful source rereads recheck prior skip decisions; changed content or target context, legacy decisions without fingerprints, and decisions older than 30 days return to review. Teachers can restore review or explicitly continue skipping selected reports. Unresolved reports are excluded from writes. Lesson options use numeric sequence order and preserve lesson IDs. See [deployment details](extension-skip-review.md) and [acceptance record](../../extension/tests/ACCEPTANCE-skip-review-reconfirm.md). Real Chrome/Edge side-loading and source-site write verification remain pending; source teaching reports were not submitted.
+Package: `extension/dist/EduLog-Teaching-Tools-0.1.0-skip-review-reconfirm.zip`. Apply migration `1000132_extension_report_skip_decisions.sql` after 1000131 and deploy the matching API to enable cross-device skip memory. Successful source rereads recheck prior skip decisions; changed content or target context, legacy decisions without fingerprints, and decisions older than 30 days return to review. Teachers can restore review or explicitly continue skipping selected reports. Unresolved reports are excluded from writes. Lesson options use numeric sequence order and preserve lesson IDs. See [deployment details](extension-skip-review.md) and [acceptance record](../../extension/tests/acceptance/ACCEPTANCE-skip-review-reconfirm.md). Real Chrome/Edge side-loading and source-site write verification remain pending; source teaching reports were not submitted.
 
 ## 0.1.0 preview request recovery
 
-Import batches keep server preview fingerprints in the local draft, but preview and apply requests project only the strict API fields (`key`, `rows`, and optional `dependencies`). This preserves dependency checks and existing batch checkpoints without sending local metadata. Failed preview checks invalidate the previous summary and keep sync disabled until a successful recheck. No API or database migration is required. See [acceptance record](../../extension/tests/ACCEPTANCE-preview-request-recovery.md); Chrome/Edge real sideload and live API verification remain pending.
+Import batches keep server preview fingerprints in the local draft, but preview and apply requests project only the strict API fields (`key`, `rows`, and optional `dependencies`). This preserves dependency checks and existing batch checkpoints without sending local metadata. Failed preview checks invalidate the previous summary and keep sync disabled until a successful recheck. No API or database migration is required. See [acceptance record](../../extension/tests/acceptance/ACCEPTANCE-preview-request-recovery.md); Chrome/Edge real sideload and live API verification remain pending.

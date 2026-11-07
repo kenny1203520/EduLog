@@ -4,8 +4,8 @@ services:
   # below so nginx can terminate TLS in front of it.
   #
   # When running Envoy instead, e.g.:
-  #   docker compose -f docker-compose.yml -f docker-compose.envoy.yml \
-  #                  -f docker-compose.nginx.yml up -d
+  #   docker compose -f docker-compose.yml -f supabase/docker-compose.envoy.yml \
+  #                  -f supabase/docker-compose.nginx.yml up -d
   # comment out the `kong:` block below and uncomment the `api-gw:` block
   # (and the matching `depends_on` entry further down) so nginx sits in front
   # of Envoy rather than Kong.
@@ -56,7 +56,7 @@ services:
         envsubst '$${PROXY_DOMAIN} $${EDULOG_PROXY_DOMAIN} $${EDULOG_PROXY_UPSTREAM_URL} $${EDULOG_HSTS_HEADER} $${EDULOG_CSP_HEADER}' < /etc/nginx/supabase-nginx.conf.tpl > /etc/nginx/user_conf.d/nginx.conf && \
         /scripts/start_nginx_certbot.sh
     volumes:
-      - ./volumes/proxy/nginx/supabase-nginx.conf.tpl:/etc/nginx/supabase-nginx.conf.tpl:ro
+      - ./supabase/volumes/proxy/nginx/supabase-nginx.conf.tpl:/etc/nginx/supabase-nginx.conf.tpl:ro
       - nginx_letsencrypt:/etc/letsencrypt
 
 volumes:
