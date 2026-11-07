@@ -1008,7 +1008,9 @@ BEGIN
      OR to_regprocedure('public.can_teaching_resource_action(text,text)') IS NULL
      OR NOT has_function_privilege('authenticated', 'public.can_teaching_resource_action(text,text)', 'EXECUTE')
      OR has_function_privilege('anon', 'public.can_teaching_resource_action(text,text)', 'EXECUTE')
-     OR has_function_privilege('anon', 'public.resolve_scoped_permission(uuid,text,uuid,uuid,date)', 'EXECUTE') THEN
+     OR has_function_privilege('anon', 'public.resolve_scoped_permission(uuid,text,uuid,uuid,date)', 'EXECUTE')
+     OR to_regprocedure('private.assert_overview_request(integer,integer,text,text,text[],integer,integer)') IS NULL
+     OR has_function_privilege('authenticated', 'private.assert_overview_request(integer,integer,text,text,text[],integer,integer)', 'EXECUTE') THEN
     RAISE EXCEPTION 'teaching permission helpers from 1000157 are missing or over-granted';
   END IF;
   SELECT count(*) INTO stale_count

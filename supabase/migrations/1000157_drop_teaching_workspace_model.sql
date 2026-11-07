@@ -21,6 +21,8 @@
 -- * can_teaching_resource_action(resource, action) is can_teaching_action
 --   without the unused teaching id. The RLS policies on classrooms, courses,
 --   class_sessions, lessons, occurrence_reports and report_templates use it.
+-- * private.assert_overview_request holds the argument checks shared by the
+--   classroom, course and teacher overview RPCs rewritten here.
 --
 -- Kept on purpose:
 --
@@ -40,6 +42,49 @@
 BEGIN;
 
 -- 1. Replacement helpers.
+
+-- Shared argument checks for the overview RPCs rewritten below. Errors keep
+-- their former order: AUTH_REQUIRED, INVALID_LIMIT, INVALID_OFFSET,
+-- INVALID_SEARCH, INVALID_SORT. The session paging pair is optional.
+CREATE SCHEMA IF NOT EXISTS private;
+
+CREATE OR REPLACE FUNCTION private.assert_overview_request(
+    p_limit integer,
+    p_offset integer,
+    p_search text,
+    p_sort text DEFAULT NULL,
+    p_allowed_sorts text[] DEFAULT NULL,
+    p_session_limit integer DEFAULT 1,
+    p_session_offset integer DEFAULT 0
+)
+ RETURNS void
+ LANGUAGE plpgsql
+ STABLE
+ SET search_path TO 'pg_catalog', 'public'
+AS $function$
+BEGIN
+  IF auth.uid() IS NULL OR auth.role() <> 'authenticated' THEN
+    RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'AUTH_REQUIRED';
+  END IF;
+  IF p_limit IS NULL OR p_limit NOT BETWEEN 1 AND 100
+     OR p_session_limit IS NULL OR p_session_limit NOT BETWEEN 1 AND 100 THEN
+    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'INVALID_LIMIT';
+  END IF;
+  IF p_offset IS NULL OR p_offset NOT BETWEEN 0 AND 1000000
+     OR p_session_offset IS NULL OR p_session_offset NOT BETWEEN 0 AND 1000000 THEN
+    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'INVALID_OFFSET';
+  END IF;
+  IF char_length(p_search) > 200 THEN
+    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'INVALID_SEARCH';
+  END IF;
+  IF p_allowed_sorts IS NOT NULL
+     AND (p_sort IS NULL OR NOT p_sort = ANY (p_allowed_sorts)) THEN
+    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'INVALID_SORT';
+  END IF;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION private.assert_overview_request(integer, integer, text, text, text[], integer, integer) FROM PUBLIC;
 
 CREATE OR REPLACE FUNCTION public.resolve_scoped_permission(p_user_id uuid, p_permission_key text, p_classroom_id uuid DEFAULT NULL::uuid, p_class_session_id uuid DEFAULT NULL::uuid, p_effective_date date DEFAULT CURRENT_DATE)
  RETURNS TABLE(is_allowed boolean, is_denied boolean, policy_configured boolean)
@@ -428,20 +473,8 @@ DECLARE
   v_search text := btrim(COALESCE(p_search, ''));
   v_result jsonb;
 BEGIN
-  IF v_user_id IS NULL OR auth.role() <> 'authenticated' THEN
-    RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'AUTH_REQUIRED';
-  END IF;
-  IF p_limit IS NULL OR p_limit < 1 OR p_limit > 100
-     OR p_session_limit IS NULL OR p_session_limit < 1 OR p_session_limit > 100 THEN
-    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'INVALID_LIMIT';
-  END IF;
-  IF p_offset IS NULL OR p_offset < 0 OR p_offset > 1000000
-     OR p_session_offset IS NULL OR p_session_offset < 0 OR p_session_offset > 1000000 THEN
-    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'INVALID_OFFSET';
-  END IF;
-  IF char_length(v_search) > 200 THEN
-    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'INVALID_SEARCH';
-  END IF;
+  PERFORM private.assert_overview_request(p_limit, p_offset, v_search,
+    p_session_limit => p_session_limit, p_session_offset => p_session_offset);
   IF p_visibility IS NULL OR p_visibility NOT IN ('all', 'visible', 'hidden') THEN
     RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'INVALID_VISIBILITY';
   END IF;
@@ -568,28 +601,14 @@ CREATE OR REPLACE FUNCTION public.get_courses_overview(p_limit integer DEFAULT 2
  SET search_path TO 'pg_catalog', 'public'
 AS $function$
 DECLARE
-  v_user_id uuid := auth.uid();
   v_search text := btrim(COALESCE(p_search, ''));
   v_result jsonb;
 BEGIN
-  IF v_user_id IS NULL OR auth.role() <> 'authenticated' THEN
-    RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'AUTH_REQUIRED';
-  END IF;
-  IF p_limit IS NULL OR p_limit < 1 OR p_limit > 100 THEN
-    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'INVALID_LIMIT';
-  END IF;
-  IF p_offset IS NULL OR p_offset < 0 OR p_offset > 1000000 THEN
-    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'INVALID_OFFSET';
-  END IF;
-  IF char_length(v_search) > 200 THEN
-    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'INVALID_SEARCH';
-  END IF;
-  IF p_sort IS NULL OR p_sort NOT IN (
-    'display_name', '-display_name', 'subject', '-subject',
-    'stage', '-stage', 'created_at', '-created_at'
-  ) THEN
-    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'INVALID_SORT';
-  END IF;
+  PERFORM private.assert_overview_request(
+    p_limit, p_offset, v_search, p_sort,
+    ARRAY['display_name', '-display_name', 'subject', '-subject',
+          'stage', '-stage', 'created_at', '-created_at']
+  );
 
   WITH readable_scopes AS MATERIALIZED (
     SELECT true AS allowed
@@ -661,21 +680,10 @@ DECLARE
   v_search text := btrim(COALESCE(p_search, ''));
   v_result jsonb;
 BEGIN
-  IF v_user_id IS NULL OR auth.role() <> 'authenticated' THEN
-    RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'AUTH_REQUIRED';
-  END IF;
-  IF p_limit IS NULL OR p_limit < 1 OR p_limit > 100 THEN
-    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'INVALID_LIMIT';
-  END IF;
-  IF p_offset IS NULL OR p_offset < 0 OR p_offset > 1000000 THEN
-    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'INVALID_OFFSET';
-  END IF;
-  IF char_length(v_search) > 200 THEN
-    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'INVALID_SEARCH';
-  END IF;
-  IF p_sort IS NULL OR p_sort NOT IN ('name', '-name', 'created_at', '-created_at') THEN
-    RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'INVALID_SORT';
-  END IF;
+  PERFORM private.assert_overview_request(
+    p_limit, p_offset, v_search, p_sort,
+    ARRAY['name', '-name', 'created_at', '-created_at']
+  );
 
   WITH readable_scopes AS MATERIALIZED (
     SELECT true AS allowed
