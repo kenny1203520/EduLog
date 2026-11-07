@@ -168,7 +168,7 @@ export function useSessionRealtime(options: SessionRealtimeOptions) {
     onBeforeUnmount(() => {
         if (realtimeRefreshTimer) clearTimeout(realtimeRefreshTimer)
         realtimeRefreshTimer = null
-        classSessionChannel?.unsubscribe()
+        void classSessionChannel?.unsubscribe()
         classSessionChannel = null
     })
 
