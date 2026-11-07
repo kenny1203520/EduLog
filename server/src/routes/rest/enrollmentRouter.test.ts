@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs'
 import { resources } from './resources.js'
 import { createEnrollmentRouter } from './enrollmentRouter.js'
 import { errorHandler } from '../../http/errors.js'
+import { expectPriorAttendedReportScope, routeSource } from '../../test/routeSource.js'
 
 describe('enrollment API contract', () => {
   it('keeps enrollment fields explicit and excludes mutation-only options', () => {
@@ -80,12 +81,9 @@ describe('enrollment history access route', () => {
 
 describe('enrollment report-progress context contract', () => {
   it('exposes a report-progress context limited to the authorized enrollment and earlier attended summaries', () => {
-    const source = readFileSync(new URL('./enrollmentRouter.ts', import.meta.url), 'utf8')
-
+    const source = routeSource('enrollmentRouter.ts')
     expect(source).toContain("router.get('/enrollments/:id/report-progress-context'")
-    expect(source).toContain("permission(req, 'teaching.reports.list', occurrence.data.class_session_id)")
-    expect(source).toContain(".eq('attendance_status', 'present')")
-    expect(source).toContain(".lt('class_occurrences.occurrence_date', occurrence.data.occurrence_date)")
+    expectPriorAttendedReportScope(source)
     expect(source).toContain(".neq('id', query.report_id)")
     expect(source).toContain('latest_prior_report: latestPriorReport')
     expect(source).not.toContain("select('id,lesson_id,is_completed,progress_letter,attendance_status,class_occurrences!inner(occurrence_date),content")
