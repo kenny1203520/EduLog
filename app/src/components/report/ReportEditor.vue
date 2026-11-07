@@ -752,7 +752,6 @@ import { classifyDraftRecovery, mergeDraftOntoServer, useReportLocalDraft, type 
 import type { LocalReportDraft } from '@/services/report/LocalDraftStore'
 import { isBrowserOffline, isNetworkError } from '@/utils/networkErrors'
 import { DateUtils } from '@/utils/dateUtils'
-import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { useAuthStore } from '@/stores/useAuthStore'
 import RatingInput from '@/components/ui/RatingInput.vue'
 import RealtimeStatusBadge, { type RealtimeBadgeTone } from '@/components/ui/RealtimeStatusBadge.vue'
@@ -768,7 +767,6 @@ import ReportReferencePanel from '@/components/report/ReportReferencePanel.vue'
 import AiReportPanel from '@/components/report/ai/AiReportPanel.vue'
 import ReportVersionHistoryModal from '@/components/report/ReportVersionHistoryModal.vue'
 import { ReportTemplateService } from '@/services/report/ReportTemplateService'
-import { CopyTemplateService, type CopyTemplateLoadOption } from '@/services/copy-template/CopyTemplateService'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { usePanelUiState, type PanelToolbar } from '@/composables/usePanelUiState'
 import { useToast } from 'vue-toastification'
@@ -797,6 +795,10 @@ import { mergeReportConflict } from '@/services/report/ReportConflictMerge'
 import { findCourseProgressGaps } from '@/utils/courseProgressGaps'
 
 import type { Lesson } from '@/models/Course'
+import { ReportQueryService } from '@/services/report/ReportQueryService'
+import { ReportCommandService } from '@/services/report/ReportCommandService'
+import { CopyTemplateQueryService, type CopyTemplateLoadOption } from '@/services/copy-template/CopyTemplateQueryService'
+import { CopyTemplateCommandService } from '@/services/copy-template/CopyTemplateCommandService'
 
 interface Props {
     reportId?: string // 報告ID
@@ -1426,7 +1428,7 @@ function copyCourseInfo() {
                 },
                 lesson_sequence: createNumberFormatters('lesson_sequence')
             }
-    const copyPromise = CopyTemplateService.getEffectiveCourseTemplate()
+    const copyPromise = CopyTemplateQueryService.getEffectiveCourseTemplate()
         .then(({ templateText, templateDocument }) => {
             const rendered = renderTemplateContent(
                 templateDocument || templateText,
@@ -1472,7 +1474,7 @@ async function openCourseCopyTemplateModal() {
 
     try {
         isLoadingCourseCopyTemplate.value = true
-        const bundle = await CopyTemplateService.getEditorBundle('course_copy')
+        const bundle = await CopyTemplateQueryService.getEditorBundle('course_copy')
         if (requestGeneration !== courseTemplateRequestGeneration || !showCourseCopyTemplateModal.value) return
         const options = bundle.options
         const template = bundle.current?.templateText || null
@@ -1517,7 +1519,7 @@ async function saveCourseCopyTemplate() {
 
     try {
         isSavingCourseCopyTemplate.value = true
-        await CopyTemplateService.saveCourseTemplateAsUserDefault({ plainText: templateText, richText: courseCopyTemplateDocument.value })
+        await CopyTemplateCommandService.saveCourseTemplateAsUserDefault({ plainText: templateText, richText: courseCopyTemplateDocument.value })
         toast.success(t('report.editor.copy_course_template_saved'))
         showCourseCopyTemplateModal.value = false
     } catch (error) {
@@ -1668,7 +1670,7 @@ async function saveTemplateDraft() {
 async function applyTemplateDraftToReport() {
     if (props.reportId) {
         try {
-            const serverReport = await OccurrenceReportService.getReportById(props.reportId)
+            const serverReport = await ReportQueryService.getReportById(props.reportId)
             if (serverReport.version !== version.value) {
                 errorKey('report.editor.restore_conflict_error')
                 return
@@ -1723,7 +1725,7 @@ async function handleDeleteReport() {
         t('report.editor.delete_report_confirm', 'Are you sure you want to delete this report? This will revert the student\'s progress.'),
         async () => {
             try {
-                await OccurrenceReportService.deleteReportAndRevertProgress(props.reportId!)
+                await ReportCommandService.deleteReportAndRevertProgress(props.reportId!)
                 toast.success(t('report.editor.delete_success') || 'Report deleted')
                 emit('deleted')
             } catch (e: any) {
@@ -2163,7 +2165,7 @@ const remoteVersionDrift = ref(false)
 
 // Detailed fields
 const selectedLessonId = ref(props.initialLessonId || '')
-type ProgressContext = Awaited<ReturnType<typeof OccurrenceReportService.getEnrollmentReportProgressContext>>
+type ProgressContext = Awaited<ReturnType<typeof ReportQueryService.getEnrollmentReportProgressContext>>
 const progressContext = ref<ProgressContext | null>(null)
 const progressContextLoading = ref(false)
 const progressContextError = ref(false)
@@ -2209,7 +2211,7 @@ async function loadProgressContext() {
     progressContextError.value = false
     progressContextLoading.value = true
     try {
-        const context = await OccurrenceReportService.getEnrollmentReportProgressContext(enrollmentId, occurrenceId, reportId)
+        const context = await ReportQueryService.getEnrollmentReportProgressContext(enrollmentId, occurrenceId, reportId)
         if (requestId === progressContextRequest) progressContext.value = context
     } catch {
         if (requestId === progressContextRequest) progressContextError.value = true
@@ -2562,7 +2564,7 @@ const {
 
             const baseSnapshot = savedReportSnapshot.value
             const result = isAttendanceOnly
-                ? await OccurrenceReportService.saveAttendanceOnly(
+                ? await ReportCommandService.saveAttendanceOnly(
                     props.reportId,
                     version.value,
                     authStore.user?.id,
@@ -2571,7 +2573,7 @@ const {
                         absenceReason: snapshot.absenceReason
                     }
                 )
-                : await OccurrenceReportService.saveReport(
+                : await ReportCommandService.saveReport(
                     props.reportId,
                     version.value,
                     authStore.user?.id,
@@ -2592,7 +2594,7 @@ const {
                     return { ...result, serverVersion: result.serverReport.version, conflictFields: merge.conflictFields }
                 }
                 if (merge.changed && result.serverReport.version > version.value) {
-                    const mergedResult = await OccurrenceReportService.saveReport(
+                    const mergedResult = await ReportCommandService.saveReport(
                         props.reportId,
                         result.serverReport.version,
                         authStore.user?.id,

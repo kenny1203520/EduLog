@@ -369,7 +369,6 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { ClassroomService } from '@/services/classroom/ClassroomService'
 import { AggregateService } from '@/services/api/AggregateService'
@@ -379,6 +378,7 @@ import BaseDropdown from '@/components/ui/BaseDropdown.vue'
 import RichTextViewer from '@/components/text-editor/RichTextViewer.vue'
 import { useFeedback } from '@/composables/useFeedback'
 import { DateUtils } from '@/utils/dateUtils'
+import { ReportQueryService } from '@/services/report/ReportQueryService'
 
 const { t, locale } = useI18n()
 const { reportError } = useFeedback()
@@ -545,7 +545,7 @@ async function refreshData() {
     totalCount.value = 0
     try {
         if (activeTab.value === 'history' && props.focusedReportId) {
-            const report = await OccurrenceReportService.getReportById(props.focusedReportId)
+            const report = await ReportQueryService.getReportById(props.focusedReportId)
             if (requestId !== refreshRequestId) return
             const dto = report.toDTO()
             reports.value = [{
@@ -574,7 +574,7 @@ async function refreshData() {
                 loading.value = false
                 return
             }
-            res = await OccurrenceReportService.getReportsByLesson(props.lessonId, {
+            res = await ReportQueryService.getReportsByLesson(props.lessonId, {
                 ...commonParams,
                 classroomId: filterClassroom.value,
                 sessionId: filterSession.value
@@ -586,7 +586,7 @@ async function refreshData() {
                 loading.value = false
                 return
             }
-            res = await OccurrenceReportService.getReportsByStudent(props.studentId, {
+            res = await ReportQueryService.getReportsByStudent(props.studentId, {
                 ...commonParams,
                 courseId: filterCourse.value
             })

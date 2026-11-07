@@ -1,12 +1,14 @@
 import { Enrollment, type EnrollmentDTO } from '@/models/Enrollment'
-import { OccurrenceService } from '../occurrence/OccurrenceService'
-import { OccurrenceReportService } from '../occurrence/OccurrenceReportService'
 import { EnrollmentTransferService, type ClassTransferResult, type SingleLessonTransferCancelResult } from './EnrollmentTransferService'
 import { EnrollmentSupportService } from './EnrollmentSupportService'
 import { SessionService } from '../session/SessionService'
 import type { SingleLessonTransferConflict, SingleLessonTransferResult } from './SingleLessonTransferConflictService'
 import type { TransferReportFieldSelections } from '@/services/report/ReportFieldConflictService'
 import { apiV1Client } from '@/services/api/ApiV1Client'
+import { OccurrenceCommandService } from '@/services/occurrence/OccurrenceCommandService'
+import { OccurrenceQueryService } from '@/services/occurrence/OccurrenceQueryService'
+import { ReportQueryService } from '@/services/report/ReportQueryService'
+import { ReportCommandService } from '@/services/report/ReportCommandService'
 
 type EnrollmentCreateOptions = {
     targetReportCount?: number
@@ -81,22 +83,22 @@ export class EnrollmentCommandService {
         }
 
         const target = new Date(normalizedTargetDate)
-        await OccurrenceService.generateOccurrences(targetSessionId, target, target).catch((err: any) => {
+        await OccurrenceCommandService.generateOccurrences(targetSessionId, target, target).catch((err: any) => {
             console.error('Failed to generate occurrence for makeup enrollment:', err)
         })
 
-        const targetOccurrence = await OccurrenceService.getOccurrenceBySessionAndDate(targetSessionId, normalizedTargetDate)
+        const targetOccurrence = await OccurrenceQueryService.getOccurrenceBySessionAndDate(targetSessionId, normalizedTargetDate)
         if (!targetOccurrence?.id) {
             throw new Error('Failed to find target occurrence: not found')
         }
 
-        const existing = await OccurrenceReportService.getReport(enrollmentId, targetOccurrence.id)
+        const existing = await ReportQueryService.getReport(enrollmentId, targetOccurrence.id)
         if (existing) {
             throw new Error('DUPLICATE_OCCURRENCE_REPORT')
         }
 
         try {
-            await OccurrenceReportService.createReport(enrollmentId, targetOccurrence.id)
+            await ReportCommandService.createReport(enrollmentId, targetOccurrence.id)
         } catch (error: any) {
             if (error?.message?.includes('duplicate key')) {
                 throw new Error('DUPLICATE_OCCURRENCE_REPORT')

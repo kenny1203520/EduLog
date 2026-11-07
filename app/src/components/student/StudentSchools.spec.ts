@@ -5,7 +5,7 @@ import StudentSchools from './StudentSchools.vue'
 const mocks = vi.hoisted(() => ({ add: vi.fn(), update: vi.fn(), load: vi.fn(), error: vi.fn(), success: vi.fn() }))
 vi.mock('vue-i18n', async importOriginal => ({ ...await importOriginal<typeof import('vue-i18n')>(), useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock('vue-toastification', () => ({ useToast: () => ({ error: mocks.error, success: mocks.success }) }))
-vi.mock('@/services/student/StudentService', () => ({ StudentService: { addSchool: mocks.add, updateSchool: mocks.update } }))
+vi.mock('@/services/student/StudentCommandService', () => ({ StudentCommandService: { addSchool: mocks.add, updateSchool: mocks.update } }))
 vi.mock('@/stores/useStudentStore', () => ({ useStudentStore: () => ({ loadStudent: mocks.load }) }))
 vi.mock('@/stores/usePreferencesStore', () => ({ usePreferencesStore: () => ({ timeZone: 'Asia/Taipei', locale: 'zh-TW' }) }))
 

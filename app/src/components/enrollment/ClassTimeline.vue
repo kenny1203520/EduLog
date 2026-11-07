@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { useFeedback } from '@/composables/useFeedback'
 import { DateUtils } from '@/utils/dateUtils'
@@ -13,6 +12,7 @@ import {
     type ClassTimelineReport,
     type ClassTimelineTransfer,
 } from '@/models/ClassTimeline'
+import { EnrollmentTransferQueryService } from '@/services/enrollment/EnrollmentTransferQueryService'
 
 const props = defineProps<{
     enrollmentId: string
@@ -74,7 +74,7 @@ const segmentGroups = computed(() => (timeline.value?.segments ?? []).map(segmen
 async function load() {
     isLoading.value = true
     try {
-        timeline.value = await EnrollmentService.getClassTimeline(props.enrollmentId)
+        timeline.value = await EnrollmentTransferQueryService.getClassTimeline(props.enrollmentId)
     } catch (error) {
         reportError(error, 'student.class_timeline.load_failed')
     } finally {

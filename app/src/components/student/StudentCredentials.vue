@@ -3,12 +3,12 @@ import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import { useFeedback } from '@/composables/useFeedback'
-import { StudentService } from '@/services/student/StudentService'
 import { useStudentStore } from '@/stores/useStudentStore'
 import { copyToClipboard as copyToClipboardUtil } from '@/utils/clipboard'
 import ConfirmModal from '@/components/ui/ConfirmModal.vue'
 import BaseDropdown from '@/components/ui/BaseDropdown.vue'
 import { isKodingPlatform, KODING_PLATFORM } from '@/utils/koding'
+import { StudentCommandService } from '@/services/student/StudentCommandService'
 
 const props = defineProps<{
     studentId: string
@@ -71,7 +71,7 @@ async function addCredential() {
 
     try {
         isModifying.value = true
-        await StudentService.addCredential({ ...newCredential.value, platform: platformValue, student_id: props.studentId })
+        await StudentCommandService.addCredential({ ...newCredential.value, platform: platformValue, student_id: props.studentId })
         closeAddCredentialForm()
         await studentStore.loadStudent(props.studentId)
         toast.success(t('student.credentials.add_btn') + ' ' + t('common.success'))
@@ -118,7 +118,7 @@ async function saveCredential() {
     }
     try {
         isModifying.value = true
-        await StudentService.updateCredential(editingCredentialId.value, { ...editCredentialForm.value, platform: platformValue })
+        await StudentCommandService.updateCredential(editingCredentialId.value, { ...editCredentialForm.value, platform: platformValue })
         cancelEditCredential()
         await studentStore.loadStudent(props.studentId)
         toast.success(t('common.save_success'))
@@ -139,7 +139,7 @@ async function handleDeleteCredential() {
     if (!credentialToDelete.value) return
     try {
         isModifying.value = true
-        await StudentService.deleteCredential(credentialToDelete.value)
+        await StudentCommandService.deleteCredential(credentialToDelete.value)
         await studentStore.loadStudent(props.studentId)
         toast.success(t('common.deleted'))
     } catch (e: any) {

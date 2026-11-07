@@ -2,10 +2,48 @@ import {
     USER_DEFAULT_SCOPE_ENTITY_ID,
     SYSTEM_ATTENDANCE_TEMPLATE,
     SYSTEM_COURSE_TEMPLATE,
+    type CopyTemplateSource,
 } from '@/utils/copyTemplate'
-import type { CopyTemplateDTO, CopyTemplateScopeType, EffectiveTemplateResult, CopyTemplateLoadOption, CopyTemplateEditorBundle } from './CopyTemplateService'
 import { createTextEditorContent } from '@/components/text-editor/content'
 import { apiResourceClient } from '@/services/api/ApiResourceClient'
+import type { RichTextDocumentV1 } from '@/components/text-editor/types'
+
+export type CopyTemplateScopeType = 'user_default' | 'class_session'
+
+export interface CopyTemplateDTO {
+    id?: string
+    user_id: string
+    template_type: 'attendance_copy' | 'course_copy'
+    scope_type: CopyTemplateScopeType
+    scope_entity_id: string
+    template_text: string
+    template_document?: RichTextDocumentV1 | null
+    created_at?: string
+    updated_at?: string
+}
+
+export interface EffectiveTemplateResult {
+    templateText: string
+    templateDocument?: RichTextDocumentV1
+    source: CopyTemplateSource
+}
+
+export interface CopyTemplateEditorBundle {
+    options: CopyTemplateLoadOption[]
+    current?: CopyTemplateLoadOption
+}
+
+export interface CopyTemplateLoadOption {
+    key: string
+    templateType: 'attendance_copy' | 'course_copy'
+    source: CopyTemplateSource
+    scopeType: CopyTemplateScopeType | 'system_default'
+    scopeEntityId: string
+    label: string
+    templateText: string
+    templateDocument?: RichTextDocumentV1
+    updatedAt?: string
+}
 
 /**
  * Query service for copy templates

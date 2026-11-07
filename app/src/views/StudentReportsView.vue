@@ -574,11 +574,8 @@ import ReportEditor from '@/components/report/ReportEditor.vue'
 import ConflictModal from '@/components/report/ConflictModal.vue'
 import ConfirmModal from '@/components/ui/ConfirmModal.vue'
 import KodingCodeCheckModal from '@/components/enrollment/KodingCodeCheckModal.vue'
-import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
-import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { CourseService } from '@/services/course/CourseService'
-import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
 import { ClassOccurrence } from '@/models/ClassOccurrence'
 import { OccurrenceReport } from '@/models/OccurrenceReport'
 import { SuspensionService } from '@/services/suspension/SuspensionService'
@@ -598,6 +595,11 @@ import { sourceFillChannel, useSourceFill } from '@/composables/useSourceFill'
 import { inExtensionPanel } from '@/composables/useExtensionPanel'
 import { usePanelUiState } from '@/composables/usePanelUiState'
 import PanelOccurrenceBar from '@/components/report/PanelOccurrenceBar.vue'
+import { EnrollmentTransferQueryService } from '@/services/enrollment/EnrollmentTransferQueryService'
+import { OccurrenceQueryService } from '@/services/occurrence/OccurrenceQueryService'
+import { OccurrenceCommandService } from '@/services/occurrence/OccurrenceCommandService'
+import { ReportCommandService } from '@/services/report/ReportCommandService'
+import { ReportQueryService } from '@/services/report/ReportQueryService'
 
 type ReportEditorExpose = {
     saveNow: (options?: { reason?: 'manual' | 'switch' }) => Promise<boolean>
@@ -739,7 +741,7 @@ async function handleConfirmCreate() {
 
     try {
         isCreatingReport.value = true
-        const report = await OccurrenceReportService.createReport(enrollmentId, pendingOccurrence.value.id!)
+        const report = await ReportCommandService.createReport(enrollmentId, pendingOccurrence.value.id!)
         selectedReport.value = report
 
         if (report) {
@@ -770,7 +772,7 @@ async function repairMissingTransferredReport() {
 
     try {
         isCreatingReport.value = true
-        await EnrollmentService.repairSingleLessonTransferReport(enrollmentId, occurrenceId)
+        await EnrollmentTransferQueryService.repairSingleLessonTransferReport(enrollmentId, occurrenceId)
         await loadOccurrences()
         const repairedOccurrence = occurrences.value.find(occurrence => occurrence.id === occurrenceId)
         if (repairedOccurrence) {
@@ -1097,7 +1099,7 @@ const reportPlacements = ref<Map<string, ClassTimelineReport>>(new Map())
 
 async function loadReportPlacements(enrollmentId: string) {
     try {
-        const timeline = await EnrollmentService.getClassTimeline(enrollmentId)
+        const timeline = await EnrollmentTransferQueryService.getClassTimeline(enrollmentId)
         reportPlacements.value = new Map(timeline.reports.map(report => [report.id, report]))
     } catch (error) {
         // The placement labels are informational; the list works without them.
@@ -1114,7 +1116,7 @@ async function switchToListView() {
     void loadReportPlacements(enrollmentId)
     try {
         // Refresh markers
-        allReports.value = await OccurrenceReportService.getReportsWithDetails(enrollmentId)
+        allReports.value = await ReportQueryService.getReportsWithDetails(enrollmentId)
         if (occurrences.value.length === 0) {
             await loadOccurrences()
         }
@@ -1190,7 +1192,7 @@ async function loadOccurrences() {
 
         // 3. Load HISTORICAL occurrences from existing reports
         // This ensures we see past classes even if the student transferred sessions
-        const reportsWithDetails = await OccurrenceReportService.getReportsWithDetails(enrollmentId)
+        const reportsWithDetails = await ReportQueryService.getReportsWithDetails(enrollmentId)
         allReports.value = reportsWithDetails
 
         // Active transfer targets must be visible even before they have a report.
@@ -1198,12 +1200,12 @@ async function loadOccurrences() {
         // This is enrichment, not required data: a failure here must never blank out
         // the report list, so it is isolated from the main load.
         try {
-            effectiveTransferTargets.value = await EnrollmentService.getEffectiveSingleLessonTransferTargets(enrollmentId)
+            effectiveTransferTargets.value = await EnrollmentTransferQueryService.getEffectiveSingleLessonTransferTargets(enrollmentId)
         } catch (transferTargetsError) {
             console.error('Failed to load effective transfer targets:', transferTargetsError)
             effectiveTransferTargets.value = []
         }
-        const transferredTargetOccurrences = await OccurrenceService.getOccurrencesByIds(
+        const transferredTargetOccurrences = await OccurrenceQueryService.getOccurrencesByIds(
             effectiveTransferTargets.value
                 .filter(target => target.is_effective_target)
                 .map(target => target.target_occurrence_id)
@@ -1255,7 +1257,7 @@ async function loadOccurrences() {
                 if (occ.classSessionId) relevantSessionIds.add(occ.classSessionId)
             })
 
-            futureOccurrences = await OccurrenceService.getOccurrencesByDateRange(
+            futureOccurrences = await OccurrenceQueryService.getOccurrencesByDateRange(
                 startDate,
                 endDate,
                 Array.from(relevantSessionIds)
@@ -1290,14 +1292,14 @@ async function loadOccurrences() {
                     // upsert ensures we don't duplicate existing ones
                     const genStart = new Date(startDate)
 
-                    await OccurrenceService.generateOccurrences(
+                    await OccurrenceCommandService.generateOccurrences(
                         enrollment.classSessionId,
                         genStart,
                         thresholdDate
                     )
 
                     // Re-fetch to populate the view
-                    futureOccurrences = await OccurrenceService.getOccurrencesByDateRange(
+                    futureOccurrences = await OccurrenceQueryService.getOccurrencesByDateRange(
                         startDate,
                         endDate,
                         Array.from(relevantSessionIds)
@@ -1471,7 +1473,7 @@ async function selectOccurrence(
             return
         } else if (hasExistingReport) {
             // Just fetch existing
-            const report = await OccurrenceReportService.getReport(enrollmentId, occurrence.id)
+            const report = await ReportQueryService.getReport(enrollmentId, occurrence.id)
             selectedReport.value = report
         } else {
             selectedReport.value = null
@@ -1540,7 +1542,7 @@ async function resolveConflict(resolvedContent: OccurrenceReportDTO) {
 
     try {
         reportLoading.value = true
-        const report = await OccurrenceReportService.resolveConflict(
+        const report = await ReportCommandService.resolveConflict(
             selectedReport.value.id!,
             resolvedContent,
             authStore.user?.id,

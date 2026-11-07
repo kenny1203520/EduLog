@@ -4,16 +4,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { PageApiService } from '@/services/api/PageApiService'
 import { SessionService } from '@/services/session/SessionService'
-import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
 import { calendarGridRange, withoutRange, type CalendarDateRange } from '@/models/ClassCalendarDay'
 import { countJoinFlagsByDate, type RosterFlag } from '@/models/ClassTimeline'
-import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
 import { ClassSessionFactory } from '@/models/ClassSession'
 import { invalidationAffectsDate, parseClassSessionDate } from '@/services/session/ClassSessionInvalidation'
 import { useAuthStore } from '@/stores/useAuthStore'
-import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
-import { CopyTemplateService } from '@/services/copy-template/CopyTemplateService'
-import { HolidayService } from '@/services/holiday/HolidayService'
 import { PermissionPolicyService } from '@/services/rbac/PermissionPolicyService'
 import { Enrollment } from '@/models/Enrollment'
 import { countRosterAttendance, getRosterEnrollments } from '@/models/RosterFilter'
@@ -59,6 +54,17 @@ import { getEffectiveTeacherAssignments } from '@/utils/effectiveTeacherAssignme
 import { absenceReasonLabel } from '@/utils/absenceReason'
 import { ApiRealtimeChannel } from '@/services/report/ApiRealtimeChannel'
 import { shouldApplyCommittedReport } from '@/services/report/CommittedReportState'
+import { EnrollmentTransferQueryService } from '@/services/enrollment/EnrollmentTransferQueryService'
+import { EnrollmentCommandService } from '@/services/enrollment/EnrollmentCommandService'
+import { EnrollmentQueryService } from '@/services/enrollment/EnrollmentQueryService'
+import { OccurrenceQueryService } from '@/services/occurrence/OccurrenceQueryService'
+import { OccurrenceCommandService } from '@/services/occurrence/OccurrenceCommandService'
+import { OccurrenceSyncService } from '@/services/occurrence/OccurrenceSyncService'
+import { ReportQueryService } from '@/services/report/ReportQueryService'
+import { ReportCommandService } from '@/services/report/ReportCommandService'
+import { HolidayQueryService } from '@/services/holiday/HolidayQueryService'
+import { CopyTemplateQueryService } from '@/services/copy-template/CopyTemplateQueryService'
+import { CopyTemplateCommandService } from '@/services/copy-template/CopyTemplateCommandService'
 
 type ReportEditorExpose = {
     saveNow: (options?: { reason?: 'manual' | 'switch' }) => Promise<boolean>
@@ -514,7 +520,7 @@ async function loadStudentProgressSummaries(
     const enrollmentIds = enrollmentList.map(enrollment => enrollment.id).filter((id): id is string => !!id)
     // One request for the whole roster instead of one paginated, full-row
     // request per student -- see getProgressSummaryReportsByEnrollments.
-    const reportsByEnrollment = await OccurrenceReportService.getProgressSummaryReportsByEnrollments(enrollmentIds)
+    const reportsByEnrollment = await ReportQueryService.getProgressSummaryReportsByEnrollments(enrollmentIds)
 
     const summaryEntries = await Promise.all(enrollmentList.map(async enrollment => {
         if (!enrollment.id) {
@@ -560,7 +566,7 @@ async function loadStudentProgressGaps(
     const enrollmentIds = enrollmentList.map(enrollment => enrollment.id).filter((id): id is string => !!id)
     isLoadingProgressGaps.value = true
     try {
-        const summaries = await OccurrenceReportService.getProgressGapsByEnrollments(occurrenceId, enrollmentIds)
+        const summaries = await ReportQueryService.getProgressGapsByEnrollments(occurrenceId, enrollmentIds)
         if (generation !== progressGapRequestGeneration
             || todayOccurrence.value?.id !== occurrenceId
             || DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate) !== occurrenceDate) return
@@ -717,7 +723,7 @@ function loadOccurrenceRange(range: CalendarDateRange, force = false): Promise<v
     const cached = loadedOccurrenceRanges.get(key)
     if (cached && !force) return cached
     const task = (async () => {
-        const occurrences = await OccurrenceService.getOccurrencesByDateRange(
+        const occurrences = await OccurrenceQueryService.getOccurrencesByDateRange(
             DateUtils.parseLocalDate(range.start)!, DateUtils.parseLocalDate(range.end)!, [sessionId]
         )
         const outside = sessionOccurrences.value.filter(occurrence => {
@@ -756,7 +762,7 @@ function handleCalendarRangeChange(range: CalendarDateRange) {
 
 async function loadReportCompletion(range: CalendarDateRange) {
     try {
-        const completion = await OccurrenceService.getReportCompletionByDate(sessionId, range.start, range.end)
+        const completion = await OccurrenceQueryService.getReportCompletionByDate(sessionId, range.start, range.end)
         reportCompletionByDate.value = { ...withoutRange(reportCompletionByDate.value, range), ...completion }
     } catch (error) {
         // The completion dot is a hint; the calendar works without it.
@@ -766,7 +772,7 @@ async function loadReportCompletion(range: CalendarDateRange) {
 
 async function loadRosterFlags(range: CalendarDateRange) {
     try {
-        const flags = await EnrollmentService.getClassRosterFlags(sessionId, range.start, range.end)
+        const flags = await EnrollmentTransferQueryService.getClassRosterFlags(sessionId, range.start, range.end)
         const byDate: Record<string, RosterFlag[]> = {}
         for (const flag of flags) (byDate[flag.date] ??= []).push(flag)
         rosterFlagsByDate.value = { ...withoutRange(rosterFlagsByDate.value, range), ...byDate }
@@ -818,11 +824,11 @@ async function loadReportsForCurrentOccurrence(options: { createMissing?: boolea
         // writes to settle before taking the complete read snapshot.
         const provisioning = reportProvisionRequests.get(occurrenceId)
         if (provisioning) await provisioning
-        occurrenceReports = await OccurrenceReportService.getReportsByOccurrence(occurrenceId)
+        occurrenceReports = await ReportQueryService.getReportsByOccurrence(occurrenceId)
     } else {
         let provisioning = reportProvisionRequests.get(occurrenceId)
         if (!provisioning) {
-            provisioning = OccurrenceReportService.createReportsForOccurrence(occurrenceId)
+            provisioning = ReportCommandService.createReportsForOccurrence(occurrenceId)
             reportProvisionRequests.set(occurrenceId, provisioning)
         }
         try {
@@ -871,7 +877,7 @@ async function loadOccurrenceTransfers() {
         return
     }
     try {
-        const transfers = await EnrollmentService.getOccurrenceLessonTransfers(occurrenceId)
+        const transfers = await EnrollmentTransferQueryService.getOccurrenceLessonTransfers(occurrenceId)
         if (todayOccurrence.value?.id === occurrenceId) occurrenceTransfers.value = transfers
     } catch (error) {
         // The transfer notes are informational; the roster stays usable without them.
@@ -889,7 +895,7 @@ async function confirmTransferCancel() {
     if (!transfer || cancellingTransferId.value) return
     cancellingTransferId.value = transfer.transfer_id
     try {
-        const result = await EnrollmentService.cancelSingleLessonTransfer(transfer.transfer_id)
+        const result = await EnrollmentCommandService.cancelSingleLessonTransfer(transfer.transfer_id)
         toast.success(t(result.targetReportRetained
             ? 'student.transfer_history.cancelled_target_retained'
             : 'student.transfer_history.cancelled'))
@@ -955,7 +961,7 @@ async function loadOccurrenceTeachers() {
     const occurrence = todayOccurrence.value
     const leaveEntries = await Promise.all(assignmentsByTeacher
         .filter(assignment => assignment.id)
-        .map(async assignment => [assignment.id!, await HolidayService.isTeacherOnLeave(
+        .map(async assignment => [assignment.id!, await HolidayQueryService.isTeacherOnLeave(
             dateStr,
             assignment.id!,
             session.value?.classroom_id,
@@ -998,11 +1004,11 @@ async function setCurrentOccurrence(occurrence: ClassOccurrence | null) {
         const occurrenceDateStr = DateUtils.formatLocalDate(occurrence.occurrenceDate)
         const [, holiday, navigation] = await Promise.all([
             loadWorkspaceRoster(occurrence.occurrenceDate),
-            HolidayService.isHoliday(occurrenceDateStr, undefined, occurrence.classSessionId).catch(error => {
+            HolidayQueryService.isHoliday(occurrenceDateStr, undefined, occurrence.classSessionId).catch(error => {
                 console.error('Failed to check holiday status:', error)
                 return false
             }),
-            OccurrenceService.getOccurrenceNavigationState(sessionId, occurrence.occurrenceDate)
+            OccurrenceQueryService.getOccurrenceNavigationState(sessionId, occurrence.occurrenceDate)
         ])
         if (loadToken !== occurrenceLoadToken) return
         isOccurrenceInHoliday.value = holiday
@@ -1040,7 +1046,7 @@ async function handleCalendarDateSelect(date: Date) {
     // A future lesson the schedule plans but that was never generated: create it first.
     if (!findOccurrenceByDate(date) && dateStr >= calendarToday.value && isPlannedClassDate(dateStr)) {
         try {
-            await OccurrenceService.generateOccurrences(sessionId, date, date)
+            await OccurrenceCommandService.generateOccurrences(sessionId, date, date)
         } catch (error) {
             console.error('Failed to generate the planned lesson:', error)
         }
@@ -1105,7 +1111,7 @@ async function ensureTodayOccurrence(today: Date): Promise<void> {
     await loadSessionOccurrences(today)
     if (findOccurrenceByDate(today)) return
     if (session.value && await SessionService.isScheduledOn(sessionId, DateUtils.formatLocalDate(today))) {
-        await OccurrenceService.generateOccurrences(sessionId, today, today)
+        await OccurrenceCommandService.generateOccurrences(sessionId, today, today)
         await loadSessionOccurrences(today)
     }
 }
@@ -1114,7 +1120,7 @@ async function goToToday() {
     const today = DateUtils.todayDate(sessionTimeZone.value)
     try {
         await ensureTodayOccurrence(today)
-        const preferred = await OccurrenceService.getPreferredOccurrence(sessionId, today)
+        const preferred = await OccurrenceQueryService.getPreferredOccurrence(sessionId, today)
         await selectClassDate(DateUtils.formatLocalDate(preferred?.occurrenceDate || today))
     } catch (error) {
         console.error(error)
@@ -1241,7 +1247,7 @@ async function loadData() {
             initialOccurrence = findOccurrenceByDate(initialDate) || null
         } else {
             await ensureTodayOccurrence(today)
-            initialOccurrence = await OccurrenceService.getPreferredOccurrence(sessionId, today)
+            initialOccurrence = await OccurrenceQueryService.getPreferredOccurrence(sessionId, today)
             if (initialOccurrence) await loadSessionOccurrences(initialOccurrence.occurrenceDate)
         }
         if (initialOccurrence?.occurrenceDate) {
@@ -1337,8 +1343,8 @@ async function refreshCurrentOccurrenceFromRealtime(options: { reportOnly?: bool
             if (!options.reportOnly) {
                 const [assignments, holiday, navigation] = await Promise.all([
                     TeacherService.getSessionTeachers(sessionId),
-                    HolidayService.isHoliday(date, undefined, sessionId),
-                    OccurrenceService.getOccurrenceNavigationState(sessionId, occurrenceDate),
+                    HolidayQueryService.isHoliday(date, undefined, sessionId),
+                    OccurrenceQueryService.getOccurrenceNavigationState(sessionId, occurrenceDate),
                 ])
                 if (requestId !== realtimeRefreshRequest || todayOccurrence.value?.id !== occurrenceId) return
                 sessionTeachers.value = assignments
@@ -1477,7 +1483,7 @@ async function setAttendance(enrId: string, status: QuickAttendanceStatus) {
 
     savingMap.value.set(enrId, true)
     try {
-        const result = await OccurrenceReportService.saveAttendanceOnly(report.id, report.version, undefined, {
+        const result = await ReportCommandService.saveAttendanceOnly(report.id, report.version, undefined, {
             attendanceStatus: status,
             absenceReason: status === 'absent' ? 'reason_not_provided' : null
         })
@@ -1789,7 +1795,7 @@ async function openAttendanceTemplateModal() {
 
     try {
         isLoadingAttendanceTemplate.value = true
-        const bundle = await CopyTemplateService.getEditorBundle('attendance_copy', sessionId)
+        const bundle = await CopyTemplateQueryService.getEditorBundle('attendance_copy', sessionId)
         if (requestGeneration !== attendanceTemplateRequestGeneration || !showAttendanceTemplateModal.value) return
         const loadOptions = bundle.options
         const classTemplate = bundle.current?.scopeType === 'class_session' ? bundle.current.templateText : null
@@ -1863,10 +1869,10 @@ async function saveAttendanceTemplate() {
     try {
         isSavingAttendanceTemplate.value = true
         if (attendanceTemplateScope.value === 'class_session') {
-            await CopyTemplateService.saveAttendanceTemplateForSession(sessionId, content)
+            await CopyTemplateCommandService.saveAttendanceTemplateForSession(sessionId, content)
             toast.success(t('classroom.copy_template_saved_session'))
         } else {
-            await CopyTemplateService.saveAttendanceTemplateAsUserDefault(content)
+            await CopyTemplateCommandService.saveAttendanceTemplateAsUserDefault(content)
             toast.success(t('classroom.copy_template_saved_user'))
         }
 
@@ -1920,7 +1926,7 @@ function copyAttendanceInfo() {
     }
 
     const formatters = buildAttendanceTemplateContext().formatters
-    const copyPromise = CopyTemplateService.getEffectiveAttendanceTemplate(sessionId)
+    const copyPromise = CopyTemplateQueryService.getEffectiveAttendanceTemplate(sessionId)
         .then(({ templateText, templateDocument }) => renderTemplateContent(
             templateDocument || templateText,
             (key, mode) => renderCopyTemplate(
@@ -1953,7 +1959,7 @@ function requestRefreshSchedule() {
 async function handleConfirmRefresh() {
     try {
         isRefreshing.value = true
-        await OccurrenceService.syncSessionOccurrences(sessionId)
+        await OccurrenceSyncService.syncSessionOccurrences(sessionId)
         toast.success(t('classroom.refresh_success'))
         showRefreshConfirm.value = false
         await loadData()
@@ -1979,7 +1985,7 @@ async function toggleIsConducted(event: any) {
     }
 
     try {
-        const updated = await OccurrenceService.updateOccurrence(todayOccurrence.value.id, {
+        const updated = await OccurrenceCommandService.updateOccurrence(todayOccurrence.value.id, {
             is_conducted: isHeld
         })
 
@@ -2021,7 +2027,7 @@ async function toggleTeacherAttendance(teacherId: string | undefined, event: any
         const existing = todayOccurrence.value.teacherAttendance || {}
         const updatedAttendance = { ...existing, [teacherId]: isPresent }
 
-        const updated = await OccurrenceService.updateOccurrence(todayOccurrence.value.id, {
+        const updated = await OccurrenceCommandService.updateOccurrence(todayOccurrence.value.id, {
             teacher_attendance: updatedAttendance
         })
 
@@ -2071,7 +2077,7 @@ async function toggleSplitView(enrollmentId: string) {
     if (occurrenceId) {
         savingMap.value.set(enrollmentId, true)
         try {
-            const fetched = await OccurrenceReportService.getReport(enrollmentId, occurrenceId)
+            const fetched = await ReportQueryService.getReport(enrollmentId, occurrenceId)
             if (selectionRequest !== editorSelectionRequest
                 || todayOccurrence.value?.id !== occurrenceId
                 || selectedDateKey.value !== dateKey) return
@@ -2136,7 +2142,7 @@ async function openAddStudentModal() {
 
     try {
         isAddingStudent.value = true
-        makeupCandidates.value = await EnrollmentService.getActiveEnrollmentCandidates()
+        makeupCandidates.value = await EnrollmentQueryService.getActiveEnrollmentCandidates()
     } catch (error: any) {
         reportError(error, 'classroom.add_student_load_failed')
         showAddStudentModal.value = false
@@ -2172,7 +2178,7 @@ async function submitAddStudentToClass() {
     try {
         isAddingStudent.value = true
         makeupSubmitError.value = ''
-        await EnrollmentService.addEnrollmentToSessionOccurrence(
+        await EnrollmentCommandService.addEnrollmentToSessionOccurrence(
             selectedMakeupEnrollmentId.value,
             sessionId,
             normalizedJoinDate
@@ -2309,7 +2315,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
     if (!conflictReportId.value) return
 
     try {
-        const report = await OccurrenceReportService.resolveConflict(
+        const report = await ReportCommandService.resolveConflict(
             conflictReportId.value,
             resolvedReport,
             auth.user?.id,

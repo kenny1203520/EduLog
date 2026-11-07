@@ -1,6 +1,6 @@
 import { MAX_PAGE_SIZE, normalizePageSize, PageApiService } from '@/services/api/PageApiService'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
-import { StudentService } from '@/services/student/StudentService'
+import { StudentQueryService } from '@/services/student/StudentQueryService'
 
 export interface UserPreferencesAggregate {
   preferences: {
@@ -151,6 +151,6 @@ export class AggregateService {
   }
 
   static async getStudentsCountCached(): Promise<number> {
-    return this.withCache('students:count', this.MEDIUM_TTL_MS, async () => (await StudentService.getAll(1, 1)).count || 0)
+    return this.withCache('students:count', this.MEDIUM_TTL_MS, async () => (await StudentQueryService.getAll(1, 1)).count || 0)
   }
 }

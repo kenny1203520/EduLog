@@ -327,10 +327,11 @@ import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import { useFeedback } from '@/composables/useFeedback'
 import { useAuthStore } from '@/stores/useAuthStore'
-import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import type { ReportVersion, OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import ConfirmModal from '@/components/ui/ConfirmModal.vue'
 import RichTextViewer from '@/components/text-editor/RichTextViewer.vue'
+import { ReportQueryService } from '@/services/report/ReportQueryService'
+import { ReportCommandService } from '@/services/report/ReportCommandService'
 
 const props = defineProps<{
     isOpen: boolean
@@ -411,7 +412,7 @@ watch(() => props.isOpen, async (newVal) => {
 async function loadVersions() {
     try {
         isLoading.value = true
-        versions.value = await OccurrenceReportService.getReportVersions(props.reportId)
+        versions.value = await ReportQueryService.getReportVersions(props.reportId)
     } catch (error) {
         console.error('Failed to load version history:', error)
         reportError(error, 'report.editor.load_history_failed')
@@ -450,7 +451,7 @@ async function executeRestore() {
         confirmState.value.isLoading = true
         isRestoring.value = true
 
-        const restoredReport = await OccurrenceReportService.restoreReportVersion(
+        const restoredReport = await ReportCommandService.restoreReportVersion(
             props.reportId,
             selectedVersion.value.id,
             authStore.user?.id,

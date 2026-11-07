@@ -5,7 +5,6 @@ import { ClassroomService } from '@/services/classroom/ClassroomService'
 import { AggregateService } from '@/services/api/AggregateService'
 import { SessionService } from '@/services/session/SessionService'
 import { VisibilityPreferenceService } from '@/services/preference/VisibilityPreferenceService'
-import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
 import { TeacherService } from '@/services/teacher/TeacherService'
 import { RoleService } from '@/services/rbac/RoleService'
 import { INCOMPLETE_REPORT_PERMISSION, PermissionPolicyService } from '@/services/rbac/PermissionPolicyService'
@@ -39,6 +38,7 @@ import ConfirmModal from '../components/ui/ConfirmModal.vue'
 import BaseDropdown from '@/components/ui/BaseDropdown.vue'
 import BasePageHeader from '@/components/ui/BasePageHeader.vue'
 import BaseSkeletonCard from '@/components/ui/BaseSkeletonCard.vue'
+import { OccurrenceSyncService } from '@/services/occurrence/OccurrenceSyncService'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -752,7 +752,7 @@ async function saveSession() {
             policyOverrides(sessionPolicySelections.value)
         )
         await PermissionPolicyService.replaceDashboardScheduleModes({ type: 'class_session', id: sessionId }, sessionScheduleSelections.value)
-        const reconciliation = await OccurrenceService.syncSessionOccurrences(sessionId)
+        const reconciliation = await OccurrenceSyncService.syncSessionOccurrences(sessionId)
 
         AggregateService.clearCache()
         await Promise.all([loadSessions(), refreshRolePolicies()])
