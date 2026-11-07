@@ -3,7 +3,6 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import { useFeedback } from '@/composables/useFeedback'
-import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
 import { SessionService } from '@/services/session/SessionService'
 import { ClassroomService } from '@/services/classroom/ClassroomService'
 import SearchableSelect from '@/components/ui/SearchableSelect.vue'
@@ -12,6 +11,8 @@ import { DateUtils } from '@/utils/dateUtils'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { formatClassSessionOption } from '@/utils/sessionSchedule'
 import { SessionEligibilityPolicy } from '@/models/SessionEligibilityPolicy'
+import { EnrollmentQueryService } from '@/services/enrollment/EnrollmentQueryService'
+import { EnrollmentCommandService } from '@/services/enrollment/EnrollmentCommandService'
 
 const props = defineProps<{
     isOpen: boolean
@@ -78,7 +79,7 @@ async function fetchCurrentEnrollment() {
 
     try {
         isLoadingEnrollment.value = true
-        const enrollments = await EnrollmentService.getByStudentId(props.studentId)
+        const enrollments = await EnrollmentQueryService.getByStudentId(props.studentId)
         currentEnrollment.value = enrollments.find((enrollment: any) => enrollment.id === props.fromEnrollmentId) || null
         activateTrialForm.value.target_total_reports = defaultReportCount.value
     } catch (e) {
@@ -151,7 +152,7 @@ async function submitActivateTrial() {
 
     try {
         isSubmitting.value = true
-        await EnrollmentService.update(props.fromEnrollmentId, {
+        await EnrollmentCommandService.update(props.fromEnrollmentId, {
             status: 'regular',
             class_session_id: activateTrialForm.value.class_session_id || undefined,
             start_date: activateTrialForm.value.effective_date,

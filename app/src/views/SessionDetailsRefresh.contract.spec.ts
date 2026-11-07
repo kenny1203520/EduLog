@@ -15,7 +15,7 @@ describe('SessionDetails background refresh contract', () => {
 
     it('uses a read-only report refresh for report events and preserves lesson options', () => {
         expect(source).toContain("options.createMissing === false")
-        expect(source).toContain('OccurrenceReportService.getReportsByOccurrence(occurrenceId)')
+        expect(source).toContain('ReportQueryService.getReportsByOccurrence(occurrenceId)')
         expect(source).toContain('await loadReportsForCurrentOccurrence({ createMissing: false })')
         expect(source).toContain('loadWorkspaceRoster(selectedDate, true)')
         expect(source).toContain('loadMissingLessons: !options.reportOnly')

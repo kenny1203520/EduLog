@@ -3,7 +3,6 @@ import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useToast } from "vue-toastification";
 import { useFeedback } from "@/composables/useFeedback";
-import { EnrollmentService } from "@/services/enrollment/EnrollmentService";
 import { useStudentStore } from "@/stores/useStudentStore";
 import { usePreferencesStore } from "@/stores/usePreferencesStore";
 import EnrollStudentModal from "@/components/enrollment/EnrollStudentModal.vue";
@@ -16,6 +15,7 @@ import TimeZoneSelect from "@/components/ui/TimeZoneSelect.vue";
 import { DateUtils } from "@/utils/dateUtils";
 import KodingCodeCheckModal from "@/components/enrollment/KodingCodeCheckModal.vue";
 import ClassTimeline from "@/components/enrollment/ClassTimeline.vue";
+import { EnrollmentCommandService } from '@/services/enrollment/EnrollmentCommandService'
 
 const props = defineProps<{
     studentId: string;
@@ -85,7 +85,7 @@ async function saveEnrollment(options: { confirmedStartDate?: boolean } = {}) {
     if (startDateChanged && !options.confirmedStartDate) {
         try {
             isModifying.value = true;
-            const impact = await EnrollmentService.getStartDateImpact(editingEnrollmentId.value, editEnrollmentForm.value.start_date);
+            const impact = await EnrollmentCommandService.getStartDateImpact(editingEnrollmentId.value, editEnrollmentForm.value.start_date);
             if (impact.reportsWithContentBeforeStart.length) {
                 startDateWarningDates.value = impact.reportsWithContentBeforeStart;
                 return;
@@ -100,7 +100,7 @@ async function saveEnrollment(options: { confirmedStartDate?: boolean } = {}) {
     startDateWarningDates.value = null;
     try {
         isModifying.value = true;
-        await EnrollmentService.update(editingEnrollmentId.value, {
+        await EnrollmentCommandService.update(editingEnrollmentId.value, {
             status: editEnrollmentForm.value.enrollment_type as any,
             start_date: editEnrollmentForm.value.start_date,
             time_zone: editEnrollmentForm.value.time_zone,
@@ -128,7 +128,7 @@ async function handleRemoveEnrollment() {
     if (!enrollmentToDelete.value) return;
     try {
         isModifying.value = true;
-        await EnrollmentService.delete(enrollmentToDelete.value);
+        await EnrollmentCommandService.delete(enrollmentToDelete.value);
         await studentStore.loadStudent(props.studentId);
         toast.success(t("common.deleted"));
     } catch (e: any) {

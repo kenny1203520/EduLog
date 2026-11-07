@@ -1,6 +1,5 @@
 import { Enrollment } from '@/models/Enrollment'
 import { DateUtils } from '@/utils/dateUtils'
-import { OccurrenceService } from '../occurrence/OccurrenceService'
 import { EnrollmentTransferQueryService } from './EnrollmentTransferQueryService'
 import { EnrollmentTransferToolService } from './EnrollmentTransferToolService'
 import { SessionService } from '../session/SessionService'
@@ -12,6 +11,7 @@ import {
 import type { TransferReportFieldSelections } from '@/services/report/ReportFieldConflictService'
 import { apiV1Client } from '@/services/api/ApiV1Client'
 import { hasDomainErrorCode } from '@/services/errors/mapDomainError'
+import { OccurrenceCommandService } from '@/services/occurrence/OccurrenceCommandService'
 
 export interface SingleLessonTransferCancelResult {
     transferId: string
@@ -155,7 +155,7 @@ export class EnrollmentTransferService {
         await this.assertTargetDateMatchesSession(targetSessionId, targetDate)
 
         const target = DateUtils.parseLocalDate(targetDate) || new Date(targetDate)
-        await OccurrenceService.generateOccurrences(targetSessionId, target, target).catch((err: any) => {
+        await OccurrenceCommandService.generateOccurrences(targetSessionId, target, target).catch((err: any) => {
             console.error('Failed to generate the target occurrence for single-lesson transfer:', err)
         })
 
@@ -169,7 +169,7 @@ export class EnrollmentTransferService {
         )
 
         const original = DateUtils.parseLocalDate(originalDate) || new Date(originalDate)
-        await OccurrenceService.generateOccurrences(originalSessionId, original, original).catch((err: any) => {
+        await OccurrenceCommandService.generateOccurrences(originalSessionId, original, original).catch((err: any) => {
             console.error('Failed to generate the original occurrence for single-lesson transfer:', err)
         })
 
@@ -230,7 +230,7 @@ export class EnrollmentTransferService {
         const originalSessionId = originalOccurrence?.class_session_id || null
 
         const target = DateUtils.parseLocalDate(targetDate) || new Date(targetDate)
-        await OccurrenceService.generateOccurrences(targetSessionId, target, target).catch((err: any) => {
+        await OccurrenceCommandService.generateOccurrences(targetSessionId, target, target).catch((err: any) => {
             console.error('Failed to generate the target occurrence for single-lesson report transfer:', err)
         })
 

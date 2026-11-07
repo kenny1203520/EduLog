@@ -3,7 +3,6 @@ import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import { useFeedback } from '@/composables/useFeedback'
-import { StudentService } from '@/services/student/StudentService'
 import type { StudentSchoolDTO } from '@/models/Student'
 import { useStudentStore } from '@/stores/useStudentStore'
 import { copyToClipboard as copyToClipboardUtil } from '@/utils/clipboard'
@@ -12,6 +11,7 @@ import ConfirmModal from '@/components/ui/ConfirmModal.vue'
 import TimeZoneSelect from '@/components/ui/TimeZoneSelect.vue'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { DateUtils } from '@/utils/dateUtils'
+import { StudentCommandService } from '@/services/student/StudentCommandService'
 
 const props = defineProps<{
     studentId: string
@@ -74,7 +74,7 @@ async function addSchool() {
 
     try {
         isModifying.value = true
-        await StudentService.addSchool({ ...newSchool.value, student_id: props.studentId })
+        await StudentCommandService.addSchool({ ...newSchool.value, student_id: props.studentId })
         closeAddSchoolForm()
         await studentStore.loadStudent(props.studentId)
         toast.success(t('student.schools.add_btn') + ' ' + t('common.success'))
@@ -131,7 +131,7 @@ async function saveSchool() {
 
     try {
         isModifying.value = true
-        await StudentService.updateSchool(editingSchoolId.value, editSchoolForm.value)
+        await StudentCommandService.updateSchool(editingSchoolId.value, editSchoolForm.value)
         cancelEditSchool()
         await studentStore.loadStudent(props.studentId)
         toast.success(t('common.save_success'))
@@ -152,7 +152,7 @@ async function handleDeleteSchool() {
     if (!schoolToDelete.value) return
     try {
         isModifying.value = true
-        await StudentService.deleteSchool(schoolToDelete.value)
+        await StudentCommandService.deleteSchool(schoolToDelete.value)
         await studentStore.loadStudent(props.studentId)
         toast.success(t('common.deleted'))
     } catch (e: any) {

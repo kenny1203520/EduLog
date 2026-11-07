@@ -4,10 +4,8 @@ import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import { useFeedback } from '@/composables/useFeedback'
 import { domainErrorCode, hasDomainErrorCode } from '@/services/errors/mapDomainError'
-import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
 import { SessionService } from '@/services/session/SessionService'
 import { ClassroomService } from '@/services/classroom/ClassroomService'
-import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import SearchableSelect from '@/components/ui/SearchableSelect.vue'
 import { useCapacityCheck } from '@/composables/useCapacityCheck'
 import CapacityProgressBar from '@/components/ui/CapacityProgressBar.vue'
@@ -21,6 +19,9 @@ import TransferReportConflictModal from '@/components/enrollment/TransferReportC
 import type { SingleLessonTransferConflict, SingleLessonTransferResult } from '@/services/enrollment/SingleLessonTransferConflictService'
 import type { TransferReportFieldSelections } from '@/services/report/ReportFieldConflictService'
 import type { ClassTransferResult } from '@/services/enrollment/EnrollmentTransferService'
+import { EnrollmentQueryService } from '@/services/enrollment/EnrollmentQueryService'
+import { EnrollmentCommandService } from '@/services/enrollment/EnrollmentCommandService'
+import { ReportQueryService } from '@/services/report/ReportQueryService'
 
 const NOTE_MAX_LENGTH = 200
 
@@ -158,7 +159,7 @@ async function fetchCurrentEnrollment() {
 
     try {
         isLoadingEnrollment.value = true
-        const enrollments = await EnrollmentService.getByStudentId(props.studentId)
+        const enrollments = await EnrollmentQueryService.getByStudentId(props.studentId)
         currentEnrollment.value = enrollments.find((enrollment: any) => enrollment.id === props.fromEnrollmentId) || null
     } catch (e) {
         console.error(e)
@@ -199,7 +200,7 @@ async function fetchReports() {
 
     try {
         isLoadingReports.value = true
-        const reports = await OccurrenceReportService.getReportsWithDetails(props.fromEnrollmentId)
+        const reports = await ReportQueryService.getReportsWithDetails(props.fromEnrollmentId)
         reportOptions.value = reports
             .map((report: any) => {
                 const occurrence = getOccurrenceData(report)
@@ -337,7 +338,7 @@ async function submitTransfer() {
         let singleResult: SingleLessonTransferResult | null = null
         if (transferForm.value.mode === 'single') {
             if (transferForm.value.single_source_mode === 'date') {
-                singleResult = await EnrollmentService.transferSingleLessonFromDate(
+                singleResult = await EnrollmentCommandService.transferSingleLessonFromDate(
                     props.fromEnrollmentId,
                     transferForm.value.original_date,
                     transferForm.value.to_session_id,
@@ -345,14 +346,14 @@ async function submitTransfer() {
                     { createIfMissing: true }
                 )
             } else {
-                singleResult = await EnrollmentService.transferSingleLessonReport(
+                singleResult = await EnrollmentCommandService.transferSingleLessonReport(
                     transferForm.value.selected_report_id,
                     transferForm.value.to_session_id,
                     transferForm.value.target_date
                 )
             }
         } else {
-            const classResult = await EnrollmentService.transferClass(
+            const classResult = await EnrollmentCommandService.transferClass(
                 props.fromEnrollmentId,
                 transferForm.value.to_session_id,
                 transferForm.value.effective_date,
@@ -408,7 +409,7 @@ async function resolveTransferConflict(selections: TransferReportFieldSelections
 
     try {
         isResolvingConflict.value = true
-        const result = await EnrollmentService.resolveSingleLessonTransferConflict(
+        const result = await EnrollmentCommandService.resolveSingleLessonTransferConflict(
             conflict,
             selections
         )

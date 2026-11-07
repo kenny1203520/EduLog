@@ -1,4 +1,4 @@
-import { OccurrenceService } from '../occurrence/OccurrenceService'
+import { OccurrenceSyncService } from '@/services/occurrence/OccurrenceSyncService'
 
 export class EnrollmentTransferToolService {
     static buildTransferEndDate(startDate: string, lessonCount: number): Date {
@@ -10,12 +10,12 @@ export class EnrollmentTransferToolService {
 
     static async syncSessionPair(oldSessionId: string | null, newSessionId: string): Promise<void> {
         if (oldSessionId) {
-            await OccurrenceService.syncSessionOccurrences(oldSessionId).catch((err: any) => {
+            await OccurrenceSyncService.syncSessionOccurrences(oldSessionId).catch((err: any) => {
                 console.error('Failed to sync the old session\'s occurrences after transfer:', err)
             })
         }
 
-        await OccurrenceService.syncSessionOccurrences(newSessionId).catch((err: any) => {
+        await OccurrenceSyncService.syncSessionOccurrences(newSessionId).catch((err: any) => {
             console.error('Failed to sync the new session\'s occurrences after transfer:', err)
         })
     }

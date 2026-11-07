@@ -5,11 +5,11 @@ import { useFeedback } from '@/composables/useFeedback'
 import BaseDropdown from '@/components/ui/BaseDropdown.vue'
 import SearchableSelect from '@/components/ui/SearchableSelect.vue'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
-import { StudentService } from '@/services/student/StudentService'
 import { TeacherService } from '@/services/teacher/TeacherService'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { buildKodingCodeCheckUrl, getKodingCredentials, type KodingCredential } from '@/utils/koding'
+import { StudentQueryService } from '@/services/student/StudentQueryService'
 
 interface KodingTarget {
     enrollmentId?: string
@@ -157,7 +157,7 @@ async function loadCandidates() {
     isLoadingCandidates.value = true
     try {
         const [studentsResult, teachersResult] = await Promise.all([
-            StudentService.getAll(1, 10000),
+            StudentQueryService.getAll(1, 10000),
             TeacherService.getAllTeachersWithCredentials()
         ])
 

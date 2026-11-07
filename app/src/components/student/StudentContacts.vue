@@ -3,11 +3,11 @@ import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import { useFeedback } from '@/composables/useFeedback'
-import { StudentService } from '@/services/student/StudentService'
 import { useStudentStore } from '@/stores/useStudentStore'
 import { useEmailValidation } from '@/composables/useEmailValidation'
 import { copyToClipboard as copyToClipboardUtil } from '@/utils/clipboard'
 import ConfirmModal from '@/components/ui/ConfirmModal.vue'
+import { StudentCommandService } from '@/services/student/StudentCommandService'
 
 const props = defineProps<{
     studentId: string
@@ -54,7 +54,7 @@ async function addContact() {
 
     try {
         isModifying.value = true
-        await StudentService.addContact({ ...newContact.value, student_id: props.studentId })
+        await StudentCommandService.addContact({ ...newContact.value, student_id: props.studentId })
         closeAddContactForm()
         await studentStore.loadStudent(props.studentId)
         toast.success(t('student.contacts.add_btn') + ' ' + t('common.success'))
@@ -80,7 +80,7 @@ async function saveContact() {
     if (!editingContactId.value) return
     try {
         isModifying.value = true
-        await StudentService.updateContact(editingContactId.value, editContactForm.value)
+        await StudentCommandService.updateContact(editingContactId.value, editContactForm.value)
         cancelEditContact()
         await studentStore.loadStudent(props.studentId)
         toast.success(t('common.save_success'))
@@ -101,7 +101,7 @@ async function handleDeleteContact() {
     if (!contactToDelete.value) return
     try {
         isModifying.value = true
-        await StudentService.deleteContact(contactToDelete.value)
+        await StudentCommandService.deleteContact(contactToDelete.value)
         await studentStore.loadStudent(props.studentId)
         toast.success(t('common.deleted'))
     } catch (e: any) {

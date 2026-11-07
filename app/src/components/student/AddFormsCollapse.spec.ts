@@ -4,7 +4,7 @@ import StudentContacts from './StudentContacts.vue'
 import StudentSchools from './StudentSchools.vue'
 import StudentCredentials from './StudentCredentials.vue'
 import TeacherManagementView from '@/views/TeacherManagementView.vue'
-import { StudentService } from '@/services/student/StudentService'
+import { StudentCommandService } from '@/services/student/StudentCommandService'
 import { TeacherService } from '@/services/teacher/TeacherService'
 
 vi.mock('vue-i18n', () => ({
@@ -50,8 +50,8 @@ vi.mock('@/utils/clipboard', () => ({
   copyToClipboard: vi.fn(() => Promise.resolve(true))
 }))
 
-vi.mock('@/services/student/StudentService', () => ({
-  StudentService: {
+vi.mock('@/services/student/StudentCommandService', () => ({
+  StudentCommandService: {
     addContact: vi.fn(),
     addSchool: vi.fn(),
     addCredential: vi.fn(),
@@ -122,9 +122,9 @@ const globalOptions = {
 describe('collapsed add forms', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(StudentService.addContact).mockResolvedValue({} as any)
-    vi.mocked(StudentService.addSchool).mockResolvedValue({} as any)
-    vi.mocked(StudentService.addCredential).mockResolvedValue({} as any)
+    vi.mocked(StudentCommandService.addContact).mockResolvedValue({} as any)
+    vi.mocked(StudentCommandService.addSchool).mockResolvedValue({} as any)
+    vi.mocked(StudentCommandService.addCredential).mockResolvedValue({} as any)
     vi.mocked(TeacherService.getAllTeachersWithCredentials).mockResolvedValue([
       {
         id: 'teacher-1',
@@ -149,7 +149,7 @@ describe('collapsed add forms', () => {
     await form.findAll('button').find(button => button.text() === 'student.contacts.add_btn')!.trigger('click')
     await flushPromises()
 
-    expect(StudentService.addContact).toHaveBeenCalledWith(expect.objectContaining({
+    expect(StudentCommandService.addContact).toHaveBeenCalledWith(expect.objectContaining({
       student_id: 'student-1',
       name: 'Parent One'
     }))

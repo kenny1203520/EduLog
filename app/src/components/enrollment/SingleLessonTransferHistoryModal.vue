@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
 import type { SingleLessonTransferHistoryItem } from '@/services/enrollment/EnrollmentTransferQueryService'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { DateUtils } from '@/utils/dateUtils'
 import { domainErrorCode, mapDomainError } from '@/services/errors/mapDomainError'
 import ConfirmModal from '@/components/ui/ConfirmModal.vue'
 import { mapErrorKey } from '@/services/errors/mapErrorKey'
+import { EnrollmentTransferQueryService } from '@/services/enrollment/EnrollmentTransferQueryService'
+import { EnrollmentCommandService } from '@/services/enrollment/EnrollmentCommandService'
 
 const props = defineProps<{
     isOpen: boolean
@@ -91,7 +92,7 @@ async function repairTargetReport(item: SingleLessonTransferHistoryItem) {
     if (!props.enrollmentId || !target || target.target_report_id || repairingTransferId.value) return
     repairingTransferId.value = item.id
     try {
-        await EnrollmentService.repairSingleLessonTransferReport(props.enrollmentId, target.target_occurrence_id)
+        await EnrollmentTransferQueryService.repairSingleLessonTransferReport(props.enrollmentId, target.target_occurrence_id)
         await loadHistory()
     } catch (cause) {
         error.value = describeError(cause, 'student.transfer_history.repair_error')
@@ -111,7 +112,7 @@ async function confirmCancel() {
     if (!item || isCancelling.value) return
     isCancelling.value = true
     try {
-        const result = await EnrollmentService.cancelSingleLessonTransfer(item.id)
+        const result = await EnrollmentCommandService.cancelSingleLessonTransfer(item.id)
         notice.value = t(result.targetReportRetained
             ? 'student.transfer_history.cancelled_target_retained'
             : 'student.transfer_history.cancelled')
@@ -132,8 +133,8 @@ async function loadHistory() {
     error.value = null
     try {
         const [historyItems, targets] = await Promise.all([
-            EnrollmentService.getSingleLessonTransferHistory(props.enrollmentId),
-            EnrollmentService.getEffectiveSingleLessonTransferTargets(props.enrollmentId)
+            EnrollmentTransferQueryService.getSingleLessonTransferHistory(props.enrollmentId),
+            EnrollmentTransferQueryService.getEffectiveSingleLessonTransferTargets(props.enrollmentId)
         ])
         history.value = historyItems
         effectiveTargets.value = targets

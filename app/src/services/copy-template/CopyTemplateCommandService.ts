@@ -1,5 +1,5 @@
 import { USER_DEFAULT_SCOPE_ENTITY_ID } from '@/utils/copyTemplate'
-import type { CopyTemplateScopeType } from './CopyTemplateService'
+import type { CopyTemplateScopeType } from './CopyTemplateQueryService'
 import { createTextEditorContent } from '@/components/text-editor/content'
 import type { TextEditorContentInput } from '@/components/text-editor/types'
 import { apiV1Client } from '@/services/api/ApiV1Client'

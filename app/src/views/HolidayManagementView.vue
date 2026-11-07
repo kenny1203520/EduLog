@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
-import { HolidayService } from '@/services/holiday/HolidayService'
 import { ClassroomService } from '@/services/classroom/ClassroomService'
 import { AggregateService } from '@/services/api/AggregateService'
 import { SessionService } from '@/services/session/SessionService'
@@ -17,6 +16,8 @@ import BasePageHeader from '@/components/ui/BasePageHeader.vue'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { DateUtils } from '@/utils/dateUtils'
 import { formatClassSessionSchedule } from '@/utils/sessionSchedule'
+import { HolidayQueryService } from '@/services/holiday/HolidayQueryService'
+import { HolidayCommandService } from '@/services/holiday/HolidayCommandService'
 
 type HolidayTab = 'closures' | 'teacherLeaves'
 type HolidayStatus = 'active' | 'upcoming' | 'ended'
@@ -224,12 +225,12 @@ async function loadHolidays() {
             const agg = await AggregateService.getHolidaysAggregate(true)
             const rows = Array.isArray(agg) ? agg : []
             if (rows.length > 0 && rows.some((row: any) => !hasHolidayKindFields(row))) {
-                holidays.value = await HolidayService.listHolidays()
+                holidays.value = await HolidayQueryService.listHolidays()
             } else {
                 holidays.value = rows.map((d: any) => new Holiday(normalizeHolidayDTO(d)))
             }
         } catch (e) {
-            holidays.value = await HolidayService.listHolidays()
+            holidays.value = await HolidayQueryService.listHolidays()
         }
     } catch (e) {
         console.error(e)
@@ -373,9 +374,9 @@ async function handleSaveHoliday() {
         }
 
         if (editingId.value) {
-            await HolidayService.updateHoliday(editingId.value, payload as any)
+            await HolidayCommandService.updateHoliday(editingId.value, payload as any)
         } else {
-            await HolidayService.createHoliday({
+            await HolidayCommandService.createHoliday({
                 startDate: payload.start_date,
                 endDate: payload.end_date,
                 timeZone: payload.time_zone,
@@ -408,7 +409,7 @@ async function confirmDelete() {
     if (!deleteId.value) return
     try {
         isDeleting.value = true
-        await HolidayService.deleteHoliday(deleteId.value)
+        await HolidayCommandService.deleteHoliday(deleteId.value)
         await loadHolidays()
         toast.success(t('holiday.delete_success') || 'Holiday deleted successfully')
     } catch (e: any) {

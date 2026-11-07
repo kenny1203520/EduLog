@@ -4,7 +4,7 @@ import HolidayManagementView from '@/views/HolidayManagementView.vue'
 import { AggregateService } from '@/services/api/AggregateService'
 import { SessionService } from '@/services/session/SessionService'
 import { TeacherService } from '@/services/teacher/TeacherService'
-import { HolidayService } from '@/services/holiday/HolidayService'
+import { HolidayQueryService } from '@/services/holiday/HolidayQueryService'
 import { Holiday } from '@/models/Holiday'
 
 vi.mock('vue-i18n', () => ({
@@ -51,9 +51,14 @@ vi.mock('@/services/teacher/TeacherService', () => ({
   }
 }))
 
-vi.mock('@/services/holiday/HolidayService', () => ({
-  HolidayService: {
-    listHolidays: vi.fn(),
+vi.mock('@/services/holiday/HolidayQueryService', () => ({
+  HolidayQueryService: {
+    listHolidays: vi.fn()
+  }
+}))
+
+vi.mock('@/services/holiday/HolidayCommandService', () => ({
+  HolidayCommandService: {
     createHoliday: vi.fn(),
     updateHoliday: vi.fn(),
     deleteHoliday: vi.fn()
@@ -144,7 +149,7 @@ describe('HolidayManagementView tabs', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(AggregateService.getHolidaysAggregate).mockResolvedValue(holidays)
-    vi.mocked(HolidayService.listHolidays).mockResolvedValue(holidays.map(holiday => new Holiday(holiday as any)))
+    vi.mocked(HolidayQueryService.listHolidays).mockResolvedValue(holidays.map(holiday => new Holiday(holiday as any)))
     vi.mocked(AggregateService.getAllClassroomsOverview).mockResolvedValue({
       classrooms: rooms,
       count: rooms.length
@@ -218,7 +223,7 @@ describe('HolidayManagementView tabs', () => {
     })
     await flushPromises()
 
-    expect(HolidayService.listHolidays).toHaveBeenCalled()
+    expect(HolidayQueryService.listHolidays).toHaveBeenCalled()
 
     await wrapper.findAll('button').find(button => button.text().includes('holiday.tab_teacher_leaves'))?.trigger('click')
     await flushPromises()
