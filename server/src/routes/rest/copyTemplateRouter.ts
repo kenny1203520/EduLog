@@ -1,12 +1,8 @@
-import { Router, type NextFunction, type Request, type Response } from 'express'
+import { Router, type Request, type Response } from 'express'
 import { z } from 'zod'
 import { mapDatabaseError } from '../../http/errors.js'
 import { complete, idempotency } from './resourceRouter.js'
-import { envelope, permission, uuid } from './domainAccess.js'
-
-function wrap(handler: (req: Request, res: Response) => Promise<unknown>) {
-  return (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res)).catch(next)
-}
+import { envelope, permission, uuid, wrap } from './domainAccess.js'
 
 async function putCopyTemplate(req: Request, res: Response) {
   const params = z.object({ templateType: z.string().trim().min(1).max(64), scopeType: z.string().trim().min(1).max(64), scopeEntityId: uuid }).parse(req.params)

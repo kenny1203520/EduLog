@@ -23,16 +23,13 @@ SELECT '15200000-0000-4000-8000-000000000004', id, 'system', NULL, DATE '2020-01
 FROM public.roles WHERE code = 'teacher' AND domain = 'teaching' AND is_builtin;
 
 INSERT INTO public.classrooms(id, name, user_id, teaching_id)
-SELECT '15200000-0000-4000-8000-0000000000c1', 'N Classroom', '15200000-0000-4000-8000-000000000001', id
-FROM public.teachings WHERE is_global LIMIT 1;
+SELECT '15200000-0000-4000-8000-0000000000c1', 'N Classroom', '15200000-0000-4000-8000-000000000001', NULL;
 INSERT INTO public.courses(id, subject, stage, user_id, teaching_id)
-SELECT '15200000-0000-4000-8000-0000000000d1', 'N Course', 'primary', '15200000-0000-4000-8000-000000000001', id
-FROM public.teachings WHERE is_global LIMIT 1;
+SELECT '15200000-0000-4000-8000-0000000000d1', 'N Course', 'primary', '15200000-0000-4000-8000-000000000001', NULL;
 INSERT INTO public.class_sessions(id, name, classroom_id, course_ids, start_time, end_time, user_id, start_date, teaching_id)
 SELECT '15200000-0000-4000-8000-0000000000e1', 'N Session', '15200000-0000-4000-8000-0000000000c1',
        ARRAY['15200000-0000-4000-8000-0000000000d1']::uuid[], '09:00', '10:00',
-       '15200000-0000-4000-8000-000000000001', CURRENT_DATE - 30, teaching.id
-FROM public.teachings teaching WHERE teaching.is_global LIMIT 1;
+       '15200000-0000-4000-8000-000000000001', CURRENT_DATE - 30, NULL;
 
 INSERT INTO public.teacher_records(id, profile_id)
 SELECT ('15200000-0000-4000-8000-0000000000f' || right(profile.auth_user_id::text, 1))::uuid, profile.id

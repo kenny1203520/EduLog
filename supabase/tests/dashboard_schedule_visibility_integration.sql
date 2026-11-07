@@ -20,7 +20,6 @@ DECLARE
   session_a2 uuid := '7e000000-0000-4000-8000-0000000000a2';
   session_b1 uuid := '7e000000-0000-4000-8000-0000000000b1';
 BEGIN
-  SELECT id INTO v_teaching_id FROM public.teachings WHERE is_global LIMIT 1;
   INSERT INTO auth.users(id, email) VALUES
     (owner_id, 'schedule-owner@example.test'),
     (admin_user, 'schedule-admin@example.test'),

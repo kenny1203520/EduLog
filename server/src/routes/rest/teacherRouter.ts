@@ -1,12 +1,8 @@
-import { Router, type NextFunction, type Request, type Response } from 'express'
+import { Router, type Request, type Response } from 'express'
 import { z } from 'zod'
 import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { complete, idempotency } from './resourceRouter.js'
-import { envelope, permission, uuid } from './domainAccess.js'
-
-function wrap(handler: (req: Request, res: Response) => Promise<unknown>) {
-  return (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res)).catch(next)
-}
+import { envelope, permission, uuid, wrap } from './domainAccess.js'
 
 async function bulkDeleteTeachers(req: Request, res: Response) {
   const input = z.object({ ids: z.array(uuid).min(1).max(100) }).strict().parse(req.body)

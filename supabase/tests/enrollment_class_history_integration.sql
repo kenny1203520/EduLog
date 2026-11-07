@@ -24,7 +24,6 @@ DECLARE
   report_1010 uuid := '7d000000-0000-4000-8000-000000000013';
   result jsonb;
 BEGIN
-  SELECT id INTO v_teaching_id FROM public.teachings WHERE is_global LIMIT 1;
   INSERT INTO auth.users(id, email) VALUES (owner_id, 'class-history-owner@example.test');
   INSERT INTO public.classrooms(id, name, user_id, teaching_id) VALUES (v_classroom_id, 'History classroom', owner_id, v_teaching_id);
   INSERT INTO public.courses(id, subject, stage, user_id, teaching_id) VALUES (v_course_id, 'History course', 'primary', owner_id, v_teaching_id);
