@@ -1,5 +1,5 @@
 import { ref, watch, type Ref } from 'vue'
-import { EnrollmentHistoryService as service } from '@/services/EnrollmentHistoryService'
+import { EnrollmentHistoryService as service } from '@/services/enrollment/EnrollmentHistoryService'
 import type { EnrollmentHistoryReport, HistoryOccurrenceCandidate, HistoryBindingPreview } from '@/models/EnrollmentHistoryReport'
 
 /** Keep history reads, binding revisions and late-response guards out of presentation components. */

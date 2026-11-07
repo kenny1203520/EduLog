@@ -91,7 +91,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Enrollment } from '@/models/Enrollment'
 import { PageApiService } from '@/services/api/PageApiService'
-import EnrollmentHistoryPanel from '@/components/reports/EnrollmentHistoryPanel.vue'
+import EnrollmentHistoryPanel from '@/components/report/EnrollmentHistoryPanel.vue'
 
 const route = useRoute()
 const router = useRouter()

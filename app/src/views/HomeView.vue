@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { AggregateService } from '@/services/AggregateService'
+import { AggregateService } from '@/services/api/AggregateService'
 import { ClassOccurrence } from '@/models/ClassOccurrence'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
-import { DateUtils } from '@/utils/DateUtils'
+import { DateUtils } from '@/utils/dateUtils'
 import { useFeedback } from '@/composables/useFeedback'
 
 const { t } = useI18n()

@@ -1,7 +1,7 @@
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ClassroomManagementView from '@/views/ClassroomManagementView.vue'
-import { AggregateService } from '@/services/AggregateService'
+import { AggregateService } from '@/services/api/AggregateService'
 
 vi.mock('vue-i18n', () => ({
   createI18n: () => ({
@@ -41,7 +41,7 @@ vi.mock('@/stores/usePreferencesStore', () => ({
   })
 }))
 
-vi.mock('@/services/AggregateService', () => ({
+vi.mock('@/services/api/AggregateService', () => ({
   AggregateService: {
     getClassroomSessionManagerAggregate: vi.fn(),
     getClassSessionsOverview: vi.fn(),
@@ -54,7 +54,7 @@ vi.mock('@/services/AggregateService', () => ({
 vi.mock('@/services/course/CourseCatalogService', () => ({ CourseCatalogService: { getCourses: vi.fn() } }))
 vi.mock('@/services/classroom/ClassroomService', () => ({ ClassroomService: { getAllClassrooms: vi.fn() } }))
 vi.mock('@/services/session/SessionService', () => ({ SessionService: {} }))
-vi.mock('@/services/VisibilityPreferenceService', () => ({ VisibilityPreferenceService: {} }))
+vi.mock('@/services/preference/VisibilityPreferenceService', () => ({ VisibilityPreferenceService: {} }))
 vi.mock('@/services/occurrence/OccurrenceService', () => ({ OccurrenceService: {} }))
 vi.mock('@/services/teacher/TeacherService', () => ({ TeacherService: {} }))
 vi.mock('@/services/rbac/RoleService', () => ({ RoleService: {} }))

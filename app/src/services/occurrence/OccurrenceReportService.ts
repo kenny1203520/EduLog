@@ -6,7 +6,7 @@ import {
 } from '@/models/OccurrenceReport'
 import { ReportCommandService } from '../report/ReportCommandService'
 import { ReportQueryService } from '../report/ReportQueryService'
-import type { RichTextDocumentV1 } from '@/components/common/text-editor/types'
+import type { RichTextDocumentV1 } from '@/components/text-editor/types'
 
 /**
  * Backward-compatible facade for report operations.

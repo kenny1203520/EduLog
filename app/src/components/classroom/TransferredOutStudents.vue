@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import type { OccurrenceLessonTransfer } from '@/services/enrollment/EnrollmentTransferQueryService'
-import { DateUtils } from '@/utils/DateUtils'
+import { DateUtils } from '@/utils/dateUtils'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 
 defineProps<{

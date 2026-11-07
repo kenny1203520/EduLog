@@ -1,4 +1,4 @@
-import { DateUtils } from '@/utils/DateUtils'
+import { DateUtils } from '@/utils/dateUtils'
 import type { ClassSessionScheduleRuleDTO, ScheduleMode, SessionType } from './ClassSession'
 export interface EnrollmentDTO {
     id?: string

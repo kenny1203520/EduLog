@@ -3,8 +3,8 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import { useFeedback } from '@/composables/useFeedback'
-import Pagination from '@/components/common/Pagination.vue'
-import ConfirmModal from '@/components/common/ConfirmModal.vue'
+import Pagination from '@/components/ui/Pagination.vue'
+import ConfirmModal from '@/components/ui/ConfirmModal.vue'
 import TeacherAccountLinkDialog from '@/components/teacher/TeacherAccountLinkDialog.vue'
 import {
     TeacherService,
@@ -19,12 +19,12 @@ import {
     type AuthUserSearchResultDTO
 } from '@/services/auth/AuthUserSearchService'
 
-import BaseDropdown from '@/components/common/BaseDropdown.vue'
-import BasePageHeader from '@/components/common/BasePageHeader.vue'
-import TextEditor from '@/components/common/text-editor/TextEditor.vue'
-import RichTextViewer from '@/components/common/text-editor/RichTextViewer.vue'
-import { createTextEditorContent } from '@/components/common/text-editor/content'
-import type { TextEditorContent } from '@/components/common/text-editor/types'
+import BaseDropdown from '@/components/ui/BaseDropdown.vue'
+import BasePageHeader from '@/components/ui/BasePageHeader.vue'
+import TextEditor from '@/components/text-editor/TextEditor.vue'
+import RichTextViewer from '@/components/text-editor/RichTextViewer.vue'
+import { createTextEditorContent } from '@/components/text-editor/content'
+import type { TextEditorContent } from '@/components/text-editor/types'
 import { isKodingPlatform, KODING_PLATFORM } from '@/utils/koding'
 
 const { t } = useI18n()

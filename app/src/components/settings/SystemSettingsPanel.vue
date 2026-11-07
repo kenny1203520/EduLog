@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { apiV1Client } from '@/services/api/ApiV1Client'
+import { RoleAssignmentService } from '@/services/rbac/RoleAssignmentService'
+import { UserAccountService } from '@/services/auth/UserAccountService'
 import { RoleService } from '@/services/rbac/RoleService'
 import type { RoleDTO } from '@/models/Rbac'
 import { useFeedback } from '@/composables/useFeedback'
@@ -12,11 +13,11 @@ import AuditLogPanel from '@/components/settings/AuditLogPanel.vue'
 import AiAdminPanel from '@/components/settings/ai/AiAdminPanel.vue'
 import IncompleteReportNotificationSettings from '@/components/settings/IncompleteReportNotificationSettings.vue'
 import DashboardScheduleVisibilitySettings from '@/components/settings/DashboardScheduleVisibilitySettings.vue'
-import SearchableSelect from '@/components/common/SearchableSelect.vue'
-import Pagination from '@/components/common/Pagination.vue'
+import SearchableSelect from '@/components/ui/SearchableSelect.vue'
+import Pagination from '@/components/ui/Pagination.vue'
 import { AuthUserSearchService, type AuthUserSearchResultDTO } from '@/services/auth/AuthUserSearchService'
 import { roleDisplayDescription } from '@/utils/roleDisplay'
-import { DateUtils } from '@/utils/DateUtils'
+import { DateUtils } from '@/utils/dateUtils'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 
 type Assignment = { id: string; user_id: string; role_id: string; roles?: { code?: string; name?: string }; effective_from?: string; effective_to?: string | null }
@@ -152,16 +153,10 @@ async function loadAssignments() {
     if (!userId) { assignmentLoading.value = false; return }
     assignmentLoading.value = true
     try {
-        const params = new URLSearchParams({
-            user_id: userId,
-            limit: String(assignmentPageSize.value),
-            offset: String((assignmentPage.value - 1) * assignmentPageSize.value),
-            sort: '-effective_from',
-        })
-        const result = await apiV1Client.get<Assignment[]>(`/system-role-assignments?${params}`)
+        const result = await RoleAssignmentService.listSystemAssignments<Assignment>(userId, assignmentPage.value, assignmentPageSize.value)
         if (sequence !== assignmentSequence || selectedUserId.value !== userId) return
-        assignments.value = result.data ?? []
-        assignmentTotal.value = Number(result.meta?.total ?? 0)
+        assignments.value = result.rows
+        assignmentTotal.value = result.total
     } catch (error) {
         if (sequence === assignmentSequence && selectedUserId.value === userId) { assignmentLoadError.value = true; reportError(error) }
     } finally { if (sequence === assignmentSequence) assignmentLoading.value = false }
@@ -171,7 +166,7 @@ async function assignRole() {
     if (!selectedUserId.value || !selectedRoleId.value) return
     saving.value = true
     try {
-        await apiV1Client.post('/system-role-assignments', {
+        await RoleAssignmentService.createSystemAssignment({
             user_id: selectedUserId.value,
             role_id: selectedRoleId.value,
             effective_from: effectiveFrom.value,
@@ -195,15 +190,15 @@ async function updateStatus() {
     saving.value = true
     try {
         const reason = targetStatus === 'disabled' ? statusReason.value.trim() : null
-        const result = await apiV1Client.patch<{ account_status: 'active' | 'disabled'; disabled_at: string | null }>(`/users/${targetUserId}/status`, { status: targetStatus, reason, expected_epoch: epoch.value })
+        const result = await UserAccountService.updateStatus(targetUserId, targetStatus, reason, epoch.value)
         const updated = {
-            account_status: result.data.account_status,
-            disabled_at: result.data.disabled_at,
-            disabled_reason: result.data.account_status === 'disabled' ? reason : null,
+            account_status: result.account_status,
+            disabled_at: result.disabled_at,
+            disabled_reason: result.account_status === 'disabled' ? reason : null,
         }
         if (selectedUser.value?.id === targetUserId) {
             selectedUser.value = { ...selectedUser.value, ...updated }
-            selectedStatus.value = result.data.account_status
+            selectedStatus.value = result.account_status
             statusReason.value = ''
         }
         users.value = users.value.map(user => user.id === targetUserId ? { ...user, ...updated } : user)
@@ -215,7 +210,7 @@ async function removeAssignment(assignment: Assignment) {
     if (!window.confirm(t('rbac.system_ui.remove_assignment_confirm'))) return
     saving.value = true
     try {
-        await apiV1Client.delete(`/system-role-assignments/${assignment.id}`, { expected_epoch: epoch.value })
+        await RoleAssignmentService.deleteSystemAssignment(assignment.id, epoch.value)
         await loadAssignments()
         success('common.deleted')
     } catch (error) { reportError(error) } finally { saving.value = false }

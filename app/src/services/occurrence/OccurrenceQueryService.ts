@@ -1,5 +1,5 @@
 import { ClassOccurrence } from '@/models/ClassOccurrence'
-import { DateUtils } from '@/utils/DateUtils'
+import { DateUtils } from '@/utils/dateUtils'
 import { apiV1Client } from '@/services/api/ApiV1Client'
 
 export class OccurrenceQueryService {

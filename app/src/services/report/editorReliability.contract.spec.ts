@@ -16,7 +16,7 @@ describe('editor reliability contracts', () => {
     it('keeps report reference options narrow', () => {
         const courseService = readFileSync(resolve(repoRoot, 'app/src/services/course/CourseCatalogService.ts'), 'utf8')
         const sessionService = readFileSync(resolve(repoRoot, 'app/src/services/session/SessionService.ts'), 'utf8')
-        const referencePanel = readFileSync(resolve(repoRoot, 'app/src/components/ReportReferencePanel.vue'), 'utf8')
+        const referencePanel = readFileSync(resolve(repoRoot, 'app/src/components/report/ReportReferencePanel.vue'), 'utf8')
         expect(courseService).toContain("apiResourceClient.list<CourseDTO>")
         expect(sessionService).toMatch(/getClassSessionOptions[\s\S]*?apiResourceClient\.list<ClassSessionOption>\('class-sessions'/)
         const optionsBlock = sessionService.slice(sessionService.indexOf('getClassSessionOptions'), sessionService.indexOf('createClassSession', sessionService.indexOf('getClassSessionOptions')))
@@ -28,13 +28,13 @@ describe('editor reliability contracts', () => {
 
     it('counts the local session plus remote peers only when collaboration is ready', () => {
         const collab = readFileSync(resolve(repoRoot, 'app/src/composables/useReportCollab.ts'), 'utf8')
-        const editor = readFileSync(resolve(repoRoot, 'app/src/components/ReportEditor.vue'), 'utf8')
+        const editor = readFileSync(resolve(repoRoot, 'app/src/components/report/ReportEditor.vue'), 'utf8')
         expect(collab).toContain('onlineParticipantCount')
         expect(collab).toContain('activePeers.value.length + 1')
         expect(editor).toContain('{{ onlineParticipantCount }} online')
     })
     it('keeps the editor visible when collaboration is unavailable', () => {
-        const editor = readFileSync(resolve(repoRoot, 'app/src/components/ReportEditor.vue'), 'utf8')
+        const editor = readFileSync(resolve(repoRoot, 'app/src/components/report/ReportEditor.vue'), 'utf8')
         const collab = readFileSync(resolve(repoRoot, 'app/src/composables/useReportCollab.ts'), 'utf8')
         expect(editor).not.toContain(':user="collaborationUser""')
         expect(editor).toContain('v-if="ready && ydoc"')
@@ -50,7 +50,7 @@ describe('editor reliability contracts', () => {
     })
 
     it('keeps system-managed attendance read-only and out of dirty mutations', () => {
-        const editor = readFileSync(resolve(repoRoot, 'app/src/components/ReportEditor.vue'), 'utf8')
+        const editor = readFileSync(resolve(repoRoot, 'app/src/components/report/ReportEditor.vue'), 'utf8')
         const commandService = readFileSync(resolve(repoRoot, 'app/src/services/report/ReportCommandService.ts'), 'utf8')
 
         expect(editor).toContain(':disabled="disabled || isSystemManagedAbsence"')
@@ -64,7 +64,7 @@ describe('editor reliability contracts', () => {
     })
 
     it('hydrates editable attendance from committed API state instead of stale collaboration metadata', () => {
-        const editor = readFileSync(resolve(repoRoot, 'app/src/components/ReportEditor.vue'), 'utf8')
+        const editor = readFileSync(resolve(repoRoot, 'app/src/components/report/ReportEditor.vue'), 'utf8')
         const attendanceInitialization = editor.slice(editor.indexOf('const shouldHydrateMeta ='), editor.indexOf("if (metaMap.has('classParticipation'))"))
         expect(attendanceInitialization).toContain("attendanceStatus.value = props.initialAttendanceStatus || 'pending'")
         expect(attendanceInitialization).toContain("metaMap.set('attendanceStatus', attendanceStatus.value)")
@@ -83,7 +83,7 @@ describe('editor reliability contracts', () => {
             'app/src/services/report/ReportQueryService.ts',
             'app/src/services/report/ReportCommandService.ts',
             'app/src/services/report/ReportTemplateService.ts',
-            'app/src/services/copy_template/CopyTemplateQueryService.ts',
+            'app/src/services/copy-template/CopyTemplateQueryService.ts',
             'app/src/services/course/CourseCatalogService.ts'
         ]
         const sources = files.map(file => readFileSync(resolve(repoRoot, file), 'utf8'))

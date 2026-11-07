@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import SearchableSelect from '@/components/common/SearchableSelect.vue'
-import { apiV1Client } from '@/services/api/ApiV1Client'
+import SearchableSelect from '@/components/ui/SearchableSelect.vue'
+import { AuthUserSearchService, type AuthUserSearchResultDTO } from '@/services/auth/AuthUserSearchService'
+import { TeacherAccountLinkService, type TeacherLinkField, type TeacherLinkProfile } from '@/services/teacher/TeacherAccountLinkService'
 
-type Profile = { id: string; auth_user_id: string | null; profile_version: number; full_name: string | null; nickname: string | null; contact_email: string | null; phone: string | null; government_id: string | null; address: string | null; mailing_address: string | null; birthday: string | null; bio: string | null; bio_document: unknown }
-type Account = { id: string; email: string; display_name: string | null }
-type Field = keyof Pick<Profile, 'full_name' | 'nickname' | 'contact_email' | 'phone' | 'government_id' | 'address' | 'mailing_address' | 'birthday' | 'bio' | 'bio_document'>
+type Profile = TeacherLinkProfile
+type Account = AuthUserSearchResultDTO
+type Field = TeacherLinkField
 const props = defineProps<{ teacherId: string }>()
 const emit = defineEmits<{ close: []; saved: [] }>()
 const { t } = useI18n()
@@ -47,10 +48,9 @@ async function loadProfiles() {
   loading.value = true
   error.value = ''
   try {
-    const queryString = selectedAccountId.value ? `?target_auth_user_id=${encodeURIComponent(selectedAccountId.value)}` : ''
-    const response = await apiV1Client.get<{ current_profile: Profile; target_profile: Profile | null }>(`/teachers/${encodeURIComponent(props.teacherId)}/account-link${queryString}`)
-    profile.value = response.data?.current_profile ?? null
-    targetProfile.value = response.data?.target_profile ?? null
+    const preview = await TeacherAccountLinkService.preview(props.teacherId, selectedAccountId.value)
+    profile.value = preview.current_profile
+    targetProfile.value = preview.target_profile
     fieldList.forEach(({ key }) => { ownership.value[key] = null })
   } catch { error.value = t('teacher.account_link.load_failed') } finally { loading.value = false }
 }
@@ -61,8 +61,7 @@ function searchAccounts(value: string) {
   if (!value.trim()) { accounts.value = []; return }
   searchTimer = setTimeout(async () => {
     try {
-      const response = await apiV1Client.get<Account[]>(`/users/search?query=${encodeURIComponent(value.trim())}`)
-      accounts.value = response.data ?? []
+      accounts.value = await AuthUserSearchService.searchUsers(value)
     } catch { accounts.value = []; error.value = t('teacher.account_link.search_failed') }
   }, 250)
 }
@@ -76,7 +75,7 @@ async function save() {
   saving.value = true
   error.value = ''
   try {
-    await apiV1Client.patch(`/teachers/${encodeURIComponent(props.teacherId)}/account-link`, {
+    await TeacherAccountLinkService.link(props.teacherId, {
       target_auth_user_id: selectedAccountId.value,
       expected_profile_id: profile.value.id,
       expected_profile_version: profile.value.profile_version,

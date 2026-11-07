@@ -1,4 +1,4 @@
-import { DateUtils } from '@/utils/DateUtils'
+import { DateUtils } from '@/utils/dateUtils'
 
 /**
  * ClassOccurrence represents a single class session that occurs on a specific date.

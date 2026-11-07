@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import BasePageHeader from '@/components/common/BasePageHeader.vue'
-import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
-import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
-import { DateUtils } from '@/utils/DateUtils'
+import BasePageHeader from '@/components/ui/BasePageHeader.vue'
+import LanguageSwitcher from '@/components/ui/LanguageSwitcher.vue'
+import TimeZoneSelect from '@/components/ui/TimeZoneSelect.vue'
+import { DateUtils } from '@/utils/dateUtils'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { useAuthStore } from '@/stores/useAuthStore'
-import { apiV1Client } from '@/services/api/ApiV1Client'
+import { AccountSettingsService, type PersonProfileForm } from '@/services/auth/AccountSettingsService'
 import type { SettingsOverview } from '@/models/Rbac'
 import { useFeedback } from '@/composables/useFeedback'
-import PasswordInput from '@/components/common/PasswordInput.vue'
+import PasswordInput from '@/components/ui/PasswordInput.vue'
 import WebExtensionIntegrations from '@/components/settings/WebExtensionIntegrations.vue'
 import MyAiCredentials from '@/components/settings/ai/MyAiCredentials.vue'
 
@@ -20,19 +20,6 @@ const router = useRouter()
 const preferences = usePreferencesStore()
 const auth = useAuthStore()
 const { reportError, success } = useFeedback()
-type PersonProfileForm = {
-    full_name?: string | null
-    nickname?: string | null
-    display_name?: string | null
-    contact_email?: string | null
-    phone?: string | null
-    address?: string | null
-    mailing_address?: string | null
-    birthday?: string | null
-    government_id?: string | null
-    bio?: string | null
-    bio_document?: Record<string, unknown> | null
-}
 const loading = ref(true)
 const overview = ref<SettingsOverview | null>(null)
 const dirty = ref(false)
@@ -59,12 +46,12 @@ async function syncTab(tab: 'personal' | 'system') {
     await router.replace({ query: { ...route.query, tab: 'personal' } })
 }
 
-async function loadOverview() { loading.value = true; try { overview.value = (await apiV1Client.get<SettingsOverview>('/pages/settings/overview')).data } catch (error) { reportError(error) } finally { loading.value = false } }
-async function loadPersonProfile() { profileLoading.value = true; try { personProfile.value = (await apiV1Client.get<PersonProfileForm>('/pages/me/person-profile')).data ?? {} } catch (error) { reportError(error) } finally { profileLoading.value = false } }
-async function savePersonProfile() { profileSaving.value = true; try { const fields = ['full_name', 'nickname', 'contact_email', 'phone', 'address', 'mailing_address', 'birthday', 'government_id', 'bio', 'bio_document'] as const; const values = personProfile.value as Record<string, unknown>; const patch = Object.fromEntries(fields.map((field) => [field, values[field] === '' ? null : values[field]])); personProfile.value = (await apiV1Client.patch<PersonProfileForm>('/pages/me/person-profile', patch)).data ?? personProfile.value; if (auth.user) auth.user = { ...auth.user, full_name: personProfile.value.full_name ?? null, nickname: personProfile.value.nickname ?? null, display_name: personProfile.value.nickname?.trim() || personProfile.value.full_name || null }; success('common.save_success') } catch (error) { reportError(error) } finally { profileSaving.value = false } }
+async function loadOverview() { loading.value = true; try { overview.value = await AccountSettingsService.getOverview() } catch (error) { reportError(error) } finally { loading.value = false } }
+async function loadPersonProfile() { profileLoading.value = true; try { personProfile.value = await AccountSettingsService.getPersonProfile() } catch (error) { reportError(error) } finally { profileLoading.value = false } }
+async function savePersonProfile() { profileSaving.value = true; try { personProfile.value = (await AccountSettingsService.updatePersonProfile(personProfile.value)) ?? personProfile.value; if (auth.user) auth.user = { ...auth.user, full_name: personProfile.value.full_name ?? null, nickname: personProfile.value.nickname ?? null, display_name: personProfile.value.nickname?.trim() || personProfile.value.full_name || null }; success('common.save_success') } catch (error) { reportError(error) } finally { profileSaving.value = false } }
 function securityErrorKey(error: unknown) { const code = (error as { code?: string })?.code; return code === 'CURRENT_PASSWORD_INVALID' ? 'settings.security.current_password_invalid' : code === 'RATE_LIMITED' ? 'settings.security.rate_limited' : 'settings.security.request_failed' }
-async function requestEmailChange() { securityBusy.value = 'email'; securityError.value = ''; securityNotice.value = ''; try { await apiV1Client.post('/auth/me/email', emailChange.value); emailChange.value = { current_password: '', email: '' }; securityNotice.value = 'settings.security.email_confirmation_sent'; success(securityNotice.value) } catch (error) { securityError.value = securityErrorKey(error) } finally { securityBusy.value = null } }
-async function changePassword() { securityError.value = ''; securityNotice.value = ''; if (passwordChange.value.new_password !== passwordChange.value.confirm_password) { securityError.value = 'settings.security.password_mismatch'; return } securityBusy.value = 'password'; try { await apiV1Client.post('/auth/me/password', passwordChange.value); passwordChange.value = { current_password: '', new_password: '', confirm_password: '' }; securityNotice.value = 'settings.security.password_changed'; success(securityNotice.value) } catch (error) { securityError.value = securityErrorKey(error) } finally { securityBusy.value = null } }
+async function requestEmailChange() { securityBusy.value = 'email'; securityError.value = ''; securityNotice.value = ''; try { await AccountSettingsService.requestEmailChange(emailChange.value); emailChange.value = { current_password: '', email: '' }; securityNotice.value = 'settings.security.email_confirmation_sent'; success(securityNotice.value) } catch (error) { securityError.value = securityErrorKey(error) } finally { securityBusy.value = null } }
+async function changePassword() { securityError.value = ''; securityNotice.value = ''; if (passwordChange.value.new_password !== passwordChange.value.confirm_password) { securityError.value = 'settings.security.password_mismatch'; return } securityBusy.value = 'password'; try { await AccountSettingsService.changePassword(passwordChange.value); passwordChange.value = { current_password: '', new_password: '', confirm_password: '' }; securityNotice.value = 'settings.security.password_changed'; success(securityNotice.value) } catch (error) { securityError.value = securityErrorKey(error) } finally { securityBusy.value = null } }
 async function selectTab(tab: 'personal' | 'system') { if (dirty.value && !window.confirm('目前有尚未儲存的修改，確定要切換分頁嗎？')) return; if (tab === 'system' && !canSystem.value) return router.replace({ query: { ...route.query, tab: 'personal' } }); dirty.value = false; await router.replace({ query: { ...route.query, tab } }) }
 function useBrowserTimeZone() { preferences.timeZone = DateUtils.getBrowserTimeZone() }
 watch([requestedTab, canSystem], ([value]) => { void syncTab(value) })

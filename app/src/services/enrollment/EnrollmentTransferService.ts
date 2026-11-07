@@ -1,5 +1,5 @@
 import { Enrollment } from '@/models/Enrollment'
-import { DateUtils } from '@/utils/DateUtils'
+import { DateUtils } from '@/utils/dateUtils'
 import { OccurrenceService } from '../occurrence/OccurrenceService'
 import { EnrollmentTransferQueryService } from './EnrollmentTransferQueryService'
 import { EnrollmentTransferToolService } from './EnrollmentTransferToolService'

@@ -3,7 +3,7 @@ import { useAuthStore } from '@/stores/useAuthStore'
 import { onBeforeUnmount, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import ConfirmModal from '@/components/common/ConfirmModal.vue'
+import ConfirmModal from '@/components/ui/ConfirmModal.vue'
 import { useAppUpdatePrompt } from '@/composables/useAppUpdatePrompt'
 
 const auth = useAuthStore()

@@ -12,7 +12,7 @@ import {
 } from '@/services/rbac/PermissionPolicyService'
 import type { PermissionDTO, PolicyScope, RoleDTO, RolePermissionPolicyDTO } from '@/models/Rbac'
 import ScopedRolePolicyEditor, { type PolicySelection } from '@/components/settings/ScopedRolePolicyEditor.vue'
-import SearchableSelect from '@/components/common/SearchableSelect.vue'
+import SearchableSelect from '@/components/ui/SearchableSelect.vue'
 
 const { t } = useI18n()
 const props = withDefaults(defineProps<{ titleKey?: string; descriptionKey?: string }>(), {

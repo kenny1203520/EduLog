@@ -3,13 +3,13 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import { useFeedback } from '@/composables/useFeedback'
-import SearchableSelect from '@/components/common/SearchableSelect.vue'
-import Pagination from '@/components/common/Pagination.vue'
+import SearchableSelect from '@/components/ui/SearchableSelect.vue'
+import Pagination from '@/components/ui/Pagination.vue'
 import EffectiveTeachingRoles from '@/components/rbac/EffectiveTeachingRoles.vue'
 import { ClassroomService } from '@/services/classroom/ClassroomService'
 import { SessionService } from '@/services/session/SessionService'
 import { AuthUserSearchService, type AuthUserSearchResultDTO } from '@/services/auth/AuthUserSearchService'
-import { apiV1Client } from '@/services/api/ApiV1Client'
+import { RoleAssignmentService } from '@/services/rbac/RoleAssignmentService'
 import { RoleService } from '@/services/rbac/RoleService'
 import type { PolicyScope, RoleDTO } from '@/models/Rbac'
 import type { ClassSessionDTO } from '@/models/ClassSession'
@@ -145,22 +145,18 @@ async function loadLists() {
     exclusionLoading.value = true
     localCanManage.value = await RoleService.canManageRoleScope(scopeTypeAtRequest, scopeIdAtRequest).catch(() => false)
     if (sequence !== localListSequence || scopeType.value !== scopeTypeAtRequest || scopeId.value !== scopeIdAtRequest || userId.value !== userIdAtRequest) return
-    const baseQuery = new URLSearchParams({ scope_type: scopeTypeAtRequest, scope_id: scopeIdAtRequest, user_id: userIdAtRequest, limit: String(pageSize) })
-    const assignmentQuery = new URLSearchParams(baseQuery)
-    assignmentQuery.set('offset', String((localPage.value - 1) * pageSize))
-    const exclusionQuery = new URLSearchParams(baseQuery)
-    exclusionQuery.set('offset', String((exclusionPage.value - 1) * pageSize))
+    const scopeAtRequest = { type: scopeTypeAtRequest, id: scopeIdAtRequest }
     const [assignments, blocked] = await Promise.allSettled([
-        apiV1Client.get<TeachingRoleAssignment[]>(`/teaching-role-assignments/scoped?${assignmentQuery}`),
-        apiV1Client.get<TeachingRoleAssignment[]>(`/teaching-role-exclusions?${exclusionQuery}`)
+        RoleAssignmentService.listScopedTeachingAssignments<TeachingRoleAssignment>(scopeAtRequest, userIdAtRequest, localPage.value, pageSize),
+        RoleAssignmentService.listTeachingExclusions<TeachingRoleAssignment>(scopeAtRequest, userIdAtRequest, exclusionPage.value, pageSize)
     ])
     if (sequence !== localListSequence || scopeType.value !== scopeTypeAtRequest || scopeId.value !== scopeIdAtRequest || userId.value !== userIdAtRequest) return
-    localAssignments.value = assignments.status === 'fulfilled' ? assignments.value.data ?? [] : []
-    exclusions.value = blocked.status === 'fulfilled' ? blocked.value.data ?? [] : []
-    localTotal.value = assignments.status === 'fulfilled' ? Number(assignments.value.meta?.total ?? 0) : 0
-    exclusionTotal.value = blocked.status === 'fulfilled' ? Number(blocked.value.meta?.total ?? 0) : 0
+    localAssignments.value = assignments.status === 'fulfilled' ? assignments.value.rows : []
+    exclusions.value = blocked.status === 'fulfilled' ? blocked.value.rows : []
+    localTotal.value = assignments.status === 'fulfilled' ? assignments.value.total : 0
+    exclusionTotal.value = blocked.status === 'fulfilled' ? blocked.value.total : 0
     if (assignments.status === 'fulfilled' && blocked.status === 'fulfilled') {
-        localCanListUsers.value = assignments.value.meta?.can_list_users === true && blocked.value.meta?.can_list_users === true
+        localCanListUsers.value = assignments.value.canListUsers && blocked.value.canListUsers
     }
     localLoadError.value = assignments.status === 'rejected'
     exclusionLoadError.value = blocked.status === 'rejected'
@@ -228,12 +224,11 @@ async function loadRootAssignments() {
     if (!rootCanManage.value || !userIdAtRequest) { rootLoading.value = false; return }
     rootLoading.value = true
     try {
-        const params = new URLSearchParams({ user_id: userIdAtRequest, limit: String(pageSize), offset: String((rootPage.value - 1) * pageSize), sort: '-effective_from' })
-        const response = await apiV1Client.get<TeachingRoleAssignment[]>(`/teaching-role-assignments?${params}`)
+        const response = await RoleAssignmentService.listTeachingAssignments<TeachingRoleAssignment>(userIdAtRequest, rootPage.value, pageSize)
         if (sequence !== rootListSequence || userId.value !== userIdAtRequest) return
-        rootAssignments.value = response.data ?? []
-        rootTotal.value = Number(response.meta?.total ?? 0)
-        rootCanListUsers.value = response.meta?.can_list_users === true
+        rootAssignments.value = response.rows
+        rootTotal.value = response.total
+        rootCanListUsers.value = response.canListUsers
     } catch { if (sequence === rootListSequence) rootLoadError.value = true }
     finally { if (sequence === rootListSequence) rootLoading.value = false }
 }
@@ -273,9 +268,9 @@ async function mutateAssignment(target: 'root' | 'local') {
     if (effectiveTo.value && effectiveTo.value < effectiveFrom.value) { errorKey('classroom.role_assignments.invalid_date_range'); return }
     saving.value = true
     try {
-        const body: Record<string, unknown> = { user_id: userId.value, role_id: roleId.value, effective_from: effectiveFrom.value, effective_to: effectiveTo.value || null, expected_epoch: epoch.value }
-        if (target === 'root') await apiV1Client.post('/teaching-role-assignments', body)
-        else await apiV1Client.post('/teaching-role-assignments/scoped', { ...body, scope_type: scopeType.value, scope_id: scopeId.value })
+        const body = { user_id: userId.value, role_id: roleId.value, effective_from: effectiveFrom.value, effective_to: effectiveTo.value || null, expected_epoch: epoch.value }
+        if (target === 'root') await RoleAssignmentService.createTeachingAssignment(body)
+        else await RoleAssignmentService.createScopedTeachingAssignment({ type: scopeType.value, id: scopeId.value }, body)
         toast.success(t('rbac.platform_teaching_assignments.saved'))
         await loadAssignments()
     } catch (error: any) {
@@ -289,7 +284,7 @@ async function excludeRole() {
     if (effectiveTo.value && effectiveTo.value < effectiveFrom.value) { errorKey('classroom.role_assignments.invalid_date_range'); return }
     saving.value = true
     try {
-        await apiV1Client.post(`/teaching-role-exclusions?scope_type=${scopeType.value}&scope_id=${encodeURIComponent(scopeId.value)}`, {
+        await RoleAssignmentService.createTeachingExclusion({ type: scopeType.value, id: scopeId.value }, {
             user_id: userId.value, role_id: roleId.value, effective_from: effectiveFrom.value,
             effective_to: effectiveTo.value || null, expected_epoch: epoch.value
         })
@@ -305,10 +300,10 @@ async function removeAssignment(assignment: TeachingRoleAssignment, target: 'roo
     if (!window.confirm(t('rbac.platform_teaching_assignments.remove_confirm', { role: roleName(assignment), user: userName(assignment) }))) return
     saving.value = true
     try {
-        const body = { expected_epoch: epoch.value }
-        if (target === 'root') await apiV1Client.delete(`/teaching-role-assignments/${assignment.id}`, body)
-        else if (target === 'local') await apiV1Client.delete(`/teaching-role-assignments/scoped/${assignment.id}?scope_type=${scopeType.value}&scope_id=${encodeURIComponent(scopeId.value)}`, body)
-        else await apiV1Client.delete(`/teaching-role-exclusions/${assignment.id}?scope_type=${scopeType.value}&scope_id=${encodeURIComponent(scopeId.value)}`, body)
+        const scope = { type: scopeType.value, id: scopeId.value }
+        if (target === 'root') await RoleAssignmentService.deleteTeachingAssignment(assignment.id, epoch.value)
+        else if (target === 'local') await RoleAssignmentService.deleteScopedTeachingAssignment(assignment.id, scope, epoch.value)
+        else await RoleAssignmentService.deleteTeachingExclusion(assignment.id, scope, epoch.value)
         if (target === 'root') await loadRootAssignments()
         else await loadLists()
         toast.success(t('common.deleted'))

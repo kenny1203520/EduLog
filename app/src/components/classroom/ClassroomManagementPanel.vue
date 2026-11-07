@@ -19,7 +19,7 @@ import {
     INCOMPLETE_REPORT_PERMISSION,
     PermissionPolicyService
 } from '@/services/rbac/PermissionPolicyService'
-import { DateUtils } from '@/utils/DateUtils'
+import { DateUtils } from '@/utils/dateUtils'
 
 type PanelTab = 'details' | 'notifications' | 'sessions' | 'role_assignments'
 

@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs'
 export type ViteAllowedHosts = string[] | true | undefined
 
 // Keep these defaults identical to app/nginx/docker-entrypoint.d/05-edulog-runtime.envsh
-// (enforced by DockerRuntimeContract.spec.ts).
+// (enforced by DockerRuntime.contract.spec.ts).
 export const DEFAULT_HSTS_HEADER = 'max-age=31536000; includeSubDomains; preload'
 
 export const DEFAULT_CSP_HEADER = [

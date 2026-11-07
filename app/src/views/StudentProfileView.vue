@@ -2,11 +2,11 @@
 import { onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useStudentStore } from '@/stores/useStudentStore'
-import StudentMainDetails from '@/components/StudentMainDetails.vue'
-import StudentContacts from '@/components/StudentContacts.vue'
-import StudentSchools from '@/components/StudentSchools.vue'
-import StudentEnrollments from '@/components/StudentEnrollments.vue'
-import StudentCredentials from '@/components/StudentCredentials.vue'
+import StudentMainDetails from '@/components/student/StudentMainDetails.vue'
+import StudentContacts from '@/components/student/StudentContacts.vue'
+import StudentSchools from '@/components/student/StudentSchools.vue'
+import StudentEnrollments from '@/components/student/StudentEnrollments.vue'
+import StudentCredentials from '@/components/student/StudentCredentials.vue'
 
 const route = useRoute()
 const studentStore = useStudentStore()

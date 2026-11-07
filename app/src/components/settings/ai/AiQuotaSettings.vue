@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import SearchableSelect from '@/components/common/SearchableSelect.vue'
+import SearchableSelect from '@/components/ui/SearchableSelect.vue'
 import { useFeedback } from '@/composables/useFeedback'
 import type { RoleDTO } from '@/models/Rbac'
 import { AiSettingsService, type QuotaPolicyDTO } from '@/services/ai/AiSettingsService'

@@ -1,5 +1,5 @@
 import { ReportTemplate, type ReportTemplateDTO } from '@/models/ReportTemplate'
-import { createTextEditorContent } from '@/components/common/text-editor/content'
+import { createTextEditorContent } from '@/components/text-editor/content'
 import { apiResourceClient } from '@/services/api/ApiResourceClient'
 
 export class ReportTemplateService {

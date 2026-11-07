@@ -6,7 +6,7 @@ import { SessionService } from '@/services/session/SessionService'
 import type { PolicyScope } from '@/models/Rbac'
 import RolePermissionEditor from '@/components/settings/RolePermissionEditor.vue'
 import { useFeedback } from '@/composables/useFeedback'
-import SearchableSelect from '@/components/common/SearchableSelect.vue'
+import SearchableSelect from '@/components/ui/SearchableSelect.vue'
 
 type ClassroomOption = { id: string; name: string; teaching_id?: string }
 type SessionOption = { id: string; name: string; classroom_id?: string | null; teaching_id?: string }

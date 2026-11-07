@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createTextEditorContent } from '@/components/common/text-editor/content'
+import { createTextEditorContent } from '@/components/text-editor/content'
 import { copyRichTextToClipboard } from './clipboard'
 
 describe('copyRichTextToClipboard', () => {

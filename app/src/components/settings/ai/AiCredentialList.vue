@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import ConfirmModal from '@/components/common/ConfirmModal.vue'
-import AiNotice from '@/components/report-ai/AiNotice.vue'
+import ConfirmModal from '@/components/ui/ConfirmModal.vue'
+import AiNotice from '@/components/report/ai/AiNotice.vue'
 import ModelPicker from '@/components/settings/ai/ModelPicker.vue'
 import { useFeedback } from '@/composables/useFeedback'
 import { AiSettingsService, type AiCredentialDTO, type AiModelDTO, type CredentialTestResult } from '@/services/ai/AiSettingsService'

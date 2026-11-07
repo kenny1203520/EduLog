@@ -1,15 +1,15 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { usePreferencesStore } from './usePreferencesStore'
-import { AggregateService } from '@/services/AggregateService'
+import { AggregateService } from '@/services/api/AggregateService'
 
 // Mock dependencies
-vi.mock('@/services/AggregateService', () => ({
+vi.mock('@/services/api/AggregateService', () => ({
   AggregateService: {
     getUserPreferencesAggregate: vi.fn()
   }
 }))
-vi.mock('@/services/UserPreferenceService', () => ({
+vi.mock('@/services/preference/UserPreferenceService', () => ({
   UserPreferenceService: {
     updateCurrentUserTimeZone: vi.fn(() => Promise.resolve())
   }

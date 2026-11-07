@@ -99,7 +99,7 @@ Test-only variables (suites skip when they are unset): `PRESIDIO_ANALYZER_URL`, 
 |---|---|---|---|
 | `EDULOG_API_DEV_TARGET` | Vite dev server | `http://localhost:3000` | `/api` proxy target |
 | `EDULOG_ALLOWED_HOSTS` | dev server + nginx | | comma-separated Host allowlist |
-| `EDULOG_CSP_HEADER`, `EDULOG_HSTS_HEADER` | dev server + nginx | built-in policies (kept identical by `DockerRuntimeContract.spec.ts`) | |
+| `EDULOG_CSP_HEADER`, `EDULOG_HSTS_HEADER` | dev server + nginx | built-in policies (kept identical by `DockerRuntime.contract.spec.ts`) | |
 | `EDULOG_FRAME_ANCESTORS` | dev server + nginx | `API_EXTENSION_ALLOWED_ORIGINS` | **space**-separated |
 | `EDULOG_HTTP_ENABLED`, `EDULOG_HTTPS_ENABLED`, `EDULOG_HTTPS_REDIRECT`, `EDULOG_HTTPS_PORT` | nginx (HTTPS flag also in dev) | `true`, `false`, `false`, `4174` | |
 | `EDULOG_SSL_CERT_PATH`, `EDULOG_SSL_KEY_PATH`, `EDULOG_SSL_CA_PATH` | dev server + nginx | `/app/ssl/fullchain.pem`, `/app/ssl/privkey.pem` | |

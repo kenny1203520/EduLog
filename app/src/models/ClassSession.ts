@@ -1,4 +1,4 @@
-import { DateUtils } from '@/utils/DateUtils'
+import { DateUtils } from '@/utils/dateUtils'
 
 export type SessionType = 'regular' | 'camp'
 export type ScheduleMode = 'weekly' | 'monthly' | 'specific_dates'

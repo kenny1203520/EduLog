@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authService } from '@/services/auth/AuthService'
 import type { BffSession, BffUser } from '@/services/auth/AuthService'
-import { AggregateService } from '@/services/AggregateService'
+import { AggregateService } from '@/services/api/AggregateService'
 import { localDraftStore } from '@/services/report/LocalDraftStore'
 
 export const useAuthStore = defineStore('auth', () => {

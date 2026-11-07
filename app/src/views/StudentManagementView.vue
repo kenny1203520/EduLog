@@ -3,9 +3,9 @@ import { ref, onMounted, watch } from 'vue'
 import { useStudentStore } from '@/stores/useStudentStore'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
-import Pagination from '@/components/common/Pagination.vue'
+import Pagination from '@/components/ui/Pagination.vue'
 import { copyToClipboard as copyToClipboardUtil } from '@/utils/clipboard'
-import BasePageHeader from '@/components/common/BasePageHeader.vue'
+import BasePageHeader from '@/components/ui/BasePageHeader.vue'
 
 const { t, locale } = useI18n()
 const toast = useToast()
