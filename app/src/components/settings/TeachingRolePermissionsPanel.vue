@@ -64,6 +64,7 @@ onMounted(load)
             <h3 class="text-xl font-black text-gray-900">{{ t('settings.teaching_role_permissions.title') }}</h3>
             <p class="mt-1 max-w-3xl text-sm text-gray-500">{{ t('settings.teaching_role_permissions.description') }}</p>
             <p class="mt-3 rounded-xl bg-sky-50 px-4 py-3 text-xs leading-5 text-sky-900">{{ t('rbac.sensitive_student_data_hint') }}</p>
+            <p class="mt-2 text-xs leading-5 text-gray-500">{{ t('rbac.custom_teaching_roles_hint') }}</p>
         </header>
         <div class="space-y-5 p-6 sm:p-8">
             <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -87,7 +88,7 @@ onMounted(load)
             <p v-if="loading" class="py-8 text-center text-sm font-bold text-gray-400">{{ t('common.loading') }}</p>
             <RolePermissionEditor v-else-if="contextReady" domain="teaching"
                 :policy-scope-type="policyScopeType" :policy-scope-id="policyScopeId"
-                :can-manage-role-definitions="false" />
+                :can-manage-role-definitions="scopeMode === 'global'" />
             <p v-else class="rounded-xl border border-dashed border-gray-200 px-4 py-8 text-center text-sm text-gray-500">{{ t('rbac.scope.select_context') }}</p>
         </div>
     </section>

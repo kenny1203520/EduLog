@@ -21,6 +21,12 @@ import { DateUtils } from '@/utils/dateUtils'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 
 type Assignment = { id: string; user_id: string; role_id: string; roles?: { code?: string; name?: string }; effective_from?: string; effective_to?: string | null }
+type SystemSection = 'permissions' | 'teaching_permissions' | 'assignments' | 'teaching_assignments' | 'users' | 'notifications' | 'dashboard_schedule' | 'audit' | 'ai'
+
+const ALL_SECTIONS: readonly SystemSection[] = ['permissions', 'teaching_permissions', 'assignments', 'teaching_assignments', 'users', 'notifications', 'dashboard_schedule', 'audit', 'ai']
+
+/** Settings overview capability flags; absent means "show every section" (older API). */
+const props = defineProps<{ sections?: Record<string, Record<string, boolean>> }>()
 
 const { errorKey, reportError, success } = useFeedback()
 const { t } = useI18n()
@@ -37,7 +43,28 @@ const selectedRoleId = ref('')
 const selectedStatus = ref<'active' | 'disabled'>('active')
 const statusReason = ref('')
 const epoch = ref(1)
-const activeSection = ref<'permissions' | 'teaching_permissions' | 'teaching_assignments' | 'notifications' | 'dashboard_schedule' | 'assignments' | 'users' | 'audit' | 'ai'>('permissions')
+const visibleSections = computed<SystemSection[]>(() => {
+    if (!props.sections) return [...ALL_SECTIONS]
+    const system = props.sections.system ?? {}
+    const teaching = props.sections.teaching ?? {}
+    const owner = system.is_owner === true
+    const allowed: Record<SystemSection, boolean> = {
+        permissions: owner || system.roles_manage === true || system.permissions_read === true,
+        teaching_permissions: teaching.roles === true || teaching.permissions === true,
+        assignments: owner || system.assignments_manage === true,
+        teaching_assignments: teaching.roles === true,
+        users: owner || system.users_manage === true,
+        // Both edit teaching-role policies.
+        notifications: teaching.roles === true,
+        dashboard_schedule: teaching.roles === true,
+        audit: owner || system.audit_read === true,
+        ai: system.ai_manage === true || system.ai_logs_view_all === true,
+    }
+    return ALL_SECTIONS.filter(section => allowed[section])
+})
+/** System role data is only loaded for the sections that use it. */
+const needsSystemRoles = computed(() => visibleSections.value.includes('assignments') || visibleSections.value.includes('users'))
+const activeSection = ref<SystemSection>(visibleSections.value[0] ?? 'permissions')
 const loading = ref(false)
 const userLoading = ref(false)
 const assignmentLoading = ref(false)
@@ -99,6 +126,7 @@ async function refreshEpoch() {
 }
 
 async function load() {
+    if (!needsSystemRoles.value) return
     loading.value = true
     try {
         const [roleResult] = await Promise.all([
@@ -216,9 +244,13 @@ async function removeAssignment(assignment: Assignment) {
     } catch (error) { reportError(error) } finally { saving.value = false }
 }
 
-function selectSection(section: typeof activeSection.value) {
+function selectSection(section: SystemSection) {
     activeSection.value = section
 }
+
+watch(visibleSections, (sections) => {
+    if (!sections.includes(activeSection.value) && sections[0]) activeSection.value = sections[0]
+})
 
 onMounted(load)
 watch(assignmentPage, loadAssignments)
@@ -231,7 +263,7 @@ watch(assignmentPageSize, () => { assignmentPage.value = 1; void loadAssignments
             <h2 class="text-xl font-black text-gray-900">{{ t('rbac.system_title') }}</h2>
             <p class="mt-1 text-sm font-bold text-gray-400">{{ t('rbac.system_subtitle') }}</p>
             <nav class="mt-5 flex flex-wrap gap-2" role="group" :aria-label="t('rbac.system_sections.label')">
-                <button v-for="section in ['permissions', 'teaching_permissions', 'assignments', 'teaching_assignments', 'users', 'notifications', 'dashboard_schedule', 'audit', 'ai'] as const" :key="section" type="button" :aria-pressed="activeSection === section" class="min-h-11 rounded-xl px-4 py-2 text-sm font-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600" :class="activeSection === section ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600'" @click="selectSection(section)">
+                <button v-for="section in visibleSections" :key="section" type="button" :aria-pressed="activeSection === section" class="min-h-11 rounded-xl px-4 py-2 text-sm font-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600" :class="activeSection === section ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600'" @click="selectSection(section)">
                     {{ t(`rbac.system_sections.${section}`) }}
                 </button>
             </nav>

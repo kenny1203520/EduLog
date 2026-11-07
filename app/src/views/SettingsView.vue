@@ -113,7 +113,7 @@ onMounted(async () => { await Promise.all([loadOverview(), loadPersonProfile()])
                     <section id="ai-credentials" class="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm"><h2 class="mb-4 text-xl font-black">{{ $t('ai.settings.personal_title') }}</h2><MyAiCredentials /></section>
                 </div>
             </div>
-            <SystemSettingsPanel v-else-if="activeTab === 'system'" />
+            <SystemSettingsPanel v-else-if="activeTab === 'system'" :sections="overview?.sections" />
         </template>
     </div>
 </template>

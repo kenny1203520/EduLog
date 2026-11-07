@@ -151,5 +151,9 @@
   "save_permissions_success": "Role permissions saved.",
   "role_created": "Role created.",
   "role_deleted": "Role deleted.",
+  "delete_role_title": "Delete role",
+  "delete_role_message": "Delete the role \"{name}\"? This cannot be undone. A role that is still assigned cannot be deleted.",
+  "role_in_use": "This role is still assigned to users or class teachers. Remove those assignments before deleting it.",
+  "custom_teaching_roles_hint": "Add, rename or delete custom teaching roles in the platform scope; classroom and class scopes only adjust permissions.",
   "system_assignment_saved": "System role assigned."
 }

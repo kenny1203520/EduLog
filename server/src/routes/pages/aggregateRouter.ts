@@ -471,13 +471,17 @@ async function settingsOverview(req: Request, res: Response) {
   const caps = (capabilities.data ?? {}) as Record<string, unknown>
   const system: Record<string, unknown> = { ...(caps.system ?? {}) as Record<string, unknown>, ai_manage: aiManage.data === true, ai_logs_view_all: aiLogs.data === true }
   const teaching = (caps.teaching ?? {}) as Record<string, unknown>
+  const teachingSections = { roles: Boolean(teaching.roles_manage), permissions: Boolean(teaching.permissions_read) }
   return sendData(req, res, {
     preferences: preferences.data, capabilities: caps,
     tabs: {
       personal: true,
-      system: Boolean(system.users_manage || system.roles_manage || system.assignments_manage || system.permissions_read || system.audit_read || system.is_owner || system.ai_manage || system.ai_logs_view_all),
+      // Teaching-role managers without a system role still reach the system
+      // tab; the panel then shows only the teaching sections.
+      system: Boolean(system.users_manage || system.roles_manage || system.assignments_manage || system.permissions_read || system.audit_read || system.is_owner || system.ai_manage || system.ai_logs_view_all
+        || teachingSections.roles || teachingSections.permissions),
     },
-    sections: { teaching: { roles: Boolean(teaching.roles_manage), permissions: Boolean(teaching.permissions_read) }, system },
+    sections: { teaching: teachingSections, system },
   })
 }
 
