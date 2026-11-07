@@ -18,7 +18,6 @@ export function auditRequest(req: Request, status: number) {
   // misleading audit records.
   const resourceId = safeUuid(req.auditContext?.resourceId)
   const teachingId = safeUuid(req.auditContext?.teachingId)
-    ?? (resource === 'teachings' ? safeUuid(segments[2]) : null)
   const scopeId = safeUuid(req.auditContext?.scopeId)
   const scopeType = req.auditContext?.scopeType ?? null
   const incompleteAuthorization = status >= 400 && req.auditContext?.authorizationStage && !req.auditContext.authorizationResult

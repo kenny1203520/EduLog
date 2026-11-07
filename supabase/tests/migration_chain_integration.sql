@@ -236,13 +236,12 @@ BEGIN
   FROM pg_policies
   WHERE schemaname = 'public'
     AND cmd = 'ALL'
-    AND tablename IN ('teachings','teaching_members','lessons','class_session_teachers','enrollments','class_occurrences','occurrence_reports','report_templates','student_credentials');
+    AND tablename IN ('lessons','class_session_teachers','enrollments','class_occurrences','occurrence_reports','report_templates','student_credentials');
   IF forbidden_count <> 0 THEN
     RAISE EXCEPTION 'action-specific core RLS policies are incomplete: %', forbidden_count;
   END IF;
   IF to_regprocedure('public.has_api_permission(uuid,text,uuid,uuid)') IS NULL
      OR to_regclass('public.rbac_policy_epoch') IS NULL
-     OR to_regprocedure('public.get_dashboard_page(date,date)') IS NULL
      OR to_regprocedure('public.get_dashboard_counts()') IS NULL
      OR to_regprocedure('public.get_courses_overview(integer,integer,text,text)') IS NULL
      OR to_regprocedure('public.get_teachers_overview(integer,integer,text,text)') IS NULL
@@ -251,7 +250,6 @@ BEGIN
      OR to_regprocedure('public.get_holidays_overview(integer,integer,text,text,boolean)') IS NULL
      OR to_regprocedure('public.get_class_session_workspace(uuid)') IS NULL
      OR to_regprocedure('public.get_student_profile_page(uuid)') IS NULL
-     OR NOT has_function_privilege('authenticated', 'public.get_dashboard_page(date,date)', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.get_dashboard_counts()', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.get_students_overview(integer,integer,text,text)', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.get_courses_overview(integer,integer,text,text)', 'EXECUTE')
@@ -261,7 +259,6 @@ BEGIN
      OR NOT has_function_privilege('authenticated', 'public.get_holidays_overview(integer,integer,text,text,boolean)', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.get_class_session_workspace(uuid)', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.get_student_profile_page(uuid)', 'EXECUTE')
-     OR has_function_privilege('anon', 'public.get_dashboard_page(date,date)', 'EXECUTE')
      OR has_function_privilege('anon', 'public.get_dashboard_counts()', 'EXECUTE')
      OR has_function_privilege('anon', 'public.get_students_overview(integer,integer,text,text)', 'EXECUTE')
      OR has_function_privilege('anon', 'public.get_courses_overview(integer,integer,text,text)', 'EXECUTE')
@@ -293,13 +290,15 @@ BEGIN
     RAISE EXCEPTION 'dashboard read model dependencies lack authenticated SELECT grants';
   END IF;
 
-  IF EXISTS (
-    SELECT 1
-    FROM pg_proc
-    WHERE oid = to_regprocedure('public.get_dashboard_page(date,date)')
-      AND prosecdef
-  ) THEN
-    RAISE EXCEPTION 'dashboard read model must execute as the caller';
+  IF to_regprocedure('public.get_dashboard_page(date,date)') IS NOT NULL
+     OR to_regprocedure('public.debug_report_access(uuid)') IS NOT NULL
+     OR to_regprocedure('public.grant_admin_access(text)') IS NOT NULL
+     OR to_regprocedure('public.rbac_upsert_classroom_assignment(uuid,uuid,uuid,uuid,date,date,bigint)') IS NOT NULL
+     OR to_regprocedure('public.rbac_delete_classroom_assignment(uuid,uuid,bigint)') IS NOT NULL
+     OR to_regclass('public.teacher_role_types') IS NOT NULL
+     OR to_regclass('public.incomplete_report_notification_rules') IS NOT NULL
+     OR to_regclass('public.documents') IS NOT NULL THEN
+    RAISE EXCEPTION 'unused legacy objects dropped by 1000156 still exist';
   END IF;
 
   IF NOT EXISTS (
@@ -497,12 +496,11 @@ WHERE account.id IN (
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public.classrooms(id, name, user_id, teaching_id)
-SELECT classroom.id, classroom.name, NULL, teaching.id
+SELECT classroom.id, classroom.name, NULL, NULL
 FROM (VALUES
   ('30000000-0000-0000-0000-000000000001'::uuid, 'A classroom'),
   ('40000000-0000-0000-0000-000000000002'::uuid, 'B classroom')
 ) AS classroom(id, name)
-CROSS JOIN LATERAL (SELECT id FROM public.teachings WHERE is_global LIMIT 1) teaching
 ON CONFLICT (id) DO NOTHING;
 
 -- These standalone students model records whose former owner was cleared by
@@ -576,7 +574,6 @@ DECLARE unrelated_course_id uuid := '50000000-0000-0000-0000-000000000103';
 DECLARE student_id uuid := '20000000-0000-0000-0000-000000000103';
 DECLARE class_session_id uuid := '60000000-0000-0000-0000-000000000103';
 BEGIN
-  SELECT id INTO platform_teaching_id FROM public.teachings WHERE is_global LIMIT 1;
   INSERT INTO public.roles(id, code, name, is_system, sort_order, domain, teaching_id, is_builtin, is_protected)
   VALUES (classroom_role_id, 'integration_classroom_student_reader', 'Integration Classroom Student Reader', false, 900, 'teaching', NULL, false, false);
   INSERT INTO public.role_permission_policies(role_id, permission_id, scope_type, scope_id, effect)
@@ -827,20 +824,11 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.get_dashboard_page(date, date) TO authenticated;
 SET ROLE authenticated;
 SELECT set_config('request.jwt.claim.role', 'authenticated', false);
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
 DO $$
-DECLARE page jsonb;
 BEGIN
-  page := public.get_dashboard_page(current_date, current_date);
-  IF jsonb_typeof(page) <> 'object'
-     OR page->'stats' IS NULL
-     OR jsonb_typeof(page->'pendingReports') <> 'array'
-     OR jsonb_typeof(page->'occurrences') <> 'array' THEN
-    RAISE EXCEPTION 'dashboard page read model returned an invalid response shape';
-  END IF;
   IF jsonb_typeof(public.get_dashboard_counts()) <> 'object'
      OR (public.get_dashboard_counts() ? 'totalStudents') IS FALSE
      OR (public.get_dashboard_counts() ? 'activeCourses') IS FALSE THEN
@@ -980,3 +968,64 @@ BEGIN
 END;
 $$;
 RESET ROLE;
+
+-- 1000157 removed the archived teaching-workspace model.
+DO $$
+DECLARE stale_count integer;
+BEGIN
+  IF to_regclass('public.teachings') IS NOT NULL
+     OR to_regclass('public.teaching_members') IS NOT NULL
+     OR to_regclass('public.teachings_legacy_archive') IS NOT NULL
+     OR to_regclass('public.teaching_members_legacy_archive') IS NOT NULL
+     OR to_regclass('public.rbac_domain_rebuild_state') IS NOT NULL
+     OR to_regclass('public.global_scope_migration_report') IS NOT NULL THEN
+    RAISE EXCEPTION 'teaching-workspace tables dropped by 1000157 still exist';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_proc
+    WHERE pronamespace = 'public'::regnamespace
+      AND proname IN (
+        'is_teaching_member', 'can_access_teaching', 'can_teaching_action',
+        'resolve_teaching_permission', 'ensure_teaching_owner_policies',
+        'provision_teaching_owner_member', 'validate_teaching_member_role_domain',
+        'reject_archived_teaching_workspace_write', 'rbac_scope_teaching_id'
+      )
+  ) THEN
+    RAISE EXCEPTION 'teaching-workspace functions dropped by 1000157 still exist';
+  END IF;
+  IF to_regprocedure('public.resolve_scoped_permission(uuid,text,uuid,uuid,date)') IS NULL
+     OR to_regprocedure('public.has_active_teaching_role(uuid)') IS NULL
+     OR to_regprocedure('public.can_teaching_resource_action(text,text)') IS NULL
+     OR NOT has_function_privilege('authenticated', 'public.can_teaching_resource_action(text,text)', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.can_teaching_resource_action(text,text)', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.resolve_scoped_permission(uuid,text,uuid,uuid,date)', 'EXECUTE')
+     OR to_regprocedure('private.assert_overview_request(integer,integer,text,text,text[],integer,integer)') IS NULL
+     OR has_function_privilege('authenticated', 'private.assert_overview_request(integer,integer,text,text,text[],integer,integer)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'teaching permission helpers from 1000157 are missing or over-granted';
+  END IF;
+  SELECT count(*) INTO stale_count
+  FROM pg_proc
+  WHERE pronamespace IN ('public'::regnamespace, 'private'::regnamespace)
+    AND prosrc ~ '(public\.teachings\M|teaching_members|is_teaching_member|can_access_teaching|can_teaching_action|resolve_teaching_permission)';
+  IF stale_count <> 0 THEN
+    RAISE EXCEPTION 'functions still reference the teaching-workspace model: %', stale_count;
+  END IF;
+  SELECT count(*) INTO stale_count
+  FROM pg_policies
+  WHERE coalesce(qual, '') || coalesce(with_check, '') ~ '(can_teaching_action|can_access_teaching)';
+  IF stale_count <> 0 THEN
+    RAISE EXCEPTION 'RLS policies still use teaching-workspace helpers: %', stale_count;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE contype = 'f' AND pg_get_constraintdef(oid) ~ 'REFERENCES teachings\('
+  ) THEN
+    RAISE EXCEPTION 'foreign keys to teachings remain';
+  END IF;
+  -- teaching_id stays a constant marker until the columns are dropped.
+  IF EXISTS (SELECT 1 FROM public.classrooms WHERE teaching_id IS NULL)
+     OR (SELECT count(DISTINCT teaching_id) FROM public.classrooms) > 1 THEN
+    RAISE EXCEPTION 'classrooms.teaching_id is no longer normalized to one value';
+  END IF;
+END;
+$$;

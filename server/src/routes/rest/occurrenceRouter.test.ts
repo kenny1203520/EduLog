@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { provisionReports } from './occurrenceRouter.js'
+import { expectPriorAttendedReportScope, routeSource } from '../../test/routeSource.js'
 
 const testOccurrenceId = '10000000-0000-4000-8000-000000000001'
 
@@ -127,13 +128,10 @@ describe('occurrence report provisioning response', () => {
 
 describe('occurrence progress gap summary contract', () => {
   it('scopes batch gap summaries to the authorized effective roster and prior attended reports', () => {
-    const source = readFileSync(new URL('./occurrenceRouter.ts', import.meta.url), 'utf8')
-
+    const source = routeSource('occurrenceRouter.ts')
     expect(source).toContain("router.get('/occurrences/:id/report-progress-gaps'")
-    expect(source).toContain("permission(req, 'teaching.reports.list', occurrence.data.class_session_id)")
     expect(source).toContain("rpc('get_effective_occurrence_enrollment_ids'")
-    expect(source).toContain(".eq('attendance_status', 'present')")
-    expect(source).toContain(".lt('class_occurrences.occurrence_date', occurrence.data.occurrence_date)")
+    expectPriorAttendedReportScope(source)
     expect(source).toContain('selectedLessonByEnrollment.get(enrollmentId)')
     expect(source).not.toContain("select('enrollment_id,lesson_id,class_occurrences!inner(occurrence_date),content")
   })

@@ -19,8 +19,6 @@ describe('v1.7 report visibility and hierarchical policy workflow', () => {
         expect(globalIncompleteReports).toContain('selectedReport.value = null')
         expect(read('src/services/AggregateService.ts')).toContain("if (scope === 'my_notifications') return fetchReports()")
         expect(read('src/services/AggregateService.ts')).toContain("request.cache = 'no-store'")
-        expect(read('../supabase/volumes/functions/aggregate-incomplete-reports/index.ts'))
-            .toContain("(scope === 'my_present' || scope === 'my_notifications') && !teacherId")
     })
 
     it('keeps created entities in edit mode before dependent policy writes', () => {

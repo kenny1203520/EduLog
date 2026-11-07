@@ -281,30 +281,6 @@ services:
                 kong.service.request.clear_header("authorization")
               end
 
-  ## EduLog versioned REST API: /api/v1/* -> Edge Function api-v1
-  - name: edulog-api-v1
-    url: http://functions:9000/api-v1
-    read_timeout: 150000
-    routes:
-      - name: edulog-api-v1-all
-        strip_path: true
-        paths:
-          - /api/v1/
-    plugins:
-      - name: cors
-  ## Edge Functions routes
-  - name: functions-v1
-    _comment: 'Edge Functions: /functions/v1/* -> http://functions:9000/*'
-    url: http://functions:9000/
-    read_timeout: 150000
-    routes:
-      - name: functions-v1-all
-        strip_path: true
-        paths:
-          - /functions/v1/
-    plugins:
-      - name: cors
-
   ## OAuth 2.0 Authorization Server Metadata (RFC 8414)
   - name: well-known-oauth
     _comment: 'Auth: /.well-known/oauth-authorization-server -> http://auth:9999/.well-known/oauth-authorization-server'

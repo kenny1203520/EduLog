@@ -362,8 +362,8 @@ export async function collection(req: Request, res: Response, def: ResourceDefin
   }
   const userOwnedTables = new Set(['user_preferences', 'user_entity_visibility_preferences', 'copy_templates'])
    let insertBody = userOwnedTables.has(def.table) ? { ...body, user_id: req.user!.id } : body
-   // Legacy teaching_id markers on teaching records are normalized by the
-   // database compatibility trigger; the API no longer reads teaching spaces.
+   // teaching_id on teaching records is a legacy constant: the database
+   // trigger normalize_global_teaching_row overwrites any value sent here.
   const itemFields = def.itemFields ?? def.fields
   const result = req.method === 'POST' ? await req.db!.from(def.table).insert(insertBody).select(itemFields.join(', ')).single() : await req.db!.from(def.table).update(body).select(itemFields.join(', ')).maybeSingle()
   if (result.error) throw mapDatabaseError(result.error)
