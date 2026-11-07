@@ -8,12 +8,11 @@ This page is the one reference for EduLog's environment variables. Each layer re
 | Frontend app (browser) | `app/src/lib/runtimeConfig.ts` (`window.__EDULOG_CONFIG__` first, then build-time `VITE_*`) | typed; unknown API modes fall back with a warning |
 | Frontend dev server | `app/vite.config.ts` → `app/vite.security.ts` | parsed in code |
 | Frontend container (nginx) | `app/nginx/docker-entrypoint.d/05-edulog-runtime.envsh` | shell, at container start |
-| Edge functions (Deno) | `supabase/volumes/functions/_shared/env.ts` (once per worker) | missing values answer with a configuration error |
 | Release/extension scripts | `scripts/lib/env.mjs` helpers | `requireEnv` fails with the variable name |
 
 Rules:
 
-- Code outside these modules does not read `process.env`, `import.meta.env` or `Deno.env`.
+- Code outside these modules does not read `process.env` or `import.meta.env`.
 - An empty value (`KEY=`) means "unset" everywhere.
 - Lists are **comma-separated**. The one exception is `EDULOG_FRAME_ANCESTORS`, which is a CSP source list and so **space-separated**.
 - Names stay stable. Compose maps the deployment-facing `EDULOG_*` names onto the names each container reads (table below). Supabase's own variables keep Supabase's names.
@@ -32,28 +31,27 @@ Only `VITE_*` keys ever reach the browser bundle. Never put a Supabase key or an
 
 The root `.env` key on the left becomes the container variable on the right.
 
-| Root `.env` | `api` container | `edulog` (nginx) container | `functions` container |
-|---|---|---|---|
-| `EDULOG_COOKIE_SECRET` **(required)** | `COOKIE_SECRET` | | |
-| `EDULOG_WEB_BASE_URL` **(required)** | `EDULOG_WEB_BASE_URL` | | |
-| `EDULOG_ALLOWED_ORIGINS` **(required in production)** | `API_ALLOWED_ORIGINS` | | `API_ALLOWED_ORIGINS` |
-| `API_EXTENSION_ALLOWED_ORIGINS` | `API_EXTENSION_ALLOWED_ORIGINS` | fallback for `EDULOG_FRAME_ANCESTORS` | |
-| `ANON_KEY` (Supabase) | `SUPABASE_ANON_KEY` | | `SUPABASE_ANON_KEY` |
-| `SERVICE_ROLE_KEY` (Supabase) | `SUPABASE_SERVICE_ROLE_KEY` | | `SUPABASE_SERVICE_ROLE_KEY` |
-| `JWT_SECRET` (Supabase) | `SUPABASE_JWT_SECRET` | | `JWT_SECRET` (`routerEnv`, main router only, not forwarded to workers) |
-| `EDULOG_SUPABASE_INTERNAL_URL` (`http://kong:8000`) | `SUPABASE_URL` | | |
-| `EDULOG_SUPABASE_REALTIME_URL` | `SUPABASE_REALTIME_URL` | | |
-| `EDULOG_COOKIE_SECURE` (`true`) | `COOKIE_SECURE` | | |
-| `NODE_ENV` (`production`) | `NODE_ENV` | | |
-| `RATE_LIMIT_STORE` (`supabase`) | `RATE_LIMIT_STORE` | | |
-| `EDULOG_API_BODY_LIMIT` (`1mb`) | `API_BODY_LIMIT` | `EDULOG_API_BODY_LIMIT` (converted to nginx units) | |
-| `EDULOG_API_RATE_LIMIT_PER_MINUTE` (`120`) | `API_RATE_LIMIT_PER_MINUTE` | | `API_RATE_LIMIT_PER_MINUTE` |
-| `EDULOG_AI_SECRET_KEY` | `AI_SECRET_KEY` | | |
-| `EDULOG_PRESIDIO_ANALYZER_URL` | `PRESIDIO_ANALYZER_URL` | | |
-| `EDULOG_OPENAI_SIWC_CLIENT_ID` / `_SECRET` | `OPENAI_SIWC_CLIENT_ID` / `_SECRET` | | |
-| `EDULOG_FUNCTIONS_ENVIRONMENT` (`production`) | | | `ENVIRONMENT` |
-| `VITE_API_V1_MODE` (`v1`) | | `VITE_API_V1_MODE` | |
-| `EDULOG_API_UPSTREAM` (`api:3000`) | | `EDULOG_API_UPSTREAM` | |
+| Root `.env` | `api` container | `edulog` (nginx) container |
+|---|---|---|
+| `EDULOG_COOKIE_SECRET` **(required)** | `COOKIE_SECRET` | |
+| `EDULOG_WEB_BASE_URL` **(required)** | `EDULOG_WEB_BASE_URL` | |
+| `EDULOG_ALLOWED_ORIGINS` **(required in production)** | `API_ALLOWED_ORIGINS` | |
+| `API_EXTENSION_ALLOWED_ORIGINS` | `API_EXTENSION_ALLOWED_ORIGINS` | fallback for `EDULOG_FRAME_ANCESTORS` |
+| `ANON_KEY` (Supabase) | `SUPABASE_ANON_KEY` | |
+| `SERVICE_ROLE_KEY` (Supabase) | `SUPABASE_SERVICE_ROLE_KEY` | |
+| `JWT_SECRET` (Supabase) | `SUPABASE_JWT_SECRET` | |
+| `EDULOG_SUPABASE_INTERNAL_URL` (`http://kong:8000`) | `SUPABASE_URL` | |
+| `EDULOG_SUPABASE_REALTIME_URL` | `SUPABASE_REALTIME_URL` | |
+| `EDULOG_COOKIE_SECURE` (`true`) | `COOKIE_SECURE` | |
+| `NODE_ENV` (`production`) | `NODE_ENV` | |
+| `RATE_LIMIT_STORE` (`supabase`) | `RATE_LIMIT_STORE` | |
+| `EDULOG_API_BODY_LIMIT` (`1mb`) | `API_BODY_LIMIT` | `EDULOG_API_BODY_LIMIT` (converted to nginx units) |
+| `EDULOG_API_RATE_LIMIT_PER_MINUTE` (`120`) | `API_RATE_LIMIT_PER_MINUTE` | |
+| `EDULOG_AI_SECRET_KEY` | `AI_SECRET_KEY` | |
+| `EDULOG_PRESIDIO_ANALYZER_URL` | `PRESIDIO_ANALYZER_URL` | |
+| `EDULOG_OPENAI_SIWC_CLIENT_ID` / `_SECRET` | `OPENAI_SIWC_CLIENT_ID` / `_SECRET` | |
+| `VITE_API_V1_MODE` (`v1`) | | `VITE_API_V1_MODE` |
+| `EDULOG_API_UPSTREAM` (`api:3000`) | | `EDULOG_API_UPSTREAM` |
 
 These root `.env` keys configure Compose itself (images, ports, mounts, build arguments) or only the optional proxy overlays:
 
@@ -69,9 +67,9 @@ Supabase uses more aliases for its own services. For example, `SERVICE_ROLE_KEY`
 
 ## Easily confused
 
-- `EDULOG_ALLOWED_HOSTS` is the frontend's **Host header** allowlist (it defends against DNS rebinding). `EDULOG_ALLOWED_ORIGINS` is the **CORS** allowlist for the API and edge functions. They are separate settings.
-- "Which environment" is spelled per runtime: `NODE_ENV` (API), `ENVIRONMENT` via `EDULOG_FUNCTIONS_ENVIRONMENT` (edge functions), and Vite's `MODE`/`PROD` (frontend build). Edge functions treat anything other than an explicit `development` as production.
-- Without an origin allowlist, the API allows only the local Vite dev server (`localhost:5173`) outside production and **refuses to start** in production. Edge functions reflect any origin only when `ENVIRONMENT=development`.
+- `EDULOG_ALLOWED_HOSTS` is the frontend's **Host header** allowlist (it defends against DNS rebinding). `EDULOG_ALLOWED_ORIGINS` is the **CORS** allowlist for the API. They are separate settings.
+- "Which environment" is spelled per runtime: `NODE_ENV` (API) and Vite's `MODE`/`PROD` (frontend build).
+- Without an origin allowlist, the API allows only the local Vite dev server (`localhost:5173`) outside production and **refuses to start** in production.
 
 ## API (`server/src/config/config.ts`)
 
@@ -110,12 +108,6 @@ Test-only variables (suites skip when they are unset): `PRESIDIO_ANALYZER_URL`, 
 | `EDULOG_HTTP_ENABLED`, `EDULOG_HTTPS_ENABLED`, `EDULOG_HTTPS_REDIRECT`, `EDULOG_HTTPS_PORT` | nginx (HTTPS flag also in dev) | `true`, `false`, `false`, `4174` | |
 | `EDULOG_SSL_CERT_PATH`, `EDULOG_SSL_KEY_PATH`, `EDULOG_SSL_CA_PATH` | dev server + nginx | `/app/ssl/fullchain.pem`, `/app/ssl/privkey.pem` | |
 | `EDULOG_API_UPSTREAM`, `EDULOG_API_BODY_LIMIT` | nginx | `api:3000`, `1mb` | |
-
-## Edge functions (`_shared/env.ts`)
-
-`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`, `API_ALLOWED_ORIGINS`, `ENVIRONMENT` (default `production`), `API_RATE_LIMIT_PER_MINUTE` (`120`, shared with the API through `EDULOG_API_RATE_LIMIT_PER_MINUTE`), `LEGACY_API_SUNSET` (`Wed, 31 Dec 2026 23:59:59 GMT`), and `OTEL_EXPORTER_OTLP_{LOGS,TRACES,METRICS}_ENDPOINT`.
-
-Values are read on first use, so importing a module never needs env access. The `main` router forwards **only these keys** to user workers (`WORKER_ENV_KEYS`). A new variable that a worker needs must be added there. The router's own `JWT_SECRET` and `VERIFY_JWT` are read through `routerEnv` in the same module and are never forwarded. Upstream keys that Compose also sets on the `functions` container (`SUPABASE_DB_URL`, `SUPABASE_SECRET_KEYS`, `SUPABASE_PUBLISHABLE_KEYS`) are not read by EduLog code and never reach workers.
 
 ## CI and release scripts
 
