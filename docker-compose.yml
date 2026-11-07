@@ -3,7 +3,7 @@
 #   With helpers:       docker compose -f docker-compose.yml -f ./supabase/dev/docker-compose.dev.yml up -d
 #   Stop:               docker compose down
 #   Destroy:            docker compose -f docker-compose.yml -f ./supabase/dev/docker-compose.dev.yml down -v --remove-orphans
-#   Reset everything:  ./reset.sh
+#   Reset everything:   ./supabase/reset.sh
 
 name: edulog
 
