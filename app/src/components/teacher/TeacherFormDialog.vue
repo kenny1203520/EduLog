@@ -151,8 +151,13 @@ function chooseAccount(account: AuthUserSearchResultDTO) {
     if (!form.value.name && account.display_name) form.value.name = account.display_name
 }
 
+/** One "@" with text before it and a dot inside the domain; no whitespace. Linear, no regex backtracking. */
 function isValidEmail(email: string) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    if (!email || email.split('').some(char => char.trim() === '')) return false
+    const at = email.indexOf('@')
+    if (at <= 0 || at !== email.lastIndexOf('@')) return false
+    const dot = email.indexOf('.', at + 2)
+    return dot > at + 1 && dot < email.length - 1
 }
 
 async function save() {
@@ -324,7 +329,7 @@ const labelClass = 'mb-1 block text-sm font-bold text-slate-700'
                             </label>
                             <label class="block md:col-span-2">
                                 <span :class="labelClass">{{ t('teacher.address_label') }}</span>
-                                <input v-model="form.address" type="text" autocomplete="street-address" :class="inputClass" :placeholder="t('teacher.address_placeholder')" />
+                                <input v-model="form.address" type="text" autocomplete="address-line1" :class="inputClass" :placeholder="t('teacher.address_placeholder')" />
                             </label>
                         </template>
                         <div class="md:col-span-2">
@@ -354,9 +359,10 @@ const labelClass = 'mb-1 block text-sm font-bold text-slate-700'
                                 <label class="block"><span :class="labelClass">{{ t('teacher.credentials_username') }}</span>
                                     <input v-model="credential.username" type="text" autocomplete="off" :class="inputClass" />
                                 </label>
-                                <label class="block"><span :class="labelClass">{{ t('teacher.credentials_password') }}</span>
-                                    <PasswordInput :model-value="credential.password ?? ''" autocomplete="new-password" :input-class="inputClass" :placeholder="t('teacher.credentials_password')" @update:model-value="credential.password = $event" />
-                                </label>
+                                <div>
+                                    <label :for="`teacher-credential-password-${credential.id}`" :class="labelClass">{{ t('teacher.credentials_password') }}</label>
+                                    <PasswordInput :id="`teacher-credential-password-${credential.id}`" :model-value="credential.password ?? ''" autocomplete="off" :input-class="inputClass" :placeholder="t('teacher.credentials_password')" @update:model-value="credential.password = $event" />
+                                </div>
                                 <label class="block md:col-span-2"><span :class="labelClass">{{ t('teacher.credentials_url') }}</span>
                                     <input v-model="credential.url" type="url" :class="inputClass" />
                                 </label>
@@ -384,9 +390,10 @@ const labelClass = 'mb-1 block text-sm font-bold text-slate-700'
                                 <label class="block"><span :class="labelClass">{{ t('teacher.credentials_username') }}</span>
                                     <input v-model="newCredential.username" type="text" autocomplete="off" :class="inputClass" />
                                 </label>
-                                <label class="block"><span :class="labelClass">{{ t('teacher.credentials_password') }}</span>
-                                    <PasswordInput v-model="newCredential.password" autocomplete="new-password" :input-class="inputClass" :placeholder="t('teacher.credentials_password')" />
-                                </label>
+                                <div>
+                                    <label for="teacher-new-credential-password" :class="labelClass">{{ t('teacher.credentials_password') }}</label>
+                                    <PasswordInput id="teacher-new-credential-password" v-model="newCredential.password" autocomplete="off" :input-class="inputClass" :placeholder="t('teacher.credentials_password')" />
+                                </div>
                                 <label class="block md:col-span-2"><span :class="labelClass">{{ t('teacher.credentials_url') }}</span>
                                     <input v-model="newCredential.url" type="url" :class="inputClass" />
                                 </label>
