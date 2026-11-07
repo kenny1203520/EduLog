@@ -1,4 +1,5 @@
-import { Router, type NextFunction, type Request, type Response } from 'express'
+import { Router, type Request, type Response } from 'express'
+import { wrap } from './domainAccess.js'
 import { z } from 'zod'
 import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { complete, idempotency } from './resourceRouter.js'
@@ -39,10 +40,6 @@ export const conflictBody = z.object({
 
 export const repairBody = z.object({ target_occurrence_id: z.string().uuid() }).strict()
 export const cancelBody = z.object({ transfer_id: z.string().uuid() }).strict()
-
-function wrap(handler: (req: Request, res: Response) => Promise<unknown>) {
-  return (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res)).catch(next)
-}
 
 // Every business code the transfer RPCs raise. The matched code is returned as
 // `details.reason` so the client can explain which rule blocked the transfer.

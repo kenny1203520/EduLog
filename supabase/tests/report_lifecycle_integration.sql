@@ -17,12 +17,10 @@ FROM public.roles WHERE code = 'teaching_owner' AND domain = 'teaching'
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public.classrooms(id, name, user_id, teaching_id)
-SELECT '93000000-0000-4000-8000-000000000001', 'Lifecycle Classroom', '91000000-0000-4000-8000-000000000001', id
-FROM public.teachings WHERE is_global LIMIT 1
+SELECT '93000000-0000-4000-8000-000000000001', 'Lifecycle Classroom', '91000000-0000-4000-8000-000000000001', NULL
 ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.courses(id, subject, stage, user_id, teaching_id)
-SELECT '94000000-0000-4000-8000-000000000001', 'Lifecycle Course', 'primary', '91000000-0000-4000-8000-000000000001', id
-FROM public.teachings WHERE is_global LIMIT 1
+SELECT '94000000-0000-4000-8000-000000000001', 'Lifecycle Course', 'primary', '91000000-0000-4000-8000-000000000001', NULL
 ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.lessons(id, course_id, title, sequence, user_id)
 VALUES
@@ -30,8 +28,7 @@ VALUES
   ('95000000-0000-4000-8000-000000000002', '94000000-0000-4000-8000-000000000001', 'Lesson 2', 2, '91000000-0000-4000-8000-000000000001')
 ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.class_sessions(id, name, classroom_id, course_ids, start_time, end_time, user_id, start_date, end_date, teaching_id)
-SELECT '96000000-0000-4000-8000-000000000001', 'Lifecycle Session', '93000000-0000-4000-8000-000000000001', ARRAY['94000000-0000-4000-8000-000000000001']::uuid[], '09:00', '10:00', '91000000-0000-4000-8000-000000000001', DATE '2026-01-01', DATE '2026-03-31', teaching.id
-FROM public.teachings teaching WHERE teaching.is_global LIMIT 1
+SELECT '96000000-0000-4000-8000-000000000001', 'Lifecycle Session', '93000000-0000-4000-8000-000000000001', ARRAY['94000000-0000-4000-8000-000000000001']::uuid[], '09:00', '10:00', '91000000-0000-4000-8000-000000000001', DATE '2026-01-01', DATE '2026-03-31', NULL
 ON CONFLICT (id) DO NOTHING;
 -- Legacy session ownership is cleared by the global-data migration. Model the
 -- report actor through the supported teacher-account link and assignment.
@@ -67,8 +64,7 @@ ON CONFLICT (id) DO NOTHING;
 -- A closed-at-first-occurrence session proves that lifecycle provisioning
 -- respects class_sessions.end_date instead of creating an out-of-range row.
 INSERT INTO public.class_sessions(id, name, classroom_id, course_ids, start_time, end_time, user_id, start_date, end_date, teaching_id)
-SELECT '96000000-0000-4000-8000-000000000002', 'Lifecycle Closed Session', '93000000-0000-4000-8000-000000000001', ARRAY['94000000-0000-4000-8000-000000000001']::uuid[], '11:00', '12:00', '91000000-0000-4000-8000-000000000001', DATE '2026-01-05', DATE '2026-01-05', teaching.id
-FROM public.teachings teaching WHERE teaching.is_global LIMIT 1
+SELECT '96000000-0000-4000-8000-000000000002', 'Lifecycle Closed Session', '93000000-0000-4000-8000-000000000001', ARRAY['94000000-0000-4000-8000-000000000001']::uuid[], '11:00', '12:00', '91000000-0000-4000-8000-000000000001', DATE '2026-01-05', DATE '2026-01-05', NULL
 ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.class_session_schedule_rules(id, class_session_id, schedule_kind, day_of_week, start_time, end_time)
 VALUES ('97000000-0000-4000-8000-000000000002', '96000000-0000-4000-8000-000000000002', 'weekly', 1, '11:00', '12:00')
