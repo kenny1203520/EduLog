@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import { useFeedback } from '@/composables/useFeedback'
 import type { ClassroomDTO, ClassSessionDTO } from '@/models/Classroom'
-import type { RoleDTO, RolePermissionPolicyDTO } from '@/models/Rbac'
+import type { RoleDTO } from '@/models/Rbac'
 import ScopedRolePolicyEditor, {
     type RolePolicySelections
 } from '@/components/settings/ScopedRolePolicyEditor.vue'
@@ -17,7 +17,8 @@ import {
 } from '@/models/DashboardScheduleMode'
 import {
     INCOMPLETE_REPORT_PERMISSION,
-    PermissionPolicyService
+    PermissionPolicyService,
+    type KeyedPolicy
 } from '@/services/rbac/PermissionPolicyService'
 import { DateUtils } from '@/utils/dateUtils'
 
@@ -28,7 +29,7 @@ const props = defineProps<{
     roomId?: string | null
     sessions: ClassSessionDTO[]
     roles: RoleDTO[]
-    policies: RolePermissionPolicyDTO[]
+    policies: KeyedPolicy[]
     roomSelections: RolePolicySelections
     schedulePolicies: DashboardSchedulePolicies
     roomScheduleSelections: DashboardScheduleSelections
@@ -138,13 +139,11 @@ async function saveSessionPolicy(continuePending = false) {
     if (!expandedSessionId.value || !canManageRbac.value) return
     savingSessionPolicy.value = true
     try {
-        const overrides = props.roles.flatMap(role => {
-            const effect = sessionSelections.value[role.id]
-            return effect === 'allow' || effect === 'deny' ? [{ role_id: role.id, effect }] : []
-        })
         const scope = { type: 'class_session' as const, id: expandedSessionId.value }
-        await PermissionPolicyService.replacePolicies(INCOMPLETE_REPORT_PERMISSION, scope, overrides)
-        await PermissionPolicyService.replaceDashboardScheduleModes(scope, sessionScheduleSelections.value)
+        await PermissionPolicyService.applyPolicyChanges(scope, [
+            ...PermissionPolicyService.selectionChanges(INCOMPLETE_REPORT_PERMISSION, sessionSelections.value),
+            ...PermissionPolicyService.scheduleModeChanges(sessionScheduleSelections.value)
+        ], [...props.policies, ...PermissionPolicyService.scheduleBaseline(props.schedulePolicies)])
         sessionBaseline.value = sessionSnapshot()
         emit('policies-changed')
         toast.success(t('classroom.role_settings_saved'))
@@ -153,6 +152,7 @@ async function saveSessionPolicy(continuePending = false) {
         pendingAction.value = null
     } catch (error: any) {
         reportError(error)
+        if (error?.kind === 'conflict') emit('policies-changed')
     } finally {
         savingSessionPolicy.value = false
     }

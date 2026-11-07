@@ -1,11 +1,12 @@
 import { computed, nextTick, ref, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
-import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
 import { useFeedback } from '@/composables/useFeedback'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import type { Enrollment } from '@/models/Enrollment'
 import { DateUtils } from '@/utils/dateUtils'
+import { EnrollmentCommandService } from '@/services/enrollment/EnrollmentCommandService'
+import { EnrollmentQueryService } from '@/services/enrollment/EnrollmentQueryService'
 
 type Translate = (key: string) => string
 
@@ -135,7 +136,7 @@ export function useMakeupEnrollment(options: MakeupEnrollmentOptions) {
 
         try {
             isAddingStudent.value = true
-            makeupCandidates.value = await EnrollmentService.getActiveEnrollmentCandidates()
+            makeupCandidates.value = await EnrollmentQueryService.getActiveEnrollmentCandidates()
         } catch (error: any) {
             reportError(error, 'classroom.add_student_load_failed')
             showAddStudentModal.value = false
@@ -171,7 +172,7 @@ export function useMakeupEnrollment(options: MakeupEnrollmentOptions) {
         try {
             isAddingStudent.value = true
             makeupSubmitError.value = ''
-            await EnrollmentService.addEnrollmentToSessionOccurrence(
+            await EnrollmentCommandService.addEnrollmentToSessionOccurrence(
                 selectedMakeupEnrollmentId.value,
                 options.sessionId,
                 normalizedJoinDate

@@ -6,7 +6,6 @@ import { useAutoSave, type AutoSaveErrorContext } from '@/composables/useAutoSav
 import { classifyDraftRecovery, mergeDraftOntoServer, useReportLocalDraft, type DraftRecoveryAction } from '@/composables/useReportLocalDraft'
 import { useReportCollab } from '@/composables/useReportCollab'
 import type { LocalReportDraft } from '@/services/report/LocalDraftStore'
-import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { mergeReportConflict } from '@/services/report/ReportConflictMerge'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
@@ -30,6 +29,7 @@ import { safeExternalHref } from '@/utils/safeExternalHref'
 import { normalizeAbsenceReasonCode } from '@/utils/absenceReason'
 import type { RenderedReportTemplate } from '@/composables/report/useReportTemplateManager'
 import type { ReportEditorEmit, ResolvedReportEditorProps } from '@/components/report/reportEditorContract'
+import { ReportCommandService } from '@/services/report/ReportCommandService'
 
 type EditorRef = Readonly<Ref<TextEditorHandle | null>>
 
@@ -118,7 +118,7 @@ export function useReportEditorSession(
             t('report.editor.delete_report_confirm', 'Are you sure you want to delete this report? This will revert the student\'s progress.'),
             async () => {
                 try {
-                    await OccurrenceReportService.deleteReportAndRevertProgress(props.reportId!)
+                    await ReportCommandService.deleteReportAndRevertProgress(props.reportId!)
                     toast.success(t('report.editor.delete_success') || 'Report deleted')
                     emit('deleted')
                 } catch (e: any) {
@@ -723,7 +723,7 @@ export function useReportEditorSession(
 
                 const baseSnapshot = savedReportSnapshot.value
                 const result = isAttendanceOnly
-                    ? await OccurrenceReportService.saveAttendanceOnly(
+                    ? await ReportCommandService.saveAttendanceOnly(
                         props.reportId,
                         version.value,
                         authStore.user?.id,
@@ -732,7 +732,7 @@ export function useReportEditorSession(
                             absenceReason: snapshot.absenceReason
                         }
                     )
-                    : await OccurrenceReportService.saveReport(
+                    : await ReportCommandService.saveReport(
                         props.reportId,
                         version.value,
                         authStore.user?.id,
@@ -753,7 +753,7 @@ export function useReportEditorSession(
                         return { ...result, serverVersion: result.serverReport.version, conflictFields: merge.conflictFields }
                     }
                     if (merge.changed && result.serverReport.version > version.value) {
-                        const mergedResult = await OccurrenceReportService.saveReport(
+                        const mergedResult = await ReportCommandService.saveReport(
                             props.reportId,
                             result.serverReport.version,
                             authStore.user?.id,

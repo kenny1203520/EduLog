@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { EnrollmentTransferService } from './EnrollmentTransferService'
 import { EnrollmentTransferQueryService } from './EnrollmentTransferQueryService'
 import { EnrollmentTransferToolService } from './EnrollmentTransferToolService'
-import { OccurrenceService } from '../occurrence/OccurrenceService'
+import { OccurrenceCommandService } from '../occurrence/OccurrenceCommandService'
 import { SessionService } from '../session/SessionService'
 
 const { postMock } = vi.hoisted(() => ({ postMock: vi.fn() }))
@@ -26,8 +26,8 @@ vi.mock('./EnrollmentTransferQueryService', () => ({
 vi.mock('./EnrollmentTransferToolService', () => ({
     EnrollmentTransferToolService: { syncSessionPair: vi.fn() }
 }))
-vi.mock('../occurrence/OccurrenceService', () => ({
-    OccurrenceService: { generateOccurrences: vi.fn() }
+vi.mock('../occurrence/OccurrenceCommandService', () => ({
+    OccurrenceCommandService: { generateOccurrences: vi.fn() }
 }))
 vi.mock('../session/SessionService', () => ({
     SessionService: { getCompatibleClassSession: vi.fn() }
@@ -51,7 +51,7 @@ describe('EnrollmentTransferService single-lesson transfers', () => {
             .mockResolvedValueOnce(null)
         vi.mocked(EnrollmentTransferQueryService.getSingleLessonReportCandidates).mockResolvedValue([])
         vi.mocked(SessionService.getCompatibleClassSession).mockResolvedValue({} as any)
-        vi.mocked(OccurrenceService.generateOccurrences).mockResolvedValue([])
+        vi.mocked(OccurrenceCommandService.generateOccurrences).mockResolvedValue([])
         vi.mocked(EnrollmentTransferToolService.syncSessionPair).mockResolvedValue()
         postMock.mockResolvedValue({ data: { status: 'transferred', transfer_id: 'transfer-1' } })
     })

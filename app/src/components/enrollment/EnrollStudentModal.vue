@@ -3,7 +3,6 @@ import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import { useFeedback } from '@/composables/useFeedback'
-import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
 import { AggregateService } from '@/services/api/AggregateService'
 import { SessionService } from '@/services/session/SessionService'
 import { ClassroomService } from '@/services/classroom/ClassroomService'
@@ -16,6 +15,7 @@ import { DateUtils } from '@/utils/dateUtils'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { formatClassSessionOption } from '@/utils/sessionSchedule'
 import { SessionEligibilityPolicy } from '@/models/SessionEligibilityPolicy'
+import { EnrollmentCommandService } from '@/services/enrollment/EnrollmentCommandService'
 
 const props = defineProps<{
     isOpen: boolean
@@ -181,7 +181,7 @@ async function submitEnrollment() {
 
     try {
         isSubmitting.value = true
-        await EnrollmentService.create(enrollmentData, {
+        await EnrollmentCommandService.create(enrollmentData, {
             targetReportCount: enrollForm.value.generate_count
         })
 

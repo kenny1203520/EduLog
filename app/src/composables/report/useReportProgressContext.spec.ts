@@ -3,7 +3,8 @@ import { effectScope, nextTick, ref } from 'vue'
 import type { Lesson } from '@/models/Course'
 
 const reports = vi.hoisted(() => ({ getEnrollmentReportProgressContext: vi.fn() }))
-vi.mock('@/services/occurrence/OccurrenceReportService', () => ({ OccurrenceReportService: reports }))
+vi.mock('@/services/report/ReportQueryService', () => ({ ReportQueryService: reports }))
+vi.mock('@/services/report/ReportCommandService', () => ({ ReportCommandService: reports }))
 vi.mock('vue-i18n', async importOriginal => ({
     ...(await importOriginal<typeof import('vue-i18n')>()),
     useI18n: () => ({ t: (key: string, values?: Record<string, unknown>) => values ? `${key}:${JSON.stringify(values)}` : key }),

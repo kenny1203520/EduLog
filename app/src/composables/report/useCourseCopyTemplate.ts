@@ -1,7 +1,6 @@
 import { computed, ref, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
-import { CopyTemplateService, type CopyTemplateLoadOption } from '@/services/copy-template/CopyTemplateService'
 import { useFeedback } from '@/composables/useFeedback'
 import type { Lesson } from '@/models/Course'
 import {
@@ -14,6 +13,8 @@ import {
 import { copyRichTextToClipboard } from '@/utils/clipboard'
 import { formatNumber } from '@/utils/numberFormatting'
 import { createTextEditorContent, renderTemplateContent } from '@/components/text-editor/content'
+import { CopyTemplateCommandService } from '@/services/copy-template/CopyTemplateCommandService'
+import { CopyTemplateQueryService, type CopyTemplateLoadOption } from '@/services/copy-template/CopyTemplateQueryService'
 
 /** Course name and display name joined per the template's list mode. */
 export function formatCoursePrimaryName(courseName: string, courseDisplayName: string, mode: string): string {
@@ -178,7 +179,7 @@ export function useCourseCopyTemplate(source: CourseCopyTemplateSource) {
             t('report.lesson_label')
         )
         const values = { ...context.values, lesson_sequence: lesson.sequence, lesson_title: lesson.title }
-        const copyPromise = CopyTemplateService.getEffectiveCourseTemplate()
+        const copyPromise = CopyTemplateQueryService.getEffectiveCourseTemplate()
             .then(({ templateText, templateDocument }) => {
                 const rendered = renderTemplateContent(
                     templateDocument || templateText,
@@ -219,7 +220,7 @@ export function useCourseCopyTemplate(source: CourseCopyTemplateSource) {
 
         try {
             isLoadingCourseCopyTemplate.value = true
-            const bundle = await CopyTemplateService.getEditorBundle('course_copy')
+            const bundle = await CopyTemplateQueryService.getEditorBundle('course_copy')
             if (requestGeneration !== courseTemplateRequestGeneration || !showCourseCopyTemplateModal.value) return
             const options = bundle.options
             const template = bundle.current?.templateText || null
@@ -264,7 +265,7 @@ export function useCourseCopyTemplate(source: CourseCopyTemplateSource) {
 
         try {
             isSavingCourseCopyTemplate.value = true
-            await CopyTemplateService.saveCourseTemplateAsUserDefault({ plainText: templateText, richText: courseCopyTemplateDocument.value })
+            await CopyTemplateCommandService.saveCourseTemplateAsUserDefault({ plainText: templateText, richText: courseCopyTemplateDocument.value })
             toast.success(t('report.editor.copy_course_template_saved'))
             showCourseCopyTemplateModal.value = false
         } catch (error) {

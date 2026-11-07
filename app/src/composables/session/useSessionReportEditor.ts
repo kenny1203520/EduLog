@@ -1,7 +1,6 @@
 import { computed, nextTick, ref, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
-import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { shouldApplyCommittedReport } from '@/services/report/CommittedReportState'
 import { useFeedback } from '@/composables/useFeedback'
 import { useAuthStore } from '@/stores/useAuthStore'
@@ -10,6 +9,8 @@ import type { Lesson } from '@/models/Course'
 import type { ClassOccurrence } from '@/models/ClassOccurrence'
 import { OccurrenceReport, type OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import { DateUtils } from '@/utils/dateUtils'
+import { ReportCommandService } from '@/services/report/ReportCommandService'
+import { ReportQueryService } from '@/services/report/ReportQueryService'
 
 export type ReportEditorExpose = {
     saveNow: (options?: { reason?: 'manual' | 'switch' }) => Promise<boolean>
@@ -113,7 +114,7 @@ export function useSessionReportEditor(source: SessionReportEditorSource) {
         if (occurrenceId) {
             savingMap.value.set(enrollmentId, true)
             try {
-                const fetched = await OccurrenceReportService.getReport(enrollmentId, occurrenceId)
+                const fetched = await ReportQueryService.getReport(enrollmentId, occurrenceId)
                 if (isStaleSelection(selectionRequest, occurrenceId, dateKey)) return
                 if (fetched) {
                     const cardReport = reportMap.value.get(enrollmentId) as OccurrenceReport | null | undefined
@@ -213,7 +214,7 @@ export function useSessionReportEditor(source: SessionReportEditorSource) {
         if (!conflictReportId.value) return
 
         try {
-            const report = await OccurrenceReportService.resolveConflict(
+            const report = await ReportCommandService.resolveConflict(
                 conflictReportId.value,
                 resolvedReport,
                 auth.user?.id,

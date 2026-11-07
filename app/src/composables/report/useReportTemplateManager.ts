@@ -2,13 +2,13 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import { ReportTemplateService } from '@/services/report/ReportTemplateService'
-import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { useFeedback } from '@/composables/useFeedback'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { createNumberFormatters, formatCopyTemplateToken, renderCopyTemplate } from '@/utils/copyTemplate'
 import { formatNumber } from '@/utils/numberFormatting'
 import { createTextEditorContent, renderTemplateContent } from '@/components/text-editor/content'
 import { insertTextAtSelection, type RichTextDocumentV1, type TextEditorContent } from '@/components/text-editor/types'
+import { ReportQueryService } from '@/services/report/ReportQueryService'
 
 export interface ReportTemplate {
     id: string
@@ -352,7 +352,7 @@ export function useReportTemplateManager(options: ReportTemplateManagerOptions) 
         const { reportId } = options.currentReport()
         if (reportId) {
             try {
-                const serverReport = await OccurrenceReportService.getReportById(reportId)
+                const serverReport = await ReportQueryService.getReportById(reportId)
                 if (serverReport.version !== options.currentReport().version) {
                     errorKey('report.editor.restore_conflict_error')
                     return

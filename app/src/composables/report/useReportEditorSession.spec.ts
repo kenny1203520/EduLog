@@ -4,7 +4,8 @@ import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 
 const reports = vi.hoisted(() => ({ saveReport: vi.fn(), saveAttendanceOnly: vi.fn(), deleteReportAndRevertProgress: vi.fn() }))
 const draft = vi.hoisted(() => ({ schedule: vi.fn(), discard: vi.fn(), load: vi.fn(), flush: vi.fn() }))
-vi.mock('@/services/occurrence/OccurrenceReportService', () => ({ OccurrenceReportService: reports }))
+vi.mock('@/services/report/ReportQueryService', () => ({ ReportQueryService: reports }))
+vi.mock('@/services/report/ReportCommandService', () => ({ ReportCommandService: reports }))
 vi.mock('@/composables/useReportLocalDraft', async importOriginal => ({
     ...(await importOriginal<typeof import('@/composables/useReportLocalDraft')>()),
     useReportLocalDraft: () => ({ ...draft, persisted: ref(false) }),

@@ -1,7 +1,6 @@
 import { ref, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
-import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import type { Enrollment } from '@/models/Enrollment'
 import type { Lesson } from '@/models/Course'
 import type { ClassOccurrence } from '@/models/ClassOccurrence'
@@ -15,6 +14,7 @@ import {
     type TodayCourseSummary
 } from '@/models/StudentProgressSummary'
 import { DateUtils } from '@/utils/dateUtils'
+import { ReportQueryService } from '@/services/report/ReportQueryService'
 
 interface StudentProgressSource {
     todayOccurrence: Ref<any>
@@ -82,7 +82,7 @@ export function useStudentProgress(source: StudentProgressSource) {
         const enrollmentIds = enrollmentList.map(enrollment => enrollment.id).filter((id): id is string => !!id)
         // One request for the whole roster instead of one paginated, full-row
         // request per student -- see getProgressSummaryReportsByEnrollments.
-        const reportsByEnrollment = await OccurrenceReportService.getProgressSummaryReportsByEnrollments(enrollmentIds)
+        const reportsByEnrollment = await ReportQueryService.getProgressSummaryReportsByEnrollments(enrollmentIds)
 
         const summaryEntries = await Promise.all(enrollmentList.map(async enrollment => {
             if (!enrollment.id) {
@@ -128,7 +128,7 @@ export function useStudentProgress(source: StudentProgressSource) {
         const enrollmentIds = enrollmentList.map(enrollment => enrollment.id).filter((id): id is string => !!id)
         isLoadingProgressGaps.value = true
         try {
-            const summaries = await OccurrenceReportService.getProgressGapsByEnrollments(occurrenceId, enrollmentIds)
+            const summaries = await ReportQueryService.getProgressGapsByEnrollments(occurrenceId, enrollmentIds)
             if (generation !== progressGapRequestGeneration
                 || todayOccurrence.value?.id !== occurrenceId
                 || DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate) !== occurrenceDate) return

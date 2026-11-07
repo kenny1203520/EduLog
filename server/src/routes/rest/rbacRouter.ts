@@ -40,9 +40,14 @@ const rolePolicyUpdate = z.object({
   expected_epoch: z.coerce.number().int().positive(),
   policies: z.array(z.object({ permission_id: uuid, effect: z.enum(['allow', 'deny']) }).strict()).max(1000),
 }).strict()
-const policyUpdate = z.object({
-  scope: z.object({ type: z.enum(['system', 'classroom', 'class_session']), id: nullableUuid }).strict(),
-  policies: z.array(z.object({ role_id: uuid, effect: z.enum(['allow', 'deny']) }).strict()).max(500),
+const rolePolicyPatch = z.object({
+  scope_type: z.enum(['system', 'classroom', 'class_session']), scope_id: nullableUuid,
+  expected_epoch: z.coerce.number().int().positive(),
+  changes: z.array(z.object({ permission_id: uuid, effect: z.enum(['allow', 'deny']).nullable() }).strict()).min(1).max(1000),
+}).strict().refine((input) => new Set(input.changes.map((change) => change.permission_id)).size === input.changes.length, { message: 'Each permission may appear only once', path: ['changes'] })
+const permissionKey = z.string().trim().min(1).max(128)
+const permissionPolicyListQuery = z.object({
+  permission_key: z.union([permissionKey, z.array(permissionKey).min(1).max(10)]).transform((value) => [...new Set(Array.isArray(value) ? value : [value])]),
 }).strict()
 const assignmentListQuery = z.object({
   user_id: uuid.optional(), role_id: uuid.optional(),
@@ -189,26 +194,6 @@ async function roleById(req: Request, id: string) {
   return result.data
 }
 
-async function authorizePolicyScope(req: Request, permissionDomain: 'system' | 'teaching', scope: z.infer<typeof policyUpdate>['scope']) {
-  requireRequest(req)
-  const domain = permissionDomain
-  const permission = `${domain}.roles.manage`
-  setAuditContext(req, { domain, resource: 'rbac-policies', action: 'manage', scopeId: scope.id ?? null, scopeType: scope.type, permission })
-  if (scope.type === 'system') {
-    const permissionKey = `${permissionDomain}.roles.manage`
-    await requireAnyAuthorization(req, [{
-      rpc: permissionDomain === 'system' ? 'has_system_permission' : 'has_api_permission',
-      permission: permissionKey,
-      args: { p_user_id: req.user!.id, p_permission_key: permissionKey, p_classroom_id: null, p_class_session_id: null },
-    }], { permission: permissionKey, stage: 'rbac_policy_scope_permission', message: 'You do not have permission to manage RBAC policies', scopeId: null, scopeType: 'system' })
-    return
-  }
-  if (permissionDomain !== 'teaching') throw new ApiError(400, 'INVALID_POLICY_SCOPE', 'System permissions only support the system scope')
-  if (!scope.id) throw new ApiError(400, 'INVALID_POLICY_SCOPE', 'A scoped policy requires a scope id')
-  const result = await req.db!.rpc('has_api_permission', { p_user_id: req.user!.id, p_permission_key: 'teaching.roles.manage', p_classroom_id: scope.type === 'classroom' ? scope.id : null, p_class_session_id: scope.type === 'class_session' ? scope.id : null })
-  requireAuthorizationDecision(req, result, { permission: 'teaching.roles.manage', stage: 'rbac_policy_scope_permission', message: 'You do not have permission to manage RBAC policies', scopeId: scope.id ?? null, scopeType: scope.type })
-}
-
 export function createRbacRouter() {
   const router = Router()
 
@@ -267,6 +252,25 @@ export function createRbacRouter() {
     return sendCompleted(req, res, 201, result.data)
   }))
 
+  // Every scope's local policies for the given permissions, across all roles,
+  // plus the RBAC epoch to send back with PATCH /roles/:id/permissions. The
+  // epoch is read before the rows, so a change in between only causes a 409.
+  // Row visibility is enforced by role_permission_policies RLS.
+  router.get('/roles/permission-policies', wrap(async (req, res) => {
+    requireRequest(req); const query = permissionPolicyListQuery.parse(req.query)
+    const epoch = await req.db!.from('rbac_policy_epoch').select('epoch').eq('singleton', true).maybeSingle()
+    if (epoch.error) throw mapDatabaseError(epoch.error)
+    const permissions = await req.db!.from('permissions').select('id,key').in('key', query.permission_key)
+    if (permissions.error) throw mapDatabaseError(permissions.error)
+    const keyById = new Map((permissions.data ?? []).map((permission) => [permission.id as string, permission.key as string]))
+    const missing = query.permission_key.filter((key) => ![...keyById.values()].includes(key))
+    if (missing.length) throw new ApiError(404, 'NOT_FOUND', `Permission was not found: ${missing.join(', ')}`)
+    const result = await req.db!.from('role_permission_policies').select('id,role_id,permission_id,scope_type,scope_id,effect,created_at,updated_at').in('permission_id', [...keyById.keys()])
+    if (result.error) throw mapDatabaseError(result.error)
+    const rows = (result.data ?? []).map((row) => ({ ...row, permission_key: keyById.get(row.permission_id as string) }))
+    return sendData(req, res, rows, { total: rows.length, epoch: epoch.data?.epoch ?? null, permissions: [...keyById].map(([id, key]) => ({ id, key })) })
+  }))
+
   router.get('/roles/:id', wrap(async (req, res) => {
     const role = await roleById(req, uuid.parse(req.params.id))
     await authorizeRoleDomain(req, role.domain as 'system' | 'teaching', role.teaching_id as string | null, 'read')
@@ -309,6 +313,31 @@ export function createRbacRouter() {
     const result = await req.db!.rpc('rbac_replace_role_permissions', { p_role_id: id, p_scope_type: input.scope_type, p_scope_id: input.scope_id ?? null, p_expected_epoch: input.expected_epoch, p_policies: input.policies })
     if (result.error) throw mapDatabaseError(result.error)
     return sendCompleted(req, res, 200, { role_id: id, scope_type: input.scope_type, scope_id: input.scope_id ?? null, epoch: result.data })
+  }))
+
+  // Partial update of one role's local policies at one scope. Permissions not
+  // listed in `changes` keep their local effect; `effect: null` removes the
+  // local policy so the role inherits again. The read-merge-replace runs
+  // against `expected_epoch`, so a concurrent RBAC change yields 409.
+  router.patch('/roles/:id/permissions', wrap(async (req, res) => {
+    const id = uuid.parse(req.params.id); const input = rolePolicyPatch.parse(req.body); const role = await roleById(req, id)
+    const scopeId = input.scope_type === 'system' ? null : input.scope_id ?? null
+    await authorizeRoleScope(req, role.domain as 'system' | 'teaching', { type: input.scope_type, id: scopeId }, 'manage')
+    setAuditContext(req, { domain: role.domain as string, resource: 'role-permissions', resourceId: id, action: 'patch', scopeId, scopeType: input.scope_type, permission: `${role.domain}.roles.manage` })
+    const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
+    const current = await req.db!.rpc('rbac_get_role_permissions', { p_role_id: id, p_scope_type: input.scope_type, p_scope_id: scopeId })
+    if (current.error) throw mapDatabaseError(current.error)
+    const rows = (current.data ?? []) as Array<{ permission_id: string; local_effect: 'allow' | 'deny' | null; epoch: number }>
+    if (rows[0] && Number(rows[0].epoch) !== input.expected_epoch) throw new ApiError(409, 'RBAC_VERSION_CONFLICT', 'The permission configuration changed; reload before saving')
+    const local = new Map(rows.filter((row) => row.local_effect).map((row) => [row.permission_id, row.local_effect as 'allow' | 'deny']))
+    for (const change of input.changes) {
+      if (change.effect) local.set(change.permission_id, change.effect)
+      else local.delete(change.permission_id)
+    }
+    const policies = [...local].map(([permission_id, effect]) => ({ permission_id, effect }))
+    const result = await req.db!.rpc('rbac_replace_role_permissions', { p_role_id: id, p_scope_type: input.scope_type, p_scope_id: scopeId, p_expected_epoch: input.expected_epoch, p_policies: policies })
+    if (result.error) throw mapDatabaseError(result.error)
+    return sendCompleted(req, res, 200, { role_id: id, scope_type: input.scope_type, scope_id: scopeId, epoch: result.data, changes: input.changes })
   }))
 
   router.get('/system-role-assignments', wrap(async (req, res) => {
@@ -616,30 +645,6 @@ export function createRbacRouter() {
     }
     clearUserValidation(userId)
     return sendCompleted(req, res, 200, result.data)
-  }))
-
-  // Deprecated permission-centric adapter. New clients save a complete role
-  // matrix through PUT /roles/:id/permissions.
-  router.get('/permissions/:permissionId/policies', wrap(async (req, res) => {
-    requireRequest(req); res.setHeader('Deprecation', 'true'); res.setHeader('Link', '</api/roles/{id}/permissions>; rel="successor-version"')
-    const permissionId = uuid.parse(req.params.permissionId)
-    const result = await req.db!.from('role_permission_policies').select('id,role_id,permission_id,scope_type,scope_id,effect,created_at,updated_at').eq('permission_id', permissionId)
-    if (result.error) throw mapDatabaseError(result.error)
-    return sendData(req, res, result.data ?? [], { total: result.data?.length ?? 0, limit: result.data?.length ?? 0, offset: 0, sort: 'created_at' })
-  }))
-
-  router.patch('/permissions/:permissionId/policies', wrap(async (req, res) => {
-    requireRequest(req); res.setHeader('Deprecation', 'true'); res.setHeader('Link', '</api/roles/{id}/permissions>; rel="successor-version"')
-    const permissionId = uuid.parse(req.params.permissionId); const input = policyUpdate.parse(req.body)
-    const permission = await req.db!.from('permissions').select('id,key,domain').eq('id', permissionId).maybeSingle()
-    if (permission.error) throw mapDatabaseError(permission.error); if (!permission.data) throw new ApiError(404, 'NOT_FOUND', 'Permission was not found')
-    if (permission.data.domain !== 'system' && permission.data.domain !== 'teaching') throw new ApiError(422, 'BUSINESS_VALIDATION_FAILED', 'Permission domain is invalid')
-    await authorizePolicyScope(req, permission.data.domain, input.scope)
-    const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
-    const scopeId = input.scope.type === 'system' ? null : input.scope.id ?? null
-    const result = await req.db!.rpc('replace_role_permission_policies', { p_permission_key: permission.data.key, p_scope_type: input.scope.type, p_scope_id: scopeId, p_policies: input.policies })
-    if (result.error) throw mapDatabaseError(result.error)
-    return sendCompleted(req, res, 200, { permission_id: permissionId, permission_key: permission.data.key, scope: { ...input.scope, id: scopeId }, policies: input.policies })
   }))
 
   return router

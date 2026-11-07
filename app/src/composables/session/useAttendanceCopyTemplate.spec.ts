@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Enrollment } from '@/models/Enrollment'
 
-vi.mock('@/services/copy-template/CopyTemplateService', () => ({ CopyTemplateService: {} }))
+const copyTemplateServiceMock = vi.hoisted(() => ({}))
+vi.mock('@/services/copy-template/CopyTemplateQueryService', () => ({ CopyTemplateQueryService: copyTemplateServiceMock }))
+vi.mock('@/services/copy-template/CopyTemplateCommandService', () => ({ CopyTemplateCommandService: copyTemplateServiceMock }))
 
 import { buildAttendanceListFormatters, formatAttendanceNameList, groupAttendancePreviewNames } from './useAttendanceCopyTemplate'
 

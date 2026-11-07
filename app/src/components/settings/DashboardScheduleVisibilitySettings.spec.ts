@@ -2,10 +2,10 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DashboardScheduleVisibilitySettings from './DashboardScheduleVisibilitySettings.vue'
 
-const { canManageRbac, getDashboardSchedulePolicies, replaceDashboardScheduleModes, getRoles, toastSuccess } = vi.hoisted(() => ({
+const { canManageRbac, getDashboardSchedulePolicies, saveDashboardScheduleModes, getRoles, toastSuccess } = vi.hoisted(() => ({
     canManageRbac: vi.fn(),
     getDashboardSchedulePolicies: vi.fn(),
-    replaceDashboardScheduleModes: vi.fn(),
+    saveDashboardScheduleModes: vi.fn(),
     getRoles: vi.fn(),
     toastSuccess: vi.fn()
 }))
@@ -15,7 +15,7 @@ vi.mock('vue-toastification', () => ({ useToast: () => ({ success: toastSuccess 
 vi.mock('@/composables/useFeedback', () => ({ useFeedback: () => ({ reportError: vi.fn() }) }))
 vi.mock('@/services/rbac/RoleService', () => ({ RoleService: { getRoles } }))
 vi.mock('@/services/rbac/PermissionPolicyService', () => ({
-    PermissionPolicyService: { canManageRbac, getDashboardSchedulePolicies, replaceDashboardScheduleModes }
+    PermissionPolicyService: { canManageRbac, getDashboardSchedulePolicies, saveDashboardScheduleModes }
 }))
 
 const global = { mocks: { $t: (key: string) => key } }
@@ -37,7 +37,7 @@ describe('DashboardScheduleVisibilitySettings', () => {
             ],
             view: []
         })
-        replaceDashboardScheduleModes.mockResolvedValue(undefined)
+        saveDashboardScheduleModes.mockResolvedValue(undefined)
     })
 
     it('shows each role\'s system-scope mode with the four schedule choices', async () => {
@@ -65,7 +65,7 @@ describe('DashboardScheduleVisibilitySettings', () => {
         await wrapper.findAll('button').find(button => button.text() === 'common.save')!.trigger('click')
         await flushPromises()
 
-        expect(replaceDashboardScheduleModes).toHaveBeenCalledWith({ type: 'system', id: null }, { manager: 'all', teacher: 'hidden' })
+        expect(saveDashboardScheduleModes).toHaveBeenCalledWith({ type: 'system', id: null }, { manager: 'all', teacher: 'hidden' }, expect.objectContaining({ all: expect.any(Array), view: [] }))
         expect(toastSuccess).toHaveBeenCalledWith('settings.dashboard_schedule.saved')
     })
 

@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { StudentService } from '@/services/student/StudentService'
 import { Student } from '@/models/Student'
+import { StudentQueryService } from '@/services/student/StudentQueryService'
+import { StudentCommandService } from '@/services/student/StudentCommandService'
 
 export const useStudentStore = defineStore('student', () => {
   const students = ref<Student[]>([])
@@ -22,7 +23,7 @@ export const useStudentStore = defineStore('student', () => {
     loading.value = true
     error.value = null
     try {
-      const result = await StudentService.getAll(page, perPage, searchQuery.value)
+      const result = await StudentQueryService.getAll(page, perPage, searchQuery.value)
       students.value = result.data
       pagination.value = {
         page,
@@ -40,7 +41,7 @@ export const useStudentStore = defineStore('student', () => {
     loading.value = true
     error.value = null
     try {
-      currentStudent.value = await StudentService.getById(id)
+      currentStudent.value = await StudentQueryService.getById(id)
     } catch (e: any) {
       error.value = e.message
     } finally {
@@ -51,7 +52,7 @@ export const useStudentStore = defineStore('student', () => {
   async function addStudent(name: string) {
     loading.value = true
     try {
-      const newStudent = await StudentService.create({ name })
+      const newStudent = await StudentCommandService.create({ name })
       students.value.push(newStudent)
     } catch (e: any) {
       error.value = e.message
@@ -64,7 +65,7 @@ export const useStudentStore = defineStore('student', () => {
   async function updateStudent(id: string, updates: any) {
     loading.value = true
     try {
-      const updated = await StudentService.update(id, updates)
+      const updated = await StudentCommandService.update(id, updates)
       // Update in list
       const idx = students.value.findIndex(s => s.id === id)
       if (idx !== -1) students.value[idx] = updated
@@ -85,7 +86,7 @@ export const useStudentStore = defineStore('student', () => {
   async function deleteStudent(id: string) {
     loading.value = true
     try {
-      await StudentService.delete(id)
+      await StudentCommandService.delete(id)
       students.value = students.value.filter(s => s.id !== id)
       if (currentStudent.value?.id === id) {
         currentStudent.value = null

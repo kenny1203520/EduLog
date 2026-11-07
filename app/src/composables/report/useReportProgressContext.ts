@@ -1,10 +1,10 @@
 import { computed, ref, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import type { Lesson } from '@/models/Course'
 import { findCourseProgressGaps } from '@/utils/courseProgressGaps'
+import { ReportQueryService } from '@/services/report/ReportQueryService'
 
-type ProgressContext = Awaited<ReturnType<typeof OccurrenceReportService.getEnrollmentReportProgressContext>>
+type ProgressContext = Awaited<ReturnType<typeof ReportQueryService.getEnrollmentReportProgressContext>>
 
 export interface FocusedProgressReport {
     id: string
@@ -74,7 +74,7 @@ export function useReportProgressContext(source: ReportProgressContextSource) {
         progressContextError.value = false
         progressContextLoading.value = true
         try {
-            const context = await OccurrenceReportService.getEnrollmentReportProgressContext(enrollmentId, occurrenceId, reportId)
+            const context = await ReportQueryService.getEnrollmentReportProgressContext(enrollmentId, occurrenceId, reportId)
             if (requestId === progressContextRequest) progressContext.value = context
         } catch {
             if (requestId === progressContextRequest) progressContextError.value = true

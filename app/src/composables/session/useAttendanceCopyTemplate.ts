@@ -1,7 +1,6 @@
 import { computed, ref, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
-import { CopyTemplateService } from '@/services/copy-template/CopyTemplateService'
 import { useFeedback } from '@/composables/useFeedback'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import type { Enrollment } from '@/models/Enrollment'
@@ -14,6 +13,8 @@ import {
 import { copyRichTextToClipboard } from '@/utils/clipboard'
 import { createTextEditorContent, renderTemplateContent } from '@/components/text-editor/content'
 import type { RichTextDocumentV1 } from '@/components/text-editor/types'
+import { CopyTemplateCommandService } from '@/services/copy-template/CopyTemplateCommandService'
+import { CopyTemplateQueryService } from '@/services/copy-template/CopyTemplateQueryService'
 
 type Translate = (key: string) => string
 type AttendanceListKey = 'present_list' | 'absent_list' | 'pending_list'
@@ -269,7 +270,7 @@ export function useAttendanceCopyTemplate(source: AttendanceCopyTemplateSource) 
 
         try {
             isLoadingAttendanceTemplate.value = true
-            const bundle = await CopyTemplateService.getEditorBundle('attendance_copy', sessionId)
+            const bundle = await CopyTemplateQueryService.getEditorBundle('attendance_copy', sessionId)
             if (requestGeneration !== attendanceTemplateRequestGeneration || !showAttendanceTemplateModal.value) return
             const loadOptions = bundle.options
             const classTemplate = bundle.current?.scopeType === 'class_session' ? bundle.current.templateText : null
@@ -331,10 +332,10 @@ export function useAttendanceCopyTemplate(source: AttendanceCopyTemplateSource) 
         try {
             isSavingAttendanceTemplate.value = true
             if (attendanceTemplateScope.value === 'class_session') {
-                await CopyTemplateService.saveAttendanceTemplateForSession(sessionId, content)
+                await CopyTemplateCommandService.saveAttendanceTemplateForSession(sessionId, content)
                 toast.success(t('classroom.copy_template_saved_session'))
             } else {
-                await CopyTemplateService.saveAttendanceTemplateAsUserDefault(content)
+                await CopyTemplateCommandService.saveAttendanceTemplateAsUserDefault(content)
                 toast.success(t('classroom.copy_template_saved_user'))
             }
 
@@ -383,7 +384,7 @@ export function useAttendanceCopyTemplate(source: AttendanceCopyTemplateSource) 
         }
 
         const formatters = buildAttendanceTemplateContext().formatters
-        const copyPromise = CopyTemplateService.getEffectiveAttendanceTemplate(sessionId)
+        const copyPromise = CopyTemplateQueryService.getEffectiveAttendanceTemplate(sessionId)
             .then(({ templateText, templateDocument }) => renderTemplateContent(
                 templateDocument || templateText,
                 (key, mode) => renderCopyTemplate(

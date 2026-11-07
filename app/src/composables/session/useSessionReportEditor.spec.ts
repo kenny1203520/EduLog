@@ -4,7 +4,8 @@ import { OccurrenceReport, type OccurrenceReportDTO } from '@/models/OccurrenceR
 import type { Enrollment } from '@/models/Enrollment'
 
 const reports = vi.hoisted(() => ({ getReport: vi.fn(), resolveConflict: vi.fn() }))
-vi.mock('@/services/occurrence/OccurrenceReportService', () => ({ OccurrenceReportService: reports }))
+vi.mock('@/services/report/ReportQueryService', () => ({ ReportQueryService: reports }))
+vi.mock('@/services/report/ReportCommandService', () => ({ ReportCommandService: reports }))
 vi.mock('vue-i18n', async importOriginal => ({ ...(await importOriginal<typeof import('vue-i18n')>()), useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock('vue-toastification', () => ({ useToast: () => ({ success: vi.fn() }) }))
 vi.mock('@/composables/useFeedback', () => ({ useFeedback: () => ({ reportError: vi.fn() }) }))

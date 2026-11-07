@@ -5,9 +5,10 @@ import type { Enrollment } from '@/models/Enrollment'
 const api = vi.hoisted(() => ({ candidates: vi.fn(), add: vi.fn() }))
 const feedback = vi.hoisted(() => ({ errorKey: vi.fn(), reportError: vi.fn() }))
 const toast = vi.hoisted(() => ({ success: vi.fn() }))
-vi.mock('@/services/enrollment/EnrollmentService', () => ({
-    EnrollmentService: { getActiveEnrollmentCandidates: api.candidates, addEnrollmentToSessionOccurrence: api.add },
-}))
+const enrollmentServiceMock = vi.hoisted(() => ({ getActiveEnrollmentCandidates: api.candidates, addEnrollmentToSessionOccurrence: api.add }))
+vi.mock('@/services/enrollment/EnrollmentQueryService', () => ({ EnrollmentQueryService: enrollmentServiceMock }))
+vi.mock('@/services/enrollment/EnrollmentCommandService', () => ({ EnrollmentCommandService: enrollmentServiceMock }))
+vi.mock('@/services/enrollment/EnrollmentTransferQueryService', () => ({ EnrollmentTransferQueryService: enrollmentServiceMock }))
 vi.mock('vue-i18n', async importOriginal => ({ ...(await importOriginal<typeof import('vue-i18n')>()), useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock('vue-toastification', () => ({ useToast: () => toast }))
 vi.mock('@/composables/useFeedback', () => ({ useFeedback: () => feedback }))

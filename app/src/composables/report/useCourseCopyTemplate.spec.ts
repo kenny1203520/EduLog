@@ -4,7 +4,8 @@ import type { Lesson } from '@/models/Course'
 
 const templates = vi.hoisted(() => ({ getEditorBundle: vi.fn(), saveCourseTemplateAsUserDefault: vi.fn(), getEffectiveCourseTemplate: vi.fn() }))
 const feedback = vi.hoisted(() => ({ errorKey: vi.fn(), reportError: vi.fn() }))
-vi.mock('@/services/copy-template/CopyTemplateService', () => ({ CopyTemplateService: templates }))
+vi.mock('@/services/copy-template/CopyTemplateQueryService', () => ({ CopyTemplateQueryService: templates }))
+vi.mock('@/services/copy-template/CopyTemplateCommandService', () => ({ CopyTemplateCommandService: templates }))
 vi.mock('vue-i18n', async importOriginal => ({ ...(await importOriginal<typeof import('vue-i18n')>()), useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock('vue-toastification', () => ({ useToast: () => ({ success: vi.fn() }) }))
 vi.mock('@/composables/useFeedback', () => ({ useFeedback: () => feedback }))

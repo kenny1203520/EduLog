@@ -7,6 +7,21 @@ export class OccurrenceQueryService {
     private static readonly PAGE_SIZE = 100
     private static readonly MAX_PAGES = 50
 
+    /** Report totals and completed counts per lesson date (YYYY-MM-DD) for one class. */
+    static async getReportCompletionByDate(sessionId: string, from: string, to: string): Promise<Record<string, { total: number; completed: number }>> {
+        const response = await apiV1Client.get<Array<{ occurrence_date: string; total: number; completed: number }>>(
+            `/class-sessions/${encodeURIComponent(sessionId)}/report-completion?from=${from}&to=${to}`
+        )
+        const byDate: Record<string, { total: number; completed: number }> = {}
+        for (const row of response.data || []) {
+            const entry = byDate[row.occurrence_date] ?? { total: 0, completed: 0 }
+            entry.total += row.total
+            entry.completed += row.completed
+            byDate[row.occurrence_date] = entry
+        }
+        return byDate
+    }
+
     private static formatDate(date: Date): string {
         return DateUtils.formatLocalDate(date)
     }

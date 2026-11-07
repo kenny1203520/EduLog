@@ -1,8 +1,6 @@
 import { computed, ref, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
-import { HolidayService } from '@/services/holiday/HolidayService'
-import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
 import { TeacherService } from '@/services/teacher/TeacherService'
 import type { SessionTeacherAssignmentDTO } from '@/services/teacher/TeacherService'
 import type { TeacherOverviewDTO } from '@/services/api/PageApiService'
@@ -11,6 +9,8 @@ import { useFeedback } from '@/composables/useFeedback'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { getEffectiveTeacherAssignments } from '@/utils/effectiveTeacherAssignments'
 import { DateUtils } from '@/utils/dateUtils'
+import { HolidayQueryService } from '@/services/holiday/HolidayQueryService'
+import { OccurrenceCommandService } from '@/services/occurrence/OccurrenceCommandService'
 
 export type OccurrenceTeacher = TeacherOverviewDTO & { role?: SessionTeacherAssignmentDTO['role'] }
 
@@ -129,7 +129,7 @@ export function useOccurrenceTeachers(source: OccurrenceTeachersSource) {
         const occurrence = todayOccurrence.value
         const leaveEntries = await Promise.all(assignmentsByTeacher
             .filter(assignment => assignment.id)
-            .map(async assignment => [assignment.id!, await HolidayService.isTeacherOnLeave(
+            .map(async assignment => [assignment.id!, await HolidayQueryService.isTeacherOnLeave(
                 dateStr,
                 assignment.id!,
                 session.value?.classroom_id,
@@ -157,7 +157,7 @@ export function useOccurrenceTeachers(source: OccurrenceTeachersSource) {
             const existing = todayOccurrence.value.teacherAttendance || {}
             const updatedAttendance = { ...existing, [teacherId]: isPresent }
 
-            const updated = await OccurrenceService.updateOccurrence(todayOccurrence.value.id, {
+            const updated = await OccurrenceCommandService.updateOccurrence(todayOccurrence.value.id, {
                 teacher_attendance: updatedAttendance
             })
 

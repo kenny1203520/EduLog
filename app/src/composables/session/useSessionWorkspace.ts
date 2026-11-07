@@ -4,10 +4,6 @@ import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import { PageApiService } from '@/services/api/PageApiService'
 import { SessionService } from '@/services/session/SessionService'
-import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
-import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
-import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
-import { HolidayService } from '@/services/holiday/HolidayService'
 import { PermissionPolicyService } from '@/services/rbac/PermissionPolicyService'
 import { TeacherService } from '@/services/teacher/TeacherService'
 import { parseClassSessionDate } from '@/services/session/ClassSessionInvalidation'
@@ -30,6 +26,14 @@ import { useStudentProgress } from './useStudentProgress'
 import { useOccurrenceTeachers } from './useOccurrenceTeachers'
 import { useSessionReportEditor, type ReportEditorExpose } from './useSessionReportEditor'
 import { useSessionRealtime, type RealtimeRefreshOptions } from './useSessionRealtime'
+import { EnrollmentCommandService } from '@/services/enrollment/EnrollmentCommandService'
+import { EnrollmentTransferQueryService } from '@/services/enrollment/EnrollmentTransferQueryService'
+import { HolidayQueryService } from '@/services/holiday/HolidayQueryService'
+import { OccurrenceCommandService } from '@/services/occurrence/OccurrenceCommandService'
+import { OccurrenceQueryService } from '@/services/occurrence/OccurrenceQueryService'
+import { OccurrenceSyncService } from '@/services/occurrence/OccurrenceSyncService'
+import { ReportCommandService } from '@/services/report/ReportCommandService'
+import { ReportQueryService } from '@/services/report/ReportQueryService'
 
 export function isReportAuthorizationError(error: any): boolean {
     const code = error?.code
@@ -201,11 +205,11 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
             // writes to settle before taking the complete read snapshot.
             const provisioning = reportProvisionRequests.get(occurrenceId)
             if (provisioning) await provisioning
-            occurrenceReports = await OccurrenceReportService.getReportsByOccurrence(occurrenceId)
+            occurrenceReports = await ReportQueryService.getReportsByOccurrence(occurrenceId)
         } else {
             let provisioning = reportProvisionRequests.get(occurrenceId)
             if (!provisioning) {
-                provisioning = OccurrenceReportService.createReportsForOccurrence(occurrenceId)
+                provisioning = ReportCommandService.createReportsForOccurrence(occurrenceId)
                 reportProvisionRequests.set(occurrenceId, provisioning)
             }
             try {
@@ -254,7 +258,7 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
             return
         }
         try {
-            const transfers = await EnrollmentService.getOccurrenceLessonTransfers(occurrenceId)
+            const transfers = await EnrollmentTransferQueryService.getOccurrenceLessonTransfers(occurrenceId)
             if (todayOccurrence.value?.id === occurrenceId) occurrenceTransfers.value = transfers
         } catch (error) {
             // The transfer notes are informational; the roster stays usable without them.
@@ -272,7 +276,7 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
         if (!transfer || cancellingTransferId.value) return
         cancellingTransferId.value = transfer.transfer_id
         try {
-            const result = await EnrollmentService.cancelSingleLessonTransfer(transfer.transfer_id)
+            const result = await EnrollmentCommandService.cancelSingleLessonTransfer(transfer.transfer_id)
             toast.success(t(result.targetReportRetained
                 ? 'student.transfer_history.cancelled_target_retained'
                 : 'student.transfer_history.cancelled'))
@@ -333,11 +337,11 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
             const occurrenceDateStr = DateUtils.formatLocalDate(occurrence.occurrenceDate)
             const [, holiday, navigation] = await Promise.all([
                 loadWorkspaceRoster(occurrence.occurrenceDate),
-                HolidayService.isHoliday(occurrenceDateStr, undefined, occurrence.classSessionId).catch(error => {
+                HolidayQueryService.isHoliday(occurrenceDateStr, undefined, occurrence.classSessionId).catch(error => {
                     console.error('Failed to check holiday status:', error)
                     return false
                 }),
-                OccurrenceService.getOccurrenceNavigationState(sessionId, occurrence.occurrenceDate)
+                OccurrenceQueryService.getOccurrenceNavigationState(sessionId, occurrence.occurrenceDate)
             ])
             if (loadToken !== occurrenceLoadToken) return
             isOccurrenceInHoliday.value = holiday
@@ -375,7 +379,7 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
         // A future lesson the schedule plans but that was never generated: create it first.
         if (!findOccurrenceByDate(date) && dateStr >= calendarToday.value && isPlannedClassDate(dateStr)) {
             try {
-                await OccurrenceService.generateOccurrences(sessionId, date, date)
+                await OccurrenceCommandService.generateOccurrences(sessionId, date, date)
             } catch (error) {
                 console.error('Failed to generate the planned lesson:', error)
             }
@@ -437,7 +441,7 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
         await loadSessionOccurrences(today)
         if (findOccurrenceByDate(today)) return
         if (session.value && await SessionService.isScheduledOn(sessionId, DateUtils.formatLocalDate(today))) {
-            await OccurrenceService.generateOccurrences(sessionId, today, today)
+            await OccurrenceCommandService.generateOccurrences(sessionId, today, today)
             await loadSessionOccurrences(today)
         }
     }
@@ -446,7 +450,7 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
         const today = DateUtils.todayDate(sessionTimeZone.value)
         try {
             await ensureTodayOccurrence(today)
-            const preferred = await OccurrenceService.getPreferredOccurrence(sessionId, today)
+            const preferred = await OccurrenceQueryService.getPreferredOccurrence(sessionId, today)
             await selectClassDate(DateUtils.formatLocalDate(preferred?.occurrenceDate || today))
         } catch (error) {
             console.error(error)
@@ -528,7 +532,7 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
                 initialOccurrence = findOccurrenceByDate(initialDate) || null
             } else {
                 await ensureTodayOccurrence(today)
-                initialOccurrence = await OccurrenceService.getPreferredOccurrence(sessionId, today)
+                initialOccurrence = await OccurrenceQueryService.getPreferredOccurrence(sessionId, today)
                 if (initialOccurrence) await loadSessionOccurrences(initialOccurrence.occurrenceDate)
             }
             if (initialOccurrence?.occurrenceDate) {
@@ -588,8 +592,8 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
                 if (!options.reportOnly) {
                     const [assignments, holiday, navigation] = await Promise.all([
                         TeacherService.getSessionTeachers(sessionId),
-                        HolidayService.isHoliday(date, undefined, sessionId),
-                        OccurrenceService.getOccurrenceNavigationState(sessionId, occurrenceDate),
+                        HolidayQueryService.isHoliday(date, undefined, sessionId),
+                        OccurrenceQueryService.getOccurrenceNavigationState(sessionId, occurrenceDate),
                     ])
                     if (requestId !== realtimeRefreshRequest || todayOccurrence.value?.id !== occurrenceId) return
                     sessionTeachers.value = assignments
@@ -715,7 +719,7 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
 
         savingMap.value.set(enrId, true)
         try {
-            const result = await OccurrenceReportService.saveAttendanceOnly(report.id, report.version, undefined, {
+            const result = await ReportCommandService.saveAttendanceOnly(report.id, report.version, undefined, {
                 attendanceStatus: status,
                 absenceReason: status === 'absent' ? 'reason_not_provided' : null
             })
@@ -831,7 +835,7 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
     async function handleConfirmRefresh() {
         try {
             isRefreshing.value = true
-            await OccurrenceService.syncSessionOccurrences(sessionId)
+            await OccurrenceSyncService.syncSessionOccurrences(sessionId)
             toast.success(t('classroom.refresh_success'))
             showRefreshConfirm.value = false
             await loadData()
@@ -856,7 +860,7 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
         }
 
         try {
-            const updated = await OccurrenceService.updateOccurrence(todayOccurrence.value.id, {
+            const updated = await OccurrenceCommandService.updateOccurrence(todayOccurrence.value.id, {
                 is_conducted: isHeld
             })
 

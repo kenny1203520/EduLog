@@ -1,10 +1,10 @@
 import { computed, ref, type Ref } from 'vue'
-import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
-import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
 import { calendarGridRange, withoutRange, type CalendarDateRange } from '@/models/ClassCalendarDay'
 import { countJoinFlagsByDate, type RosterFlag } from '@/models/ClassTimeline'
 import type { ClassOccurrence } from '@/models/ClassOccurrence'
 import { DateUtils } from '@/utils/dateUtils'
+import { EnrollmentTransferQueryService } from '@/services/enrollment/EnrollmentTransferQueryService'
+import { OccurrenceQueryService } from '@/services/occurrence/OccurrenceQueryService'
 
 interface SessionCalendarSource {
     sessionId: string
@@ -34,7 +34,7 @@ export function useSessionCalendar(source: SessionCalendarSource) {
 
     async function loadReportCompletion(range: CalendarDateRange) {
         try {
-            const completion = await OccurrenceService.getReportCompletionByDate(sessionId, range.start, range.end)
+            const completion = await OccurrenceQueryService.getReportCompletionByDate(sessionId, range.start, range.end)
             reportCompletionByDate.value = { ...withoutRange(reportCompletionByDate.value, range), ...completion }
         } catch (error) {
             // The completion dot is a hint; the calendar works without it.
@@ -44,7 +44,7 @@ export function useSessionCalendar(source: SessionCalendarSource) {
 
     async function loadRosterFlags(range: CalendarDateRange) {
         try {
-            const flags = await EnrollmentService.getClassRosterFlags(sessionId, range.start, range.end)
+            const flags = await EnrollmentTransferQueryService.getClassRosterFlags(sessionId, range.start, range.end)
             const byDate: Record<string, RosterFlag[]> = {}
             for (const flag of flags) (byDate[flag.date] ??= []).push(flag)
             rosterFlagsByDate.value = { ...withoutRange(rosterFlagsByDate.value, range), ...byDate }
@@ -64,7 +64,7 @@ export function useSessionCalendar(source: SessionCalendarSource) {
         const cached = loadedOccurrenceRanges.get(key)
         if (cached && !force) return cached
         const task = (async () => {
-            const occurrences = await OccurrenceService.getOccurrencesByDateRange(
+            const occurrences = await OccurrenceQueryService.getOccurrencesByDateRange(
                 DateUtils.parseLocalDate(range.start)!, DateUtils.parseLocalDate(range.end)!, [sessionId]
             )
             const outside = sessionOccurrences.value.filter(occurrence => {

@@ -6,7 +6,6 @@ const mocks = vi.hoisted(() => ({
     school: { id: 'e7982b6e-d0c9-4f89-814f-de95709e0d50' }
 }))
 vi.mock('@/services/api/ApiResourceClient', () => ({ apiResourceClient: { create: mocks.create, update: mocks.update } }))
-vi.mock('@/services/enrollment/EnrollmentService', () => ({ EnrollmentService: {} }))
 vi.mock('@/utils/dateUtils', () => ({ DateUtils: {
     isValidTimeZone: (value: string) => value === 'Asia/Taipei', getDefaultTimeZone: () => 'Asia/Taipei'
 } }))

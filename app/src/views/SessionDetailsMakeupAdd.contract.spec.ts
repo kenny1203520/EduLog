@@ -17,7 +17,7 @@ describe('quick make-up enrollment flow contract', () => {
         const end = commandSource.indexOf('\n    static async ', start + 1)
         const handler = commandSource.slice(start, end < 0 ? undefined : end)
 
-        expect(handler).toContain('OccurrenceService.getOccurrenceBySessionAndDate(targetSessionId, normalizedTargetDate)')
+        expect(handler).toContain('OccurrenceQueryService.getOccurrenceBySessionAndDate(targetSessionId, normalizedTargetDate)')
         expect(handler).not.toContain(".from('class_occurrences')")
     })
 
