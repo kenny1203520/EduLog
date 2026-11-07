@@ -3,7 +3,10 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 // Compact mode is the editor inside the extension side panel: only what the teacher fills in.
-const source = readFileSync(resolve(process.cwd(), 'src/components/report/ReportEditor.vue'), 'utf8').replace(/\r\n/g, '\n')
+// The progress notes are their own component (ReportProgressCheck), read together with the editor.
+const source = ['src/components/report/ReportEditor.vue', 'src/components/report/ReportProgressCheck.vue']
+  .map(file => readFileSync(resolve(process.cwd(), file), 'utf8').replace(/\r\n/g, '\n'))
+  .join('\n')
 
 describe('ReportEditor compact mode (side panel)', () => {
   it('drops the title, delete, report link, source link and font stepper', () => {

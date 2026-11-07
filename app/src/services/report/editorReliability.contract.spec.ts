@@ -3,6 +3,16 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const repoRoot = resolve(process.cwd(), '..')
+// ReportEditor renders; its state machine lives in useReportEditorSession and its
+// sections in their own components. The contracts cover all of them together.
+const EDITOR_FILES = [
+    'src/components/report/ReportEditor.vue',
+    'src/composables/report/useReportEditorSession.ts',
+    'src/components/report/ReportDraftRecoveryBanner.vue',
+    'src/components/report/ReportAttendanceSection.vue',
+    'src/components/report/ReportProgressCheck.vue',
+]
+const readEditor = () => EDITOR_FILES.map(file => readFileSync(resolve(process.cwd(), file), 'utf8')).join('\n')
 
 describe('editor reliability contracts', () => {
     it('keeps the collaboration snapshot RPC lock-free and version guarded', () => {
@@ -28,13 +38,13 @@ describe('editor reliability contracts', () => {
 
     it('counts the local session plus remote peers only when collaboration is ready', () => {
         const collab = readFileSync(resolve(repoRoot, 'app/src/composables/useReportCollab.ts'), 'utf8')
-        const editor = readFileSync(resolve(repoRoot, 'app/src/components/report/ReportEditor.vue'), 'utf8')
+        const editor = readEditor()
         expect(collab).toContain('onlineParticipantCount')
         expect(collab).toContain('activePeers.value.length + 1')
         expect(editor).toContain('{{ onlineParticipantCount }} online')
     })
     it('keeps the editor visible when collaboration is unavailable', () => {
-        const editor = readFileSync(resolve(repoRoot, 'app/src/components/report/ReportEditor.vue'), 'utf8')
+        const editor = readEditor()
         const collab = readFileSync(resolve(repoRoot, 'app/src/composables/useReportCollab.ts'), 'utf8')
         expect(editor).not.toContain(':user="collaborationUser""')
         expect(editor).toContain('v-if="ready && ydoc"')
@@ -50,12 +60,14 @@ describe('editor reliability contracts', () => {
     })
 
     it('keeps system-managed attendance read-only and out of dirty mutations', () => {
-        const editor = readFileSync(resolve(repoRoot, 'app/src/components/report/ReportEditor.vue'), 'utf8')
+        const editor = readEditor()
         const commandService = readFileSync(resolve(repoRoot, 'app/src/services/report/ReportCommandService.ts'), 'utf8')
 
         expect(editor).toContain(':disabled="disabled || isSystemManagedAbsence"')
         expect(editor).toContain('normalizeSystemManagedReason')
-        expect(editor).toContain('if (!isSystemManagedAbsence.value)')
+        // The dirty-payload rule moved to models/ReportEditorSnapshot; the editor passes the flag.
+        expect(editor).toContain('includeAttendance: !isSystemManagedAbsence.value')
+        expect(readFileSync(resolve(process.cwd(), 'src/models/ReportEditorSnapshot.ts'), 'utf8')).toContain('if (options.includeAttendance)')
         expect(editor).toContain('metaMap.set(\'attendanceStatus\', attendanceStatus.value)')
         expect(editor).toContain('never hydrate these two fields from a stale Yjs document')
         expect(commandService).toContain("error.code === 'SYSTEM_MANAGED_REPORT'")
@@ -64,7 +76,7 @@ describe('editor reliability contracts', () => {
     })
 
     it('hydrates editable attendance from committed API state instead of stale collaboration metadata', () => {
-        const editor = readFileSync(resolve(repoRoot, 'app/src/components/report/ReportEditor.vue'), 'utf8')
+        const editor = readEditor()
         const attendanceInitialization = editor.slice(editor.indexOf('const shouldHydrateMeta ='), editor.indexOf("if (metaMap.has('classParticipation'))"))
         expect(attendanceInitialization).toContain("attendanceStatus.value = props.initialAttendanceStatus || 'pending'")
         expect(attendanceInitialization).toContain("metaMap.set('attendanceStatus', attendanceStatus.value)")
