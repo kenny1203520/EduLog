@@ -1,4 +1,4 @@
-import { Router, type NextFunction, type Request, type Response } from 'express'
+import { Router, type Request, type Response } from 'express'
 import { z } from 'zod'
 import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { complete, idempotency } from './resourceRouter.js'
@@ -7,7 +7,7 @@ import { requireAuthorizationDecision, requireAuthorizationRpcDecision } from '.
 import { ensurePlannedLessons, fillPlannedLessons } from '../../services/lessonProvisioning.js'
 import { orderByRelation } from '../../services/relationOrder.js'
 import { transferRpcError } from './transferRouter.js'
-import { envelope, permission, uuid } from './domainAccess.js'
+import { envelope, permission, uuid, wrap } from './domainAccess.js'
 
 const fields = 'id,student_id,course_id,classroom_id,class_session_id,status,start_date,lesson_number,external_link,time_zone,koding_admission_id,user_id,created_at,updated_at,courses(subject,stage,display_name),classrooms(name,address),class_sessions(id,name,day_of_week,start_time,end_time,capacity,time_zone,session_type,schedule_mode,class_session_schedule_rules(id,schedule_kind,day_of_week,day_of_month,occurrence_date,start_time,end_time)),students(name)'
 const mutable = ['student_id', 'course_id', 'classroom_id', 'class_session_id', 'status', 'start_date', 'lesson_number', 'external_link', 'time_zone', 'koding_admission_id'] as const
@@ -19,7 +19,6 @@ export const enrollmentBodySchema = z.object({
 }).strict()
 export const enrollmentCreateSchema = enrollmentBodySchema.required({ student_id: true, course_id: true })
 type Input = z.infer<typeof enrollmentBodySchema>
-function wrap(handler: (req: Request, res: Response) => Promise<unknown>) { return (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res)).catch(next) }
 function pick(input: Input) { return Object.fromEntries(Object.entries(input).filter(([key]) => (mutable as readonly string[]).includes(key))) }
 async function authorizeExisting(req: Request, action: 'update' | 'delete', enrollmentId: string) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
