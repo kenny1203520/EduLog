@@ -1,8 +1,6 @@
-import { apiDataClient } from '@/services/api/ApiDataClient'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import type { TransferReportFieldSelections } from '@/services/report/ReportFieldConflictService'
 import { apiV1Client } from '@/services/api/ApiV1Client'
-import { getApiV1Mode } from '@/services/api/ApiModeClient'
 import { EnrollmentTransferQueryService, type TransferConflictDisplayContext } from './EnrollmentTransferQueryService'
 import { EnrollmentTransferToolService } from './EnrollmentTransferToolService'
 
@@ -66,38 +64,17 @@ export class SingleLessonTransferConflictService {
         conflict: SingleLessonTransferConflict,
         fieldSources: TransferReportFieldSelections
     ): Promise<SingleLessonTransferResult> {
-        if (getApiV1Mode() === 'v1') {
-            const response = await apiV1Client.post<{ status: 'completed'; transfer_id?: string }>('/enrollment-transfers/conflicts/resolve', {
-                enrollment_id: conflict.enrollmentId,
-                source_occurrence_id: conflict.sourceOccurrenceId,
-                target_occurrence_id: conflict.targetOccurrenceId,
-                source_report_id: conflict.sourceReport?.id || null,
-                source_version: conflict.sourceReport?.version || null,
-                target_report_id: conflict.targetReport.id,
-                target_version: conflict.targetReport.version,
-                field_sources: fieldSources
-            })
-            await EnrollmentTransferToolService.syncSessionPair(conflict.sourceSessionId, conflict.targetSessionId)
-            return { status: 'completed', transferId: response.data.transfer_id }
-        }
-        const { data, error } = await apiDataClient.rpc('resolve_single_lesson_transfer_conflict', {
-            p_enrollment_id: conflict.enrollmentId,
-            p_source_occurrence_id: conflict.sourceOccurrenceId,
-            p_target_occurrence_id: conflict.targetOccurrenceId,
-            p_source_report_id: conflict.sourceReport?.id || null,
-            p_source_version: conflict.sourceReport?.version || null,
-            p_target_report_id: conflict.targetReport.id,
-            p_target_version: conflict.targetReport.version,
-            p_field_sources: fieldSources
+        const response = await apiV1Client.post<{ status: 'completed'; transfer_id?: string }>('/enrollment-transfers/conflicts/resolve', {
+            enrollment_id: conflict.enrollmentId,
+            source_occurrence_id: conflict.sourceOccurrenceId,
+            target_occurrence_id: conflict.targetOccurrenceId,
+            source_report_id: conflict.sourceReport?.id || null,
+            source_version: conflict.sourceReport?.version || null,
+            target_report_id: conflict.targetReport.id,
+            target_version: conflict.targetReport.version,
+            field_sources: fieldSources
         })
-
-        if (error) throw new Error(error.message)
-
-        await EnrollmentTransferToolService.syncSessionPair(
-            conflict.sourceSessionId,
-            conflict.targetSessionId
-        )
-
-        return { status: 'completed', transferId: data?.transfer_id }
+        await EnrollmentTransferToolService.syncSessionPair(conflict.sourceSessionId, conflict.targetSessionId)
+        return { status: 'completed', transferId: response.data.transfer_id }
     }
 }

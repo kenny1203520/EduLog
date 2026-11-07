@@ -24,9 +24,6 @@ export default defineConfig(({ mode }) => {
       vue(),
       VitePWA({
         registerType: 'autoUpdate',
-        workbox: {
-          globIgnores: ['**/runtime-config.js']
-        },
         devOptions: {
           enabled: true
         },

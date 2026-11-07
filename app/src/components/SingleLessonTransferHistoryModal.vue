@@ -7,7 +7,7 @@ import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { DateUtils } from '@/utils/DateUtils'
 import { domainErrorCode, mapDomainError } from '@/services/errors/mapDomainError'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
-import { mapSupabaseError } from '@/services/errors/mapSupabaseError'
+import { mapErrorKey } from '@/services/errors/mapErrorKey'
 
 const props = defineProps<{
     isOpen: boolean
@@ -25,7 +25,7 @@ function describeError(cause: unknown, fallbackKey: string): string {
     const domain = mapDomainError(domainErrorCode(cause))
     if (domain) return t(domain.i18nKey)
     if (message) return t(fallbackKey)
-    return t(mapSupabaseError(cause).i18nKey)
+    return t(mapErrorKey(cause).i18nKey)
 }
 
 const preferences = usePreferencesStore()

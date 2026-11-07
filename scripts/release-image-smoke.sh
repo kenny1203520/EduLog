@@ -21,7 +21,7 @@ docker run -d --name "$api" --network "$network" --network-alias api \
   -e EDULOG_WEB_BASE_URL=https://edulog.example.test \
   -e RATE_LIMIT_STORE=supabase edulog-release-smoke:api >/dev/null
 docker run -d --name "$frontend" --network "$network" \
-  -e VITE_API_V1_MODE=v1 edulog-release-smoke:frontend >/dev/null
+  edulog-release-smoke:frontend >/dev/null
 
 for attempt in {1..30}; do
   if docker exec "$api" node -e "fetch('http://127.0.0.1:3000/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))" >/dev/null 2>&1 \
@@ -37,7 +37,6 @@ for attempt in {1..30}; do
 done
 docker exec "$frontend" wget -q -O /dev/null http://127.0.0.1:4173/
 docker exec "$frontend" wget -q -O - http://127.0.0.1:4173/api/healthz | grep -q '"status":"ok"'
-docker exec "$frontend" wget -q -O - http://127.0.0.1:4173/runtime-config.js | grep -q '"v1"'
 version="$(node -p "require('./app/package.json').version")"
 docker exec "$frontend" grep -r -q "$version" /usr/share/nginx/html/assets
 docker exec "$api" node -e "fetch('http://127.0.0.1:3000/api/student-schools').then(r=>{if(r.status!==401)process.exit(1)}).catch(()=>process.exit(1))"

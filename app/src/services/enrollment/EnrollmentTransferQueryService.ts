@@ -1,9 +1,7 @@
-import { apiDataClient } from '@/services/api/ApiDataClient'
 import { ClassSessionFactory } from '@/models/ClassSession'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import { apiV1Client } from '@/services/api/ApiV1Client'
 import { apiResourceClient } from '@/services/api/ApiResourceClient'
-import { getApiV1Mode } from '@/services/api/ApiModeClient'
 import { normalizeEnrollmentReportRelations } from '@/services/report/ReportQueryService'
 import type { ClassTimelineData, RosterFlag } from '@/models/ClassTimeline'
 
@@ -78,15 +76,8 @@ export interface EffectiveSingleLessonTransferTarget {
 
 export class EnrollmentTransferQueryService {
     static async getSingleLessonTransferHistory(enrollmentId: string): Promise<SingleLessonTransferHistoryItem[]> {
-        if (getApiV1Mode() === 'v1') {
-            const response = await apiV1Client.get<SingleLessonTransferHistoryItem[]>('/enrollments/' + enrollmentId + '/transfer-history')
-            return response.data || []
-        }
-        const { data, error } = await apiDataClient.rpc('get_single_lesson_transfer_history', {
-            p_enrollment_id: enrollmentId
-        })
-        if (error) throw new Error(error.message)
-        return (data || []) as SingleLessonTransferHistoryItem[]
+        const response = await apiV1Client.get<SingleLessonTransferHistoryItem[]>('/enrollments/' + enrollmentId + '/transfer-history')
+        return response.data || []
     }
 
     /** Lists the active transfers into and out of one class occurrence. */
@@ -109,138 +100,54 @@ export class EnrollmentTransferQueryService {
     }
 
     static async getEffectiveSingleLessonTransferTargets(enrollmentId: string): Promise<EffectiveSingleLessonTransferTarget[]> {
-        if (getApiV1Mode() === 'v1') {
-            const response = await apiV1Client.get<EffectiveSingleLessonTransferTarget[]>('/enrollments/' + enrollmentId + '/effective-transfer-targets')
-            return response.data || []
-        }
-        const { data, error } = await apiDataClient.rpc('get_effective_single_lesson_transfer_targets', {
-            p_enrollment_id: enrollmentId
-        })
-        if (error) throw new Error(error.message)
-        return (data || []) as EffectiveSingleLessonTransferTarget[]
+        const response = await apiV1Client.get<EffectiveSingleLessonTransferTarget[]>('/enrollments/' + enrollmentId + '/effective-transfer-targets')
+        return response.data || []
     }
 
     static async repairSingleLessonTransferReport(enrollmentId: string, targetOccurrenceId: string): Promise<string> {
-        if (getApiV1Mode() === 'v1') {
-            const response = await apiV1Client.post<{ report_id: string }>('/enrollments/' + enrollmentId + '/repair-transfer-report', { target_occurrence_id: targetOccurrenceId })
-            return response.data.report_id
-        }
-        const { data, error } = await apiDataClient.rpc('repair_single_lesson_transfer_report', {
-            p_enrollment_id: enrollmentId,
-            p_target_occurrence_id: targetOccurrenceId
-        })
-        if (error) throw new Error(error.message)
-        return data as string
+        const response = await apiV1Client.post<{ report_id: string }>('/enrollments/' + enrollmentId + '/repair-transfer-report', { target_occurrence_id: targetOccurrenceId })
+        return response.data.report_id
     }
 
     static async getEnrollmentSessionInfo(enrollmentId: string): Promise<{ class_session_id: string | null; course_id: string }> {
-        if (getApiV1Mode() === 'v1') {
-            const response = await apiResourceClient.get<{ class_session_id: string | null; course_id: string }>('enrollments', enrollmentId, 'v1')
-            return { class_session_id: response.data.class_session_id ?? null, course_id: response.data.course_id }
-        }
-        const { data, error } = await apiDataClient
-            .from('enrollments')
-            .select('class_session_id, course_id')
-            .eq('id', enrollmentId)
-            .single()
-
-        if (error || !data) {
-            throw new Error(`Failed to fetch enrollment: ${error?.message || 'not found'}`)
-        }
-
-        return data
+        const response = await apiResourceClient.get<{ class_session_id: string | null; course_id: string }>('enrollments', enrollmentId)
+        return { class_session_id: response.data.class_session_id ?? null, course_id: response.data.course_id }
     }
 
     static async getSingleLessonReportCandidates(
         enrollmentId: string,
         originalDate: string
     ): Promise<SingleLessonTransferReportRow[]> {
-        if (getApiV1Mode() === 'v1') {
-            const response = await apiResourceClient.list<SingleLessonTransferReportRow>('reports', {
-                filters: [
-                    { field: 'enrollment_id', operator: 'eq', value: enrollmentId },
-                    { field: 'class_occurrences.occurrence_date', operator: 'eq', value: originalDate },
-                ],
-                perPage: 100,
-                sort: 'created_at',
-                mode: 'v1'
-            })
-            // The relation filter only narrows the embedded occurrence, not the
-            // report rows, so keep only reports whose occurrence is on that date.
-            return (response.data || [])
-                .map((row) => normalizeEnrollmentReportRelations(row) as SingleLessonTransferReportRow)
-                .filter((row) => !Array.isArray(row.class_occurrence) && row.class_occurrence?.occurrence_date === originalDate)
-        }
-        const { data, error } = await apiDataClient
-            .from('occurrence_reports')
-            .select(`
-                id,
-                enrollment_id,
-                class_occurrence_id,
-                version,
-                class_occurrence:class_occurrences!inner(occurrence_date, class_session_id)
-            `)
-            .eq('enrollment_id', enrollmentId)
-            .eq('class_occurrence.occurrence_date', originalDate)
-
-        if (error) {
-            throw new Error(`Failed to find original report: ${error.message}`)
-        }
-
-        return (data || []) as SingleLessonTransferReportRow[]
+        const response = await apiResourceClient.list<SingleLessonTransferReportRow>('reports', {
+            filters: [
+                { field: 'enrollment_id', operator: 'eq', value: enrollmentId },
+                { field: 'class_occurrences.occurrence_date', operator: 'eq', value: originalDate },
+            ],
+            perPage: 100,
+            sort: 'created_at'
+        })
+        // The relation filter only narrows the embedded occurrence, not the
+        // report rows, so keep only reports whose occurrence is on that date.
+        return (response.data || [])
+            .map((row) => normalizeEnrollmentReportRelations(row) as SingleLessonTransferReportRow)
+            .filter((row) => !Array.isArray(row.class_occurrence) && row.class_occurrence?.occurrence_date === originalDate)
     }
 
     static async getReportTransferInfo(reportId: string): Promise<SingleLessonTransferReportRow> {
-        if (getApiV1Mode() === 'v1') {
-            const response = await apiResourceClient.list<SingleLessonTransferReportRow>('reports', {
-                filters: [{ field: 'id', operator: 'eq', value: reportId }],
-                perPage: 1,
-                mode: 'v1'
-            })
-            const report = response.data?.[0]
-            if (!report) throw new Error('Failed to fetch report for transfer: not found')
-            return normalizeEnrollmentReportRelations(report) as SingleLessonTransferReportRow
-        }
-        const { data, error } = await apiDataClient
-            .from('occurrence_reports')
-            .select(`
-                id,
-                enrollment_id,
-                class_occurrence_id,
-                version,
-                class_occurrence:class_occurrences!inner(occurrence_date, class_session_id)
-            `)
-            .eq('id', reportId)
-            .single()
-
-        if (error || !data) {
-            throw new Error(`Failed to fetch report for transfer: ${error?.message || 'not found'}`)
-        }
-
-        return data as SingleLessonTransferReportRow
+        const response = await apiResourceClient.list<SingleLessonTransferReportRow>('reports', {
+            filters: [{ field: 'id', operator: 'eq', value: reportId }],
+            perPage: 1
+        })
+        const report = response.data?.[0]
+        if (!report) throw new Error('Failed to fetch report for transfer: not found')
+        return normalizeEnrollmentReportRelations(report) as SingleLessonTransferReportRow
     }
 
     static async isSessionScheduledOn(sessionId: string, date: string): Promise<boolean> {
-        if (getApiV1Mode() === 'v1') {
-            const response = await apiResourceClient.get<any>('class-sessions', sessionId, 'v1')
-            return ClassSessionFactory.create({
-                ...response.data,
-                schedule_rules: response.data?.schedule_rules || response.data?.class_session_schedule_rules || []
-            }).isScheduledOn(date)
-        }
-        const { data, error } = await apiDataClient
-            .from('class_sessions')
-            .select('*, class_session_schedule_rules(*)')
-            .eq('id', sessionId)
-            .single()
-
-        if (error || !data) {
-            throw new Error(`Failed to fetch target session: ${error?.message || 'not found'}`)
-        }
-
+        const response = await apiResourceClient.get<any>('class-sessions', sessionId)
         return ClassSessionFactory.create({
-            ...(data as any),
-            schedule_rules: (data as any).class_session_schedule_rules || []
+            ...response.data,
+            schedule_rules: response.data?.schedule_rules || response.data?.class_session_schedule_rules || []
         }).isScheduledOn(date)
     }
 
@@ -248,29 +155,14 @@ export class EnrollmentTransferQueryService {
         enrollmentId: string,
         occurrenceId: string
     ): Promise<{ id: string } | null> {
-        if (getApiV1Mode() === 'v1') {
-            const response = await apiResourceClient.list<{ id: string }>('reports', {
-                filters: [
-                    { field: 'enrollment_id', operator: 'eq', value: enrollmentId },
-                    { field: 'class_occurrence_id', operator: 'eq', value: occurrenceId },
-                ],
-                perPage: 1,
-                mode: 'v1'
-            })
-            return response.data?.[0] || null
-        }
-        const { data, error } = await apiDataClient
-            .from('occurrence_reports')
-            .select('id')
-            .eq('enrollment_id', enrollmentId)
-            .eq('class_occurrence_id', occurrenceId)
-            .maybeSingle()
-
-        if (error) {
-            throw new Error(`Failed to check target report: ${error.message}`)
-        }
-
-        return data || null
+        const response = await apiResourceClient.list<{ id: string }>('reports', {
+            filters: [
+                { field: 'enrollment_id', operator: 'eq', value: enrollmentId },
+                { field: 'class_occurrence_id', operator: 'eq', value: occurrenceId },
+            ],
+            perPage: 1
+        })
+        return response.data?.[0] || null
     }
 
     /** Loads the complete report state required by field-level transfer conflict management. */
@@ -278,29 +170,14 @@ export class EnrollmentTransferQueryService {
         enrollmentId: string,
         occurrenceId: string
     ): Promise<OccurrenceReportDTO | null> {
-        if (getApiV1Mode() === 'v1') {
-            const response = await apiResourceClient.list<OccurrenceReportDTO>('reports', {
-                filters: [
-                    { field: 'enrollment_id', operator: 'eq', value: enrollmentId },
-                    { field: 'class_occurrence_id', operator: 'eq', value: occurrenceId },
-                ],
-                perPage: 1,
-                mode: 'v1'
-            })
-            return response.data?.[0] || null
-        }
-        const { data, error } = await apiDataClient
-            .from('occurrence_reports')
-            .select('*')
-            .eq('enrollment_id', enrollmentId)
-            .eq('class_occurrence_id', occurrenceId)
-            .maybeSingle()
-
-        if (error) {
-            throw new Error(`Failed to fetch report conflict data: ${error.message}`)
-        }
-
-        return (data as OccurrenceReportDTO | null) || null
+        const response = await apiResourceClient.list<OccurrenceReportDTO>('reports', {
+            filters: [
+                { field: 'enrollment_id', operator: 'eq', value: enrollmentId },
+                { field: 'class_occurrence_id', operator: 'eq', value: occurrenceId },
+            ],
+            perPage: 1
+        })
+        return response.data?.[0] || null
     }
 
     /** Loads readable occurrence, session, classroom, and lesson metadata for conflict UI. */
@@ -308,70 +185,12 @@ export class EnrollmentTransferQueryService {
         occurrenceId: string,
         lessonId?: string | null
     ): Promise<TransferConflictDisplayContext> {
-        if (getApiV1Mode() === 'v1') {
-            const occurrenceResponse = await apiV1Client.get<any>('/occurrences/' + encodeURIComponent(occurrenceId))
-            const occurrence = occurrenceResponse.data
-            const lesson = lessonId ? (await apiResourceClient.get<any>('lessons', lessonId, 'v1')).data : null
-            if (!occurrence?.id) throw new Error('Failed to fetch occurrence conflict context: not found')
-            const session = Array.isArray(occurrence.class_sessions) ? occurrence.class_sessions[0] : occurrence.class_sessions
-            const classroom = Array.isArray(session?.classrooms) ? session.classrooms[0] : session?.classrooms
-            return {
-                occurrenceId: occurrence.id,
-                occurrenceDate: occurrence.occurrence_date,
-                startTime: occurrence.actual_start_time || occurrence.original_start_time || session?.start_time || null,
-                endTime: occurrence.actual_end_time || occurrence.original_end_time || session?.end_time || null,
-                sessionId: occurrence.class_session_id,
-                sessionName: session?.name || null,
-                sessionTimeZone: session?.time_zone || null,
-                classroomId: session?.classroom_id || null,
-                classroomName: classroom?.name || null,
-                lessonId: lesson?.id || lessonId || null,
-                lessonSequence: lesson?.sequence ?? null,
-                lessonTitle: lesson?.title || null
-            }
-        }
-        const occurrenceQuery = apiDataClient
-            .from('class_occurrences')
-            .select(`
-                id,
-                occurrence_date,
-                class_session_id,
-                original_start_time,
-                original_end_time,
-                actual_start_time,
-                actual_end_time,
-                class_session:class_sessions!class_session_id(
-                    id,
-                    name,
-                    start_time,
-                    end_time,
-                    time_zone,
-                    classroom_id,
-                    classroom:classrooms!classroom_id(id, name)
-                )
-            `)
-            .eq('id', occurrenceId)
-            .single()
-        const lessonQuery = lessonId
-            ? apiDataClient.from('lessons').select('id, title, sequence').eq('id', lessonId).maybeSingle()
-            : Promise.resolve({ data: null, error: null })
-        const [{ data: occurrence, error: occurrenceError }, { data: lesson, error: lessonError }] =
-            await Promise.all([occurrenceQuery, lessonQuery])
-
-        if (occurrenceError || !occurrence) {
-            throw new Error(`Failed to fetch occurrence conflict context: ${occurrenceError?.message || 'not found'}`)
-        }
-        if (lessonError) {
-            throw new Error(`Failed to fetch lesson conflict context: ${lessonError.message}`)
-        }
-
-        const session = Array.isArray((occurrence as any).class_session)
-            ? (occurrence as any).class_session[0]
-            : (occurrence as any).class_session
-        const classroom = Array.isArray(session?.classroom)
-            ? session.classroom[0]
-            : session?.classroom
-
+        const occurrenceResponse = await apiV1Client.get<any>('/occurrences/' + encodeURIComponent(occurrenceId))
+        const occurrence = occurrenceResponse.data
+        const lesson = lessonId ? (await apiResourceClient.get<any>('lessons', lessonId)).data : null
+        if (!occurrence?.id) throw new Error('Failed to fetch occurrence conflict context: not found')
+        const session = Array.isArray(occurrence.class_sessions) ? occurrence.class_sessions[0] : occurrence.class_sessions
+        const classroom = Array.isArray(session?.classrooms) ? session.classrooms[0] : session?.classrooms
         return {
             occurrenceId: occurrence.id,
             occurrenceDate: occurrence.occurrence_date,
@@ -389,24 +208,10 @@ export class EnrollmentTransferQueryService {
     }
 
     static async getTargetOccurrenceId(sessionId: string, targetDate: string): Promise<string> {
-        if (getApiV1Mode() === 'v1') {
-            const params = new URLSearchParams({ class_session_id: sessionId, date: targetDate, limit: '1', sort: 'occurrence_date' })
-            const response = await apiV1Client.get<Array<{ id: string }>>(`/occurrences?${params}`)
-            const occurrence = response.data?.[0]
-            if (!occurrence?.id) throw new Error('Failed to find target occurrence: not found')
-            return occurrence.id
-        }
-        const { data, error } = await apiDataClient
-            .from('class_occurrences')
-            .select('id')
-            .eq('class_session_id', sessionId)
-            .eq('occurrence_date', targetDate)
-            .single()
-
-        if (error || !data?.id) {
-            throw new Error(`Failed to find target occurrence: ${error?.message || 'not found'}`)
-        }
-
-        return data.id
+        const params = new URLSearchParams({ class_session_id: sessionId, date: targetDate, limit: '1', sort: 'occurrence_date' })
+        const response = await apiV1Client.get<Array<{ id: string }>>(`/occurrences?${params}`)
+        const occurrence = response.data?.[0]
+        if (!occurrence?.id) throw new Error('Failed to find target occurrence: not found')
+        return occurrence.id
     }
 }
