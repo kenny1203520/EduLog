@@ -7,15 +7,12 @@ BEGIN;
 INSERT INTO auth.users(id, email) VALUES ('a1500000-0000-4000-8000-000000000001', 'null-content@example.test')
 ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.classrooms(id, name, user_id, teaching_id)
-SELECT 'a1500000-0000-4000-8000-000000000011', 'Null Content Classroom', 'a1500000-0000-4000-8000-000000000001', id
-FROM public.teachings WHERE is_global LIMIT 1;
+SELECT 'a1500000-0000-4000-8000-000000000011', 'Null Content Classroom', 'a1500000-0000-4000-8000-000000000001', NULL;
 INSERT INTO public.courses(id, subject, stage, user_id, teaching_id)
-SELECT 'a1500000-0000-4000-8000-000000000021', 'Null Content Course', 'primary', 'a1500000-0000-4000-8000-000000000001', id
-FROM public.teachings WHERE is_global LIMIT 1;
+SELECT 'a1500000-0000-4000-8000-000000000021', 'Null Content Course', 'primary', 'a1500000-0000-4000-8000-000000000001', NULL;
 INSERT INTO public.class_sessions(id, name, classroom_id, course_ids, start_time, end_time, user_id, start_date, teaching_id)
 SELECT 'a1500000-0000-4000-8000-000000000031', 'Null Content Session', 'a1500000-0000-4000-8000-000000000011',
-  ARRAY['a1500000-0000-4000-8000-000000000021']::uuid[], '09:00', '10:00', 'a1500000-0000-4000-8000-000000000001', DATE '2026-01-01', id
-FROM public.teachings WHERE is_global LIMIT 1;
+  ARRAY['a1500000-0000-4000-8000-000000000021']::uuid[], '09:00', '10:00', 'a1500000-0000-4000-8000-000000000001', DATE '2026-01-01', NULL;
 INSERT INTO public.students(id, name, user_id) VALUES ('a1500000-0000-4000-8000-000000000041', 'Null Content Student', 'a1500000-0000-4000-8000-000000000001');
 INSERT INTO public.enrollments(id, student_id, course_id, classroom_id, class_session_id, status, user_id, start_date)
 VALUES ('a1500000-0000-4000-8000-000000000051', 'a1500000-0000-4000-8000-000000000041', 'a1500000-0000-4000-8000-000000000021',
