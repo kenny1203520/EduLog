@@ -269,17 +269,24 @@ async function enrollmentReportProgressContext(req: Request, res: Response) {
   return res.json(envelope(req, { enrollment_id: enrollmentId, occurrence_date: occurrence.data.occurrence_date, lessons: lessons.data ?? [], reports: summaries, latest_prior_report: latestPriorReport }))
 }
 
+/** Course lessons in order and the ids of lessons the enrollment has completed. */
+async function lessonCompletion(req: Request, enrollmentId: string, courseId: string) {
+  const [lessons, reports] = await Promise.all([
+    req.db!.from('lessons').select('id,sequence,title').eq('course_id', courseId).order('sequence', { ascending: true }),
+    req.db!.from('occurrence_reports').select('lesson_id,is_completed').eq('enrollment_id', enrollmentId).not('lesson_id', 'is', null),
+  ])
+  if (lessons.error) throw mapDatabaseError(lessons.error); if (reports.error) throw mapDatabaseError(reports.error)
+  return { lessons: lessons.data ?? [], completed: new Set((reports.data ?? []).filter((row) => row.is_completed).map((row) => row.lesson_id)) }
+}
+
 async function enrollmentProgress(req: Request, res: Response) {
   const enrollmentId = uuid.parse(req.params.id)
   const enrollment = await req.db!.from('enrollments').select('id,course_id,lesson_number,status,class_session_id').eq('id', enrollmentId).maybeSingle()
   if (enrollment.error) throw mapDatabaseError(enrollment.error)
   if (!enrollment.data) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found')
   await permission(req, 'teaching.enrollments.read', enrollment.data.class_session_id)
-  const lessons = await req.db!.from('lessons').select('id,sequence,title').eq('course_id', enrollment.data.course_id).order('sequence', { ascending: true })
-  const reports = await req.db!.from('occurrence_reports').select('lesson_id,is_completed').eq('enrollment_id', enrollmentId).not('lesson_id', 'is', null)
-  if (lessons.error) throw mapDatabaseError(lessons.error); if (reports.error) throw mapDatabaseError(reports.error)
-  const completed = new Set((reports.data ?? []).filter((row) => row.is_completed).map((row) => row.lesson_id))
-  const nextLesson = (lessons.data ?? []).find((lesson) => !completed.has(lesson.id)) ?? null
+  const { lessons, completed } = await lessonCompletion(req, enrollmentId, enrollment.data.course_id)
+  const nextLesson = lessons.find((lesson) => !completed.has(lesson.id)) ?? null
   return res.json(envelope(req, { enrollment_id: enrollmentId, current_lesson_number: enrollment.data.lesson_number, next_lesson: nextLesson, completed_lesson_ids: [...completed] }))
 }
 
@@ -289,13 +296,8 @@ async function recalculateProgress(req: Request, res: Response) {
   if (enrollment.error) throw mapDatabaseError(enrollment.error); if (!enrollment.data) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found')
   await permission(req, 'teaching.enrollments.update', enrollment.data.class_session_id)
   const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
-  const [lessons, reports] = await Promise.all([
-    req.db!.from('lessons').select('id,sequence').eq('course_id', enrollment.data.course_id).order('sequence', { ascending: true }),
-    req.db!.from('occurrence_reports').select('lesson_id,is_completed').eq('enrollment_id', enrollmentId).not('lesson_id', 'is', null),
-  ])
-  if (lessons.error) throw mapDatabaseError(lessons.error); if (reports.error) throw mapDatabaseError(reports.error)
-  const completed = new Set((reports.data ?? []).filter((row) => row.is_completed).map((row) => row.lesson_id))
-  const lessonNumber = (lessons.data ?? []).find((lesson) => !completed.has(lesson.id))?.sequence ?? enrollment.data.lesson_number ?? 1
+  const { lessons, completed } = await lessonCompletion(req, enrollmentId, enrollment.data.course_id)
+  const lessonNumber = lessons.find((lesson) => !completed.has(lesson.id))?.sequence ?? enrollment.data.lesson_number ?? 1
   const updated = await req.db!.from('enrollments').update({ lesson_number: lessonNumber }).eq('id', enrollmentId).select('id,lesson_number').single()
   if (updated.error) throw mapDatabaseError(updated.error)
   const body = envelope(req, updated.data); await complete(req, 200, body); return res.json(body)
