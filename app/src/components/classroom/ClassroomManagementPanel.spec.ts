@@ -9,10 +9,12 @@ vi.mock('vue-i18n', async importOriginal => ({
     useI18n: () => ({ t: (key: string) => key }),
 }))
 vi.mock('vue-toastification', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }))
-vi.mock('@/services/rbac/PermissionPolicyService', () => ({
-    INCOMPLETE_REPORT_PERMISSION: 'reports.incomplete.receive',
-    PermissionPolicyService: { replacePolicies: vi.fn(), replaceDashboardScheduleModes: vi.fn(), canManageRbac: vi.fn().mockResolvedValue(true) }
-}))
+vi.mock('@/services/rbac/PermissionPolicyService', async importOriginal => {
+    const actual = await importOriginal<typeof import('@/services/rbac/PermissionPolicyService')>()
+    // Keep the pure change builders; stub only the network calls.
+    Object.assign(actual.PermissionPolicyService, { applyPolicyChanges: vi.fn(), canManageRbac: vi.fn().mockResolvedValue(true) })
+    return actual
+})
 
 const roles: RoleDTO[] = [{ id: 'teacher', name: 'Teacher', is_system: true, sort_order: 1 }]
 const sessions = [
@@ -50,14 +52,16 @@ describe('ClassroomManagementPanel', () => {
         await save.trigger('click')
         await flushPromises()
 
-        expect(PermissionPolicyService.replacePolicies).toHaveBeenCalledWith(
-            'reports.incomplete.receive',
+        // One save covers the notification and schedule permissions, so each role is patched once.
+        expect(PermissionPolicyService.applyPolicyChanges).toHaveBeenCalledTimes(1)
+        expect(PermissionPolicyService.applyPolicyChanges).toHaveBeenCalledWith(
             { type: 'class_session', id: 'session-b' },
-            [{ role_id: 'teacher', effect: 'allow' }]
-        )
-        expect(PermissionPolicyService.replaceDashboardScheduleModes).toHaveBeenCalledWith(
-            { type: 'class_session', id: 'session-b' },
-            { teacher: 'hidden' }
+            [
+                { role_id: 'teacher', permission_key: 'reports.incomplete.receive', effect: 'allow' },
+                { role_id: 'teacher', permission_key: 'teaching.dashboard.schedule.view', effect: 'deny' },
+                { role_id: 'teacher', permission_key: 'teaching.dashboard.schedule.all', effect: null }
+            ],
+            []
         )
         wrapper.unmount()
     })
@@ -95,7 +99,6 @@ describe('ClassroomManagementPanel', () => {
         const policyButtons = wrapper.findAll('[role="group"] button')
         expect(policyButtons.every(button => button.attributes('disabled') !== undefined)).toBe(true)
         expect(wrapper.findAll('button').some(button => button.text().includes('classroom.save_notification_settings'))).toBe(false)
-        expect(PermissionPolicyService.replacePolicies).not.toHaveBeenCalled()
-        expect(PermissionPolicyService.replaceDashboardScheduleModes).not.toHaveBeenCalled()
+        expect(PermissionPolicyService.applyPolicyChanges).not.toHaveBeenCalled()
         wrapper.unmount()
     })})

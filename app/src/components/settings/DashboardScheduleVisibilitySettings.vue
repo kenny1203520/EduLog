@@ -47,12 +47,16 @@ async function save() {
     if (!canManageRbac.value) return
     saving.value = true
     try {
-        await PermissionPolicyService.replaceDashboardScheduleModes({ type: 'system', id: null }, selections.value)
+        await PermissionPolicyService.saveDashboardScheduleModes({ type: 'system', id: null }, selections.value, policies.value)
         policies.value = await PermissionPolicyService.getDashboardSchedulePolicies()
         syncSelections()
         toast.success(t('settings.dashboard_schedule.saved'))
     } catch (error: any) {
         reportError(error)
+        if (error?.kind === 'conflict') {
+            policies.value = await PermissionPolicyService.getDashboardSchedulePolicies().catch(() => policies.value)
+            syncSelections()
+        }
     } finally {
         saving.value = false
     }

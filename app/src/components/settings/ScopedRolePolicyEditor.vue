@@ -77,7 +77,7 @@ function sourceLabel(roleId: string, inherited = false) {
 }
 
 function update(roleId: string, effect: PolicySelection) {
-    if (props.disabled) return
+    if (props.disabled || props.roles.find(role => role.id === roleId)?.is_protected) return
     emit('update:modelValue', { ...props.modelValue, [roleId]: effect })
 }
 </script>
@@ -89,6 +89,7 @@ function update(roleId: string, effect: PolicySelection) {
             :class="compact ? 'p-3 md:grid-cols-[minmax(8rem,1fr)_auto]' : 'p-4 lg:grid-cols-[minmax(10rem,1fr)_auto_minmax(12rem,1fr)] lg:items-center'">
             <div class="min-w-0">
                 <p class="truncate font-black text-gray-800" :title="roleDisplayName(role, t)">{{ roleDisplayName(role, t) }}</p>
+                <p v-if="role.is_protected" class="mt-1 text-xs font-bold text-amber-700">{{ $t('rbac.protected_read_only') }}</p>
                 <p class="mt-1 text-xs font-bold text-gray-400">
                     {{ $t(`${labelNamespace}.effective`) }}:
                     <span :class="effectiveFor(role.id).effect === 'deny' ? 'text-red-600' : effectiveFor(role.id).effect === 'allow' ? 'text-emerald-600' : 'text-gray-500'">
@@ -104,7 +105,7 @@ function update(roleId: string, effect: PolicySelection) {
                     :class="modelValue[role.id] === effect
                         ? effect === 'allow' ? 'bg-emerald-600 text-white' : effect === 'deny' ? 'bg-red-600 text-white' : 'bg-gray-700 text-white'
                         : 'text-gray-500 hover:bg-gray-100'"
-                    :aria-pressed="modelValue[role.id] === effect" :disabled="disabled"
+                    :aria-pressed="modelValue[role.id] === effect" :disabled="disabled || role.is_protected"
                     @click="update(role.id, effect)">
                     {{ $t(`${labelNamespace}.${effect}`) }}
                 </button>

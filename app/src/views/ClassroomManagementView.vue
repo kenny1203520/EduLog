@@ -7,8 +7,8 @@ import { SessionService } from '@/services/session/SessionService'
 import { VisibilityPreferenceService } from '@/services/preference/VisibilityPreferenceService'
 import { TeacherService } from '@/services/teacher/TeacherService'
 import { RoleService } from '@/services/rbac/RoleService'
-import { INCOMPLETE_REPORT_PERMISSION, PermissionPolicyService } from '@/services/rbac/PermissionPolicyService'
-import type { PermissionDTO, RoleDTO, RolePermissionPolicyDTO } from '@/models/Rbac'
+import { INCOMPLETE_REPORT_PERMISSION, PermissionPolicyService, type KeyedPolicy, type PolicyScopeTarget } from '@/services/rbac/PermissionPolicyService'
+import type { RoleDTO } from '@/models/Rbac'
 import type { RolePolicySelections } from '@/components/settings/ScopedRolePolicyEditor.vue'
 import { roleDisplayName } from '@/utils/roleDisplay'
 import ScopedRolePolicyEditor from '@/components/settings/ScopedRolePolicyEditor.vue'
@@ -127,8 +127,8 @@ const teacherRoleCatalogError = ref(false)
 const teacherRoleManageAllowed = ref<boolean | null>(null)
 const teacherRolePermissionError = ref(false)
 let teacherRoleCatalogSequence = 0
-const notificationPermission = ref<PermissionDTO | null>(null)
-const notificationPolicies = ref<RolePermissionPolicyDTO[]>([])
+const notificationPoliciesLoaded = ref(false)
+const notificationPolicies = ref<KeyedPolicy[]>([])
 const roomPolicySelections = ref<RolePolicySelections>({})
 const sessionPolicySelections = ref<RolePolicySelections>({})
 const schedulePolicies = ref<DashboardSchedulePolicies>({ all: [], view: [] })
@@ -201,9 +201,8 @@ const newSession = ref<Partial<ClassSessionDTO>>({
 const editingSession = ref<ClassSessionDTO | null>(null)
 
 async function loadNotificationPolicies() {
-    const permission = await PermissionPolicyService.getPermission(INCOMPLETE_REPORT_PERMISSION)
-    notificationPermission.value = permission
-    notificationPolicies.value = await PermissionPolicyService.getPolicies(permission.id)
+    notificationPolicies.value = await PermissionPolicyService.getPolicies(INCOMPLETE_REPORT_PERMISSION)
+    notificationPoliciesLoaded.value = true
 }
 
 function policySelectionsFor(scopeType: 'classroom' | 'class_session', scopeId?: string | null): RolePolicySelections {
@@ -214,16 +213,21 @@ function policySelectionsFor(scopeType: 'classroom' | 'class_session', scopeId?:
     })) as RolePolicySelections
 }
 
-function policyOverrides(selections: RolePolicySelections) {
-    return roles.value.flatMap(role => {
-        const effect = selections[role.id]
-        return effect === 'allow' || effect === 'deny' ? [{ role_id: role.id, effect }] : []
-    })
+/** Saves the incomplete-report and today's-schedule selections of one scope together. */
+async function saveScopePolicies(scope: PolicyScopeTarget, notification: RolePolicySelections, schedule: DashboardScheduleSelections) {
+    try {
+        await PermissionPolicyService.applyPolicyChanges(scope, [
+            ...PermissionPolicyService.selectionChanges(INCOMPLETE_REPORT_PERMISSION, notification),
+            ...PermissionPolicyService.scheduleModeChanges(schedule)
+        ], [...notificationPolicies.value, ...PermissionPolicyService.scheduleBaseline(schedulePolicies.value)])
+    } catch (error: any) {
+        if (error?.kind === 'conflict') await refreshRolePolicies().catch(() => undefined)
+        throw error
+    }
 }
 
 async function refreshNotificationPolicies() {
-    if (!notificationPermission.value) return loadNotificationPolicies()
-    notificationPolicies.value = await PermissionPolicyService.getPolicies(notificationPermission.value.id)
+    return loadNotificationPolicies()
 }
 
 async function loadSchedulePolicies() {
@@ -332,7 +336,7 @@ async function ensureEditorDependencies() {
         courses.value = result.data
     }
     if (teachersList.value.length === 0) await loadTeachers()
-    if (!notificationPermission.value) await loadNotificationPolicies()
+    if (!notificationPoliciesLoaded.value) await loadNotificationPolicies()
     if (!schedulePoliciesLoaded.value) await loadSchedulePolicies()
 }
 
@@ -590,12 +594,7 @@ async function saveClassroom() {
 
         // Switch to edit mode immediately so a policy failure cannot create a duplicate room on retry.
         editingClassroom.value = saved
-        await PermissionPolicyService.replacePolicies(
-            INCOMPLETE_REPORT_PERMISSION,
-            { type: 'classroom', id: saved.id },
-            policyOverrides(roomPolicySelections.value)
-        )
-        await PermissionPolicyService.replaceDashboardScheduleModes({ type: 'classroom', id: saved.id }, roomScheduleSelections.value)
+        await saveScopePolicies({ type: 'classroom', id: saved.id }, roomPolicySelections.value, roomScheduleSelections.value)
         AggregateService.clearCache()
         await Promise.all([loadRooms(), loadAllRooms(), refreshRolePolicies()])
         closeRoomModal()
@@ -746,12 +745,7 @@ async function saveSession() {
             await TeacherService.replaceTeachersForSession(sessionId, assignmentsToSave)
             teacherAssignmentBaseline.value = assignmentsToSave.map(item => ({ ...item }))
         }
-        await PermissionPolicyService.replacePolicies(
-            INCOMPLETE_REPORT_PERMISSION,
-            { type: 'class_session', id: sessionId },
-            policyOverrides(sessionPolicySelections.value)
-        )
-        await PermissionPolicyService.replaceDashboardScheduleModes({ type: 'class_session', id: sessionId }, sessionScheduleSelections.value)
+        await saveScopePolicies({ type: 'class_session', id: sessionId }, sessionPolicySelections.value, sessionScheduleSelections.value)
         const reconciliation = await OccurrenceSyncService.syncSessionOccurrences(sessionId)
 
         AggregateService.clearCache()
