@@ -242,7 +242,6 @@ BEGIN
   END IF;
   IF to_regprocedure('public.has_api_permission(uuid,text,uuid,uuid)') IS NULL
      OR to_regclass('public.rbac_policy_epoch') IS NULL
-     OR to_regprocedure('public.get_dashboard_page(date,date)') IS NULL
      OR to_regprocedure('public.get_dashboard_counts()') IS NULL
      OR to_regprocedure('public.get_courses_overview(integer,integer,text,text)') IS NULL
      OR to_regprocedure('public.get_teachers_overview(integer,integer,text,text)') IS NULL
@@ -251,7 +250,6 @@ BEGIN
      OR to_regprocedure('public.get_holidays_overview(integer,integer,text,text,boolean)') IS NULL
      OR to_regprocedure('public.get_class_session_workspace(uuid)') IS NULL
      OR to_regprocedure('public.get_student_profile_page(uuid)') IS NULL
-     OR NOT has_function_privilege('authenticated', 'public.get_dashboard_page(date,date)', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.get_dashboard_counts()', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.get_students_overview(integer,integer,text,text)', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.get_courses_overview(integer,integer,text,text)', 'EXECUTE')
@@ -261,7 +259,6 @@ BEGIN
      OR NOT has_function_privilege('authenticated', 'public.get_holidays_overview(integer,integer,text,text,boolean)', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.get_class_session_workspace(uuid)', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.get_student_profile_page(uuid)', 'EXECUTE')
-     OR has_function_privilege('anon', 'public.get_dashboard_page(date,date)', 'EXECUTE')
      OR has_function_privilege('anon', 'public.get_dashboard_counts()', 'EXECUTE')
      OR has_function_privilege('anon', 'public.get_students_overview(integer,integer,text,text)', 'EXECUTE')
      OR has_function_privilege('anon', 'public.get_courses_overview(integer,integer,text,text)', 'EXECUTE')
@@ -293,13 +290,15 @@ BEGIN
     RAISE EXCEPTION 'dashboard read model dependencies lack authenticated SELECT grants';
   END IF;
 
-  IF EXISTS (
-    SELECT 1
-    FROM pg_proc
-    WHERE oid = to_regprocedure('public.get_dashboard_page(date,date)')
-      AND prosecdef
-  ) THEN
-    RAISE EXCEPTION 'dashboard read model must execute as the caller';
+  IF to_regprocedure('public.get_dashboard_page(date,date)') IS NOT NULL
+     OR to_regprocedure('public.debug_report_access(uuid)') IS NOT NULL
+     OR to_regprocedure('public.grant_admin_access(text)') IS NOT NULL
+     OR to_regprocedure('public.rbac_upsert_classroom_assignment(uuid,uuid,uuid,uuid,date,date,bigint)') IS NOT NULL
+     OR to_regprocedure('public.rbac_delete_classroom_assignment(uuid,uuid,bigint)') IS NOT NULL
+     OR to_regclass('public.teacher_role_types') IS NOT NULL
+     OR to_regclass('public.incomplete_report_notification_rules') IS NOT NULL
+     OR to_regclass('public.documents') IS NOT NULL THEN
+    RAISE EXCEPTION 'unused legacy objects dropped by 1000156 still exist';
   END IF;
 
   IF NOT EXISTS (
@@ -825,20 +824,11 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.get_dashboard_page(date, date) TO authenticated;
 SET ROLE authenticated;
 SELECT set_config('request.jwt.claim.role', 'authenticated', false);
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
 DO $$
-DECLARE page jsonb;
 BEGIN
-  page := public.get_dashboard_page(current_date, current_date);
-  IF jsonb_typeof(page) <> 'object'
-     OR page->'stats' IS NULL
-     OR jsonb_typeof(page->'pendingReports') <> 'array'
-     OR jsonb_typeof(page->'occurrences') <> 'array' THEN
-    RAISE EXCEPTION 'dashboard page read model returned an invalid response shape';
-  END IF;
   IF jsonb_typeof(public.get_dashboard_counts()) <> 'object'
      OR (public.get_dashboard_counts() ? 'totalStudents') IS FALSE
      OR (public.get_dashboard_counts() ? 'activeCourses') IS FALSE THEN
