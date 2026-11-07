@@ -16,7 +16,8 @@ export interface CatalogModel {
     supportsStructuredOutput?: boolean
 }
 
-export type ModelCatalog = { supported: true, models: CatalogModel[], fetchedAt: string } | { supported: false, reason: string }
+/** `reason` is a stable code (see server modelCatalog.ts); `detail` is a short diagnostic such as "HTTP 400 …". */
+export type ModelCatalog = { supported: true, models: CatalogModel[], fetchedAt: string } | { supported: false, reason: string, detail?: string }
 
 /** Outcome of the test call; status and message are what the provider said, without secrets. */
 export interface CredentialTestResult {

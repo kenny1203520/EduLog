@@ -135,6 +135,7 @@ onMounted(load)
                     <label class="block text-sm font-bold text-gray-700">{{ credentialForm.provider === 'ollama' ? t('ai.settings.base_url') : t('ai.settings.base_url_optional') }}
                         <input v-model="credentialForm.base_url" type="url" maxlength="2048" :required="credentialForm.provider === 'ollama'"
                             class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 px-3 text-sm" :placeholder="credentialForm.provider === 'ollama' ? 'http://ollama:11434' : ''"  :aria-label="credentialForm.provider === 'ollama' ? 'http://ollama:11434' : ''"/>
+                        <span v-if="credentialForm.provider !== 'ollama'" class="mt-1 block text-xs font-normal text-gray-500">{{ t('ai.settings.base_url_optional_hint') }}</span>
                     </label>
                     <div class="md:col-span-2">
                         <button type="submit" class="min-h-11 rounded-xl bg-emerald-600 px-4 text-sm font-black text-white disabled:opacity-50" :disabled="saving || !overview.secret_storage_available">{{ t('ai.settings.add_key') }}</button>
