@@ -28,7 +28,6 @@ DECLARE
   failed boolean;
   row_count integer;
 BEGIN
-  SELECT id INTO v_teaching_id FROM public.teachings WHERE is_global LIMIT 1;
   INSERT INTO auth.users(id, email) VALUES (owner_id, 'transfer-cancel-owner@example.test');
   INSERT INTO public.classrooms(id, name, user_id, teaching_id) VALUES (v_classroom_id, 'Cancel fixture classroom', owner_id, v_teaching_id);
   INSERT INTO public.courses(id, subject, stage, user_id, teaching_id) VALUES (v_course_id, 'Cancel fixture', 'primary', owner_id, v_teaching_id);

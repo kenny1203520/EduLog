@@ -68,10 +68,8 @@ services:
       # Uncomment to use Big Query backend for analytics
       # NEXT_ANALYTICS_BACKEND_PROVIDER: bigquery
       SNIPPETS_MANAGEMENT_FOLDER: /app/snippets
-      EDGE_FUNCTIONS_MANAGEMENT_FOLDER: /app/edge-functions
     volumes:
       - ./supabase/volumes/snippets:/app/snippets:Z
-      - ./supabase/volumes/functions:/app/edge-functions:Z
 
   kong:
     networks:
@@ -448,45 +446,6 @@ services:
       PG_META_DB_PASSWORD: ${POSTGRES_PASSWORD}
       CRYPTO_KEY: ${PG_META_CRYPTO_KEY}
 
-  functions:
-    networks:
-      - net
-    container_name: edulog-edge-functions
-    image: supabase/edge-runtime:v1.74.0
-    restart: unless-stopped
-    volumes:
-      - ./supabase/volumes/functions:/home/deno/functions:Z
-      - deno-cache:/root/.cache/deno
-    depends_on:
-      kong:
-        condition: service_healthy
-      # analytics:
-      #   condition: service_healthy
-    environment:
-      # Legacy symmetric HS256 key
-      JWT_SECRET: ${JWT_SECRET}
-      SUPABASE_URL: http://kong:8000
-      SUPABASE_PUBLIC_URL: ${SUPABASE_PUBLIC_URL}
-      # Legacy API keys (HS256-signed JWTs)
-      SUPABASE_ANON_KEY: ${ANON_KEY}
-      SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
-      # New opaque API keys
-      SUPABASE_PUBLISHABLE_KEYS: "{\"default\":\"${SUPABASE_PUBLISHABLE_KEY:-}\"}"
-      SUPABASE_SECRET_KEYS: "{\"default\":\"${SUPABASE_SECRET_KEY:-}\"}"
-      SUPABASE_DB_URL: postgresql://postgres:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
-      # TODO: Allow configuring VERIFY_JWT per function.
-      VERIFY_JWT: "${FUNCTIONS_VERIFY_JWT}"
-      # EduLog edge-function settings (read in supabase/volumes/functions/_shared/env.ts).
-      API_ALLOWED_ORIGINS: ${EDULOG_ALLOWED_ORIGINS:-}
-      ENVIRONMENT: ${EDULOG_FUNCTIONS_ENVIRONMENT:-production}
-      API_RATE_LIMIT_PER_MINUTE: ${EDULOG_API_RATE_LIMIT_PER_MINUTE:-120}
-    command: 
-      [
-        "start",
-        "--main-service",
-        "/home/deno/functions/main"
-      ]
-
   analytics:
     networks:
       - net
@@ -772,8 +731,6 @@ services:
 volumes:
   db-config:
     name: supabase_db-config
-  deno-cache:
-    name: supabase_deno-cache
 
 networks:
   net:

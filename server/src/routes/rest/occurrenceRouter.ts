@@ -1,4 +1,4 @@
-import { Router, type NextFunction, type Request, type Response } from 'express'
+import { Router, type Request, type Response } from 'express'
 import { z } from 'zod'
 import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { complete, idempotency } from './resourceRouter.js'
@@ -6,12 +6,11 @@ import { setAuditContext } from '../../http/context.js'
 import { requireAuthorizationDecision } from '../../auth/authorization.js'
 import { matchScheduleRule, nextDate, type ScheduleRule } from '../../domain/occurrenceSchedule.js'
 import { findReportProgressGaps } from '../../domain/reportProgressGaps.js'
-import { envelope, permission, uuid } from './domainAccess.js'
+import { envelope, permission, uuid, wrap } from './domainAccess.js'
 import { assertOccurrencePermission, transferRpcError } from './transferRouter.js'
 
 const fields = 'id,class_session_id,occurrence_date,status,notes,original_start_time,original_end_time,actual_start_time,actual_end_time,teacher_ids,teacher_attendance,is_conducted,time_zone,created_at,updated_at'
 export const occurrenceBodySchema = z.object({ status: z.enum(['scheduled', 'completed', 'cancelled']).optional(), notes: z.string().max(10000).nullable().optional(), actual_start_time: z.string().max(32).nullable().optional(), actual_end_time: z.string().max(32).nullable().optional(), teacher_attendance: z.record(z.string(), z.boolean()).optional(), is_conducted: z.boolean().optional() }).strict()
-function wrap(handler: (req: Request, res: Response) => Promise<unknown>) { return (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res)).catch(next) }
 async function authorize(req: Request, id: string, action: 'update' | 'delete' = 'update') {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const occurrence = await req.db.from('class_occurrences').select('class_session_id,occurrence_date').eq('id', id).maybeSingle(); if (occurrence.error) throw mapDatabaseError(occurrence.error); if (!occurrence.data) throw new ApiError(404, 'NOT_FOUND', 'Occurrence was not found')
@@ -174,25 +173,36 @@ async function occurrenceItem(req: Request, res: Response) {
   return res.json(envelope(req, data))
 }
 
-async function preferredOccurrence(req: Request, res: Response) {
+/** Nearest occurrence of a session before (lt/lte) or after (gt) a date. */
+function adjacentOccurrence(req: Request, sessionId: string, date: string, op: 'lt' | 'lte' | 'gt') {
+  const builder = req.db!.from('class_occurrences').select(occurrenceFields).eq('class_session_id', sessionId)
+  const filtered = op === 'gt' ? builder.gt('occurrence_date', date) : op === 'lt' ? builder.lt('occurrence_date', date) : builder.lte('occurrence_date', date)
+  return filtered.order('occurrence_date', { ascending: op === 'gt' }).limit(1).maybeSingle()
+}
+
+/** Parses `:id` and `?date=` and checks occurrence read access on that session. */
+async function readSessionDate(req: Request) {
   const sessionId = uuid.parse(req.params.id)
   const query = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).strict().parse(req.query)
   await permission(req, 'teaching.occurrences.read', sessionId)
-  const previous = await req.db!.from('class_occurrences').select(occurrenceFields).eq('class_session_id', sessionId).lte('occurrence_date', query.date).order('occurrence_date', { ascending: false }).limit(1).maybeSingle()
+  return { sessionId, query }
+}
+
+async function preferredOccurrence(req: Request, res: Response) {
+  const { sessionId, query } = await readSessionDate(req)
+  const previous = await adjacentOccurrence(req, sessionId, query.date, 'lte')
   if (previous.error) throw mapDatabaseError(previous.error)
   if (previous.data) return res.json(envelope(req, previous.data))
-  const next = await req.db!.from('class_occurrences').select(occurrenceFields).eq('class_session_id', sessionId).gt('occurrence_date', query.date).order('occurrence_date', { ascending: true }).limit(1).maybeSingle()
+  const next = await adjacentOccurrence(req, sessionId, query.date, 'gt')
   if (next.error) throw mapDatabaseError(next.error)
   return res.json(envelope(req, next.data ?? null))
 }
 
 async function navigation(req: Request, res: Response) {
-  const sessionId = uuid.parse(req.params.id)
-  const query = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).strict().parse(req.query)
-  await permission(req, 'teaching.occurrences.read', sessionId)
+  const { sessionId, query } = await readSessionDate(req)
   const [previous, next] = await Promise.all([
-    req.db!.from('class_occurrences').select(occurrenceFields).eq('class_session_id', sessionId).lt('occurrence_date', query.date).order('occurrence_date', { ascending: false }).limit(1).maybeSingle(),
-    req.db!.from('class_occurrences').select(occurrenceFields).eq('class_session_id', sessionId).gt('occurrence_date', query.date).order('occurrence_date', { ascending: true }).limit(1).maybeSingle(),
+    adjacentOccurrence(req, sessionId, query.date, 'lt'),
+    adjacentOccurrence(req, sessionId, query.date, 'gt'),
   ])
   if (previous.error) throw mapDatabaseError(previous.error)
   if (next.error) throw mapDatabaseError(next.error)
