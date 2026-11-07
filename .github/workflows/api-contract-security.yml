@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
-      - 'supabase/volumes/functions/**'
+      - 'supabase/migrations/**'
       - 'supabase/tests/**'
       - '.github/workflows/api-contract-security.yml'
   push:
@@ -19,7 +19,7 @@ permissions:
   contents: read
 
 jobs:
-  deno-api-contract:
+  deno-static:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -28,41 +28,13 @@ jobs:
       - uses: denoland/setup-deno@11b63cf76cfcafb4e43f97b6cad24d8e8438f62d # v1
         with:
           deno-version: v1.x
-      - name: Typecheck API and shared security modules
-        run: >-
-          deno check
-          supabase/volumes/functions/_shared/api.ts
-          supabase/volumes/functions/_shared/telemetry.ts
-          supabase/volumes/functions/_shared/validation.ts
-          supabase/volumes/functions/api-v1/index.ts
-          supabase/volumes/functions/api-v1/openapi.ts
-          supabase/volumes/functions/api-v1/controllers/types.ts
-          supabase/volumes/functions/api-v1/controllers/systemController.ts
-          supabase/volumes/functions/api-v1/controllers/teachingMembersController.ts
-          supabase/volumes/functions/api-v1/controllers/resourceController.ts
-          supabase/volumes/functions/api-v1/resourceRegistry.ts
-          supabase/volumes/functions/api-v1/openapiRegistry.ts
-          supabase/volumes/functions/api-v1/resourceService.ts
-      - name: Run migration and API contract/security tests
+      - name: Run migration and security static tests
         run: >-
           deno test --allow-read
           supabase/tests/migration_chain_static_test.ts
           supabase/tests/core_rls_fixture_static_test.ts
           supabase/tests/teacher_permission_migration_static_test.ts
           supabase/tests/migration_hardening_static_test.ts
-          supabase/tests/api_contract_static_test.ts
-          supabase/tests/shared_security_test.ts
-          supabase/tests/auth_security_static_test.ts
-          supabase/tests/api_shared_contract_test.ts
-          supabase/tests/api_registry_test.ts
-          supabase/tests/api_resource_validation_test.ts
-          supabase/tests/api_sensitive_projection_test.ts
-          supabase/tests/api_scoped_authorization_static_test.ts
           supabase/tests/frontend_runtime_config_static_test.ts
-          supabase/tests/api_system_contract_test.ts
-          supabase/tests/api_system_endpoint_contract_test.ts
           supabase/tests/rate_limit_static_test.ts
-          supabase/tests/auth_failure_matrix_static_test.ts
-          supabase/tests/legacy_adapter_static_test.ts
-          supabase/tests/telemetry_context_test.ts
           supabase/tests/database_linter_static_test.ts

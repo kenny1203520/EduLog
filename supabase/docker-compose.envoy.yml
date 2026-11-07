@@ -11,12 +11,6 @@ services:
     profiles:
       - disabled
 
-  # Rewire dependencies that require Kong to Envoy
-  functions:
-    depends_on: !override
-      api-gw:
-        condition: service_healthy
-
   # Keep the EduLog API healthy behind the same gateway replacement.
   api:
     depends_on: !override
