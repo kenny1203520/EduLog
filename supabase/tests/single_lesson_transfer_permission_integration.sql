@@ -23,7 +23,6 @@ DECLARE
   session_b uuid := '7f000000-0000-4000-8000-0000000000b1';
   week integer;
 BEGIN
-  SELECT id INTO v_teaching_id FROM public.teachings WHERE is_global LIMIT 1;
   INSERT INTO auth.users(id, email) VALUES
     (owner_id, 'permission-owner@example.test'),
     (rbac_user, 'permission-rbac@example.test'),

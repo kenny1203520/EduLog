@@ -228,32 +228,6 @@ resources:
                                     principals:
                                       - any: true
                                        
-                      - name: functions-v1-all
-                        match:
-                          prefix: /functions/v1/
-                        route:
-                          cluster: functions
-                          prefix_rewrite: /
-                          timeout: 150s
-                        request_headers_to_add:
-                          - header:
-                              key: X-Forwarded-Prefix
-                              value: /functions/v1/
-                            append_action: ADD_IF_ABSENT
-                        typed_per_filter_config:
-                          envoy.filters.http.rbac:
-                            '@type': >-
-                              type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute
-                            rbac:
-                              rules:
-                                action: ALLOW
-                                policies:
-                                  allow_all:
-                                    permissions:
-                                      - any: true
-                                    principals:
-                                      - any: true
-                                      
                       - match:
                           prefix: /storage/v1/
                         route:
