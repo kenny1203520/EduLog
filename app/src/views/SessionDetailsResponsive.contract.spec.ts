@@ -2,7 +2,20 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-const source = readFileSync(resolve(process.cwd(), 'src/views/SessionDetailsView.vue'), 'utf8')
+// The class page is split into the view, its composables and its section components.
+// The contract covers the page as a whole, so it reads all of them.
+const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8')
+const SESSION_DETAILS_FILES = [
+    'src/views/SessionDetailsView.vue',
+    'src/composables/session/useSessionWorkspace.ts',
+    'src/composables/session/useSessionReportEditor.ts',
+    'src/composables/session/useSessionRealtime.ts',
+    'src/composables/session/useStudentProgress.ts',
+    'src/composables/session/useSessionCalendar.ts',
+    'src/components/classroom/SessionHeader.vue',
+    'src/components/classroom/OccurrenceNavigatorCard.vue',
+]
+const source = SESSION_DETAILS_FILES.map(read).join('\n')
 
 describe('SessionDetails responsive and loading contract', () => {
     it('renders retry state separately from the initialized classroom content', () => {
@@ -14,8 +27,12 @@ describe('SessionDetails responsive and loading contract', () => {
     it('uses actual adjacent occurrence navigation and disables boundaries', () => {
         expect(source).toContain("moveOccurrence('previous')")
         expect(source).toContain("moveOccurrence('next')")
-        expect(source).toContain(':disabled="!previousOccurrence || isOccurrenceLoading"')
-        expect(source).toContain(':disabled="!nextOccurrence || isOccurrenceLoading"')
+        // OccurrenceNavigatorCard receives the adjacency as has-previous/has-next.
+        expect(source).toContain(':has-previous="Boolean(previousOccurrence)"')
+        expect(source).toContain(':has-next="Boolean(nextOccurrence)"')
+        expect(source).toContain(':is-loading="isOccurrenceLoading"')
+        expect(source).toContain(':disabled="!hasPrevious || isLoading"')
+        expect(source).toContain(':disabled="!hasNext || isLoading"')
         expect(source).not.toContain('moveWeek(')
     })
 

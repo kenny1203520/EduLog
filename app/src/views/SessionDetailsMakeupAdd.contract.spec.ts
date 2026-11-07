@@ -2,8 +2,14 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-const viewSource = readFileSync(resolve(process.cwd(), 'src/views/SessionDetailsView.vue'), 'utf8')
-const commandSource = readFileSync(resolve(process.cwd(), 'src/services/enrollment/EnrollmentCommandService.ts'), 'utf8')
+const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8').replace(/\r\n/g, '\n')
+// The make-up flow lives in useMakeupEnrollment; the roster refresh it triggers
+// lives in useSessionWorkspace; the inline error is rendered by MakeupStudentModal.
+const flowSource = read('src/composables/session/useMakeupEnrollment.ts')
+const workspaceSource = read('src/composables/session/useSessionWorkspace.ts')
+const modalSource = read('src/components/classroom/MakeupStudentModal.vue')
+const viewSource = read('src/views/SessionDetailsView.vue')
+const commandSource = read('src/services/enrollment/EnrollmentCommandService.ts')
 
 describe('quick make-up enrollment flow contract', () => {
     it('uses the specialized exact-date occurrence query instead of generic filters', () => {
@@ -16,22 +22,28 @@ describe('quick make-up enrollment flow contract', () => {
     })
 
     it('refreshes the displayed date roster and summaries after a makeup report is committed', () => {
-        expect(viewSource).toContain('await loadWorkspaceRoster(occurrenceDate, true)')
-        expect(viewSource).toContain('await loadReportsForCurrentOccurrence({ createMissing: false })')
-        expect(viewSource).toContain('loadStudentProgressSummaries(enrollments.value, \'replace\', occurrenceDate)')
+        expect(flowSource).toContain('await options.refreshRosterForDate(normalizedJoinDate)')
+        expect(viewSource).toContain('refreshRosterForDate,')
+        const start = workspaceSource.indexOf('async function refreshRosterForDate(')
+        const refresh = workspaceSource.slice(start, workspaceSource.indexOf('\n    }\n', start))
+        expect(refresh).toContain('await loadWorkspaceRoster(occurrenceDate, true)')
+        expect(refresh).toContain('await loadReportsForCurrentOccurrence({ createMissing: false })')
+        expect(refresh).toContain('loadStudentProgressSummaries(enrollments.value, \'replace\', occurrenceDate)')
     })
 
     it('keeps the modal open and focuses a localized inline error after submit failure', () => {
-        const start = viewSource.indexOf('async function submitAddStudentToClass()')
-        const catchStart = viewSource.indexOf('} catch (error: any) {', start)
-        const catchEnd = viewSource.indexOf('\n    } finally {', catchStart)
-        const catchBody = viewSource.slice(catchStart, catchEnd)
+        const start = flowSource.indexOf('async function submitAddStudentToClass()')
+        const catchStart = flowSource.indexOf('} catch (error: any) {', start)
+        const catchEnd = flowSource.indexOf('} finally {', catchStart)
+        const catchBody = flowSource.slice(catchStart, catchEnd)
 
         expect(catchBody).toContain('makeupSubmitError.value = errorMessage')
-        expect(catchBody).toContain('makeupSubmitErrorElement.value?.focus()')
+        expect(catchBody).toContain('options.focusSubmitError()')
         expect(catchBody).not.toContain('closeAddStudentModal()')
         expect(catchBody).not.toContain('toast.error(')
-        expect(viewSource).toContain('v-if="makeupSubmitError"')
-        expect(viewSource).toContain('role="alert" tabindex="-1"')
+        expect(viewSource).toContain('focusSubmitError: () => makeupModal.value?.focusSubmitError()')
+        expect(modalSource).toContain('makeupSubmitErrorElement.value?.focus()')
+        expect(modalSource).toContain('v-if="submitError"')
+        expect(modalSource).toContain('role="alert" tabindex="-1"')
     })
 })

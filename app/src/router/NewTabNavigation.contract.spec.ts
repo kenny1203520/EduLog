@@ -57,9 +57,11 @@ describe('native internal navigation contract', () => {
         const classrooms = source('src/views/ClassroomManagementView.vue')
         expectNativeInternalLinks(tagsContaining(classrooms, 'router-link', "name: 'session-details'"))
 
-        const session = source('src/views/SessionDetailsView.vue')
-        expectNativeInternalLinks(tagsContaining(session, 'router-link', "name: 'classrooms'"))
-        expectNativeInternalLinks(tagsContaining(session, 'router-link', '/dashboard/teachers'))
+        // The class page's header and teacher modal are their own components.
+        const sessionHeader = source('src/components/classroom/SessionHeader.vue')
+        expectNativeInternalLinks(tagsContaining(sessionHeader, 'router-link', "name: 'classrooms'"))
+        const teacherModal = source('src/components/classroom/TeacherAssignmentModal.vue')
+        expectNativeInternalLinks(tagsContaining(teacherModal, 'router-link', '/dashboard/teachers'))
     })
 
     it('uses links for page navigation while preserving stateful redirects', () => {
