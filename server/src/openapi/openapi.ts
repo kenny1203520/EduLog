@@ -502,9 +502,13 @@ export function buildOpenApi() {
     patch: { ...pageBase, operationId: 'role_update', 'x-permission': 'system.roles.manage | teaching.roles.manage', parameters: [idParam, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/RoleUpdateMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
     delete: { ...pageBase, operationId: 'role_delete', 'x-permission': 'system.roles.manage | teaching.roles.manage', parameters: [idParam, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/RoleDeleteMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
+  paths['/api/roles/permission-policies'] = {
+    get: { ...pageBase, operationId: 'role_permission_policies_list', summary: 'Local policies of the given permissions across all roles and scopes, with the RBAC epoch', 'x-authorization-model': 'database-rls', parameters: [{ name: 'permission_key', in: 'query', required: true, style: 'form', explode: true, schema: { type: 'array', minItems: 1, maxItems: 10, items: { type: 'string', maxLength: 128 } } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+  }
   paths['/api/roles/{id}/permissions'] = {
     get: { ...pageBase, operationId: 'role_permissions_get', 'x-permission': 'system.roles.read | teaching.roles.read', parameters: [idParam, { name: 'scope_type', in: 'query', required: true, schema: { type: 'string', enum: ['system', 'classroom', 'class_session'] } }, { name: 'scope_id', in: 'query', schema: { type: 'string', format: 'uuid' } }], responses: { '200': { description: 'Permission matrix rows', content: { 'application/json': { schema: { $ref: '#/components/schemas/RolePermissionMatrixEnvelope' } } } }, ...errorResponses } },
     put: { ...pageBase, operationId: 'role_permissions_replace', 'x-permission': 'system.roles.manage | teaching.roles.manage', parameters: [idParam, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/RolePermissionSetMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+    patch: { ...pageBase, operationId: 'role_permissions_patch', summary: 'Set or clear selected local policies of one role at one scope; other permissions keep their local effect', 'x-permission': 'system.roles.manage | teaching.roles.manage', parameters: [idParam, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/RolePermissionPatchMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
   paths['/api/rbac/scoped-capability'] = {
     get: { ...pageBase, operationId: 'rbac_scoped_capability', summary: 'Check whether the current user can manage a role policy at a scope', 'x-authorization-model': 'permission-probe', parameters: [{ name: 'scope_type', in: 'query', required: true, schema: { type: 'string', enum: ['system', 'classroom', 'class_session'] } }, { name: 'scope_id', in: 'query', description: 'Required for classroom and class_session; omit for platform-wide teaching policy', schema: { type: 'string', format: 'uuid' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
@@ -577,10 +581,6 @@ export function buildOpenApi() {
       },
     },
   }
-  paths['/api/permissions/{permissionId}/policies'] = {
-    get: { operationId: 'permission_policies_list', deprecated: true, 'x-successor': '/api/roles/{id}/permissions', 'x-authorization-model': 'database-rls', security: [{ cookieAuth: [] }], parameters: [{ name: 'permissionId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
-    patch: { operationId: 'permission_policies_replace', deprecated: true, 'x-successor': '/api/roles/{id}/permissions', 'x-authorization-model': 'scope-permission', security: [{ cookieAuth: [] }], parameters: [{ name: 'permissionId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }, { $ref: '#/components/parameters/IdempotencyKey' }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
-  }
   const specializedSchemas = {
     RoleCreateMutation: {
       type: 'object', additionalProperties: false, required: ['domain', 'name', 'expected_epoch'],
@@ -611,6 +611,13 @@ export function buildOpenApi() {
     RolePermissionMatrixEnvelope: {
       type: 'object', required: ['data', 'meta', 'request_id', 'trace_id'],
       properties: { data: { type: 'array', items: { $ref: '#/components/schemas/RolePermissionMatrixRow' } }, meta: { type: 'object', properties: { total: { type: 'integer' }, epoch: { type: 'integer' } } }, request_id: { type: 'string' }, trace_id: { type: 'string' } },
+    },
+    RolePermissionPatchMutation: {
+      type: 'object', additionalProperties: false, required: ['scope_type', 'expected_epoch', 'changes'],
+      properties: {
+        scope_type: { type: 'string', enum: ['system', 'classroom', 'class_session'] }, scope_id: { type: ['string', 'null'], format: 'uuid' }, expected_epoch: { type: 'integer', minimum: 1 },
+        changes: { type: 'array', minItems: 1, maxItems: 1000, items: { type: 'object', additionalProperties: false, required: ['permission_id', 'effect'], properties: { permission_id: { type: 'string', format: 'uuid' }, effect: { type: ['string', 'null'], enum: ['allow', 'deny', null] } } } },
+      },
     },
     RolePermissionSetMutation: {
       type: 'object', additionalProperties: false, required: ['scope_type', 'expected_epoch', 'policies'],

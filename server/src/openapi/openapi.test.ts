@@ -39,7 +39,8 @@ describe('generated API contract', () => {
     expect(fullSpec.components.schemas.RoleCreateMutation.required).toEqual(expect.arrayContaining(['expected_epoch']))
     expect(fullSpec.components.schemas.RoleUpdateMutation.required).toEqual(expect.arrayContaining(['expected_epoch']))
     expect(fullSpec.components.schemas.RoleDeleteMutation.required).toEqual(['expected_epoch'])
-    expect(fullSpec.paths['/api/permissions/{permissionId}/policies']?.get?.deprecated).toBe(true)
+    expect(fullSpec.paths['/api/permissions/{permissionId}/policies']).toBeUndefined()
+    expect(fullSpec.components.schemas.RolePermissionPatchMutation.required).toEqual(['scope_type', 'expected_epoch', 'changes'])
   })
 
   it('documents the typed role permission matrix and user display sorting', () => {
