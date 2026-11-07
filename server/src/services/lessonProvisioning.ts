@@ -1,5 +1,5 @@
 import type { Request } from 'express'
-import { closureApplies, matchScheduleRule, plannedLessonDates, type ClosureHoliday, type ScheduleRule } from '../../domain/occurrenceSchedule.js'
+import { closureApplies, matchScheduleRule, plannedLessonDates, type ClosureHoliday, type ScheduleRule } from '../domain/occurrenceSchedule.js'
 
 export type LessonProvisioning = {
   /** Scheduled dates scanned, closed ones included. */

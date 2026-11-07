@@ -18,9 +18,6 @@ const validateAssignmentRange = (value: { effective_from?: string; effective_to?
 }
 export const assignmentSchema = assignmentFieldsSchema.superRefine(validateAssignmentRange)
 export const teacherAssignmentCreateSchema = z.object({ teachers: z.array(assignmentSchema).max(100) }).strict()
-export const teacherAssignmentUpdateSchema = assignmentFieldsSchema.partial().strict().superRefine((value, ctx) => {
-  if (value.effective_from && value.effective_to) validateAssignmentRange(value, ctx)
-})
 export const teacherAssignmentRemoveSchema = z.object({ teacher_id: z.string().uuid().optional(), effective_from: dateSchema.optional() }).strict()
 
 function wrap(handler: (req: Request, res: Response) => Promise<unknown>) {
@@ -176,25 +173,6 @@ async function remove(req: Request, res: Response) {
   return res.json(body)
 }
 
-async function update(req: Request, res: Response) {
-  const id = sessionId(req)
-  const assignmentId = typeof req.params.assignmentId === 'string' && z.string().uuid().safeParse(req.params.assignmentId).success ? req.params.assignmentId : undefined
-  if (!assignmentId) throw new ApiError(400, 'INVALID_ID', 'Assignment id is invalid')
-  const input = teacherAssignmentUpdateSchema.parse(req.body)
-  if (!Object.keys(input).length) throw new ApiError(422, 'EMPTY_MUTATION', 'At least one assignment field is required')
-  await authorize(req, id, 'update')
-  const replay = await idempotency(req, 200, null)
-  if (replay) return res.status(replay.status).json(replay.body)
-  const result = await req.db!.from('class_session_teachers').update(input).eq('id', assignmentId).eq('class_session_id', id).select(assignmentFields).maybeSingle()
-  if (result.error) throw mapDatabaseError(result.error)
-  if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Teacher assignment was not found')
-  const data = (await hydrateAssignments(req, [result.data])).map(mapAssignment)[0]
-  setAuditContext(req, { resourceId: assignmentId, scopeId: id, scopeType: 'class_session' })
-  const body = { data, meta: {}, request_id: req.requestId, trace_id: req.traceId }
-  await complete(req, 200, body)
-  return res.json(body)
-}
-
 export function createTeacherAssignmentRouter() {
   const router = Router()
   router.get('/class-sessions/:sessionId/teachers', wrap(list))
@@ -202,6 +180,5 @@ export function createTeacherAssignmentRouter() {
   router.put('/class-sessions/:sessionId/teachers', wrap(replace))
   router.delete('/class-sessions/:sessionId/teachers', wrap(remove))
   router.delete('/class-sessions/:sessionId/teachers/:teacherId', wrap(remove))
-  router.patch('/class-sessions/:sessionId/teachers/:assignmentId', wrap(update))
   return router
 }

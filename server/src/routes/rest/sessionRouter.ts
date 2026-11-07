@@ -1,4 +1,5 @@
-import { Router, type NextFunction, type Request, type Response } from 'express'
+import { Router, type Request, type Response } from 'express'
+import { wrap } from './domainAccess.js'
 import { z } from 'zod'
 import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { complete, idempotency } from './resourceRouter.js'
@@ -46,10 +47,6 @@ export const sessionSchema = z.object({
     if (rule.start_time >= rule.end_time) ctx.addIssue({ code: 'custom', path: ['schedule_rules', index, 'end_time'], message: 'end_time must be after start_time' })
   })
 })
-
-function wrap(handler: (req: Request, res: Response) => Promise<unknown>) {
-  return (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res)).catch(next)
-}
 
 async function authorize(req: Request, action: 'read' | 'create' | 'update' | 'delete', id: string | null) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
@@ -188,7 +185,6 @@ async function readEnrollmentPeak(req: Request, res: Response) {
   return sendDetails(req, res, {
     ...occupancy,
     max_occupancy: maxOccupancy,
-    max_enrollment: maxOccupancy,
   })
 }
 

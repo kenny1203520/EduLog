@@ -1,4 +1,4 @@
-import { Router, type NextFunction, type Request, type Response } from 'express'
+import { Router, type Request, type Response } from 'express'
 import { z } from 'zod'
 import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { complete, idempotency } from './resourceRouter.js'
@@ -6,6 +6,7 @@ import { initialReportAttendance } from '../../domain/reportSemantics.js'
 import { setAuditContext } from '../../http/context.js'
 import { requireAuthorizationDecision } from '../../auth/authorization.js'
 import { measureReportAdoptions } from '../../ai/adoption/adoptionTracker.js'
+import { envelope, permission, uuid, wrap } from './domainAccess.js'
 
 const fields = 'id,enrollment_id,class_occurrence_id,lesson_id,is_completed,progress_letter,attendance_status,absence_reason,class_participation,classroom_behavior,contact_notes,contact_notes_document,class_notes,class_notes_document,content,content_document,external_link,source_origin,source_admission_id,source_report_id,version,last_edited_by,last_edited_at,created_at,updated_at'
 const writable = ['lesson_id', 'is_completed', 'progress_letter', 'attendance_status', 'absence_reason', 'class_participation', 'classroom_behavior', 'contact_notes', 'contact_notes_document', 'class_notes', 'class_notes_document', 'content', 'content_document', 'external_link'] as const
@@ -47,7 +48,6 @@ type MutationContext = {
 export function firstUncompletedSequence(lessons: Array<{ id: string; sequence: number }>, representedLessonIds: Set<string>, currentLessonNumber: number) {
   return lessons.find((lesson) => !representedLessonIds.has(lesson.id))?.sequence ?? currentLessonNumber
 }
-function wrap(handler: (req: Request, res: Response) => Promise<unknown>) { return (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res)).catch(next) }
 function reportId(req: Request) {
   const id = typeof req.params.id === 'string' ? req.params.id : undefined
   if (!id || !z.string().uuid().safeParse(id).success) throw new ApiError(400, 'INVALID_ID', 'Report id is invalid')
@@ -218,4 +218,72 @@ async function saveCollaboration(req: Request, res: Response) {
   await complete(req, 200, body)
   return res.json(body)
 }
-export function createReportRouter() { const router = Router(); router.post('/reports', wrap(create)); router.patch('/reports/:id', wrap(update)); router.delete('/reports/:id', wrap(remove)); router.get('/reports/:id/collaboration', wrap(readCollaboration)); router.post('/reports/:id/collaboration', wrap(saveCollaboration)); return router }
+// Report version restore, conflict resolution and progress summaries.
+const reportPatch = reportBodySchema.omit({ enrollment_id: true, class_occurrence_id: true, expected_version: true })
+
+async function reportMutation(req: Request, reportId: string, patch: Record<string, unknown>, expectedVersion: number, res: Response) {
+  if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
+  const context = await req.db.rpc('get_occurrence_report_mutation_context', { p_report_id: reportId, p_permission_key: 'teaching.reports.update' }).maybeSingle()
+  if (context.error) throw mapDatabaseError(context.error)
+  requireAuthorizationDecision(req, { data: Boolean(context.data), error: null }, { permission: 'teaching.reports.update', stage: 'report_mutation_context', message: 'You do not have permission to modify this report', scopeId: reportId, scopeType: 'occurrence_report' })
+  const mutationContext = context.data as { teaching_id?: string | null; class_occurrence_id?: string | null }
+  setAuditContext(req, { domain: 'teaching', resource: 'reports', resourceId: reportId, permission: 'teaching.reports.update', action: 'update', teachingId: mutationContext.teaching_id ?? null, scopeId: mutationContext.class_occurrence_id ?? null, scopeType: 'class_occurrence' })
+  const replay = await idempotency(req, 200, null)
+  if (replay) return res.status(replay.status).json(replay.body)
+  const result = await req.db!.rpc('apply_occurrence_report_lifecycle', { p_report_id: reportId, p_expected_version: expectedVersion, p_patch: patch, p_actor: req.user!.id, p_operation: 'update' })
+  if (result.error) throw mapDatabaseError(result.error)
+  const body = envelope(req, result.data)
+  await complete(req, 200, body)
+  return res.json(body)
+}
+
+async function restoreVersion(req: Request, res: Response) {
+  const reportId = uuid.parse(req.params.reportId); const versionId = uuid.parse(req.params.versionId)
+  const input = z.object({ expected_version: z.number().int().min(1) }).strict().parse(req.body)
+  const version = await req.db!.from('report_versions').select('id,occurrence_report_id,version,snapshot,content').eq('id', versionId).eq('occurrence_report_id', reportId).maybeSingle()
+  if (version.error) throw mapDatabaseError(version.error)
+  if (!version.data) throw new ApiError(404, 'NOT_FOUND', 'Report version was not found')
+  const snapshot: Record<string, unknown> = version.data.snapshot && typeof version.data.snapshot === 'object' ? version.data.snapshot as Record<string, unknown> : { content: version.data.content }
+  const patch = Object.fromEntries(writable.filter((field) => field in snapshot).map((field) => [field, snapshot[field]]))
+  return reportMutation(req, reportId, reportPatch.parse(patch), input.expected_version, res)
+}
+
+async function resolveConflict(req: Request, res: Response) {
+  const reportId = uuid.parse(req.params.reportId)
+  const input = z.object({ expected_version: z.number().int().min(1), report: reportPatch }).strict().parse(req.body)
+  return reportMutation(req, reportId, input.report, input.expected_version, res)
+}
+
+async function progressSummaryReports(req: Request, res: Response) {
+  const query = z.object({
+    enrollment_ids: z.string().min(1).max(10000),
+    limit: z.coerce.number().int().min(1).max(1000).default(1000),
+    sort: z.enum(['created_at', '-created_at', 'updated_at', '-updated_at']).default('-created_at'),
+  }).strict().parse(req.query)
+  const enrollmentIds = [...new Set(query.enrollment_ids.split(',').filter(Boolean))]
+  if (enrollmentIds.length > 100 || enrollmentIds.some((id) => !uuid.safeParse(id).success)) throw new ApiError(400, 'INVALID_QUERY', 'enrollment_ids contains an invalid id')
+  for (const enrollmentId of enrollmentIds) {
+    const enrollment = await req.db!.from('enrollments').select('id,class_session_id').eq('id', enrollmentId).maybeSingle()
+    if (enrollment.error) throw mapDatabaseError(enrollment.error)
+    if (!enrollment.data) continue
+    await permission(req, 'teaching.reports.list', enrollment.data.class_session_id)
+  }
+  const descending = query.sort.startsWith('-')
+  const field = descending ? query.sort.slice(1) : query.sort
+  const result = await req.db!.from('occurrence_reports').select('id,enrollment_id,lesson_id,is_completed,progress_letter,attendance_status,created_at,updated_at,class_occurrences(occurrence_date)').in('enrollment_id', enrollmentIds).order(field, { ascending: !descending }).limit(query.limit)
+  if (result.error) throw mapDatabaseError(result.error)
+  return res.json(envelope(req, result.data ?? [], { limit: query.limit, offset: 0, total: result.data?.length ?? 0, sort: query.sort }))
+}
+
+export function createReportRouter() {
+  const router = Router()
+  router.post('/reports', wrap(create))
+  router.patch('/reports/:id', wrap(update))
+  router.delete('/reports/:id', wrap(remove))
+  router.get('/reports/:id/collaboration', wrap(readCollaboration))
+  router.post('/reports/:id/collaboration', wrap(saveCollaboration))
+  router.get('/reports/progress-summary', wrap(progressSummaryReports))
+  router.post('/reports/:reportId/versions/:versionId/restore', wrap(restoreVersion))
+  router.post('/reports/:reportId/conflicts/resolve', wrap(resolveConflict))
+  return router
+}

@@ -8,7 +8,7 @@ describe('resource query filters', () => {
       { field: 'status', operator: 'ilike', value: '%active%' },
       { field: 'teacher_ids', operator: 'contains', value: ['teacher-1'] },
       { field: 'notes', operator: 'is', value: 'null' },
-    ]), resources.occurrences)).toEqual([
+    ]), { ...resources.holidays, filterable: ['status', 'teacher_ids', 'notes'] })).toEqual([
       { field: 'status', operator: 'ilike', value: '%active%' },
       { field: 'teacher_ids', operator: 'contains', value: ['teacher-1'] },
       { field: 'notes', operator: 'is', value: 'null' },

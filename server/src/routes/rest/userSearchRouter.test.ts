@@ -1,7 +1,7 @@
 import express from 'express'
 import request from 'supertest'
 import { describe, expect, it, vi } from 'vitest'
-import { createUserSearchRouter } from './userSearch.js'
+import { createUserSearchRouter } from './userSearchRouter.js'
 
 describe('user search directory', () => {
   it('returns disabled account details only after system.users.list is authorized', async () => {

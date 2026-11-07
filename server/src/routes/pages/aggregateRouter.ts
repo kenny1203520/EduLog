@@ -6,7 +6,7 @@ import { filterOccurrencesByScheduleModes, type DashboardScheduleMode, type Teac
 import { measureRequestPhase, recordDatabaseCall, setAuditContext } from '../../http/context.js'
 import { authorizeCollection, authorizeResource, requireAuthorizationDecision } from '../../auth/authorization.js'
 import { resources } from '../rest/resources.js'
-import { orderByRelation } from '../rest/relationOrder.js'
+import { orderByRelation } from '../../services/relationOrder.js'
 import { attachTeacherProfile, complete, idempotency } from '../rest/resourceRouter.js'
 
 const wrap = (handler: (req: Request, res: Response) => Promise<unknown>) => (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res)).catch(next)
@@ -456,6 +456,31 @@ async function classSessionWorkspace(req: Request, res: Response) {
   return sendData(req, res, { session: { ...page.session, current_enrollments: enrollments.filter((enrollment) => enrollment.status === 'regular').length }, enrollments, teachers }, { total: enrollments.length, roster_date: rosterDate })
 }
 
+/** Settings navigation and capability summary for the signed-in user. */
+async function settingsOverview(req: Request, res: Response) {
+  if (!req.db || !req.adminDb || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
+  const aiPermission = (key: string) => req.db!.rpc('has_api_permission', { p_user_id: req.user!.id, p_permission_key: key, p_classroom_id: null, p_class_session_id: null })
+  const [preferences, capabilities, aiManage, aiLogs] = await Promise.all([
+    req.db!.from('user_preferences').select('time_zone,editor_settings,created_at,updated_at').eq('user_id', req.user!.id).maybeSingle(),
+    req.db!.rpc('get_rbac_capabilities', { p_teaching_id: null }),
+    aiPermission('system.ai.manage'),
+    aiPermission('system.ai.logs.view_all'),
+  ])
+  if (preferences.error) throw mapDatabaseError(preferences.error)
+  if (capabilities.error) throw mapDatabaseError(capabilities.error)
+  const caps = (capabilities.data ?? {}) as Record<string, unknown>
+  const system: Record<string, unknown> = { ...(caps.system ?? {}) as Record<string, unknown>, ai_manage: aiManage.data === true, ai_logs_view_all: aiLogs.data === true }
+  const teaching = (caps.teaching ?? {}) as Record<string, unknown>
+  return sendData(req, res, {
+    preferences: preferences.data, capabilities: caps,
+    tabs: {
+      personal: true,
+      system: Boolean(system.users_manage || system.roles_manage || system.assignments_manage || system.permissions_read || system.audit_read || system.is_owner || system.ai_manage || system.ai_logs_view_all),
+    },
+    sections: { teaching: { roles: Boolean(teaching.roles_manage), permissions: Boolean(teaching.permissions_read) }, system },
+  })
+}
+
 export function createAggregateRouter() {
   const router = Router()
   router.get('/pages/me/preferences', wrap(preferences))
@@ -474,5 +499,6 @@ export function createAggregateRouter() {
   router.get('/pages/teachers/overview', wrap(teachersOverview))
   router.get('/pages/teachers/:teacherId/private-details', wrap(teacherPrivateDetails))
   router.get('/pages/class-sessions/:sessionId/workspace', wrap(classSessionWorkspace))
+  router.get('/pages/settings/overview', wrap(settingsOverview))
   return router
 }

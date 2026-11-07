@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resources, resourceSchemas } from './resources.js'
+import { genericOperationsOf, resources, resourceSchemas } from './resources.js'
 
 describe('student API resource boundaries', () => {
   it('accepts nullable school dates while retaining strict write validation', () => {
@@ -58,17 +58,26 @@ describe('student API resource boundaries', () => {
     }
   })
 
-  it('registers the schedule and teacher-assignment resources used by the client facade', () => {
-    expect(resources['class-session-schedule-rules'].table).toBe('class_session_schedule_rules')
+  it('registers the teacher-assignment resource used by the client facade', () => {
     expect(resources['class-session-teachers'].table).toBe('class_session_teachers')
-    expect(resources['class-session-schedule-rules'].scope).toBe('session-child')
     expect(resources['class-session-teachers'].scope).toBe('session-child')
+    // Schedule rules are written through class sessions; the generic resource had no caller.
+    expect(resources).not.toHaveProperty('class-session-schedule-rules')
   })
 
   it('does not expose generic mutations for business-sensitive resources', () => {
-    for (const key of ['class-sessions', 'enrollments', 'occurrences', 'reports', 'student-suspensions', 'holidays']) {
-      expect(resources[key].genericMethods).toEqual(['GET'])
+    for (const key of ['enrollments', 'reports', 'student-suspensions', 'holidays']) {
+      expect(resources[key].genericOperations).toEqual(['list', 'read'])
     }
+  })
+
+  it('leaves routes served by earlier domain routers out of the generic registry', () => {
+    // rbacRouter serves every /roles route; occurrenceRouter serves GET /occurrences and /occurrences/:id;
+    // sessionRouter serves GET /class-sessions/:id; studentRouter serves DELETE /students/:id.
+    expect(resources).not.toHaveProperty('roles')
+    expect(resources).not.toHaveProperty('occurrences')
+    expect(resources['class-sessions'].genericOperations).toEqual(['list'])
+    expect(resources.students.genericOperations).toEqual(['list', 'create', 'read', 'update'])
   })
 
   it('models holidays by referenced classroom/session scopes', () => {
@@ -77,12 +86,8 @@ describe('student API resource boundaries', () => {
   })
 
   it('declares explicit system permissions instead of deriving them from list', () => {
-    expect(resources.roles.permissions).toMatchObject({
-      list: 'system.roles.read', read: 'system.roles.read', create: 'system.roles.manage',
-      update: 'system.roles.manage', delete: 'system.roles.manage', manage: 'system.roles.manage',
-    })
-    expect(resources.permissions.genericMethods).toEqual(['GET'])
-    expect(resources['audit-events'].genericMethods).toEqual(['GET'])
+    expect(resources.permissions.genericOperations).toEqual(['list', 'read'])
+    expect(resources['audit-events'].genericOperations).toEqual(['list', 'read'])
     expect(resources.users.permissions).toMatchObject({ list: 'system.users.list', read: 'system.users.read' })
     expect(resources.permissions.permissions).toMatchObject({ list: 'system.permissions.read', read: 'system.permissions.read' })
     expect(resources['audit-events'].permissions).toMatchObject({ list: 'system.audit.list', read: 'system.audit.list' })
@@ -124,23 +129,16 @@ describe('student API resource boundaries', () => {
 
   it('keeps the frontend collection projections complete without exposing student profile details', () => {
     expect(resources['class-sessions'].fields).toEqual(expect.arrayContaining(['time_zone', 'session_type', 'schedule_mode']))
-    expect(resources.occurrences.fields).toEqual(expect.arrayContaining(['original_start_time', 'original_end_time', 'actual_start_time', 'actual_end_time', 'time_zone']))
     expect(resources.holidays.fields).toEqual(expect.arrayContaining(['kind', 'teacher_ids', 'time_zone']))
     expect(resources.students.listFields).not.toContain('email')
     expect(resources.students.itemFields).not.toEqual(expect.arrayContaining(['email', 'phone', 'residence_address', 'mailing_address', 'birthday']))
   })
 
-  it('accepts the client role compatibility flag only as a non-persisted false value', () => {
-    expect(resources.roles.compatibilityFields).toContain('is_system')
-    expect(resources.roles.writable).not.toContain('is_system')
-    expect(resources.roles.createSchema?.safeParse({ name: 'Custom role' }).success).toBe(true)
-  })
-
   it('requires typed schemas for every generic write route', () => {
     for (const resource of Object.values(resources)) {
-      const methods = new Set(resource.genericMethods ?? ['GET', 'POST', 'PATCH', 'DELETE'])
-      if (methods.has('POST')) expect(resource.createSchema, resource.route).toBeDefined()
-      if (methods.has('PATCH')) expect(resource.updateSchema, resource.route).toBeDefined()
+      const operations = genericOperationsOf(resource)
+      if (operations.has('create')) expect(resource.createSchema, resource.route).toBeDefined()
+      if (operations.has('update')) expect(resource.updateSchema, resource.route).toBeDefined()
     }
   })
 

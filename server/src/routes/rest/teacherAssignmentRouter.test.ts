@@ -11,7 +11,7 @@ describe('class session teacher assignment API contract', () => {
     expect(source).toContain("router.put('/class-sessions/:sessionId/teachers'")
     expect(source).toContain("rpc('replace_class_session_teacher_assignments'")
     expect(source).toContain("p_permission_key: 'teaching.roles.manage'")
-    expect((source.match(/await authorize\(req, id, 'update'\)/g) ?? []).length).toBe(4)
+    expect((source.match(/await authorize\(req, id, 'update'\)/g) ?? []).length).toBe(3)
     expect(source).toContain('idempotency(req')
     expect(source).toContain("from('class_session_teachers')")
   })
