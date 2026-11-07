@@ -78,8 +78,8 @@ export function googleBaseUrl(baseUrl: string | null | undefined): string {
   if (!baseUrl) return DEFAULT_BASE.google
   try {
     const url = new URL(baseUrl)
-    const path = url.pathname.replace(/\/+$/, '')
-    if (path === '') return `${url.origin}/v1beta`
+    // A path made only of slashes means the admin entered just the host.
+    if ([...url.pathname].every((char) => char === '/')) return `${url.origin}/v1beta`
   } catch {
     return baseUrl
   }
