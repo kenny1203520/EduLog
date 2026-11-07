@@ -236,7 +236,7 @@ BEGIN
   FROM pg_policies
   WHERE schemaname = 'public'
     AND cmd = 'ALL'
-    AND tablename IN ('teachings','teaching_members','lessons','class_session_teachers','enrollments','class_occurrences','occurrence_reports','report_templates','student_credentials');
+    AND tablename IN ('lessons','class_session_teachers','enrollments','class_occurrences','occurrence_reports','report_templates','student_credentials');
   IF forbidden_count <> 0 THEN
     RAISE EXCEPTION 'action-specific core RLS policies are incomplete: %', forbidden_count;
   END IF;
@@ -497,12 +497,11 @@ WHERE account.id IN (
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public.classrooms(id, name, user_id, teaching_id)
-SELECT classroom.id, classroom.name, NULL, teaching.id
+SELECT classroom.id, classroom.name, NULL, NULL
 FROM (VALUES
   ('30000000-0000-0000-0000-000000000001'::uuid, 'A classroom'),
   ('40000000-0000-0000-0000-000000000002'::uuid, 'B classroom')
 ) AS classroom(id, name)
-CROSS JOIN LATERAL (SELECT id FROM public.teachings WHERE is_global LIMIT 1) teaching
 ON CONFLICT (id) DO NOTHING;
 
 -- These standalone students model records whose former owner was cleared by
@@ -576,7 +575,6 @@ DECLARE unrelated_course_id uuid := '50000000-0000-0000-0000-000000000103';
 DECLARE student_id uuid := '20000000-0000-0000-0000-000000000103';
 DECLARE class_session_id uuid := '60000000-0000-0000-0000-000000000103';
 BEGIN
-  SELECT id INTO platform_teaching_id FROM public.teachings WHERE is_global LIMIT 1;
   INSERT INTO public.roles(id, code, name, is_system, sort_order, domain, teaching_id, is_builtin, is_protected)
   VALUES (classroom_role_id, 'integration_classroom_student_reader', 'Integration Classroom Student Reader', false, 900, 'teaching', NULL, false, false);
   INSERT INTO public.role_permission_policies(role_id, permission_id, scope_type, scope_id, effect)
@@ -980,3 +978,62 @@ BEGIN
 END;
 $$;
 RESET ROLE;
+
+-- 1000157 removed the archived teaching-workspace model.
+DO $$
+DECLARE stale_count integer;
+BEGIN
+  IF to_regclass('public.teachings') IS NOT NULL
+     OR to_regclass('public.teaching_members') IS NOT NULL
+     OR to_regclass('public.teachings_legacy_archive') IS NOT NULL
+     OR to_regclass('public.teaching_members_legacy_archive') IS NOT NULL
+     OR to_regclass('public.rbac_domain_rebuild_state') IS NOT NULL
+     OR to_regclass('public.global_scope_migration_report') IS NOT NULL THEN
+    RAISE EXCEPTION 'teaching-workspace tables dropped by 1000157 still exist';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_proc
+    WHERE pronamespace = 'public'::regnamespace
+      AND proname IN (
+        'is_teaching_member', 'can_access_teaching', 'can_teaching_action',
+        'resolve_teaching_permission', 'ensure_teaching_owner_policies',
+        'provision_teaching_owner_member', 'validate_teaching_member_role_domain',
+        'reject_archived_teaching_workspace_write', 'rbac_scope_teaching_id'
+      )
+  ) THEN
+    RAISE EXCEPTION 'teaching-workspace functions dropped by 1000157 still exist';
+  END IF;
+  IF to_regprocedure('public.resolve_scoped_permission(uuid,text,uuid,uuid,date)') IS NULL
+     OR to_regprocedure('public.has_active_teaching_role(uuid)') IS NULL
+     OR to_regprocedure('public.can_teaching_resource_action(text,text)') IS NULL
+     OR NOT has_function_privilege('authenticated', 'public.can_teaching_resource_action(text,text)', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.can_teaching_resource_action(text,text)', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.resolve_scoped_permission(uuid,text,uuid,uuid,date)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'teaching permission helpers from 1000157 are missing or over-granted';
+  END IF;
+  SELECT count(*) INTO stale_count
+  FROM pg_proc
+  WHERE pronamespace IN ('public'::regnamespace, 'private'::regnamespace)
+    AND prosrc ~ '(public\.teachings\M|teaching_members|is_teaching_member|can_access_teaching|can_teaching_action|resolve_teaching_permission)';
+  IF stale_count <> 0 THEN
+    RAISE EXCEPTION 'functions still reference the teaching-workspace model: %', stale_count;
+  END IF;
+  SELECT count(*) INTO stale_count
+  FROM pg_policies
+  WHERE coalesce(qual, '') || coalesce(with_check, '') ~ '(can_teaching_action|can_access_teaching)';
+  IF stale_count <> 0 THEN
+    RAISE EXCEPTION 'RLS policies still use teaching-workspace helpers: %', stale_count;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE contype = 'f' AND pg_get_constraintdef(oid) ~ 'REFERENCES teachings\('
+  ) THEN
+    RAISE EXCEPTION 'foreign keys to teachings remain';
+  END IF;
+  -- teaching_id stays a constant marker until the columns are dropped.
+  IF EXISTS (SELECT 1 FROM public.classrooms WHERE teaching_id IS NULL)
+     OR (SELECT count(DISTINCT teaching_id) FROM public.classrooms) > 1 THEN
+    RAISE EXCEPTION 'classrooms.teaching_id is no longer normalized to one value';
+  END IF;
+END;
+$$;
