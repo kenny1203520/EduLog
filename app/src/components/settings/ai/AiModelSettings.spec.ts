@@ -50,11 +50,29 @@ describe('ModelPicker', () => {
         expect(wrapper.text()).toContain('ChatGPT 方案沒有提供模型清單')
         await wrapper.find('input').setValue('gpt-5')
         expect(wrapper.emitted('pick')?.at(-1)).toEqual([{ id: 'gpt-5', name: 'gpt-5' }])
-        expect(wrapper.text()).toContain('重試載入模型')
+        // Retrying cannot help a ChatGPT plan.
+        expect(wrapper.text()).not.toContain('重試載入模型')
+    })
+
+    it('explains why the list failed, shows the provider detail and retries', async () => {
+        service.catalog.mockResolvedValue({ supported: false, reason: 'auth_failed', detail: 'HTTP 400 INVALID_ARGUMENT: API key not valid.' })
+        const wrapper = mount(ModelPicker, { props: { scope: 'personal', credentialId: 'c2' }, global })
+        await flushPromises()
+        expect(wrapper.text()).toContain('供應商拒絕了這把金鑰')
+        expect(wrapper.text()).toContain('HTTP 400 INVALID_ARGUMENT: API key not valid.')
+        expect(wrapper.find('input').exists()).toBe(true)
         service.catalog.mockResolvedValue({ supported: true, fetchedAt: 'new', models: [{ id: 'qwen3:8b-instruct-q4_K_M', name: 'qwen3:8b-instruct-q4_K_M', textCapable: true }] })
         await wrapper.findAll('button').find((button) => button.text().includes('重試載入模型'))!.trigger('click')
         await flushPromises()
         expect(service.catalog).toHaveBeenLastCalledWith('personal', 'c2', true)
+    })
+
+    it('shows a raw reason from an older server as detail under the generic message', async () => {
+        service.catalog.mockResolvedValue({ supported: false, reason: 'HTTP 403' })
+        const wrapper = mount(ModelPicker, { props: { scope: 'site', credentialId: 'c3' }, global })
+        await flushPromises()
+        expect(wrapper.text()).toContain('暫時取不到這個來源的模型清單')
+        expect(wrapper.text()).toContain('HTTP 403')
     })
 
     it('keeps manual entry available for an empty Ollama catalog and preserves full model IDs', async () => {
