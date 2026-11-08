@@ -181,6 +181,35 @@ async function globalTeachingPermission(req: Request, permission: string) {
   return teachingPermission(req, permission, null)
 }
 
+/** True for read-only actions, which may be granted in any classroom or class session. */
+function isReadAction(permission: string) {
+  return /\.(list|read)$/.test(permission)
+}
+
+/**
+ * Entry check for an unscoped list or read: passes when the permission holds at
+ * platform level or in any classroom / class session. The RPC or RLS behind the
+ * request filters rows by scope, so a class-level teacher sees only their rows.
+ */
+export async function anyScopeTeachingPermission(req: Request, permission: string) {
+  setAuditContext(req, { domain: 'teaching', permission, scopeType: 'any' })
+  if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
+  const { data, error } = await req.db.rpc('has_teaching_permission_any_scope', {
+    p_user_id: req.user.id,
+    p_permission_key: permission,
+  })
+  requireAuthorizationDecision(req, { data, error }, {
+    permission,
+    stage: 'any_scope_teaching_permission',
+    scopeType: 'any',
+  })
+}
+
+/** Unscoped collection fallback: reads accept any scope, writes need platform level. */
+async function unscopedCollectionPermission(req: Request, permission: string) {
+  return isReadAction(permission) ? anyScopeTeachingPermission(req, permission) : globalTeachingPermission(req, permission)
+}
+
 async function isAccountPersonProfile(req: Request, profileId: string | null) {
   if (!req.adminDb || !req.user || !profileId) return false
   const result = await req.adminDb.from('profiles').select('id').eq('auth_user_id', req.user.id).eq('id', profileId).maybeSingle()
@@ -332,10 +361,10 @@ export async function authorizeCollection(req: Request, def: ResourceDefinition,
     const courseId = value('course_id')
     if (courseId) return coursePermission(req, permission, courseId)
     const teachingId = value('teaching_id')
-    return teachingId ? teachingPermission(req, permission, teachingId) : globalTeachingPermission(req, permission)
+    return teachingId ? teachingPermission(req, permission, teachingId) : unscopedCollectionPermission(req, permission)
   }
   if (def.scope === 'platform') {
-    return globalTeachingPermission(req, permission)
+    return unscopedCollectionPermission(req, permission)
   }
   if (def.scope === 'self') {
     if (!req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
@@ -345,29 +374,29 @@ export async function authorizeCollection(req: Request, def: ResourceDefinition,
   }
   if (def.scope === 'classroom' || def.scope === 'classroom-child') {
     const classroomId = value('classroom_id')
-    return classroomId ? apiPermission(req, permission, classroomId, null) : globalTeachingPermission(req, permission)
+    return classroomId ? apiPermission(req, permission, classroomId, null) : unscopedCollectionPermission(req, permission)
   }
   if (def.scope === 'session' || def.scope === 'occurrence') {
     const classSessionId = value('class_session_id')
-    return classSessionId ? apiPermission(req, permission, null, classSessionId) : globalTeachingPermission(req, permission)
+    return classSessionId ? apiPermission(req, permission, null, classSessionId) : unscopedCollectionPermission(req, permission)
   }
   if (def.scope === 'holiday') {
     const classroomIds = body?.classroom_ids ?? query.classroom_ids
     const sessionIds = body?.class_session_ids ?? query.class_session_ids
-    if (classroomIds === undefined && sessionIds === undefined) return apiPermission(req, permission, null, null)
+    if (classroomIds === undefined && sessionIds === undefined) return unscopedCollectionPermission(req, permission)
     return holidayPermission(req, permission, { classroom_ids: classroomIds, class_session_ids: sessionIds })
   }
   if (def.scope === 'student-child' || def.scope === 'student') {
     const studentId = value('student_id')
-    return studentId ? entityPermission(req, 'student', permission, studentId) : globalTeachingPermission(req, permission)
+    return studentId ? entityPermission(req, 'student', permission, studentId) : unscopedCollectionPermission(req, permission)
   }
   if (def.scope === 'enrollment-child' || def.scope === 'enrollment') {
     const enrollmentId = value('enrollment_id')
-    return enrollmentId ? entityPermission(req, 'enrollment', permission, enrollmentId) : apiPermission(req, permission, null, null)
+    return enrollmentId ? entityPermission(req, 'enrollment', permission, enrollmentId) : unscopedCollectionPermission(req, permission)
   }
   if (def.scope === 'report-child' || def.scope === 'report') {
     const reportId = value('occurrence_report_id')
-    return reportId ? entityPermission(req, 'report', permission, reportId) : apiPermission(req, permission, null, null)
+    return reportId ? entityPermission(req, 'report', permission, reportId) : unscopedCollectionPermission(req, permission)
   }
   if (def.scope === 'teacher-child') {
     const teacherId = value('teacher_id')
@@ -378,6 +407,8 @@ export async function authorizeCollection(req: Request, def: ResourceDefinition,
     if (!teacher.data) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
     return authorizeResource(req, { ...def, scope: 'teacher' }, permission, teacherId, teacher.data as Record<string, unknown>)
   }
+  // The generic teachers list reads through the service role, so an unscoped
+  // list stays platform-only; the teachers overview RPC handles scoped access.
   if (def.scope === 'teacher') return globalTeachingPermission(req, permission)
   return apiPermission(req, permission, null, null)
 }

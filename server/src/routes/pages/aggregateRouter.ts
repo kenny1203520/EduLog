@@ -4,7 +4,7 @@ import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { sendData } from '../../http/response.js'
 import { filterOccurrencesByScheduleModes, type DashboardScheduleMode, type TeacherSessionAssignment } from '../../domain/dashboardSchedule.js'
 import { measureRequestPhase, recordDatabaseCall, setAuditContext } from '../../http/context.js'
-import { authorizeCollection, authorizeResource, requireAuthorizationDecision } from '../../auth/authorization.js'
+import { anyScopeTeachingPermission, authorizeCollection, authorizeResource, requireAuthorizationDecision } from '../../auth/authorization.js'
 import { resources } from '../rest/resources.js'
 import { orderByRelation } from '../../services/relationOrder.js'
 import { attachTeacherProfile, complete, idempotency } from '../rest/resourceRouter.js'
@@ -28,11 +28,11 @@ function throwDatabaseError(req: Request, operation: string, error: { code?: str
 async function requirePagePermission(req: Request, permission: string, resource: string, resourceId: string | null = null, operation = 'page.permission') {
   const db = requireDb(req)
   setAuditContext(req, { domain: permission.startsWith('system.') ? 'system' : 'teaching', resource, resourceId, action: 'read', permission })
-  const result = await database(req, () => db.rpc('has_api_permission', {
+  // Page entry accepts the permission in any classroom or class session; the
+  // page RPC then returns only rows inside the caller's scope.
+  const result = await database(req, () => db.rpc('has_teaching_permission_any_scope', {
     p_user_id: req.user!.id,
     p_permission_key: permission,
-    p_classroom_id: null,
-    p_class_session_id: null,
   }))
   if (result.error) {
     req.log.error({ operation, database_error_code: result.error.code ?? 'UNKNOWN', request_id: req.requestId, trace_id: req.traceId }, 'database_operation_failed')
@@ -404,7 +404,8 @@ async function teachersOverview(req: Request, res: Response) {
   const db = requireDb(req)
   const query = pageListQuery.parse(req.query)
   const sort = pageSort(query.sort, ['name', 'created_at'], 'name')
-  await authorizeCollection(req, resources.teachers, 'teaching.teachers.list', query)
+  // get_teachers_overview filters by scope (own record, co-teachers, or all for platform grants).
+  await anyScopeTeachingPermission(req, 'teaching.teachers.list')
   const result = await database(req, () => db.rpc('get_teachers_overview', {
     p_limit: query.limit, p_offset: query.offset, p_search: query.search, p_sort: sort.value,
   }))
@@ -456,6 +457,20 @@ async function classSessionWorkspace(req: Request, res: Response) {
   return sendData(req, res, { session: { ...page.session, current_enrollments: enrollments.filter((enrollment) => enrollment.status === 'regular').length }, enrollments, teachers }, { total: enrollments.length, roster_date: rosterDate })
 }
 
+/**
+ * Teaching capability summary for navigation and action buttons. Each key maps
+ * to { any, platform }: "any" means the permission holds in at least one
+ * classroom or class session; "platform" means it holds platform-wide.
+ */
+async function myCapabilities(req: Request, res: Response) {
+  const db = requireDb(req)
+  const result = await database(req, () => db.rpc('get_my_teaching_capabilities'))
+  if (result.error) throwDatabaseError(req, 'me.capabilities', result.error)
+  const value = result.data
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ApiError(500, 'DATABASE_ERROR', 'The request could not be completed')
+  return sendData(req, res, value)
+}
+
 /** Settings navigation and capability summary for the signed-in user. */
 async function settingsOverview(req: Request, res: Response) {
   if (!req.db || !req.adminDb || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
@@ -489,6 +504,7 @@ export function createAggregateRouter() {
   const router = Router()
   router.get('/pages/me/preferences', wrap(preferences))
   router.get('/pages/me/person-profile', wrap(myPersonProfile))
+  router.get('/pages/me/capabilities', wrap(myCapabilities))
   router.patch('/pages/me/person-profile', wrap(myPersonProfile))
   router.get('/pages/enrollments/:enrollmentId/reports', wrap(studentReportsPage))
   router.get('/pages/classrooms/overview', wrap(classroomManager))

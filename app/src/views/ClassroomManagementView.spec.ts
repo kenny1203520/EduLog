@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ClassroomManagementView from '@/views/ClassroomManagementView.vue'
 import { AggregateService } from '@/services/api/AggregateService'
 
+vi.mock('@/stores/useCapabilityStore', () => ({ useCapabilityStore: () => ({ ensureLoaded: vi.fn(), can: () => true, canPlatform: () => true }) }))
 vi.mock('vue-i18n', () => ({
   createI18n: () => ({
     global: {
