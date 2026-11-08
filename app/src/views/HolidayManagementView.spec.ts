@@ -7,6 +7,7 @@ import { TeacherService } from '@/services/teacher/TeacherService'
 import { HolidayQueryService } from '@/services/holiday/HolidayQueryService'
 import { Holiday } from '@/models/Holiday'
 
+vi.mock('@/stores/useCapabilityStore', () => ({ useCapabilityStore: () => ({ ensureLoaded: vi.fn(), can: () => true, canPlatform: () => true }) }))
 vi.mock('vue-i18n', () => ({
   createI18n: () => ({
     global: {

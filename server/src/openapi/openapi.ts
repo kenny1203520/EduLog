@@ -465,6 +465,15 @@ export function buildOpenApi() {
       responses: { '200': pageResponse('SettingsOverviewData'), ...errorResponses },
     },
   }
+  paths['/api/pages/me/capabilities'] = {
+    get: {
+      ...pageBase,
+      operationId: 'page_my_teaching_capabilities',
+      summary: 'Read which teaching permissions the signed-in user holds in any scope and at platform level',
+      'x-authorization-model': 'current-user-capabilities',
+      responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses },
+    },
+  }
   paths['/api/rbac/capabilities'] = {
     get: {
       ...pageBase,

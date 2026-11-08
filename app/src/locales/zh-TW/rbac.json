@@ -151,5 +151,9 @@
   "save_permissions_success": "角色權限已儲存。",
   "role_created": "角色已建立。",
   "role_deleted": "角色已刪除。",
+  "delete_role_title": "刪除角色",
+  "delete_role_message": "確定要刪除角色「{name}」嗎？刪除後無法復原。仍有人使用此角色時無法刪除。",
+  "role_in_use": "仍有使用者或班級老師使用此角色，請先移除這些指派再刪除。",
+  "custom_teaching_roles_hint": "可在「平台」範圍新增、改名或刪除自訂教學角色；教室與班級範圍只調整權限。",
   "system_assignment_saved": "系統角色已指派。"
 }

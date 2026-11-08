@@ -4,6 +4,7 @@ import { authService } from '@/services/auth/AuthService'
 import type { BffSession, BffUser } from '@/services/auth/AuthService'
 import { AggregateService } from '@/services/api/AggregateService'
 import { localDraftStore } from '@/services/report/LocalDraftStore'
+import { useCapabilityStore } from '@/stores/useCapabilityStore'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<BffUser | null>(null)
@@ -22,6 +23,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   function clearSession() {
     AggregateService.clearCache()
+    useCapabilityStore().reset()
     user.value = null
     session.value = null
     loading.value = false
@@ -72,6 +74,7 @@ export const useAuthStore = defineStore('auth', () => {
     if (result.user) {
       accountDisabled.value = false
       AggregateService.clearCache()
+      useCapabilityStore().reset()
       session.value = result.session ?? { user: result.user }
       user.value = result.user
     }
