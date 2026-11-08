@@ -402,12 +402,12 @@ async function studentReports(req: Request, res: Response) {
 
 async function teachersOverview(req: Request, res: Response) {
   const db = requireDb(req)
-  const query = pageListQuery.parse(req.query)
-  const sort = pageSort(query.sort, ['name', 'created_at'], 'name')
+  const query = pageListQuery.extend({ status: z.enum(['active', 'archived', 'all']).default('active') }).parse(req.query)
+  const sort = pageSort(query.sort, ['name', 'created_at', 'class_count'], 'name')
   // get_teachers_overview filters by scope (own record, co-teachers, or all for platform grants).
   await anyScopeTeachingPermission(req, 'teaching.teachers.list')
   const result = await database(req, () => db.rpc('get_teachers_overview', {
-    p_limit: query.limit, p_offset: query.offset, p_search: query.search, p_sort: sort.value,
+    p_limit: query.limit, p_offset: query.offset, p_search: query.search, p_sort: sort.value, p_status: query.status,
   }))
   if (result.error) throwDatabaseError(req, 'teachers_overview.read', result.error)
   const page = (result.data ?? {}) as { items?: unknown; total?: unknown; statistics?: unknown }
@@ -417,6 +417,18 @@ async function teachersOverview(req: Request, res: Response) {
     throw new ApiError(500, 'DATABASE_ERROR', 'The request could not be completed')
   }
   return sendData(req, res, { teachers, statistics: page.statistics }, { limit: query.limit, offset: query.offset, total, sort: sort.value })
+}
+
+/** Class assignments of one teacher, limited to class sessions the caller may read. */
+async function teacherAssignments(req: Request, res: Response) {
+  const db = requireDb(req)
+  const teacherId = typeof req.params.teacherId === 'string' ? req.params.teacherId : ''
+  if (!z.string().uuid().safeParse(teacherId).success) throw new ApiError(400, 'INVALID_ID', 'Teacher id is invalid')
+  setAuditContext(req, { domain: 'teaching', resource: 'teacher-assignments', resourceId: teacherId, action: 'read', permission: 'teaching.teachers.read' })
+  const result = await database(req, () => db.rpc('get_teacher_assignments', { p_teacher_id: teacherId }))
+  if (result.error) throwDatabaseError(req, 'teacher_assignments.read', result.error)
+  if (!Array.isArray(result.data)) throw new ApiError(404, 'NOT_FOUND', 'Teacher was not found')
+  return sendData(req, res, result.data, { total: result.data.length })
 }
 
 async function teacherPrivateDetails(req: Request, res: Response) {
@@ -518,6 +530,7 @@ export function createAggregateRouter() {
   router.get('/pages/students/:studentId/reports', wrap(studentReports))
   router.get('/pages/teachers/overview', wrap(teachersOverview))
   router.get('/pages/teachers/:teacherId/private-details', wrap(teacherPrivateDetails))
+  router.get('/pages/teachers/:teacherId/assignments', wrap(teacherAssignments))
   router.get('/pages/class-sessions/:sessionId/workspace', wrap(classSessionWorkspace))
   router.get('/pages/settings/overview', wrap(settingsOverview))
   return router

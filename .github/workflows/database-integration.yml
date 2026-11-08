@@ -70,6 +70,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/tests/student_sensitive_permission_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/incomplete_report_notification_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/scoped_teaching_access_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/teacher_archive_integration.sql
       - name: Reconciliation migrations are rerunnable
         shell: bash
         run: |

@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import StudentContacts from './StudentContacts.vue'
 import StudentSchools from './StudentSchools.vue'
 import StudentCredentials from './StudentCredentials.vue'
-import TeacherManagementView from '@/views/TeacherManagementView.vue'
+import TeacherFormDialog from '@/components/teacher/TeacherFormDialog.vue'
 import { StudentCommandService } from '@/services/student/StudentCommandService'
 import { TeacherService } from '@/services/teacher/TeacherService'
 
@@ -183,12 +183,10 @@ describe('collapsed add forms', () => {
   })
 
   it('keeps teacher credential add form collapsed in edit modal and opens it on demand', async () => {
-    const wrapper = mount(TeacherManagementView, {
+    const wrapper = mount(TeacherFormDialog, {
+      props: { open: true, teacherId: 'teacher-1', canEditSensitive: true },
       global: globalOptions
     })
-    await flushPromises()
-
-    await wrapper.findAll('button').find(button => button.text() === 'common.edit')!.trigger('click')
     await flushPromises()
 
     expect(wrapper.find('[data-testid="teacher-credential-add-form"]').exists()).toBe(false)
