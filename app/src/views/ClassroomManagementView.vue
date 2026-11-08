@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useCapabilityStore } from '@/stores/useCapabilityStore'
 import { ref, onMounted, computed, watch } from 'vue'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { ClassroomService } from '@/services/classroom/ClassroomService'
@@ -39,9 +40,11 @@ import BaseDropdown from '@/components/ui/BaseDropdown.vue'
 import BasePageHeader from '@/components/ui/BasePageHeader.vue'
 import BaseSkeletonCard from '@/components/ui/BaseSkeletonCard.vue'
 import { OccurrenceSyncService } from '@/services/occurrence/OccurrenceSyncService'
+import { AuthorizationError } from '@/services/errors/AppError'
 
 const { t } = useI18n()
 const toast = useToast()
+const capabilities = useCapabilityStore()
 const { reportError } = useFeedback()
 const preferences = usePreferencesStore()
 const activeTab = ref<'rooms' | 'sessions'>('rooms')
@@ -329,15 +332,23 @@ async function loadRooms() {
     }
 }
 
+function isPermissionDenied(error: unknown) {
+    return error instanceof AuthorizationError || (error as { status?: number } | null)?.status === 403
+}
+
+// Each catalog loads on its own: a classroom-level manager may read courses
+// but not the platform role or teacher lists, and the scoped role catalog
+// (loadTeacherRoleCatalog) covers role choices for them.
 async function ensureEditorDependencies() {
-    if (roles.value.length === 0) roles.value = await RoleService.getRoles()
-    if (courses.value.length === 0) {
-        const result = await CourseCatalogService.getCourses()
-        courses.value = result.data
-    }
-    if (teachersList.value.length === 0) await loadTeachers()
-    if (!notificationPoliciesLoaded.value) await loadNotificationPolicies()
-    if (!schedulePoliciesLoaded.value) await loadSchedulePolicies()
+    const tasks: Array<Promise<unknown>> = []
+    if (roles.value.length === 0) tasks.push(RoleService.getRoles().then((value) => { roles.value = value }))
+    if (courses.value.length === 0) tasks.push(CourseCatalogService.getCourses().then((result) => { courses.value = result.data }))
+    if (teachersList.value.length === 0) tasks.push(loadTeachers())
+    if (!notificationPoliciesLoaded.value) tasks.push(loadNotificationPolicies())
+    if (!schedulePoliciesLoaded.value) tasks.push(loadSchedulePolicies())
+    const results = await Promise.allSettled(tasks)
+    const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
+    if (failure && !isPermissionDenied(failure.reason)) throw failure.reason
 }
 
 async function loadTeacherRoleCatalog(scopeType: 'classroom' | 'class_session', scopeId: string) {
@@ -965,11 +976,11 @@ function clearTeacherSelection() {
                 </div>
 
                 <!-- Primary Action Button -->
-                <button v-if="activeTab === 'rooms'" @click="openCreateRoomModal"
+                <button v-if="activeTab === 'rooms' && capabilities.canPlatform('teaching.classrooms.create')" @click="openCreateRoomModal"
                     class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl transition-all shadow-lg shadow-emerald-200 font-black flex items-center justify-center gap-2 active:scale-95 text-sm uppercase tracking-widest w-full md:w-auto shrink-0">
                     <span class="text-xl leading-none">+</span> {{ t('classroom.add_room') }}
                 </button>
-                <button v-else @click="openCreateSessionModal"
+                <button v-else-if="activeTab !== 'rooms' && capabilities.can('teaching.class_sessions.create')" @click="openCreateSessionModal"
                     class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl transition-all shadow-lg shadow-emerald-200 font-black flex items-center justify-center gap-2 active:scale-95 text-sm uppercase tracking-widest w-full md:w-auto shrink-0">
                     <span class="text-xl leading-none">+</span> {{ t('classroom.add_session') }}
                 </button>
@@ -1055,7 +1066,7 @@ function clearTeacherSelection() {
                         <!-- Quick Actions (always visible for mouse, keyboard, and touch) -->
                         <div
                             class="flex w-full items-center justify-end gap-2 border-t border-gray-100 pt-3">
-                            <button @click="openEditRoom(room)"
+                            <button v-if="capabilities.can('teaching.classrooms.update')" @click="openEditRoom(room)"
                                 class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-emerald-600 transition-all hover:bg-emerald-50"
                                 :title="$t('common.edit')"
                                 :aria-label="$t('common.edit')">
@@ -1065,7 +1076,7 @@ function clearTeacherSelection() {
                                         d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
                                 </svg>
                             </button>
-                            <button @click="deleteClassroom(room.id!)"
+                            <button v-if="capabilities.canPlatform('teaching.classrooms.delete')" @click="deleteClassroom(room.id!)"
                                 class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-red-500 transition-all hover:bg-red-50"
                                 :title="$t('common.delete')"
                                 :aria-label="$t('common.delete')">
@@ -1197,14 +1208,14 @@ function clearTeacherSelection() {
                         </div>
 
                         <div class="mt-4 flex items-center justify-end gap-1 border-t border-gray-100 pt-3">
-                            <button @click="openEditSession(session)"
+                            <button v-if="capabilities.can('teaching.class_sessions.update')" @click="openEditSession(session)"
                                 class="rounded-xl p-2.5 text-gray-400 transition-all hover:bg-emerald-50 hover:text-emerald-600"
                                 :title="$t('common.edit')" :aria-label="$t('common.edit')">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                                     <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
                                 </svg>
                             </button>
-                            <button @click="deleteSession(session.id!)"
+                            <button v-if="capabilities.can('teaching.class_sessions.delete')" @click="deleteSession(session.id!)"
                                 class="rounded-xl p-2.5 text-gray-400 transition-all hover:bg-red-50 hover:text-red-600"
                                 :title="$t('common.delete')" :aria-label="$t('common.delete')">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">

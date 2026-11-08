@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, type RouteLocationNormalized } from 'vue-router'
 import { useAuthStore } from '@/stores/useAuthStore'
+import { useCapabilityStore } from '@/stores/useCapabilityStore'
 import LoginView from '@/views/LoginView.vue'
 import { getSafePostLoginTarget } from './authRedirect'
 
@@ -45,19 +46,19 @@ const router = createRouter({
           path: 'courses',
           name: 'courses',
           component: () => import('@/views/CourseManagementView.vue'),
-          meta: { title: 'nav.courses', description: 'nav.description.courses' }
+          meta: { capability: 'teaching.courses.list', title: 'nav.courses', description: 'nav.description.courses' }
         },
         {
           path: 'students',
           name: 'students',
           component: () => import('@/views/StudentManagementView.vue'),
-          meta: { title: 'nav.students', description: 'nav.description.students' }
+          meta: { capability: 'teaching.students.list', title: 'nav.students', description: 'nav.description.students' }
         },
         {
           path: 'classrooms',
           name: 'classrooms',
           component: () => import('@/views/ClassroomManagementView.vue'),
-          meta: { title: 'nav.classrooms', description: 'nav.description.classrooms' }
+          meta: { capability: 'teaching.classrooms.list', title: 'nav.classrooms', description: 'nav.description.classrooms' }
         },
         {
           path: 'classrooms/session/:id',
@@ -81,19 +82,19 @@ const router = createRouter({
           path: 'reports/incomplete',
           name: 'incomplete-reports',
           component: () => import('@/views/GlobalIncompleteReportsView.vue'),
-          meta: { title: 'nav.incomplete_reports', description: 'nav.description.incomplete' }
+          meta: { capability: 'teaching.reports.list', title: 'nav.incomplete_reports', description: 'nav.description.incomplete' }
         },
         {
           path: 'holidays',
           name: 'holidays',
           component: () => import('@/views/HolidayManagementView.vue'),
-          meta: { title: 'nav.holidays', description: 'nav.description.holidays' }
+          meta: { capability: 'teaching.holidays.list', title: 'nav.holidays', description: 'nav.description.holidays' }
         },
         {
           path: 'teachers',
           name: 'teachers',
           component: () => import('@/views/TeacherManagementView.vue'),
-          meta: { title: 'nav.teachers', description: 'nav.description.teachers' }
+          meta: { capability: 'teaching.teachers.list', title: 'nav.teachers', description: 'nav.description.teachers' }
         },
         {
           path: 'settings',
@@ -141,6 +142,15 @@ router.beforeEach(async (to: RouteLocationNormalized) => {
   
   if (to.path === '/login' && authStore.isAuthenticated) {
     return getSafePostLoginTarget(to.query.redirect, router)
+  }
+
+  // Pages the user holds no permission for in any scope go back to the
+  // dashboard instead of rendering a page full of permission errors.
+  const capability = to.meta.capability
+  if (typeof capability === 'string' && authStore.isAuthenticated) {
+    const capabilities = useCapabilityStore()
+    await capabilities.ensureLoaded()
+    if (!capabilities.can(capability)) return { name: 'dashboard' }
   }
 
   return true
