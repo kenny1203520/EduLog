@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { mergeReportConflict } from './ReportConflictMerge'
 import type { OccurrenceReportDTO, ReportDraftSnapshot } from '@/models/OccurrenceReport'
-import { createTextEditorContent } from '@/components/common/text-editor/content'
+import { createTextEditorContent } from '@/components/text-editor/content'
 
 const text = (value: string) => createTextEditorContent(value)
 const base: ReportDraftSnapshot = {

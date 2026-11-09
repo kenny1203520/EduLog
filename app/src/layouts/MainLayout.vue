@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/useAuthStore'
+import { useCapabilityStore } from '@/stores/useCapabilityStore'
 import { useRouter } from 'vue-router'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
-import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
+import LanguageSwitcher from '@/components/ui/LanguageSwitcher.vue'
 import { useFeedback } from '@/composables/useFeedback'
 import { useAccountIdentity } from '@/composables/useAccountIdentity'
 import { inExtensionPanel } from '@/composables/useExtensionPanel'
@@ -11,6 +12,7 @@ import { inExtensionPanel } from '@/composables/useExtensionPanel'
 const auth = useAuthStore()
 const router = useRouter()
 const preferences = usePreferencesStore()
+const capabilities = useCapabilityStore()
 const { info, reportError } = useFeedback()
 const isSidebarOpen = ref(false)
 const isDesktopSidebarOpen = ref(true)
@@ -33,6 +35,7 @@ function onAccountKeydown(event: KeyboardEvent) {
 
 onMounted(() => {
     preferences.loadUserPreferences()
+    void capabilities.ensureLoaded()
     window.addEventListener('online', onOnline)
     window.addEventListener('offline', onOffline)
     window.addEventListener('edulog:api-request-start', onRequestStart)
@@ -160,7 +163,7 @@ async function handleLogout() {
                     </div>
                 </router-link>
 
-                <router-link to="/dashboard/students" @click="isSidebarOpen = false"
+                <router-link v-if="capabilities.can('teaching.students.list')" to="/dashboard/students" @click="isSidebarOpen = false"
                     class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
                     active-class="bg-emerald-50/60 text-emerald-600 font-bold relative before:absolute before:left-[-1rem] before:top-3 before:bottom-3 before:w-1 before:bg-emerald-500 before:rounded-r-full">
                     <div class="flex items-center gap-3">
@@ -173,7 +176,7 @@ async function handleLogout() {
                     </div>
                 </router-link>
 
-                <router-link to="/dashboard/courses" @click="isSidebarOpen = false"
+                <router-link v-if="capabilities.can('teaching.courses.list')" to="/dashboard/courses" @click="isSidebarOpen = false"
                     class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
                     active-class="bg-emerald-50/60 text-emerald-600 font-bold relative before:absolute before:left-[-1rem] before:top-3 before:bottom-3 before:w-1 before:bg-emerald-500 before:rounded-r-full">
                     <div class="flex items-center gap-3">
@@ -186,7 +189,7 @@ async function handleLogout() {
                     </div>
                 </router-link>
 
-                <router-link to="/dashboard/classrooms" @click="isSidebarOpen = false"
+                <router-link v-if="capabilities.can('teaching.classrooms.list')" to="/dashboard/classrooms" @click="isSidebarOpen = false"
                     class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
                     active-class="bg-emerald-50/60 text-emerald-600 font-bold relative before:absolute before:left-[-1rem] before:top-3 before:bottom-3 before:w-1 before:bg-emerald-500 before:rounded-r-full">
                     <div class="flex items-center gap-3">
@@ -199,7 +202,7 @@ async function handleLogout() {
                     </div>
                 </router-link>
 
-                <router-link to="/dashboard/holidays" @click="isSidebarOpen = false"
+                <router-link v-if="capabilities.can('teaching.holidays.list')" to="/dashboard/holidays" @click="isSidebarOpen = false"
                     class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
                     active-class="bg-emerald-50/60 text-emerald-600 font-bold relative before:absolute before:left-[-1rem] before:top-3 before:bottom-3 before:w-1 before:bg-emerald-500 before:rounded-r-full">
                     <div class="flex items-center gap-3">
@@ -212,7 +215,7 @@ async function handleLogout() {
                     </div>
                 </router-link>
 
-                <router-link to="/dashboard/teachers" @click="isSidebarOpen = false"
+                <router-link v-if="capabilities.can('teaching.teachers.list')" to="/dashboard/teachers" @click="isSidebarOpen = false"
                     class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
                     active-class="bg-emerald-50/60 text-emerald-600 font-bold relative before:absolute before:left-[-1rem] before:top-3 before:bottom-3 before:w-1 before:bg-emerald-500 before:rounded-r-full">
                     <div class="flex items-center gap-3">
@@ -228,7 +231,7 @@ async function handleLogout() {
                     </div>
                 </router-link>
 
-                <router-link to="/dashboard/reports/incomplete" @click="isSidebarOpen = false"
+                <router-link v-if="capabilities.can('teaching.reports.list')" to="/dashboard/reports/incomplete" @click="isSidebarOpen = false"
                     class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
                     active-class="bg-emerald-50/60 text-emerald-600 font-bold relative before:absolute before:left-[-1rem] before:top-3 before:bottom-3 before:w-1 before:bg-emerald-500 before:rounded-r-full">
                     <div class="flex items-center gap-3">

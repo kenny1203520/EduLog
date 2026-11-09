@@ -1,9 +1,7 @@
 import type { PermissionDTO, PolicyEffect, PolicyScope, RolePermissionPolicyDTO } from '@/models/Rbac'
 import { schedulePolicyOverrides, type DashboardSchedulePolicies, type DashboardScheduleSelections } from '@/models/DashboardScheduleMode'
-import { AuthorizationError } from '@/services/errors/AppError'
+import { AuthorizationError, ConflictError } from '@/services/errors/AppError'
 import { apiResourceClient } from '@/services/api/ApiResourceClient'
-import { apiDataClient } from '@/services/api/ApiDataClient'
-import { getApiV1Mode } from '@/services/api/ApiModeClient'
 import { apiV1Client } from '@/services/api/ApiV1Client'
 
 export const INCOMPLETE_REPORT_PERMISSION = 'reports.incomplete.receive'
@@ -11,20 +9,49 @@ export const DASHBOARD_SCHEDULE_ALL_PERMISSION = 'teaching.dashboard.schedule.al
 export const DASHBOARD_SCHEDULE_VIEW_PERMISSION = 'teaching.dashboard.schedule.view'
 export interface PolicyScopeTarget { type: PolicyScope; id?: string | null }
 
+/** A local policy row of one permission, tagged with its key. */
+export type KeyedPolicy = RolePermissionPolicyDTO & { permission_key: string }
+
+/** Every scope's local policies of some permissions, read at one RBAC epoch. */
+export interface PolicySnapshot {
+    epoch: number
+    permissionIds: Record<string, string>
+    policies: KeyedPolicy[]
+}
+
+/** Desired local effect of one role for one permission at the save scope; null means inherit. */
+export interface PolicyChange { role_id: string; permission_key: string; effect: PolicyEffect | null }
+
+/** Selection of a role in a permission editor. */
+export type PolicySelectionValue = PolicyEffect | 'inherit'
+
+const MAX_SAVE_ATTEMPTS = 3
+
+function isScope(policy: RolePermissionPolicyDTO, scope: PolicyScopeTarget) {
+    return policy.scope_type === scope.type && (scope.type === 'system' || policy.scope_id === scope.id)
+}
+
+function effectAt(policies: KeyedPolicy[], change: Pick<PolicyChange, 'role_id' | 'permission_key'>, scope: PolicyScopeTarget): PolicyEffect | null {
+    return policies.find(policy => policy.role_id === change.role_id
+        && policy.permission_key === change.permission_key
+        && isScope(policy, scope))?.effect ?? null
+}
+
+function errorCode(error: unknown) {
+    return (error as { code?: string } | null)?.code
+}
+
+function toPublicError(error: unknown): unknown {
+    const status = (error as { status?: number } | null)?.status
+    const code = errorCode(error)
+    if (status === 401 || status === 403 || code === '42501') return new AuthorizationError({ message: 'RBAC policy management was denied', cause: error })
+    if (code === 'RBAC_VERSION_CONFLICT') return new ConflictError({ message: 'RBAC policies changed while saving', cause: error })
+    return error
+}
+
 export class PermissionPolicyService {
     static async canUpdateOccurrence(classSessionId: string): Promise<boolean> {
         try {
-            if (getApiV1Mode() === 'mock') {
-                const user = await apiDataClient.auth.getUser()
-                if (user.error || !user.data.user) return false
-                const result = await apiDataClient.rpc('resolve_user_permission', {
-                    p_user_id: user.data.user.id,
-                    p_permission_key: 'teaching.occurrences.update',
-                    p_class_session_id: classSessionId
-                })
-                const row = Array.isArray(result.data) ? result.data[0] : result.data
-                return !result.error && row?.is_allowed === true && row?.is_denied !== true
-            }
             const query = new URLSearchParams({
                 permission: 'teaching.occurrences.update',
                 class_session_id: classSessionId
@@ -41,13 +68,6 @@ export class PermissionPolicyService {
 
     /** Whether the signed-in user holds `permissionKey` at system scope. */
     static async hasPermission(permissionKey: string): Promise<boolean> {
-        if (getApiV1Mode() === 'mock') {
-            const user = await apiDataClient.auth.getUser()
-            if (user.error || !user.data.user) return false
-            const result = await apiDataClient.rpc('resolve_user_permission', { p_user_id: user.data.user.id, p_permission_key: permissionKey })
-            const row = Array.isArray(result.data) ? result.data[0] : result.data
-            return !result.error && row?.is_allowed === true && row?.is_denied !== true
-        }
         try {
             const path = `/rbac/capability?permission=${encodeURIComponent(permissionKey)}`
             return (await apiV1Client.get<{ allowed: boolean }>(path)).data?.allowed === true
@@ -59,36 +79,116 @@ export class PermissionPolicyService {
         if (!permission) throw new Error('Permission was not found')
         return permission
     }
-    static async getPolicies(permissionId: string): Promise<RolePermissionPolicyDTO[]> {
-        return (await apiV1Client.get<RolePermissionPolicyDTO[]>(`/permissions/${encodeURIComponent(permissionId)}/policies`)).data || []
-    }
-    static async replacePolicies(permissionKey: string, scope: PolicyScopeTarget, policies: Array<{ role_id: string; effect: PolicyEffect }>): Promise<void> {
-        try {
-            if (getApiV1Mode() === 'mock') {
-                const result = await apiDataClient.rpc('replace_role_permission_policies', { p_permission_key: permissionKey, p_scope_type: scope.type, p_scope_id: scope.type === 'system' ? null : scope.id, p_policies: policies })
-                if (result.error) throw result.error
-                return
-            }
-            const permission = await this.getPermission(permissionKey)
-            await apiV1Client.patch(`/permissions/${encodeURIComponent(permission.id)}/policies`, { scope, policies })
-        } catch (error) {
-            if ((error as any)?.status === 401 || (error as any)?.status === 403 || (error as any)?.code === '42501') throw new AuthorizationError({ message: 'RBAC policy management was denied', cause: error })
-            throw error
+
+    /** Local policies of `permissionKeys` in every scope, with the epoch they were read at. */
+    static async getPolicySnapshot(permissionKeys: string[]): Promise<PolicySnapshot> {
+        const query = new URLSearchParams()
+        for (const key of permissionKeys) query.append('permission_key', key)
+        const response = await apiV1Client.get<KeyedPolicy[]>(`/roles/permission-policies?${query.toString()}`)
+        const meta = response.meta ?? {}
+        const permissions = (meta.permissions ?? []) as Array<{ id: string; key: string }>
+        return {
+            epoch: Number(meta.epoch),
+            permissionIds: Object.fromEntries(permissions.map(permission => [permission.key, permission.id])),
+            policies: response.data ?? []
         }
+    }
+
+    /** Local policies of one permission in every scope. */
+    static async getPolicies(permissionKey: string): Promise<KeyedPolicy[]> {
+        return (await this.getPolicySnapshot([permissionKey])).policies
     }
 
     /** Both permissions behind the four-state today's-schedule mode. */
     static async getDashboardSchedulePolicies(): Promise<DashboardSchedulePolicies> {
-        const [allPermission, viewPermission] = await Promise.all([
-            this.getPermission(DASHBOARD_SCHEDULE_ALL_PERMISSION),
-            this.getPermission(DASHBOARD_SCHEDULE_VIEW_PERMISSION)
-        ])
-        const [all, view] = await Promise.all([this.getPolicies(allPermission.id), this.getPolicies(viewPermission.id)])
-        return { all, view }
+        const snapshot = await this.getPolicySnapshot([DASHBOARD_SCHEDULE_ALL_PERMISSION, DASHBOARD_SCHEDULE_VIEW_PERMISSION])
+        return {
+            all: snapshot.policies.filter(policy => policy.permission_key === DASHBOARD_SCHEDULE_ALL_PERMISSION),
+            view: snapshot.policies.filter(policy => policy.permission_key === DASHBOARD_SCHEDULE_VIEW_PERMISSION)
+        }
     }
-    static async replaceDashboardScheduleModes(scope: PolicyScopeTarget, selections: DashboardScheduleSelections): Promise<void> {
+
+    /** Changes that set one permission's selection for each role. */
+    static selectionChanges(permissionKey: string, selections: Record<string, PolicySelectionValue>): PolicyChange[] {
+        return Object.entries(selections).map(([role_id, selection]) => ({
+            role_id,
+            permission_key: permissionKey,
+            effect: selection === 'allow' || selection === 'deny' ? selection : null
+        }))
+    }
+
+    /** Changes that set each role's today's-schedule mode. */
+    static scheduleModeChanges(selections: DashboardScheduleSelections): PolicyChange[] {
         const overrides = schedulePolicyOverrides(selections)
-        await this.replacePolicies(DASHBOARD_SCHEDULE_VIEW_PERMISSION, scope, overrides.view)
-        await this.replacePolicies(DASHBOARD_SCHEDULE_ALL_PERMISSION, scope, overrides.all)
+        return Object.keys(selections).flatMap(role_id => [
+            { role_id, permission_key: DASHBOARD_SCHEDULE_VIEW_PERMISSION, effect: overrides.view.find(item => item.role_id === role_id)?.effect ?? null },
+            { role_id, permission_key: DASHBOARD_SCHEDULE_ALL_PERMISSION, effect: overrides.all.find(item => item.role_id === role_id)?.effect ?? null }
+        ])
+    }
+
+    /** The schedule policies as keyed rows, for use as a save baseline. */
+    static scheduleBaseline(policies: DashboardSchedulePolicies): KeyedPolicy[] {
+        return [
+            ...policies.all.map(policy => ({ ...policy, permission_key: DASHBOARD_SCHEDULE_ALL_PERMISSION })),
+            ...policies.view.map(policy => ({ ...policy, permission_key: DASHBOARD_SCHEDULE_VIEW_PERMISSION }))
+        ]
+    }
+
+    /** Saves each role's today's-schedule mode at `scope`. */
+    static async saveDashboardScheduleModes(scope: PolicyScopeTarget, selections: DashboardScheduleSelections, baseline: DashboardSchedulePolicies): Promise<void> {
+        await this.applyPolicyChanges(scope, this.scheduleModeChanges(selections), this.scheduleBaseline(baseline))
+    }
+
+    /**
+     * Saves `changes` at `scope` through PATCH /roles/:id/permissions, one
+     * request per role, passing each response's epoch to the next request.
+     *
+     * Only cells that differ from `baseline` (the policies the editor showed)
+     * are sent, so roles and permissions the user did not touch are left as
+     * they are. When the epoch is stale the latest policies are read again:
+     * if another user changed one of the edited cells the save stops with a
+     * ConflictError, otherwise it retries with the new epoch.
+     */
+    static async applyPolicyChanges(scope: PolicyScopeTarget, changes: PolicyChange[], baseline: KeyedPolicy[]): Promise<void> {
+        const target = { type: scope.type, id: scope.type === 'system' ? null : scope.id ?? null }
+        const pending = changes.filter(change => effectAt(baseline, change, target) !== change.effect)
+        if (!pending.length) return
+        const keys = [...new Set(pending.map(change => change.permission_key))]
+        try {
+            for (let attempt = 1; ; attempt++) {
+                const latest = await this.getPolicySnapshot(keys)
+                const remaining = pending.filter(change => effectAt(latest.policies, change, target) !== change.effect)
+                if (remaining.some(change => effectAt(latest.policies, change, target) !== effectAt(baseline, change, target))) {
+                    throw new ConflictError({ message: 'Another user changed the same RBAC policy' })
+                }
+                try {
+                    await this.patchRoles(target, remaining, latest)
+                    return
+                } catch (error) {
+                    if (errorCode(error) !== 'RBAC_VERSION_CONFLICT' || attempt >= MAX_SAVE_ATTEMPTS) throw error
+                }
+            }
+        } catch (error) {
+            throw toPublicError(error)
+        }
+    }
+
+    private static async patchRoles(scope: PolicyScopeTarget, changes: PolicyChange[], snapshot: PolicySnapshot) {
+        const byRole = new Map<string, PolicyChange[]>()
+        for (const change of changes) byRole.set(change.role_id, [...byRole.get(change.role_id) ?? [], change])
+        let epoch = snapshot.epoch
+        for (const [roleId, roleChanges] of byRole) {
+            const response = await apiV1Client.patch<{ epoch: number }>(`/roles/${encodeURIComponent(roleId)}/permissions`, {
+                scope_type: scope.type,
+                scope_id: scope.id ?? null,
+                expected_epoch: epoch,
+                changes: roleChanges.map(change => {
+                    const permissionId = snapshot.permissionIds[change.permission_key]
+                    if (!permissionId) throw new Error(`Permission was not found: ${change.permission_key}`)
+                    return { permission_id: permissionId, effect: change.effect }
+                })
+            })
+            epoch = Number(response.data.epoch)
+        }
     }
 }

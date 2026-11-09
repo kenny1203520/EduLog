@@ -1,18 +1,12 @@
 {
   "name": "edulog",
   "version": "1.0.0",
-  "description": "EduLog 是一套為家教/補教場景設計的學習報告系統，提供比傳統後台更快的撰寫體驗，並支援跨裝置、即時同步與歷史報告參照。",
-  "main": "index.js",
-  "directories": {
-    "doc": "docs"
-  },
-  "scripts": {},
+  "private": true,
+  "description": "Root tooling for EduLog: provides Playwright for the extension browser tests (scripts/extension/browser-tests.mjs).",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/kenny1203520/EduLog.git"
   },
-  "keywords": [],
-  "type": "commonjs",
   "bugs": {
     "url": "https://github.com/kenny1203520/EduLog/issues"
   },

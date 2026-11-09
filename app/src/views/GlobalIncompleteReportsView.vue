@@ -101,7 +101,7 @@
                         </div>
                         <input type="text" v-model="searchQuery"
                             class="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-100 rounded-xl text-sm font-bold text-gray-700 placeholder:text-gray-300 outline-none focus:ring-4 focus:ring-emerald-500/5 focus:border-emerald-200 transition-all shadow-sm"
-                            :placeholder="t('report.search_placeholder')" />
+                            :placeholder="t('report.search_placeholder')"  :aria-label="t('report.search_placeholder')"/>
                     </div>
 
                     <!-- Refresh Button -->
@@ -412,14 +412,14 @@
 import { ref, onMounted, computed, watch, onBeforeUnmount } from 'vue'
 import { ReportQueryService } from '@/services/report/ReportQueryService'
 import { sourceIdentityFromRow } from '@/utils/sourceReportLink'
-import ReportEditor from '@/components/ReportEditor.vue'
-import ConfirmModal from '@/components/common/ConfirmModal.vue'
-import BasePageHeader from '@/components/common/BasePageHeader.vue'
+import ReportEditor from '@/components/report/ReportEditor.vue'
+import ConfirmModal from '@/components/ui/ConfirmModal.vue'
+import BasePageHeader from '@/components/ui/BasePageHeader.vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import { useFeedback } from '@/composables/useFeedback'
-import { apiResourceClient } from '@/services/api/ApiResourceClient'
-import { DateUtils } from '@/utils/DateUtils'
+import { CourseCatalogService } from '@/services/course/CourseCatalogService'
+import { DateUtils } from '@/utils/dateUtils'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { useRoute, useRouter } from 'vue-router'
 import { PermissionPolicyService } from '@/services/rbac/PermissionPolicyService'
@@ -534,7 +534,7 @@ async function loadReports(refreshEditor = true) {
         totalReports.value = total
 
         if (!selectedReport.value && normalized.length > 0) {
-            selectReport(normalized[0])
+            void selectReport(normalized[0])
         } else if (selectedReport.value) {
             const found = normalized.find(r => r.id === selectedReport.value.id)
             if (found) {
@@ -610,8 +610,7 @@ watch(selectedReport, async (newVal) => {
 
     editorLoading.value = true
     try {
-        const response = await apiResourceClient.list<any>('lessons', { courseId: newVal.courseId, sort: 'sequence', perPage: 100 })
-        activeLessons.value = response.data || []
+        activeLessons.value = await CourseCatalogService.getLessonsByCourse(newVal.courseId)
     } catch (e) {
         console.error('Failed to load lessons for report context', e)
         activeLessons.value = []
@@ -627,7 +626,7 @@ async function handleSaveSuccess() {
 
 function handleReportRestored() {
     toast.success(t('report.editor.restore_success'))
-    loadReports(true)
+    void loadReports(true)
 }
 
 function handleSaveError(msg: string) {

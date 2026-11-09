@@ -2,7 +2,16 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-const editor = readFileSync(resolve(process.cwd(), 'src/components/ReportEditor.vue'), 'utf8')
+// ReportEditor renders; its state machine lives in useReportEditorSession and its
+// sections in their own components. The contracts cover all of them together.
+const EDITOR_FILES = [
+    'src/components/report/ReportEditor.vue',
+    'src/composables/report/useReportEditorSession.ts',
+    'src/components/report/ReportDraftRecoveryBanner.vue',
+    'src/components/report/ReportAttendanceSection.vue',
+    'src/components/report/ReportProgressCheck.vue',
+]
+const editor = EDITOR_FILES.map(file => readFileSync(resolve(process.cwd(), file), 'utf8')).join('\n')
 
 describe('report editor offline protection contracts', () => {
     it('writes a device-local draft for every local edit and drops it once saved', () => {

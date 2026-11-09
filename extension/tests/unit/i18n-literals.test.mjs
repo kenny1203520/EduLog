@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {readFileSync, readdirSync} from 'node:fs'
+import { strings } from '../../workspace/views/strings.js'
 
 // UI wording in sites/ and content/ goes through edulogUi.tx() (or keyed t()). What remains as bare
 // Chinese literals is source-site vocabulary: lexicon patterns, header/label matching, status keys
@@ -79,4 +80,9 @@ test('route titles and menu labels shown by the toolbar and navigation have Engl
   const labels = [...lexicon.match(/labels: Object\.freeze\(\{([^}]*)\}/)[1].matchAll(/: '([^']+)'/g)].map(match => match[1])
   const groups = [...lexicon.match(/groupLabels: Object\.freeze\(\[([^\]]*)\]/)[1].matchAll(/'([^']+)'/g)].map(match => match[1])
   assert.deepEqual([...titles, ...labels, ...groups].filter(key => !book[key]), [])
+})
+
+test('skip link and skipped-record action have distinct translations', () => {
+  assert.deepEqual(strings['ws.skip-to-content'], ['跳至工作內容', 'Skip to content'])
+  assert.deepEqual(strings['ws.skip-item'], ['略過此筆', 'Skip'])
 })

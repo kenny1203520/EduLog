@@ -18,7 +18,7 @@ const storageAvailable = ref(true)
 const chatgptAvailable = ref(false)
 const saving = ref(false)
 const connecting = ref(false)
-const form = reactive<{ provider: AiProvider, label: string, secret: string }>({ provider: 'anthropic', label: '', secret: '' })
+const form = reactive<{ provider: AiProvider, label: string, secret: string, base_url: string }>({ provider: 'anthropic', label: '', secret: '', base_url: '' })
 
 async function load() {
     loading.value = true
@@ -37,10 +37,16 @@ async function load() {
 async function add() {
     saving.value = true
     try {
-        const created = await AiSettingsService.addMyCredential({ provider: form.provider, label: form.label.trim() || t(`ai.providers.${form.provider}`), secret: form.secret.trim() })
+        const created = await AiSettingsService.addMyCredential({
+            provider: form.provider,
+            label: form.label.trim() || t(`ai.providers.${form.provider}`),
+            ...(form.secret.trim() ? { secret: form.secret.trim() } : {}),
+            ...(form.provider === 'ollama' ? { base_url: form.base_url.trim() } : {}),
+        })
         credentials.value = [...credentials.value, { ...created, models: [] }]
         form.secret = ''
         form.label = ''
+        form.base_url = ''
         success('ai.settings.saved')
     } catch (error) {
         reportError(error)
@@ -153,14 +159,18 @@ onMounted(async () => {
                     </select>
                 </label>
                 <label class="block text-sm font-bold text-gray-700">{{ t('ai.settings.label') }}
-                    <input v-model="form.label" maxlength="120" class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 px-3 text-sm" :placeholder="t(`ai.providers.${form.provider}`)" />
+                    <input v-model="form.label" maxlength="120" class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 px-3 text-sm" :placeholder="t(`ai.providers.${form.provider}`)"  :aria-label="t(`ai.providers.${form.provider}`)"/>
                 </label>
-                <label class="block text-sm font-bold text-gray-700">{{ t('ai.settings.api_key') }}
-                    <input v-model="form.secret" type="password" autocomplete="off" required maxlength="4096" class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 px-3 text-sm" />
+                <label v-if="form.provider === 'ollama'" class="block text-sm font-bold text-gray-700">{{ t('ai.settings.base_url') }}
+                    <input v-model="form.base_url" type="url" autocomplete="url" required pattern="https://.+" maxlength="2048" class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 px-3 text-sm" placeholder="https://ollama.example.com" />
+                </label>
+                <label class="block text-sm font-bold text-gray-700">{{ form.provider === 'ollama' ? t('ai.settings.api_key_optional') : t('ai.settings.api_key') }}
+                    <input v-model="form.secret" type="password" autocomplete="off" :required="form.provider !== 'ollama'" maxlength="4096" class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 px-3 text-sm" />
                 </label>
                 <p class="text-xs text-gray-600">{{ t('ai.settings.key_storage_note') }}</p>
-                <p class="text-xs text-gray-600">{{ t('ai.settings.gemini_note') }}</p>
-                <button type="submit" class="min-h-11 rounded-xl bg-emerald-600 px-4 text-sm font-black text-white disabled:opacity-50" :disabled="saving || !form.secret.trim() || !storageAvailable">
+                <p v-if="form.provider === 'ollama'" class="text-xs text-gray-600">{{ t('ai.settings.ollama_public_help') }}</p>
+                <p v-else-if="form.provider === 'google'" class="text-xs text-gray-600">{{ t('ai.settings.gemini_note') }}</p>
+                <button type="submit" class="min-h-11 rounded-xl bg-emerald-600 px-4 text-sm font-black text-white disabled:opacity-50" :disabled="saving || (form.provider === 'ollama' ? !form.base_url.trim() : !form.secret.trim()) || (!storageAvailable && (form.provider !== 'ollama' || !!form.secret.trim()))">
                     {{ saving ? t('common.saving') : t('ai.settings.add_key') }}
                 </button>
             </form>

@@ -21,7 +21,7 @@ const probes = [], editorRequests = []
 const json = (res, body, status = 200) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)) }
 const cookies = req => Object.fromEntries((req.headers.cookie || '').split('; ').filter(Boolean).map(part => part.split('=')))
 const server = createServer((req, res) => {
-  const url = new URL(req.url, 'http://local')
+  const url = new URL(req.url, 'https://local.invalid')
   const api = url.pathname.replace(/^\/api\/extension\/v1/, '')
   if (url.pathname.startsWith('/api/extension/v1/')) {
     if (req.headers.authorization !== `Bearer ${'a'.repeat(64)}`) return json(res, { error: { code: 'EXTENSION_AUTH_INVALID', message: 'x' } }, 401)
@@ -114,7 +114,7 @@ try {
       await panelPage.goto(`chrome-extension://${id}/sidepanel/panel.html?tab=999`)
       await panelPage.locator('#allow').waitFor({ state: 'visible' })
       assert.equal(await panelPage.locator('#editor').isVisible(), false)
-      assert.match(await panelPage.locator('#message-text').textContent(), new RegExp(web.replace(/[.:/]/g, '\\$&')))
+      assert.ok((await panelPage.locator('#message-text').textContent()).includes(web))
       await panelPage.screenshot({ path: join(output, `${name}-panel-no-access.png`) })
       await worker.evaluate(() => chrome.storage.local.remove('edulogExtension'))
       await panelPage.waitForFunction(() => document.querySelector('#message').dataset.tone === 'error')

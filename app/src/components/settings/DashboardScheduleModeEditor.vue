@@ -74,7 +74,7 @@ function sourceLabel(result: ResolvedDashboardScheduleMode) {
 }
 
 function update(roleId: string, selection: DashboardScheduleSelection) {
-    if (props.disabled) return
+    if (props.disabled || props.roles.find(role => role.id === roleId)?.is_protected) return
     emit('update:modelValue', { ...props.modelValue, [roleId]: selection })
 }
 </script>
@@ -86,6 +86,7 @@ function update(roleId: string, selection: DashboardScheduleSelection) {
             :class="compact ? 'p-3 md:grid-cols-[minmax(8rem,1fr)_auto]' : 'p-4 lg:grid-cols-[minmax(10rem,1fr)_auto_minmax(12rem,1fr)] lg:items-center'">
             <div class="min-w-0">
                 <p class="truncate font-black text-gray-800" :title="roleDisplayName(role, t)">{{ roleDisplayName(role, t) }}</p>
+                <p v-if="role.is_protected" class="mt-1 text-xs font-bold text-amber-700">{{ $t('rbac.protected_read_only') }}</p>
                 <p class="mt-1 text-xs font-bold text-gray-500">
                     {{ $t('settings.dashboard_schedule.effective') }}:
                     <span :class="effectiveFor(role.id).mode ? resultClass[effectiveFor(role.id).mode!] : 'text-gray-500'">
@@ -99,7 +100,7 @@ function update(roleId: string, selection: DashboardScheduleSelection) {
                 <button v-for="choice in choices" :key="choice" type="button"
                     class="min-h-9 min-w-0 cursor-pointer rounded-lg px-2.5 py-2 text-xs font-black transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
                     :class="modelValue[role.id] === choice ? selectedClass[choice] : 'text-gray-600 hover:bg-gray-100'"
-                    :aria-pressed="modelValue[role.id] === choice" :disabled="disabled"
+                    :aria-pressed="modelValue[role.id] === choice" :disabled="disabled || role.is_protected"
                     @click="update(role.id, choice)">
                     {{ $t(`settings.dashboard_schedule.${choice}`) }}
                 </button>

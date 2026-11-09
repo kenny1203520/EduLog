@@ -2,10 +2,10 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod'
 import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { sendData } from '../../http/response.js'
-import { listQuerySchema, resources, type ResourceDefinition } from './resources.js'
+import { genericOperationsOf, listQuerySchema, resources, type ResourceDefinition } from './resources.js'
 import { authorizeCollection, authorizeResource, permissionForResource } from '../../auth/authorization.js'
 import { setAuditContext } from '../../http/context.js'
-import { applyListOrder } from './relationOrder.js'
+import { applyListOrder } from '../../services/relationOrder.js'
 
 const mutationMethods = ['POST', 'PATCH', 'DELETE']
 const serviceOnlyViews = new Set(['users', 'teachers'])
@@ -362,8 +362,8 @@ export async function collection(req: Request, res: Response, def: ResourceDefin
   }
   const userOwnedTables = new Set(['user_preferences', 'user_entity_visibility_preferences', 'copy_templates'])
    let insertBody = userOwnedTables.has(def.table) ? { ...body, user_id: req.user!.id } : body
-   // Legacy teaching_id markers on teaching records are normalized by the
-   // database compatibility trigger; the API no longer reads teaching spaces.
+   // teaching_id on teaching records is a legacy constant: the database
+   // trigger normalize_global_teaching_row overwrites any value sent here.
   const itemFields = def.itemFields ?? def.fields
   const result = req.method === 'POST' ? await req.db!.from(def.table).insert(insertBody).select(itemFields.join(', ')).single() : await req.db!.from(def.table).update(body).select(itemFields.join(', ')).maybeSingle()
   if (result.error) throw mapDatabaseError(result.error)
@@ -377,12 +377,12 @@ export async function collection(req: Request, res: Response, def: ResourceDefin
 export function createResourceRouter() {
   const router = Router()
   for (const [route, def] of Object.entries(resources)) {
-    const methods = new Set(def.genericMethods ?? ['GET', 'POST', 'PATCH', 'DELETE'])
-    if (methods.has('GET')) router.get(`/${route}`, wrap((req, res) => collection(req, res, def)))
-    if (methods.has('POST')) router.post(`/${route}`, wrap((req, res) => collection(req, res, def)))
-    if (methods.has('GET')) router.get(`/${route}/:id`, wrap((req, res) => item(req, res, def)))
-    if (methods.has('PATCH')) router.patch(`/${route}/:id`, wrap((req, res) => item(req, res, def)))
-    if (methods.has('DELETE')) router.delete(`/${route}/:id`, wrap((req, res) => item(req, res, def)))
+    const operations = genericOperationsOf(def)
+    if (operations.has('list')) router.get(`/${route}`, wrap((req, res) => collection(req, res, def)))
+    if (operations.has('create')) router.post(`/${route}`, wrap((req, res) => collection(req, res, def)))
+    if (operations.has('read')) router.get(`/${route}/:id`, wrap((req, res) => item(req, res, def)))
+    if (operations.has('update')) router.patch(`/${route}/:id`, wrap((req, res) => item(req, res, def)))
+    if (operations.has('delete')) router.delete(`/${route}/:id`, wrap((req, res) => item(req, res, def)))
   }
   return router
 }

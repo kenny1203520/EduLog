@@ -6,7 +6,7 @@ import { SessionService } from '@/services/session/SessionService'
 import type { PolicyScope } from '@/models/Rbac'
 import RolePermissionEditor from '@/components/settings/RolePermissionEditor.vue'
 import { useFeedback } from '@/composables/useFeedback'
-import SearchableSelect from '@/components/common/SearchableSelect.vue'
+import SearchableSelect from '@/components/ui/SearchableSelect.vue'
 
 type ClassroomOption = { id: string; name: string; teaching_id?: string }
 type SessionOption = { id: string; name: string; classroom_id?: string | null; teaching_id?: string }
@@ -64,6 +64,7 @@ onMounted(load)
             <h3 class="text-xl font-black text-gray-900">{{ t('settings.teaching_role_permissions.title') }}</h3>
             <p class="mt-1 max-w-3xl text-sm text-gray-500">{{ t('settings.teaching_role_permissions.description') }}</p>
             <p class="mt-3 rounded-xl bg-sky-50 px-4 py-3 text-xs leading-5 text-sky-900">{{ t('rbac.sensitive_student_data_hint') }}</p>
+            <p class="mt-2 text-xs leading-5 text-gray-500">{{ t('rbac.custom_teaching_roles_hint') }}</p>
         </header>
         <div class="space-y-5 p-6 sm:p-8">
             <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -75,19 +76,19 @@ onMounted(load)
                         <option value="class_session">{{ t('rbac.scope.class_session') }}</option>
                     </select>
                 </label>
-                <label v-if="scopeMode === 'classroom' || scopeMode === 'class_session'" class="space-y-2">
+                <div v-if="scopeMode === 'classroom' || scopeMode === 'class_session'" class="space-y-2">
                     <span class="text-xs font-black uppercase tracking-wider text-gray-500">{{ t('rbac.scope.classroom') }}</span>
                     <SearchableSelect v-model="classroomId" :options="classroomOptions" :placeholder="t('common.select_placeholder')" :aria-label="t('rbac.scope.classroom')" />
-                </label>
-                <label v-if="scopeMode === 'class_session'" class="space-y-2">
+                </div>
+                <div v-if="scopeMode === 'class_session'" class="space-y-2">
                     <span class="text-xs font-black uppercase tracking-wider text-gray-500">{{ t('rbac.scope.class_session') }}</span>
                     <SearchableSelect v-model="sessionId" :options="sessionOptions" :placeholder="t('common.select_placeholder')" :aria-label="t('rbac.scope.class_session')" />
-                </label>
+                </div>
             </div>
             <p v-if="loading" class="py-8 text-center text-sm font-bold text-gray-400">{{ t('common.loading') }}</p>
             <RolePermissionEditor v-else-if="contextReady" domain="teaching"
                 :policy-scope-type="policyScopeType" :policy-scope-id="policyScopeId"
-                :can-manage-role-definitions="false" />
+                :can-manage-role-definitions="scopeMode === 'global'" />
             <p v-else class="rounded-xl border border-dashed border-gray-200 px-4 py-8 text-center text-sm text-gray-500">{{ t('rbac.scope.select_context') }}</p>
         </div>
     </section>

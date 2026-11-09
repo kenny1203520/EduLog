@@ -86,7 +86,7 @@ function app(tables: Record<string, Row[]>, analyzer: DeidAnalyzer | null, optio
     req.log = { error() {}, warn() {}, info() {} } as never
     next()
   })
-  instance.use('/api', createAiDeidRouter({} as ApiConfig, analyzer))
+  instance.use('/api', createAiDeidRouter(analyzer))
   instance.use(errorHandler)
   return instance
 }

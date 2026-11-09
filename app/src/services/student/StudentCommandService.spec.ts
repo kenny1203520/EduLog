@@ -2,18 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { StudentCommandService } from './StudentCommandService'
 
 const mocks = vi.hoisted(() => ({
-    mode: 'v1', create: vi.fn(), update: vi.fn(), insert: vi.fn(), legacyUpdate: vi.fn(),
+    create: vi.fn(), update: vi.fn(),
     school: { id: 'e7982b6e-d0c9-4f89-814f-de95709e0d50' }
 }))
-vi.mock('@/services/api/ApiModeClient', () => ({ getApiV1Mode: () => mocks.mode }))
 vi.mock('@/services/api/ApiResourceClient', () => ({ apiResourceClient: { create: mocks.create, update: mocks.update } }))
-vi.mock('@/services/enrollment/EnrollmentService', () => ({ EnrollmentService: {} }))
-vi.mock('@/utils/DateUtils', () => ({ DateUtils: {
+vi.mock('@/utils/dateUtils', () => ({ DateUtils: {
     isValidTimeZone: (value: string) => value === 'Asia/Taipei', getDefaultTimeZone: () => 'Asia/Taipei'
-} }))
-vi.mock('@/services/api/ApiDataClient', () => ({ apiDataClient: {
-    auth: { getUser: async () => ({ data: { user: { id: 'user' } } }) },
-    from: () => ({ insert: mocks.insert, update: mocks.legacyUpdate })
 } }))
 
 const studentId = 'ffe5b8ab-4657-4977-b6c9-3320da82046f'
@@ -27,15 +21,11 @@ beforeEach(() => {
     vi.clearAllMocks()
     mocks.create.mockResolvedValue({ data: mocks.school })
     mocks.update.mockResolvedValue({ data: mocks.school })
-    const query: any = { select: () => query, eq: () => query, single: async () => ({ data: mocks.school, error: null }) }
-    mocks.insert.mockReturnValue(query)
-    mocks.legacyUpdate.mockReturnValue(query)
 })
 
-describe.each(['v1', 'legacy'])('school writes in %s mode', mode => {
-    beforeEach(() => { mocks.mode = mode })
-    const updatePayload = () => mode === 'v1' ? mocks.update.mock.calls[0]![2] : mocks.legacyUpdate.mock.calls[0]![0]
-    const createPayload = () => mode === 'v1' ? mocks.create.mock.calls[0]![1] : mocks.insert.mock.calls[0]![0]
+describe('school writes', () => {
+    const updatePayload = () => mocks.update.mock.calls[0]![2]
+    const createPayload = () => mocks.create.mock.calls[0]![1]
 
     it('strips response metadata from a full school record and preserves its dates', async () => {
         await StudentCommandService.updateSchool(existing.id, existing)

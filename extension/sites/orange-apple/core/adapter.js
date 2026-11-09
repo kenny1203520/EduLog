@@ -15,7 +15,7 @@
         if (!changes.has(node)) changes.set(node, new Map())
         const attrs = changes.get(node)
         if (!attrs.has(name)) attrs.set(name, node.getAttribute(name))
-        if (value === null) node.removeAttribute(name)
+        if (value == null) node.removeAttribute(name)
         else node.setAttribute(name, value)
       },
       listen(node, event, handler) { node.addEventListener(event, handler); listeners.push(() => node.removeEventListener(event, handler)) },

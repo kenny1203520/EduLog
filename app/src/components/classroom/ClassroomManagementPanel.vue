@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import { useFeedback } from '@/composables/useFeedback'
 import type { ClassroomDTO, ClassSessionDTO } from '@/models/Classroom'
-import type { RoleDTO, RolePermissionPolicyDTO } from '@/models/Rbac'
+import type { RoleDTO } from '@/models/Rbac'
 import ScopedRolePolicyEditor, {
     type RolePolicySelections
 } from '@/components/settings/ScopedRolePolicyEditor.vue'
@@ -17,9 +17,10 @@ import {
 } from '@/models/DashboardScheduleMode'
 import {
     INCOMPLETE_REPORT_PERMISSION,
-    PermissionPolicyService
+    PermissionPolicyService,
+    type KeyedPolicy
 } from '@/services/rbac/PermissionPolicyService'
-import { DateUtils } from '@/utils/DateUtils'
+import { DateUtils } from '@/utils/dateUtils'
 
 type PanelTab = 'details' | 'notifications' | 'sessions' | 'role_assignments'
 
@@ -28,7 +29,7 @@ const props = defineProps<{
     roomId?: string | null
     sessions: ClassSessionDTO[]
     roles: RoleDTO[]
-    policies: RolePermissionPolicyDTO[]
+    policies: KeyedPolicy[]
     roomSelections: RolePolicySelections
     schedulePolicies: DashboardSchedulePolicies
     roomScheduleSelections: DashboardScheduleSelections
@@ -138,13 +139,11 @@ async function saveSessionPolicy(continuePending = false) {
     if (!expandedSessionId.value || !canManageRbac.value) return
     savingSessionPolicy.value = true
     try {
-        const overrides = props.roles.flatMap(role => {
-            const effect = sessionSelections.value[role.id]
-            return effect === 'allow' || effect === 'deny' ? [{ role_id: role.id, effect }] : []
-        })
         const scope = { type: 'class_session' as const, id: expandedSessionId.value }
-        await PermissionPolicyService.replacePolicies(INCOMPLETE_REPORT_PERMISSION, scope, overrides)
-        await PermissionPolicyService.replaceDashboardScheduleModes(scope, sessionScheduleSelections.value)
+        await PermissionPolicyService.applyPolicyChanges(scope, [
+            ...PermissionPolicyService.selectionChanges(INCOMPLETE_REPORT_PERMISSION, sessionSelections.value),
+            ...PermissionPolicyService.scheduleModeChanges(sessionScheduleSelections.value)
+        ], [...props.policies, ...PermissionPolicyService.scheduleBaseline(props.schedulePolicies)])
         sessionBaseline.value = sessionSnapshot()
         emit('policies-changed')
         toast.success(t('classroom.role_settings_saved'))
@@ -153,6 +152,7 @@ async function saveSessionPolicy(continuePending = false) {
         pendingAction.value = null
     } catch (error: any) {
         reportError(error)
+        if (error?.kind === 'conflict') emit('policies-changed')
     } finally {
         savingSessionPolicy.value = false
     }
@@ -214,7 +214,7 @@ watch(() => props.roomId, () => {
                 <div v-if="activeTab === 'details'" class="mx-auto grid max-w-3xl grid-cols-1 gap-5 md:grid-cols-2">
                     <label class="space-y-2 md:col-span-2">
                         <span class="text-sm font-bold text-gray-700">{{ $t('classroom.room_name') }}</span>
-                        <input v-model="roomModel.name" :placeholder="$t('classroom.room_placeholder')" class="w-full rounded-xl border-gray-300">
+                        <input v-model="roomModel.name" :placeholder="$t('classroom.room_placeholder')" class="w-full rounded-xl border-gray-300" :aria-label="$t('classroom.room_placeholder')">
                     </label>
                     <label class="space-y-2">
                         <span class="text-sm font-bold text-gray-700">{{ $t('classroom.address') }}</span>
@@ -226,7 +226,7 @@ watch(() => props.roomId, () => {
                     </label>
                     <label class="min-w-0 space-y-2 md:col-span-2">
                         <span class="text-sm font-bold text-gray-700">{{ $t('classroom.external_link') }}</span>
-                        <input v-model="roomModel.external_link" type="url" :placeholder="$t('classroom.external_link_placeholder')" class="w-full min-w-0 rounded-xl border-gray-300">
+                        <input v-model="roomModel.external_link" type="url" :placeholder="$t('classroom.external_link_placeholder')" class="w-full min-w-0 rounded-xl border-gray-300" :aria-label="$t('classroom.external_link_placeholder')">
                     </label>
                     <label class="space-y-2 md:col-span-2">
                         <span class="text-sm font-bold text-gray-700">{{ $t('classroom.color_label') }}</span>
@@ -259,7 +259,7 @@ watch(() => props.roomId, () => {
                 <div v-else class="mx-auto max-w-4xl space-y-4">
                     <div class="sticky top-0 z-10 bg-white pb-2">
                         <input v-model="search" type="search" :placeholder="$t('classroom.search_child_sessions')"
-                            class="w-full rounded-xl border-gray-200 bg-gray-50 px-4 py-3 font-bold">
+                            class="w-full rounded-xl border-gray-200 bg-gray-50 px-4 py-3 font-bold" :aria-label="$t('classroom.search_child_sessions')">
                     </div>
                     <article v-for="session in filteredSessions" :key="session.id" class="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
                         <button type="button" class="grid w-full min-w-0 gap-3 p-4 text-left sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"

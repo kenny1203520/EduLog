@@ -45,7 +45,7 @@ describe('lesson schedule planning', () => {
 describe('enrollment report provisioning contract', () => {
   it('syncs only this enrollment through sync_enrollment_reports', () => {
     const source = readFileSync(new URL('../routes/rest/enrollmentRouter.ts', import.meta.url), 'utf8')
-    const provisioning = readFileSync(new URL('../routes/rest/lessonProvisioning.ts', import.meta.url), 'utf8')
+    const provisioning = readFileSync(new URL('../services/lessonProvisioning.ts', import.meta.url), 'utf8')
     expect(source).toContain("rpc('sync_enrollment_reports'")
     expect(source).not.toContain("rpc('provision_occurrence_reports'")
     expect(source).toContain("'/enrollments/:id/start-date-impact'")

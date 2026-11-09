@@ -3,9 +3,9 @@ import { ref, onMounted, watch } from 'vue'
 import { useStudentStore } from '@/stores/useStudentStore'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
-import Pagination from '@/components/common/Pagination.vue'
+import Pagination from '@/components/ui/Pagination.vue'
 import { copyToClipboard as copyToClipboardUtil } from '@/utils/clipboard'
-import BasePageHeader from '@/components/common/BasePageHeader.vue'
+import BasePageHeader from '@/components/ui/BasePageHeader.vue'
 
 const { t, locale } = useI18n()
 const toast = useToast()
@@ -80,7 +80,7 @@ async function copyToClipboard(text: string) {
                     </div>
                     <input v-model="studentStore.searchQuery" type="text"
                         :placeholder="t('common.search', 'Search students...')"
-                        class="flex-1 bg-transparent border-none outline-none text-sm font-bold text-gray-700 placeholder:text-gray-300 py-2" />
+                        class="flex-1 bg-transparent border-none outline-none text-sm font-bold text-gray-700 placeholder:text-gray-300 py-2"  :aria-label="t('common.search', 'Search students...')"/>
                     <button v-if="studentStore.searchQuery" @click="studentStore.searchQuery = ''"
                         class="p-2 text-gray-300 hover:text-gray-500 transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
@@ -251,11 +251,11 @@ async function copyToClipboard(text: string) {
 
                 <form @submit.prevent="handleCreateStudent" class="space-y-6">
                     <div class="space-y-2">
-                        <label class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">{{
+                        <label class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1" for="edulog-studentmanagementview-201-13677">{{
                             $t('student.name') }}</label>
                         <input v-model="newStudentName" type="text"
                             class="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all font-bold placeholder-gray-300"
-                            required :placeholder="$t('student.name')" />
+                            required :placeholder="$t('student.name')"  id="edulog-studentmanagementview-201-13677"/>
                     </div>
 
                     <div class="flex gap-4 pt-4">

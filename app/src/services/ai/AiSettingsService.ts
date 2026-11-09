@@ -3,7 +3,7 @@ import { apiV1Client } from '@/services/api/ApiV1Client'
 /** Client for personal (/ai/me) and admin (/ai/admin) AI settings. */
 
 export type AiProvider = 'anthropic' | 'openai' | 'google' | 'openrouter' | 'ollama'
-export const PERSONAL_PROVIDERS: AiProvider[] = ['anthropic', 'openai', 'google', 'openrouter']
+export const PERSONAL_PROVIDERS: AiProvider[] = ['anthropic', 'openai', 'google', 'openrouter', 'ollama']
 export const SITE_PROVIDERS: AiProvider[] = ['anthropic', 'openai', 'google', 'openrouter', 'ollama']
 
 /** A model offered by the provider's own list (see server/src/ai/providers/modelCatalog.ts). */
@@ -16,7 +16,8 @@ export interface CatalogModel {
     supportsStructuredOutput?: boolean
 }
 
-export type ModelCatalog = { supported: true, models: CatalogModel[], fetchedAt: string } | { supported: false, reason: string }
+/** `reason` is a stable code (see server modelCatalog.ts); `detail` is a short diagnostic such as "HTTP 400 …". */
+export type ModelCatalog = { supported: true, models: CatalogModel[], fetchedAt: string } | { supported: false, reason: string, detail?: string }
 
 /** Outcome of the test call; status and message are what the provider said, without secrets. */
 export interface CredentialTestResult {
@@ -142,10 +143,10 @@ export const AiSettingsService = {
     async myCredentials() {
         return (await apiV1Client.get<{ credentials: AiCredentialDTO[], secret_storage_available: boolean, chatgpt_available?: boolean }>('/ai/me/credentials')).data
     },
-    async addMyCredential(input: { provider: AiProvider, label: string, secret: string }) {
+    async addMyCredential(input: { provider: AiProvider, label: string, secret?: string, base_url?: string }) {
         return (await apiV1Client.post<AiCredentialDTO>('/ai/me/credentials', input)).data
     },
-    async updateMyCredential(id: string, patch: { label?: string, secret?: string, status?: 'active' | 'disabled' }) {
+    async updateMyCredential(id: string, patch: { label?: string, secret?: string | null, base_url?: string, status?: 'active' | 'disabled' }) {
         return (await apiV1Client.patch<AiCredentialDTO>(`/ai/me/credentials/${id}`, patch)).data
     },
     async deleteMyCredential(id: string) { await apiV1Client.delete(`/ai/me/credentials/${id}`) },

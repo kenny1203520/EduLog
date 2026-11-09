@@ -1,5 +1,5 @@
 import { Course, type CourseDTO, Lesson, type LessonDTO } from '@/models/Course'
-import { createTextEditorContent } from '@/components/common/text-editor/content'
+import { createTextEditorContent } from '@/components/text-editor/content'
 import { apiResourceClient } from '../api/ApiResourceClient'
 
 function toCourse(dto: CourseDTO & { lessons?: LessonDTO[] }) {

@@ -44,13 +44,6 @@ vi.mock('@/stores/usePreferencesStore', () => ({
     })
 }))
 
-vi.mock('@/services/api/ApiDataClient', () => ({
-    apiDataClient: {
-        channel: vi.fn(),
-        removeChannel: vi.fn()
-    }
-}))
-
 describe('StudentReportsView scheduled report filter', () => {
     it('is enabled by default and can be toggled off and on', async () => {
         const wrapper = mount(StudentReportsView, {
@@ -110,13 +103,13 @@ describe('StudentReportsView scheduled report filter', () => {
             source.indexOf('async function loadOccurrences()'),
             source.indexOf('async function selectOccurrence(')
         )
-        expect(loadOccurrencesBody).toContain('effectiveTransferTargets.value = await EnrollmentService.getEffectiveSingleLessonTransferTargets(enrollmentId)')
+        expect(loadOccurrencesBody).toContain('effectiveTransferTargets.value = await EnrollmentTransferQueryService.getEffectiveSingleLessonTransferTargets(enrollmentId)')
         expect(loadOccurrencesBody).toContain('effectiveTransferTargets.value = []')
         expect(loadOccurrencesBody).toContain("loadError.value = t('report.list_load_error')")
         // The transfer-targets call must be wrapped in its own try/catch, isolated
         // from the outer function-level catch that used to blank the whole list.
         const transferTargetsCallIndex = loadOccurrencesBody.indexOf(
-            'effectiveTransferTargets.value = await EnrollmentService.getEffectiveSingleLessonTransferTargets(enrollmentId)'
+            'effectiveTransferTargets.value = await EnrollmentTransferQueryService.getEffectiveSingleLessonTransferTargets(enrollmentId)'
         )
         const innerTryIndex = loadOccurrencesBody.lastIndexOf('try {', transferTargetsCallIndex)
         const innerCatchIndex = loadOccurrencesBody.indexOf('} catch (transferTargetsError) {', transferTargetsCallIndex)

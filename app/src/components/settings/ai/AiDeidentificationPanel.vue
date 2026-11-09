@@ -73,7 +73,7 @@ function toggleLanguage(code: DeidLanguage, enabled: boolean) {
     const current = overview.value.enabled_languages
     const next = enabled ? [...current, code] : current.filter((item) => item !== code)
     if (next.length === 0) return
-    save(async () => {
+    void save(async () => {
         const saved = await AiDeidService.saveLanguages(next)
         overview.value = { ...overview.value!, enabled_languages: saved.enabled_languages }
     })
@@ -167,7 +167,7 @@ async function saveRule() {
 }
 
 function toggleRule(rule: DeidRuleDTO, enabled: boolean) {
-    save(async () => {
+    void save(async () => {
         const saved = await AiDeidService.updateRule(rule.id, { enabled })
         overview.value = { ...overview.value!, rules: overview.value!.rules.map((item) => item.id === saved.id ? saved : item) }
     })
@@ -175,7 +175,7 @@ function toggleRule(rule: DeidRuleDTO, enabled: boolean) {
 
 function deleteRule(rule: DeidRuleDTO) {
     if (!window.confirm(t('aiDeid.rules.delete_confirm', { name: rule.name }))) return
-    save(async () => {
+    void save(async () => {
         await AiDeidService.deleteRule(rule.id)
         overview.value = { ...overview.value!, rules: overview.value!.rules.filter((item) => item.id !== rule.id) }
     })
@@ -191,7 +191,7 @@ function toggleDraftLanguage(code: DeidLanguage, checked: boolean) {
 const allowInput = ref('')
 
 function saveAllowList(entries: string[]) {
-    save(async () => {
+    void save(async () => {
         const saved = await AiDeidService.saveAllowList(entries)
         overview.value = { ...overview.value!, allow_list: saved.allow_list }
     })
@@ -320,7 +320,7 @@ onMounted(load)
                                 {{ languageLabel(code) }}
                             </label>
                         </div>
-                        <label class="mt-3 block text-xs font-bold text-gray-700" for="deid-rebuild">{{ t('aiDeid.status.rebuild_command') }}</label>
+                        <p class="mt-3 block text-xs font-bold text-gray-700">{{ t('aiDeid.status.rebuild_command') }}</p>
                         <div class="mt-1 flex flex-wrap items-stretch gap-2">
                             <code id="deid-rebuild" class="min-w-0 flex-1 break-all rounded-xl bg-gray-900 px-3 py-2 font-mono text-xs leading-relaxed text-gray-100">{{ rebuildCommand }}</code>
                             <button type="button" class="min-h-11 rounded-xl border border-gray-200 px-3 text-sm font-bold text-gray-700 hover:bg-gray-50" @click="copyCommand">{{ t('aiDeid.status.copy') }}</button>
@@ -386,7 +386,7 @@ onMounted(load)
                 <h3 id="deid-test-title" class="text-lg font-black text-gray-900">{{ t('aiDeid.test.title') }}</h3>
                 <p class="text-sm text-gray-600">{{ t('aiDeid.test.hint') }}</p>
                 <form class="space-y-3" @submit.prevent="runTest">
-                    <label class="block text-sm font-bold text-gray-700">{{ t('aiDeid.test.text') }}
+                    <label class="block text-sm font-bold text-gray-700" for="edulog-aideidentificationpanel-107-9562">{{ t('aiDeid.test.text') }}
                         <textarea v-model="testForm.text" rows="4" maxlength="5000" class="mt-1 w-full rounded-xl border border-gray-200 p-3 text-sm leading-relaxed"></textarea>
                     </label>
                     <fieldset>
@@ -394,7 +394,7 @@ onMounted(load)
                         <p class="text-xs text-gray-600">{{ t('aiDeid.test.names_hint') }}</p>
                         <div class="mt-1 grid gap-2 sm:grid-cols-3">
                             <label v-for="field in (['students', 'teachers', 'schools'] as const)" :key="field" class="block text-xs font-bold text-gray-700">{{ t(`aiDeid.test.${field}`) }}
-                                <input v-model="testForm[field]" maxlength="500" class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 px-3 text-sm" />
+                                <input v-model="testForm[field]" maxlength="500" class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 px-3 text-sm"  id="edulog-aideidentificationpanel-107-9562"/>
                             </label>
                         </div>
                     </fieldset>
@@ -453,14 +453,14 @@ onMounted(load)
                         <button type="button" class="min-h-11 min-w-11 rounded-xl text-gray-600 hover:bg-gray-100" :aria-label="t('aiDeid.form.close')" @click="drawerOpen = false">×</button>
                     </div>
                     <div class="mt-4 space-y-4">
-                        <label class="block text-sm font-bold text-gray-700">{{ t('aiDeid.form.name') }}
+                        <label class="block text-sm font-bold text-gray-700" for="edulog-aideidentificationpanel-174-15549">{{ t('aiDeid.form.name') }}
                             <input ref="nameInput" v-model="draft.name" required maxlength="100" class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 px-3 text-sm" />
                         </label>
                         <fieldset>
                             <legend class="text-sm font-bold text-gray-700">{{ t('aiDeid.form.kind') }}</legend>
                             <div class="mt-1 flex flex-wrap gap-2">
                                 <label v-for="kind in (['deny_list', 'regex'] as const)" :key="kind" class="flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-gray-200 px-3 text-sm font-bold text-gray-800">
-                                    <input v-model="draft.kind" type="radio" name="deid-rule-kind" class="h-5 w-5 accent-emerald-600" :value="kind" />
+                                    <input v-model="draft.kind" type="radio" name="deid-rule-kind" class="h-5 w-5 accent-emerald-600" :value="kind"  id="edulog-aideidentificationpanel-174-15549"/>
                                     {{ t(`aiDeid.rules.kind_${kind}`) }}
                                 </label>
                             </div>
@@ -484,7 +484,7 @@ onMounted(load)
                                     :title="example.pattern" @click="draft.pattern = example.pattern; formErrors = {}">{{ t(`aiDeid.examples.${example.key}`) }}</button>
                             </div>
                         </div>
-                        <label class="block text-sm font-bold text-gray-700">{{ t('aiDeid.form.placeholder_kind') }}
+                        <label class="block text-sm font-bold text-gray-700" for="edulog-aideidentificationpanel-205-19049">{{ t('aiDeid.form.placeholder_kind') }}
                             <select v-model="draft.placeholder_kind" class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm">
                                 <option v-for="kind in DEID_PLACEHOLDER_KINDS" :key="kind" :value="kind">{{ t(`aiDeid.kinds.${kind}`) }}</option>
                             </select>
@@ -494,7 +494,7 @@ onMounted(load)
                             <p class="text-xs text-gray-600">{{ t('aiDeid.form.languages_hint') }}</p>
                             <div class="mt-1 flex flex-wrap gap-2">
                                 <label v-for="code in overview?.available_languages ?? []" :key="code" class="flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-gray-200 px-3 text-sm font-bold text-gray-800">
-                                    <input type="checkbox" class="h-5 w-5 accent-emerald-600" :checked="draft.languages.includes(code)" @change="toggleDraftLanguage(code, ($event.target as HTMLInputElement).checked)" />
+                                    <input type="checkbox" class="h-5 w-5 accent-emerald-600" :checked="draft.languages.includes(code)" @change="toggleDraftLanguage(code, ($event.target as HTMLInputElement).checked)"  id="edulog-aideidentificationpanel-205-19049"/>
                                     {{ languageLabel(code) }}
                                 </label>
                             </div>

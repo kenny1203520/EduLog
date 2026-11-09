@@ -1,6 +1,6 @@
 """Install spaCy models and write Presidio configuration for the chosen languages.
 
-Run at image build time:  python configure_languages.py zh,en /app/conf-edulog
+Run at image build time:  python configure_languages.py zh,en
 
 Writes nlp.yaml, analyzer.yaml and recognizers.yaml (JSON, which YAML
 loaders accept). The EduLog API probes the installed languages with
@@ -72,7 +72,11 @@ def taiwan_recognizers(code: str) -> list[dict]:
     ]
 
 
-def write_config(languages: list[str], out_dir: Path) -> None:
+OUT_DIR = Path("/app/conf-edulog")
+
+
+def write_config(languages: list[str]) -> None:
+    out_dir = OUT_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
     nlp = {
         "nlp_engine_name": "spacy",
@@ -100,11 +104,11 @@ def write_config(languages: list[str], out_dir: Path) -> None:
 
 
 def main() -> None:
-    if len(sys.argv) != 3:
-        sys.exit("usage: configure_languages.py <languages> <out_dir>")
+    if len(sys.argv) != 2:
+        sys.exit("usage: configure_languages.py <languages>")
     languages = parse_languages(sys.argv[1])
     install_models(languages)
-    write_config(languages, Path(sys.argv[2]))
+    write_config(languages)
     print(f"Presidio languages: {', '.join(languages)}")
 
 

@@ -10,7 +10,7 @@ import { SupabaseReportAssistRepository } from './ai/report/supabaseReportAssist
 installProcessGuards()
 const config = loadConfig()
 const clients = createSupabaseClients(config)
-const server = createServer(createApp())
+const server = createServer(createApp(config, clients))
 attachRealtimeProxy(server, clients.adminClient, config)
 // AI generations that were running when the API last stopped can never finish.
 new SupabaseReportAssistRepository(clients.adminClient, clients.adminClient)

@@ -15,22 +15,27 @@ EduLog 是一套為家教/補教場景設計的學習報告系統，提供比傳
 
 - Frontend: Vue 3, TypeScript, Vite, Vue Router, Pinia, Vue I18n
 - UI / Styling: Tailwind CSS 4
-- Backend: Express.js Auth BFF/API (Node.js 26 LTS)`n- Data: Self-hosted Supabase (PostgreSQL + Auth + Realtime + Storage)
+- Backend: Express.js Auth BFF/API (Node.js 26 LTS)
+- Data: Self-hosted Supabase (PostgreSQL + Auth + Realtime + Storage)
 - Infra: Docker Compose
 
 ## 專案結構
 
 ```text
 EduLog/
-├─ app/                  # Vue 3 前端
-└─ supabase/             # Self-hosted Supabase 與資料庫 migration
-   └─ migrations/        # EduLog 自定義 schema migrations
+├─ app/                  # Vue 3 前端（Nginx image）
+├─ server/               # Express Auth BFF / API（API image）
+├─ extension/            # Chrome 擴充功能（Manifest V3）
+├─ supabase/             # Self-hosted Supabase、migrations 與資料庫測試
+├─ scripts/              # 發佈、環境變數檢查與擴充功能打包腳本
+├─ docker/               # 自建映像檔（Presidio）
+└─ docs/                 # 架構、部署與維運文件
 ```
 
 ## 環境需求
 
-- Node.js 20+
-- npm 10+
+- Node.js 26+
+- npm（隨 Node.js 附帶）
 - Docker Desktop（或等效 Docker + Compose）
 
 ## 快速開始
@@ -39,8 +44,11 @@ EduLog/
 
 ```bash
 cp .env.example .env
+# 至少填入 EDULOG_COOKIE_SECRET、EDULOG_WEB_BASE_URL、EDULOG_ALLOWED_ORIGINS，並重新產生 Supabase 密鑰
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
+
+所有環境變數、預設值與 Compose 改名對照請見 [docs/deployment/environment.md](docs/deployment/environment.md)。
 
 正式流量只由 Nginx frontend container 對外提供；`/api/*` 由 Nginx 轉送到 Express，Express 再使用 user JWT client 或受限的 server-side service-role client 存取 Supabase。Production Compose 不公開 Kong、Auth、Realtime、Storage 或 Postgres port。
 
@@ -48,14 +56,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 ### 2. 前端環境變數
 
-前端不設定 `VITE_SUPABASE_URL`、`VITE_SUPABASE_ANON_KEY` 或 Functions URL。`app/.env` 只需：
-
-```env
-VITE_API_V1_MODE=mock
-VITE_LEGACY_API_BASE_URL=/api
-```
-
-Production 由 Nginx runtime config 設定 `VITE_API_V1_MODE=v1`，瀏覽器透過同源 `/api/*` 與 HttpOnly session cookie 呼叫 Express。
+前端不讀取任何 `VITE_*` 變數，也不設定 Supabase URL、anon key 或 Functions URL。瀏覽器一律透過同源 `/api/*` 與 HttpOnly session cookie 呼叫 Express；開發時由 Vite 代理 `/api`（`EDULOG_API_DEV_TARGET`，預設 `http://localhost:3000`）。
 
 ### 3. 安裝與啟動前端/後端
 
@@ -66,24 +67,15 @@ cd ../server && npm install && npm run dev
 ## 建置
 
 ```bash
-cd app
-npm run build
-npm run preview
+cd app && npm run build
+cd ../server && npm run build
 ```
 
-正式 Docker image 以 Nginx 服務 Vue 靜態檔；Express API image 獨立建置並只在 server container 讀取 Supabase secrets。Nginx 啟動時僅產生 API mode runtime config，不會把 Supabase key 注入瀏覽器。
+正式 Docker image 以 Nginx 服務 Vue 靜態檔；Express API image 獨立建置並只在 server container 讀取 Supabase secrets。瀏覽器不會取得任何 Supabase key 或執行期設定。
 
 ## 資料庫 Migration
 
-EduLog 自定義 migration 位於 `supabase/migrations/`，請依序執行：
-
-1. `1000001_core_schema.sql`
-2. `1000002_academics.sql`
-3. `1000003_operations.sql`
-4. `1000004_enhance_report_versions.sql`
-5. `1000005_user_visibility_preferences.sql`
-
-可透過 Supabase Studio 的 SQL Editor 逐一執行，或使用 `psql` / `docker exec` 管線方式批次執行。
+EduLog 自定義 migration 位於 `supabase/migrations/`，依檔名順序全部套用；各版本的前置檢查與注意事項見 [supabase/migrations/README.md](supabase/migrations/README.md)。
 
 ## 常用指令
 
@@ -91,23 +83,34 @@ EduLog 自定義 migration 位於 `supabase/migrations/`，請依序執行：
 
 - `npm run dev`：啟動開發伺服器
 - `npm run build`：型別檢查並建置
-- `npm run preview`：預覽建置結果
+- `npm run test`：執行 Vitest
+
+### API (`server/`)
+
+- `npm run dev`：啟動 Express 開發伺服器
+- `npm run typecheck` / `npm test` / `npm run build`
 
 ### Supabase (`supabase/`)
 
 - `docker compose up -d`：背景啟動
 - `docker compose down`：停止服務
-- `docker compose -f docker-compose.yml -f ./dev/docker-compose.dev.yml down -v --remove-orphans`：完整清除開發容器/volume
-- `./reset.sh`：重置 Supabase 開發環境
+- `docker compose -f docker-compose.yml -f ./supabase/dev/docker-compose.dev.yml down -v --remove-orphans`：完整清除開發容器/volume（於專案根目錄執行）
+- `./supabase/reset.sh`：重置 Supabase 開發環境
 
 ## 安全注意事項
 
-- `supabase/.env.example` 僅供本機開發，正式環境務必重新產生所有密鑰。`n- Supabase URL、anon key、service-role key 只注入 Express container；禁止出現在 Vue source、runtime config 或 frontend artifact。`n- Express 的一般資料操作必須使用帶 user JWT 的 client，RLS 是 API 之外的最後防線。
+- `supabase/.env.example` 僅供本機開發，正式環境務必重新產生所有密鑰。
+- Supabase URL、anon key、service-role key 只注入 Express container；禁止出現在 Vue source 或 frontend artifact。
+- Express 的一般資料操作必須使用帶 user JWT 的 client，RLS 是 API 之外的最後防線。
 - 請勿將真實金鑰、帳密與敏感資料提交到版本控制。
 - 前端 image 內建 Nginx CSP/HSTS 與 HTTP/HTTPS 雙模式；若啟用原生 HTTPS，請掛載憑證並設定 `EDULOG_HTTPS_ENABLED=true`。
 
 ## 延伸文件
 
+- [docs/deployment/self-hosting.md](docs/deployment/self-hosting.md)：自架部署步驟
+- [docs/deployment/environment.md](docs/deployment/environment.md)：環境變數總表
+- [AGENT.md](AGENT.md)：架構與開發規範
 - `app/README.md`：前端開發細節
+- `extension/README.md`：瀏覽器擴充功能
 - `supabase/README.md`：Self-hosted Supabase 說明
 - `supabase/migrations/README.md`：資料庫 migration 指南

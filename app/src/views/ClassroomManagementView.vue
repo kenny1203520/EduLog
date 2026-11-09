@@ -1,15 +1,15 @@
 <script setup lang="ts">
+import { useCapabilityStore } from '@/stores/useCapabilityStore'
 import { ref, onMounted, computed, watch } from 'vue'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { ClassroomService } from '@/services/classroom/ClassroomService'
-import { AggregateService } from '@/services/AggregateService'
+import { AggregateService } from '@/services/api/AggregateService'
 import { SessionService } from '@/services/session/SessionService'
-import { VisibilityPreferenceService } from '@/services/VisibilityPreferenceService'
-import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
+import { VisibilityPreferenceService } from '@/services/preference/VisibilityPreferenceService'
 import { TeacherService } from '@/services/teacher/TeacherService'
 import { RoleService } from '@/services/rbac/RoleService'
-import { INCOMPLETE_REPORT_PERMISSION, PermissionPolicyService } from '@/services/rbac/PermissionPolicyService'
-import type { PermissionDTO, RoleDTO, RolePermissionPolicyDTO } from '@/models/Rbac'
+import { INCOMPLETE_REPORT_PERMISSION, PermissionPolicyService, type KeyedPolicy, type PolicyScopeTarget } from '@/services/rbac/PermissionPolicyService'
+import type { RoleDTO } from '@/models/Rbac'
 import type { RolePolicySelections } from '@/components/settings/ScopedRolePolicyEditor.vue'
 import { roleDisplayName } from '@/utils/roleDisplay'
 import ScopedRolePolicyEditor from '@/components/settings/ScopedRolePolicyEditor.vue'
@@ -26,22 +26,25 @@ import { Course } from '@/models/Course'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import { useFeedback } from '@/composables/useFeedback'
-import Pagination from '@/components/common/Pagination.vue'
-import SearchableSelect from '@/components/common/SearchableSelect.vue'
+import Pagination from '@/components/ui/Pagination.vue'
+import SearchableSelect from '@/components/ui/SearchableSelect.vue'
 import EffectiveTeachingRoles from '@/components/rbac/EffectiveTeachingRoles.vue'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
-import { DateUtils } from '@/utils/DateUtils'
+import { DateUtils } from '@/utils/dateUtils'
 import { paginateTeacherAssignments, partitionTeacherAssignments } from '@/utils/teacherAssignmentHistory'
 import { buildSessionScheduleDisplayItems } from '@/utils/sessionScheduleDisplay'
 
-import ConfirmModal from '../components/common/ConfirmModal.vue'
+import ConfirmModal from '../components/ui/ConfirmModal.vue'
 
-import BaseDropdown from '@/components/common/BaseDropdown.vue'
-import BasePageHeader from '@/components/common/BasePageHeader.vue'
-import BaseSkeletonCard from '@/components/common/BaseSkeletonCard.vue'
+import BaseDropdown from '@/components/ui/BaseDropdown.vue'
+import BasePageHeader from '@/components/ui/BasePageHeader.vue'
+import BaseSkeletonCard from '@/components/ui/BaseSkeletonCard.vue'
+import { OccurrenceSyncService } from '@/services/occurrence/OccurrenceSyncService'
+import { AuthorizationError } from '@/services/errors/AppError'
 
 const { t } = useI18n()
 const toast = useToast()
+const capabilities = useCapabilityStore()
 const { reportError } = useFeedback()
 const preferences = usePreferencesStore()
 const activeTab = ref<'rooms' | 'sessions'>('rooms')
@@ -127,8 +130,8 @@ const teacherRoleCatalogError = ref(false)
 const teacherRoleManageAllowed = ref<boolean | null>(null)
 const teacherRolePermissionError = ref(false)
 let teacherRoleCatalogSequence = 0
-const notificationPermission = ref<PermissionDTO | null>(null)
-const notificationPolicies = ref<RolePermissionPolicyDTO[]>([])
+const notificationPoliciesLoaded = ref(false)
+const notificationPolicies = ref<KeyedPolicy[]>([])
 const roomPolicySelections = ref<RolePolicySelections>({})
 const sessionPolicySelections = ref<RolePolicySelections>({})
 const schedulePolicies = ref<DashboardSchedulePolicies>({ all: [], view: [] })
@@ -201,9 +204,8 @@ const newSession = ref<Partial<ClassSessionDTO>>({
 const editingSession = ref<ClassSessionDTO | null>(null)
 
 async function loadNotificationPolicies() {
-    const permission = await PermissionPolicyService.getPermission(INCOMPLETE_REPORT_PERMISSION)
-    notificationPermission.value = permission
-    notificationPolicies.value = await PermissionPolicyService.getPolicies(permission.id)
+    notificationPolicies.value = await PermissionPolicyService.getPolicies(INCOMPLETE_REPORT_PERMISSION)
+    notificationPoliciesLoaded.value = true
 }
 
 function policySelectionsFor(scopeType: 'classroom' | 'class_session', scopeId?: string | null): RolePolicySelections {
@@ -214,16 +216,21 @@ function policySelectionsFor(scopeType: 'classroom' | 'class_session', scopeId?:
     })) as RolePolicySelections
 }
 
-function policyOverrides(selections: RolePolicySelections) {
-    return roles.value.flatMap(role => {
-        const effect = selections[role.id]
-        return effect === 'allow' || effect === 'deny' ? [{ role_id: role.id, effect }] : []
-    })
+/** Saves the incomplete-report and today's-schedule selections of one scope together. */
+async function saveScopePolicies(scope: PolicyScopeTarget, notification: RolePolicySelections, schedule: DashboardScheduleSelections) {
+    try {
+        await PermissionPolicyService.applyPolicyChanges(scope, [
+            ...PermissionPolicyService.selectionChanges(INCOMPLETE_REPORT_PERMISSION, notification),
+            ...PermissionPolicyService.scheduleModeChanges(schedule)
+        ], [...notificationPolicies.value, ...PermissionPolicyService.scheduleBaseline(schedulePolicies.value)])
+    } catch (error: any) {
+        if (error?.kind === 'conflict') await refreshRolePolicies().catch(() => undefined)
+        throw error
+    }
 }
 
 async function refreshNotificationPolicies() {
-    if (!notificationPermission.value) return loadNotificationPolicies()
-    notificationPolicies.value = await PermissionPolicyService.getPolicies(notificationPermission.value.id)
+    return loadNotificationPolicies()
 }
 
 async function loadSchedulePolicies() {
@@ -325,15 +332,23 @@ async function loadRooms() {
     }
 }
 
+function isPermissionDenied(error: unknown) {
+    return error instanceof AuthorizationError || (error as { status?: number } | null)?.status === 403
+}
+
+// Each catalog loads on its own: a classroom-level manager may read courses
+// but not the platform role or teacher lists, and the scoped role catalog
+// (loadTeacherRoleCatalog) covers role choices for them.
 async function ensureEditorDependencies() {
-    if (roles.value.length === 0) roles.value = await RoleService.getRoles()
-    if (courses.value.length === 0) {
-        const result = await CourseCatalogService.getCourses()
-        courses.value = result.data
-    }
-    if (teachersList.value.length === 0) await loadTeachers()
-    if (!notificationPermission.value) await loadNotificationPolicies()
-    if (!schedulePoliciesLoaded.value) await loadSchedulePolicies()
+    const tasks: Array<Promise<unknown>> = []
+    if (roles.value.length === 0) tasks.push(RoleService.getRoles().then((value) => { roles.value = value }))
+    if (courses.value.length === 0) tasks.push(CourseCatalogService.getCourses().then((result) => { courses.value = result.data }))
+    if (teachersList.value.length === 0) tasks.push(loadTeachers())
+    if (!notificationPoliciesLoaded.value) tasks.push(loadNotificationPolicies())
+    if (!schedulePoliciesLoaded.value) tasks.push(loadSchedulePolicies())
+    const results = await Promise.allSettled(tasks)
+    const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
+    if (failure && !isPermissionDenied(failure.reason)) throw failure.reason
 }
 
 async function loadTeacherRoleCatalog(scopeType: 'classroom' | 'class_session', scopeId: string) {
@@ -437,16 +452,16 @@ async function loadAllRooms() {
 }
 
 watch(() => roomsPagination.value.page, loadRooms)
-watch(() => roomsPagination.value.perPage, () => { roomsPagination.value.page = 1; loadRooms() })
+watch(() => roomsPagination.value.perPage, () => { roomsPagination.value.page = 1; void loadRooms() })
 watch(() => sessionsPagination.value.page, loadSessions)
-watch(() => sessionsPagination.value.perPage, () => { sessionsPagination.value.page = 1; loadSessions() })
+watch(() => sessionsPagination.value.perPage, () => { sessionsPagination.value.page = 1; void loadSessions() })
 watch(selectedSessionClassroomFilter, () => {
     sessionsPagination.value.page = 1
-    loadSessions()
+    void loadSessions()
 })
 watch(activeTab, () => {
     if (activeTab.value === 'rooms') {
-        loadRooms()
+        void loadRooms()
         return
     }
 
@@ -455,19 +470,19 @@ watch(activeTab, () => {
 watch(displayMode, () => {
     if (activeTab.value === 'rooms') {
         roomsPagination.value.page = 1
-        loadRooms()
+        void loadRooms()
     } else if (activeTab.value === 'sessions') {
         sessionsPagination.value.page = 1
-        loadSessions()
+        void loadSessions()
     }
 })
 watch(searchQuery, () => {
     if (activeTab.value === 'rooms') {
         roomsPagination.value.page = 1
-        loadRooms()
+        void loadRooms()
     } else if (activeTab.value === 'sessions') {
         sessionsPagination.value.page = 1
-        loadSessions()
+        void loadSessions()
     }
 })
 
@@ -590,12 +605,7 @@ async function saveClassroom() {
 
         // Switch to edit mode immediately so a policy failure cannot create a duplicate room on retry.
         editingClassroom.value = saved
-        await PermissionPolicyService.replacePolicies(
-            INCOMPLETE_REPORT_PERMISSION,
-            { type: 'classroom', id: saved.id },
-            policyOverrides(roomPolicySelections.value)
-        )
-        await PermissionPolicyService.replaceDashboardScheduleModes({ type: 'classroom', id: saved.id }, roomScheduleSelections.value)
+        await saveScopePolicies({ type: 'classroom', id: saved.id }, roomPolicySelections.value, roomScheduleSelections.value)
         AggregateService.clearCache()
         await Promise.all([loadRooms(), loadAllRooms(), refreshRolePolicies()])
         closeRoomModal()
@@ -746,13 +756,8 @@ async function saveSession() {
             await TeacherService.replaceTeachersForSession(sessionId, assignmentsToSave)
             teacherAssignmentBaseline.value = assignmentsToSave.map(item => ({ ...item }))
         }
-        await PermissionPolicyService.replacePolicies(
-            INCOMPLETE_REPORT_PERMISSION,
-            { type: 'class_session', id: sessionId },
-            policyOverrides(sessionPolicySelections.value)
-        )
-        await PermissionPolicyService.replaceDashboardScheduleModes({ type: 'class_session', id: sessionId }, sessionScheduleSelections.value)
-        const reconciliation = await OccurrenceService.syncSessionOccurrences(sessionId)
+        await saveScopePolicies({ type: 'class_session', id: sessionId }, sessionPolicySelections.value, sessionScheduleSelections.value)
+        const reconciliation = await OccurrenceSyncService.syncSessionOccurrences(sessionId)
 
         AggregateService.clearCache()
         await Promise.all([loadSessions(), refreshRolePolicies()])
@@ -943,7 +948,7 @@ function clearTeacherSelection() {
                             </svg>
                         </div>
                         <input v-model="searchQuery" type="text" :placeholder="t('common.search')"
-                            class="flex-1 bg-transparent border-none outline-none text-sm font-bold text-gray-700 placeholder:text-gray-300 py-2 min-w-0" />
+                            class="flex-1 bg-transparent border-none outline-none text-sm font-bold text-gray-700 placeholder:text-gray-300 py-2 min-w-0"  :aria-label="t('common.search')"/>
                         <button v-if="searchQuery" @click="searchQuery = ''"
                             class="p-2 text-gray-300 hover:text-gray-500 transition-colors">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
@@ -971,11 +976,11 @@ function clearTeacherSelection() {
                 </div>
 
                 <!-- Primary Action Button -->
-                <button v-if="activeTab === 'rooms'" @click="openCreateRoomModal"
+                <button v-if="activeTab === 'rooms' && capabilities.canPlatform('teaching.classrooms.create')" @click="openCreateRoomModal"
                     class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl transition-all shadow-lg shadow-emerald-200 font-black flex items-center justify-center gap-2 active:scale-95 text-sm uppercase tracking-widest w-full md:w-auto shrink-0">
                     <span class="text-xl leading-none">+</span> {{ t('classroom.add_room') }}
                 </button>
-                <button v-else @click="openCreateSessionModal"
+                <button v-else-if="activeTab !== 'rooms' && capabilities.can('teaching.class_sessions.create')" @click="openCreateSessionModal"
                     class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl transition-all shadow-lg shadow-emerald-200 font-black flex items-center justify-center gap-2 active:scale-95 text-sm uppercase tracking-widest w-full md:w-auto shrink-0">
                     <span class="text-xl leading-none">+</span> {{ t('classroom.add_session') }}
                 </button>
@@ -1007,11 +1012,11 @@ function clearTeacherSelection() {
             </div>
 
             <div v-if="activeTab === 'sessions'" class="flex items-center gap-2 md:ml-auto w-full md:w-auto relative">
-                <label class="text-xs font-black text-gray-500 uppercase tracking-widest whitespace-nowrap">{{
+                <label class="text-xs font-black text-gray-500 uppercase tracking-widest whitespace-nowrap" for="edulog-classroommanagementview-93-6711">{{
                     $t('classroom.filter_by_room') }}</label>
 
                 <SearchableSelect v-model="selectedSessionClassroomFilter" :options="classroomOptions"
-                    :placeholder="$t('classroom.all_rooms')" class="min-w-[240px]" />
+                    :placeholder="$t('classroom.all_rooms')" class="min-w-[240px]"  id="edulog-classroommanagementview-93-6711"/>
 
                 <button v-if="selectedSessionClassroomFilter" @click="selectedSessionClassroomFilter = ''"
                     class="px-3 py-2 rounded-xl text-xs font-black uppercase tracking-widest text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all border border-transparent hover:border-red-100">
@@ -1061,7 +1066,7 @@ function clearTeacherSelection() {
                         <!-- Quick Actions (always visible for mouse, keyboard, and touch) -->
                         <div
                             class="flex w-full items-center justify-end gap-2 border-t border-gray-100 pt-3">
-                            <button @click="openEditRoom(room)"
+                            <button v-if="capabilities.can('teaching.classrooms.update')" @click="openEditRoom(room)"
                                 class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-emerald-600 transition-all hover:bg-emerald-50"
                                 :title="$t('common.edit')"
                                 :aria-label="$t('common.edit')">
@@ -1071,7 +1076,7 @@ function clearTeacherSelection() {
                                         d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
                                 </svg>
                             </button>
-                            <button @click="deleteClassroom(room.id!)"
+                            <button v-if="capabilities.canPlatform('teaching.classrooms.delete')" @click="deleteClassroom(room.id!)"
                                 class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-red-500 transition-all hover:bg-red-50"
                                 :title="$t('common.delete')"
                                 :aria-label="$t('common.delete')">
@@ -1203,14 +1208,14 @@ function clearTeacherSelection() {
                         </div>
 
                         <div class="mt-4 flex items-center justify-end gap-1 border-t border-gray-100 pt-3">
-                            <button @click="openEditSession(session)"
+                            <button v-if="capabilities.can('teaching.class_sessions.update')" @click="openEditSession(session)"
                                 class="rounded-xl p-2.5 text-gray-400 transition-all hover:bg-emerald-50 hover:text-emerald-600"
                                 :title="$t('common.edit')" :aria-label="$t('common.edit')">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                                     <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
                                 </svg>
                             </button>
-                            <button @click="deleteSession(session.id!)"
+                            <button v-if="capabilities.can('teaching.class_sessions.delete')" @click="deleteSession(session.id!)"
                                 class="rounded-xl p-2.5 text-gray-400 transition-all hover:bg-red-50 hover:text-red-600"
                                 :title="$t('common.delete')" :aria-label="$t('common.delete')">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
@@ -1320,15 +1325,15 @@ function clearTeacherSelection() {
                 <h3 class="text-xl font-bold mb-6 text-gray-800">{{ editingSession ? $t('classroom.edit_session') : $t('classroom.add_session') }}</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="md:col-span-2">
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.session_name')
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5" for="edulog-classroommanagementview-406-32698">{{ $t('classroom.session_name')
                             }}</label>
                         <input v-model="newSession.name" :placeholder="$t('classroom.session_placeholder')"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500" id="edulog-classroommanagementview-406-32698">
                     </div>
 
                     <div class="md:col-span-2">
-                        <label class="block text-sm font-semibold text-gray-700 mb-2">{{ $t('classroom.session_type') }}</label>
-                        <div class="grid grid-cols-2 gap-2 rounded-xl bg-gray-100 p-1">
+                        <p class="block text-sm font-semibold text-gray-700 mb-2">{{ $t('classroom.session_type') }}</p>
+                        <div role="group" :aria-label="$t('classroom.session_type')" class="grid grid-cols-2 gap-2 rounded-xl bg-gray-100 p-1">
                             <button type="button" @click="setSessionType('regular')"
                                 class="rounded-lg px-4 py-2 text-sm font-bold transition"
                                 :class="newSession.session_type !== 'camp' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500'">
@@ -1343,59 +1348,52 @@ function clearTeacherSelection() {
                     </div>
 
                     <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5" for="edulog-classroommanagementview-429-34283">{{
                             $t('student.internal_courses.classroom') }}</label>
                         <SearchableSelect v-model="newSession.classroom_id" :options="roomOptions"
-                            :placeholder="$t('student.internal_courses.session_select_placeholder')" />
+                            :placeholder="$t('student.internal_courses.session_select_placeholder')"  id="edulog-classroommanagementview-429-34283"/>
                     </div>
 
                     <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.capacity')
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5" for="edulog-classroommanagementview-436-34711">{{ $t('classroom.capacity')
                             }}</label>
                         <input type="number" v-model="newSession.capacity"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500" id="edulog-classroommanagementview-436-34711">
                     </div>
 
-                    <!-- <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{
-                            $t('student.internal_courses.lesson_number') }}</label>
-                        <input type="number" v-model.number="newSession.lesson_number"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500"
-                            placeholder="1">
-                    </div> -->
 
                     <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('common.start_date') }}
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5" for="edulog-classroommanagementview-451-35602">{{ $t('common.start_date') }}
                             <span v-if="newSession.session_type !== 'camp'" class="text-red-500">*</span></label>
                         <input type="date" v-model="newSession.start_date" :required="newSession.session_type !== 'camp'"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500" id="edulog-classroommanagementview-451-35602">
                     </div>
 
                     <div>
                         <div class="flex items-center justify-between mb-1.5">
-                            <label class="block text-sm font-semibold text-gray-700">{{ $t('common.end_date') }}</label>
+                            <label for="classroom-session-end-date" class="block text-sm font-semibold text-gray-700">{{ $t('common.end_date') }}</label>
                             <button v-if="newSession.end_date" @click="newSession.end_date = null"
                                 class="text-[10px] text-gray-400 hover:text-red-500 font-medium uppercase tracking-wider transition-colors">
                                 {{ $t('common.clear') }}
                             </button>
                         </div>
-                        <input type="date" v-model="newSession.end_date"
+                        <input id="classroom-session-end-date" type="date" v-model="newSession.end_date"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                         <p class="text-xs text-gray-500 mt-1">{{ newSession.session_type === 'camp' ? $t('classroom.camp_date_hint') : $t('classroom.long_term_hint') }}</p>
                     </div>
 
                     <div class="md:col-span-2">
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.external_link')
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5" for="edulog-classroommanagementview-471-37136">{{ $t('classroom.external_link')
                             }}</label>
                         <input v-model="newSession.external_link"
                             :placeholder="$t('classroom.external_link_placeholder')"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500" id="edulog-classroommanagementview-471-37136">
                     </div>
 
                     <div class="md:col-span-2">
-                        <label class="block text-sm font-semibold text-gray-700 mb-2">{{ $t('classroom.schedule')
-                            }}</label>
-                        <div v-if="newSession.session_type !== 'camp'" class="flex gap-2 mb-3">
+                        <p class="block text-sm font-semibold text-gray-700 mb-2">{{ $t('classroom.schedule')
+                            }}</p>
+                        <div v-if="newSession.session_type !== 'camp'" role="group" :aria-label="$t('classroom.schedule')" class="flex gap-2 mb-3">
                             <button type="button" @click="setScheduleMode('weekly')"
                                 class="rounded-lg border px-3 py-1.5 text-sm font-bold"
                                 :class="newSession.schedule_mode === 'weekly' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-gray-200 text-gray-500'">
@@ -1411,7 +1409,7 @@ function clearTeacherSelection() {
                             <div v-for="(rule, index) in newSession.schedule_rules" :key="rule.id || index"
                                 class="grid grid-cols-1 sm:grid-cols-[minmax(120px,1fr)_auto_auto_auto] items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3">
                                 <BaseDropdown v-if="newSession.schedule_mode === 'weekly'"
-                                    v-model="rule.day_of_week" :options="dayOptions" theme="emerald" />
+                                    v-model="rule.day_of_week" :options="dayOptions" theme="emerald" :aria-label="$t('classroom.day_of_week')" />
                                 <label v-else-if="newSession.schedule_mode === 'monthly'" class="flex items-center gap-2 text-sm text-gray-600">
                                     {{ $t('classroom.monthly_day_prefix') }}
                                     <input type="number" min="1" max="31" v-model.number="rule.day_of_month"
@@ -1419,11 +1417,12 @@ function clearTeacherSelection() {
                                     {{ $t('classroom.monthly_day_suffix') }}
                                 </label>
                                 <input v-else type="date" v-model="rule.occurrence_date"
+                                    :aria-label="$t('classroom.copy_template_variable_labels.occurrence_date')"
                                     class="border-gray-300 rounded-lg focus:ring-purple-500 focus:border-purple-500">
                                 <input type="time" v-model="rule.start_time"
-                                    class="border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                                    :aria-label="$t('classroom.start_time')" class="border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                                 <input type="time" v-model="rule.end_time"
-                                    class="border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                                    :aria-label="$t('classroom.end_time')" class="border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                                 <button type="button" @click="removeScheduleRule(index)"
                                     class="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-600"
                                     :title="$t('common.delete')">×</button>
@@ -1440,10 +1439,10 @@ function clearTeacherSelection() {
                     </div>
 
                     <div class="md:col-span-2">
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('common.time_zone')
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5" for="edulog-classroommanagementview-526-41612">{{ $t('common.time_zone')
                             }}</label>
                         <select v-model="newSession.time_zone"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500" id="edulog-classroommanagementview-526-41612">
                             <option v-for="option in preferences.timeZoneOptions" :key="option.value"
                                 :value="option.value">
                                 {{ option.label }}
@@ -1452,10 +1451,14 @@ function clearTeacherSelection() {
                     </div>
 
                     <div class="md:col-span-2">
-                        <label class="block text-sm font-medium text-gray-700 mb-2">{{
-                            $t('student.internal_courses.course') }}</label>
-                        <div class="h-40 overflow-y-auto border border-gray-200 rounded-lg p-3 bg-gray-50 space-y-1">
-                            <div v-for="c in courses" :key="c.id" @click="toggleCourseSelection(c.id!)"
+                        <p class="block text-sm font-medium text-gray-700 mb-2">{{
+                            $t('student.internal_courses.course') }}</p>
+                        <div role="group" :aria-label="$t('student.internal_courses.course')" class="h-40 overflow-y-auto border border-gray-200 rounded-lg p-3 bg-gray-50 space-y-1">
+                            <div v-for="c in courses" :key="c.id" role="checkbox" tabindex="0"
+                                :aria-checked="newSession.course_ids?.includes(c.id!) ?? false"
+                                @click="toggleCourseSelection(c.id!)"
+                                @keydown.enter.prevent="toggleCourseSelection(c.id!)"
+                                @keydown.space.prevent="toggleCourseSelection(c.id!)"
                                 class="flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-white select-none transition"
                                 :class="newSession.course_ids?.includes(c.id!) ? 'bg-white shadow-sm ring-1 ring-emerald-500' : ''">
                                 <div class="w-4 h-4 rounded border flex items-center justify-center transition-colors"
@@ -1476,8 +1479,8 @@ function clearTeacherSelection() {
                     </div>
 
                     <div class="md:col-span-2">
-                        <label class="block text-sm font-semibold text-gray-700 mb-2">{{
-                            $t('classroom.copy.teaching_schedule') }}</label>
+                        <p class="block text-sm font-semibold text-gray-700 mb-2">{{
+                            $t('classroom.copy.teaching_schedule') }}</p>
                         <p v-if="teacherRolePermissionError" role="alert" class="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
                             <span>{{ $t('rbac.teacher_assignment_permission_check_failed') }}</span>
                             <button type="button" class="min-h-11 rounded-lg px-3 underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500" @click="retryTeacherRoleCatalog">{{ $t('rbac.platform_teaching_assignments.retry') }}</button>
@@ -1508,17 +1511,17 @@ function clearTeacherSelection() {
                                 <div class="flex items-start justify-between gap-3">
                                     <div class="flex-1">
                                         <label
-                                            class="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">{{
+                                            class="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1" :for="`teacher-assignment-teacher-${entry.index}`">{{
                                                 $t('classroom.teacher') }}</label>
                                         <SearchableSelect v-model="entry.config.teacher_id" :options="teacherOptions"
-                                            :placeholder="$t('classroom.teacher_search_placeholder')" :disabled="teacherRoleManageAllowed !== true || teacherAssignmentsLoadError" />
+                                            :placeholder="$t('classroom.teacher_search_placeholder')" :disabled="teacherRoleManageAllowed !== true || teacherAssignmentsLoadError" :id="`teacher-assignment-teacher-${entry.index}`"/>
                                     </div>
                                     <div class="flex-1">
-                                        <label class="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">
+                                        <label class="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1" :for="`teacher-assignment-role-${entry.index}`">
                                             {{ $t('classroom.teacher_role') }}</label>
                                         <SearchableSelect v-model="entry.config.role_id" :options="teacherRoleOptions"
                                             :placeholder="$t('classroom.teacher_role_placeholder')"
-                                            :disabled="teacherRoleManageAllowed !== true || teacherAssignmentsLoadError || teacherRoleCatalogError || !teacherRoleCatalog.length" />
+                                            :disabled="teacherRoleManageAllowed !== true || teacherAssignmentsLoadError || teacherRoleCatalogError || !teacherRoleCatalog.length" :id="`teacher-assignment-role-${entry.index}`"/>
                                     </div>
                                     <button @click="removeTeacherAssignment(entry.index)" :disabled="teacherRoleManageAllowed !== true || teacherAssignmentsLoadError"
                                         class="mt-6 p-2 text-gray-400 hover:text-red-500 transition-colors">
@@ -1540,14 +1543,14 @@ function clearTeacherSelection() {
                                 <div class="grid grid-cols-2 gap-3">
                                     <div>
                                         <label
-                                            class="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">{{
+                                            class="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1" :for="`teacher-assignment-start-${entry.index}`">{{
                                                 $t('common.start_date') }}</label>
                                         <input type="date" v-model="entry.config.effective_from"
-                                            :disabled="teacherRoleManageAllowed !== true || teacherAssignmentsLoadError" class="w-full text-sm border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-100" />
+                                            :disabled="teacherRoleManageAllowed !== true || teacherAssignmentsLoadError" class="w-full text-sm border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-100" :id="`teacher-assignment-start-${entry.index}`"/>
                                     </div>
                                     <div>
                                         <div class="flex items-center justify-between mb-1">
-                                            <label
+                                            <label :for="`teacher-assignment-end-${entry.index}`"
                                                 class="block text-[10px] font-bold uppercase tracking-wider text-gray-500">
                                                 {{ $t('common.end_date') }}
                                                 <span v-if="!entry.config.effective_to"
@@ -1559,7 +1562,7 @@ function clearTeacherSelection() {
                                                 {{ $t('common.clear') }}
                                             </button>
                                         </div>
-                                        <input type="date" v-model="entry.config.effective_to"
+                                        <input :id="`teacher-assignment-end-${entry.index}`" type="date" v-model="entry.config.effective_to"
                                             :disabled="teacherRoleManageAllowed !== true || teacherAssignmentsLoadError" class="w-full text-sm border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-100" />
                                     </div>
                                 </div>

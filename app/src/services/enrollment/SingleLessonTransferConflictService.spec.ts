@@ -4,8 +4,11 @@ import { EnrollmentTransferQueryService } from './EnrollmentTransferQueryService
 import { EnrollmentTransferToolService } from './EnrollmentTransferToolService'
 import { createDefaultTransferFieldSelections } from '@/services/report/ReportFieldConflictService'
 
-const { rpcMock } = vi.hoisted(() => ({ rpcMock: vi.fn() }))
-vi.mock('@/services/api/ApiDataClient', () => ({ apiDataClient: { rpc: rpcMock } }))
+const { postMock } = vi.hoisted(() => ({ postMock: vi.fn() }))
+vi.mock('@/services/api/ApiV1Client', async importOriginal => ({
+    ...await importOriginal<typeof import('@/services/api/ApiV1Client')>(),
+    apiV1Client: { post: postMock }
+}))
 vi.mock('./EnrollmentTransferQueryService', () => ({
     EnrollmentTransferQueryService: {
         getReportForOccurrence: vi.fn(),
@@ -48,7 +51,7 @@ const conflict: SingleLessonTransferConflict = {
 describe('SingleLessonTransferConflictService', () => {
     beforeEach(() => {
         vi.clearAllMocks()
-        rpcMock.mockResolvedValue({ data: { transfer_id: 'transfer-1' }, error: null })
+        postMock.mockResolvedValue({ data: { status: 'completed', transfer_id: 'transfer-1' } })
         vi.mocked(EnrollmentTransferToolService.syncSessionPair).mockResolvedValue()
     })
 
@@ -67,26 +70,26 @@ describe('SingleLessonTransferConflictService', () => {
         expect(result).toEqual({ status: 'conflict', conflict })
     })
 
-    it('sends versions and every field choice to the atomic resolution RPC', async () => {
+    it('sends versions and every field choice to the atomic resolution endpoint', async () => {
         const selections = createDefaultTransferFieldSelections(sourceReport, targetReport)
         const result = await SingleLessonTransferConflictService.resolve(conflict, selections)
 
-        expect(rpcMock).toHaveBeenCalledWith('resolve_single_lesson_transfer_conflict', {
-            p_enrollment_id: 'enrollment-1',
-            p_source_occurrence_id: 'source-occurrence',
-            p_target_occurrence_id: 'target-occurrence',
-            p_source_report_id: 'source-report',
-            p_source_version: 3,
-            p_target_report_id: 'target-report',
-            p_target_version: 5,
-            p_field_sources: selections
+        expect(postMock).toHaveBeenCalledWith('/enrollment-transfers/conflicts/resolve', {
+            enrollment_id: 'enrollment-1',
+            source_occurrence_id: 'source-occurrence',
+            target_occurrence_id: 'target-occurrence',
+            source_report_id: 'source-report',
+            source_version: 3,
+            target_report_id: 'target-report',
+            target_version: 5,
+            field_sources: selections
         })
         expect(EnrollmentTransferToolService.syncSessionPair).toHaveBeenCalledWith('source-session', 'target-session')
         expect(result).toEqual({ status: 'completed', transferId: 'transfer-1' })
     })
 
     it('does not sync sessions when optimistic locking rejects the merge', async () => {
-        rpcMock.mockResolvedValue({ data: null, error: { message: 'TRANSFER_CONFLICT_STALE' } })
+        postMock.mockRejectedValue(new Error('TRANSFER_CONFLICT_STALE'))
 
         await expect(SingleLessonTransferConflictService.resolve(
             conflict,

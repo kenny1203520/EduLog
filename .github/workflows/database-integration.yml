@@ -69,6 +69,8 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/tests/student_create_permission_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/student_sensitive_permission_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/incomplete_report_notification_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/scoped_teaching_access_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/teacher_archive_integration.sql
       - name: Reconciliation migrations are rerunnable
         shell: bash
         run: |
@@ -90,16 +92,26 @@ jobs:
           done
 
           # Re-run the new RBAC migrations on a complete current-schema copy.
+          # 1000156 drops get_dashboard_page, which 1000101 asserts, and 1000157
+          # drops the teachings tables these reruns still read, so both are
+          # applied (twice) only after the rerun loop below.
           createdb edulog_reconciliation_rbac
           export PGDATABASE=edulog_reconciliation_rbac
           psql -v ON_ERROR_STOP=1 -f supabase/tests/postgres_bootstrap.sql
           for migration in supabase/migrations/*.sql; do
+            case "$migration" in
+            *1000156*|*1000157*) continue ;;
+            esac
             psql -v ON_ERROR_STOP=1 -f "$migration"
           done
           for migration in supabase/migrations/1000100*.sql supabase/migrations/1000101*.sql supabase/migrations/1000111*.sql supabase/migrations/1000112*.sql supabase/migrations/1000113*.sql supabase/migrations/1000114*.sql supabase/migrations/1000115*.sql supabase/migrations/1000128*.sql supabase/migrations/1000129*.sql; do
             psql -v ON_ERROR_STOP=1 -f "$migration"
             psql -v ON_ERROR_STOP=1 -f "$migration"
           done
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000156_drop_unused_legacy_objects.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000156_drop_unused_legacy_objects.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000157_drop_teaching_workspace_model.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000157_drop_teaching_workspace_model.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/student_create_permission_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/student_sensitive_permission_integration.sql
       - name: Upgrade an existing database and verify owner backfill

@@ -3,7 +3,7 @@ import request from 'supertest'
 import crypto from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 import { createExtensionIntegrationRouter } from './extensionIntegrationRouter.js'
-import { loadConfig } from '../../config/config.js'
+import { testConfig } from '../../test/testConfig.js'
 import type { SupabaseClients } from '../../infra/supabase.js'
 
 const user = '11111111-1111-4111-8111-111111111111'
@@ -23,7 +23,7 @@ function setup(row: unknown = { id, user_id: user, extension_origin: origin, exp
   const rpcResult = { single: vi.fn(async () => ({ data: { token_id: id, expires_at: '2099-01-01T00:00:00Z' }, error: null })) }
   const rpc = vi.fn(() => rpcResult)
   const admin = { from: vi.fn(() => q), rpc }
-  const config = loadConfig({ NODE_ENV: 'test', SUPABASE_URL: 'http://supabase.test', SUPABASE_ANON_KEY: 'anon-test', SUPABASE_SERVICE_ROLE_KEY: 'service-test', COOKIE_SECRET: 'a'.repeat(32), EDULOG_WEB_BASE_URL: 'http://localhost:5173', API_EXTENSION_ALLOWED_ORIGINS: origin })
+  const config = testConfig({ EDULOG_WEB_BASE_URL: 'http://localhost:5173', API_EXTENSION_ALLOWED_ORIGINS: origin })
   const app = express()
   app.use(express.json())
   app.use('/api/extension', createExtensionIntegrationRouter({ adminClient: admin, publicClient: {} } as unknown as SupabaseClients, config))

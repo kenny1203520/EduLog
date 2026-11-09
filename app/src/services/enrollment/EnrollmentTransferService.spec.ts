@@ -2,12 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { EnrollmentTransferService } from './EnrollmentTransferService'
 import { EnrollmentTransferQueryService } from './EnrollmentTransferQueryService'
 import { EnrollmentTransferToolService } from './EnrollmentTransferToolService'
-import { OccurrenceService } from '../occurrence/OccurrenceService'
+import { OccurrenceCommandService } from '../occurrence/OccurrenceCommandService'
 import { SessionService } from '../session/SessionService'
 
-const { rpcMock, postMock } = vi.hoisted(() => ({ rpcMock: vi.fn(), postMock: vi.fn() }))
+const { postMock } = vi.hoisted(() => ({ postMock: vi.fn() }))
 
-vi.mock('@/services/api/ApiDataClient', () => ({ apiDataClient: { from: vi.fn(), rpc: rpcMock } }))
 vi.mock('@/services/api/ApiV1Client', async importOriginal => ({
     ...await importOriginal<typeof import('@/services/api/ApiV1Client')>(),
     apiV1Client: { post: postMock, get: vi.fn() }
@@ -27,8 +26,8 @@ vi.mock('./EnrollmentTransferQueryService', () => ({
 vi.mock('./EnrollmentTransferToolService', () => ({
     EnrollmentTransferToolService: { syncSessionPair: vi.fn() }
 }))
-vi.mock('../occurrence/OccurrenceService', () => ({
-    OccurrenceService: { generateOccurrences: vi.fn() }
+vi.mock('../occurrence/OccurrenceCommandService', () => ({
+    OccurrenceCommandService: { generateOccurrences: vi.fn() }
 }))
 vi.mock('../session/SessionService', () => ({
     SessionService: { getCompatibleClassSession: vi.fn() }
@@ -52,9 +51,9 @@ describe('EnrollmentTransferService single-lesson transfers', () => {
             .mockResolvedValueOnce(null)
         vi.mocked(EnrollmentTransferQueryService.getSingleLessonReportCandidates).mockResolvedValue([])
         vi.mocked(SessionService.getCompatibleClassSession).mockResolvedValue({} as any)
-        vi.mocked(OccurrenceService.generateOccurrences).mockResolvedValue([])
+        vi.mocked(OccurrenceCommandService.generateOccurrences).mockResolvedValue([])
         vi.mocked(EnrollmentTransferToolService.syncSessionPair).mockResolvedValue()
-        rpcMock.mockResolvedValue({ data: 'transfer-1', error: null })
+        postMock.mockResolvedValue({ data: { status: 'transferred', transfer_id: 'transfer-1' } })
     })
 
     it('records a transfer without creating a placeholder when the source report is missing', async () => {
@@ -66,11 +65,11 @@ describe('EnrollmentTransferService single-lesson transfers', () => {
             { createIfMissing: true }
         )
 
-        expect(rpcMock).toHaveBeenCalledWith('transfer_single_lesson', {
-            p_enrollment_id: 'enrollment-1',
-            p_source_occurrence_id: 'source-occurrence',
-            p_target_occurrence_id: 'target-occurrence',
-            p_report_id: null
+        expect(postMock).toHaveBeenCalledWith('/enrollment-transfers/single-lesson', {
+            enrollment_id: 'enrollment-1',
+            source_occurrence_id: 'source-occurrence',
+            target_occurrence_id: 'target-occurrence',
+            report_id: null
         })
         expect(EnrollmentTransferToolService.syncSessionPair)
             .toHaveBeenCalledWith('source-session', 'target-session')
@@ -89,8 +88,8 @@ describe('EnrollmentTransferService single-lesson transfers', () => {
             '2026-08-05'
         )
 
-        expect(rpcMock).toHaveBeenCalledWith('transfer_single_lesson', expect.objectContaining({
-            p_report_id: 'report-1'
+        expect(postMock).toHaveBeenCalledWith('/enrollment-transfers/single-lesson', expect.objectContaining({
+            report_id: 'report-1'
         }))
     })
 
@@ -108,8 +107,8 @@ describe('EnrollmentTransferService single-lesson transfers', () => {
             'enrollment-1', '2026-08-03', 'target-session', '2026-08-05'
         )
 
-        expect(rpcMock).toHaveBeenCalledWith('transfer_single_lesson', expect.objectContaining({
-            p_source_occurrence_id: 'makeup-occurrence', p_report_id: 'moved-report'
+        expect(postMock).toHaveBeenCalledWith('/enrollment-transfers/single-lesson', expect.objectContaining({
+            source_occurrence_id: 'makeup-occurrence', report_id: 'moved-report'
         }))
     })
 
@@ -127,18 +126,18 @@ describe('EnrollmentTransferService single-lesson transfers', () => {
             '2026-08-12'
         )
 
-        expect(rpcMock).toHaveBeenCalledWith('transfer_single_lesson', {
-            p_enrollment_id: 'enrollment-1',
-            p_source_occurrence_id: 'makeup-occurrence',
-            p_target_occurrence_id: 'target-occurrence',
-            p_report_id: 'report-2'
+        expect(postMock).toHaveBeenCalledWith('/enrollment-transfers/single-lesson', {
+            enrollment_id: 'enrollment-1',
+            source_occurrence_id: 'makeup-occurrence',
+            target_occurrence_id: 'target-occurrence',
+            report_id: 'report-2'
         })
         expect(EnrollmentTransferToolService.syncSessionPair)
             .toHaveBeenCalledWith('makeup-session', 'next-session')
     })
 
     it('converts a concurrent target-report insert into a manageable conflict', async () => {
-        rpcMock.mockResolvedValue({ data: null, error: { message: 'TARGET_REPORT_ALREADY_EXISTS' } })
+        postMock.mockRejectedValue(new Error('TARGET_REPORT_ALREADY_EXISTS'))
         vi.mocked(EnrollmentTransferQueryService.getReportForOccurrence)
             .mockResolvedValueOnce(null)
             .mockResolvedValueOnce({
@@ -192,7 +191,7 @@ describe('EnrollmentTransferService single-lesson transfers', () => {
         const result = await EnrollmentTransferService.transferSingleLessonReport('source-report', 'target-session', '2026-10-03')
 
         expect(result.status).toBe('conflict')
-        expect(rpcMock).not.toHaveBeenCalledWith('transfer_single_lesson', expect.anything())
+        expect(postMock).not.toHaveBeenCalledWith('/enrollment-transfers/single-lesson', expect.anything())
     })
 
     it('cancels a transfer through the API and reports a retained target report', async () => {

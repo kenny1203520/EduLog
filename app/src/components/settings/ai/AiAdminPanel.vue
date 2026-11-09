@@ -126,7 +126,7 @@ onMounted(load)
                         </select>
                     </label>
                     <label class="block text-sm font-bold text-gray-700">{{ t('ai.settings.label') }}
-                        <input v-model="credentialForm.label" maxlength="120" class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 px-3 text-sm" :placeholder="t(`ai.providers.${credentialForm.provider}`)" />
+                        <input v-model="credentialForm.label" maxlength="120" class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 px-3 text-sm" :placeholder="t(`ai.providers.${credentialForm.provider}`)"  :aria-label="t(`ai.providers.${credentialForm.provider}`)"/>
                     </label>
                     <label class="block text-sm font-bold text-gray-700">{{ credentialForm.provider === 'ollama' ? t('ai.settings.api_key_optional') : t('ai.settings.api_key') }}
                         <input v-model="credentialForm.secret" type="password" autocomplete="off" maxlength="4096" :required="credentialForm.provider !== 'ollama'"
@@ -134,7 +134,8 @@ onMounted(load)
                     </label>
                     <label class="block text-sm font-bold text-gray-700">{{ credentialForm.provider === 'ollama' ? t('ai.settings.base_url') : t('ai.settings.base_url_optional') }}
                         <input v-model="credentialForm.base_url" type="url" maxlength="2048" :required="credentialForm.provider === 'ollama'"
-                            class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 px-3 text-sm" :placeholder="credentialForm.provider === 'ollama' ? 'http://ollama:11434' : ''" />
+                            class="mt-1 min-h-11 w-full rounded-xl border border-gray-200 px-3 text-sm" :placeholder="credentialForm.provider === 'ollama' ? 'http://ollama:11434' : ''"  :aria-label="credentialForm.provider === 'ollama' ? 'http://ollama:11434' : ''"/>
+                        <span v-if="credentialForm.provider !== 'ollama'" class="mt-1 block text-xs font-normal text-gray-500">{{ t('ai.settings.base_url_optional_hint') }}</span>
                     </label>
                     <div class="md:col-span-2">
                         <button type="submit" class="min-h-11 rounded-xl bg-emerald-600 px-4 text-sm font-black text-white disabled:opacity-50" :disabled="saving || !overview.secret_storage_available">{{ t('ai.settings.add_key') }}</button>

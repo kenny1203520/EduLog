@@ -1,12 +1,10 @@
-import { apiDataClient } from '@/services/api/ApiDataClient'
 import type { ClassSessionDTO } from '@/models/Classroom'
 import { ClassSessionFactory, type ClassSessionScheduleRuleDTO } from '@/models/ClassSession'
-import { VisibilityPreferenceService } from '../VisibilityPreferenceService'
-import { DateUtils } from '@/utils/DateUtils'
+import { VisibilityPreferenceService } from '../preference/VisibilityPreferenceService'
+import { DateUtils } from '@/utils/dateUtils'
 import { SessionEligibilityPolicy } from '@/models/SessionEligibilityPolicy'
 import { apiResourceClient } from '@/services/api/ApiResourceClient'
 import { apiV1Client } from '@/services/api/ApiV1Client'
-import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 export type SessionVisibilityFilterMode = 'all' | 'visible' | 'hidden'
 
@@ -34,8 +32,6 @@ export class SessionService {
         return input
     }
 
-    private static scheduleSelect = '*, class_session_schedule_rules(*)'
-
     static async getClassSessions(
         page: number = 1,
         perPage: number = 100,
@@ -43,64 +39,21 @@ export class SessionService {
         classroomId?: string | null,
         visibilityMode: SessionVisibilityFilterMode = 'all'
     ): Promise<{ data: ClassSessionDTO[], count: number }> {
-        if (getApiV1Mode() === 'v1' && visibilityMode === 'all') {
-            const response = await apiResourceClient.list<any>('class-sessions', { page, perPage, search, sort: 'name', classroomId: classroomId || undefined, mode: 'v1' })
+        if (visibilityMode === 'all') {
+            const response = await apiResourceClient.list<any>('class-sessions', { page, perPage, search, sort: 'name', classroomId: classroomId || undefined })
             let rows = (response.data || []).map(this.hydrateSession)
             if (classroomId) rows = rows.filter((row: any) => row.classroom_id === classroomId)
             return { data: rows, count: Number(response.meta?.total ?? rows.length) }
         }
         const from = (page - 1) * perPage
         const to = from + perPage - 1
-
-        if (visibilityMode === 'all') {
-            let query = apiDataClient
-                .from('class_sessions')
-                .select(this.scheduleSelect, { count: 'exact' })
-
-            if (search) {
-                query = query.ilike('name', `%${search}%`)
-            }
-
-            if (classroomId) {
-                query = query.eq('classroom_id', classroomId)
-            }
-
-            const { data, error, count } = await query
-                .order('name', { ascending: true })
-                .range(from, to)
-
-            if (error) throw new Error(error.message)
-            return { data: (data || []).map(this.hydrateSession), count: count || 0 }
-        }
-
-        const chunkSize = Math.max(perPage, 250)
         const allSessions: ClassSessionDTO[] = []
-
-        for (let offset = 0; ; offset += chunkSize) {
-            let query = apiDataClient
-                .from('class_sessions')
-                .select(this.scheduleSelect)
-
-            if (search) {
-                query = query.ilike('name', `%${search}%`)
-            }
-
-            if (classroomId) {
-                query = query.eq('classroom_id', classroomId)
-            }
-
-            const { data, error } = await query
-                .order('name', { ascending: true })
-                .range(offset, offset + chunkSize - 1)
-
-            if (error) throw new Error(error.message)
-
-            const chunk = (data || []).map(this.hydrateSession)
-            allSessions.push(...chunk)
-
-            if (chunk.length < chunkSize) {
-                break
-            }
+        for (let chunkPage = 1; ; chunkPage += 1) {
+            const response = await apiResourceClient.list<any>('class-sessions', { page: chunkPage, perPage: 100, search, sort: 'name', classroomId: classroomId || undefined })
+            const chunk = (response.data || []).map(this.hydrateSession)
+            allSessions.push(...(classroomId ? chunk.filter((row: any) => row.classroom_id === classroomId) : chunk))
+            const total = Number(response.meta?.total ?? 0)
+            if (chunk.length < 100 || (total > 0 && chunkPage * 100 >= total)) break
         }
 
         const sessionIds = allSessions
@@ -135,19 +88,8 @@ export class SessionService {
 
     static async getClassSessionOptions(page: number = 1, perPage: number = 100): Promise<{ data: ClassSessionOption[]; count: number }> {
         const pageSize = Math.min(Math.max(1, Math.trunc(perPage)), 100)
-        if (getApiV1Mode() === 'v1') {
-            const response = await apiResourceClient.list<ClassSessionOption>('class-sessions', { page, perPage: pageSize, sort: 'name', mode: 'v1' })
-            return { data: response.data || [], count: Number(response.meta?.total ?? response.data?.length ?? 0) }
-        }
-        const from = (page - 1) * pageSize
-        const to = from + pageSize - 1
-        const { data, error, count } = await apiDataClient
-            .from('class_sessions')
-            .select('id, name, classroom_id, course_ids', { count: 'exact' })
-            .order('name', { ascending: true })
-            .range(from, to)
-        if (error) throw new Error(error.message)
-        return { data: (data || []) as ClassSessionOption[], count: count || 0 }
+        const response = await apiResourceClient.list<ClassSessionOption>('class-sessions', { page, perPage: pageSize, sort: 'name' })
+        return { data: response.data || [], count: Number(response.meta?.total ?? response.data?.length ?? 0) }
     }
 
     static async getAllClassSessionOptions(): Promise<{ data: ClassSessionOption[], count: number }> {
@@ -173,63 +115,15 @@ export class SessionService {
     }
 
     static async saveClassSession(session: Partial<ClassSessionDTO>, id?: string): Promise<ClassSessionDTO> {
-        if (getApiV1Mode() === 'v1') {
-            const rules = (session.schedule_rules || session.class_session_schedule_rules || []) as ClassSessionScheduleRuleDTO[]
-            const payload = { name: session.name || '', classroom_id: session.classroom_id || null, course_ids: session.course_ids || [], capacity: session.capacity ?? 10, lesson_number: session.lesson_number ?? null, external_link: session.external_link || null, start_date: session.start_date || null, end_date: session.end_date || null, time_zone: DateUtils.isValidTimeZone(session.time_zone) ? session.time_zone : DateUtils.getDefaultTimeZone(), session_type: session.session_type || 'regular', schedule_mode: session.schedule_mode || (session.session_type === 'camp' ? 'specific_dates' : 'weekly'), schedule_rules: rules.map(this.toScheduleRuleInput) }
-            const response = id ? await apiResourceClient.update<any>('class-sessions', id, payload, 'v1') : await apiResourceClient.create<any>('class-sessions', payload, 'v1')
-            return this.hydrateSession(response.data)
-        }
         const rules = (session.schedule_rules || session.class_session_schedule_rules || []) as ClassSessionScheduleRuleDTO[]
-        const payload = {
-            name: session.name || '',
-            classroom_id: session.classroom_id || null,
-            course_ids: session.course_ids || [],
-            capacity: session.capacity ?? 10,
-            lesson_number: session.lesson_number ?? null,
-            external_link: session.external_link || null,
-            start_date: session.start_date || null,
-            end_date: session.end_date || null,
-            time_zone: DateUtils.isValidTimeZone(session.time_zone) ? session.time_zone : DateUtils.getDefaultTimeZone(),
-            session_type: session.session_type || 'regular',
-            schedule_mode: session.schedule_mode || (session.session_type === 'camp' ? 'specific_dates' : 'weekly')
-        }
-
-        const model = ClassSessionFactory.create({
-            ...payload,
-            id,
-            schedule_rules: rules
-        } as ClassSessionDTO)
-        const validationErrors = model.validate()
-        if (validationErrors.length > 0) throw new Error(validationErrors[0])
-
-        const { data: savedId, error } = await apiDataClient.rpc('save_class_session_with_schedule', {
-            p_session: payload,
-            p_rules: rules.map(rule => this.toScheduleRuleInput(rule)).map(rule => ({
-                schedule_kind: rule.schedule_kind,
-                day_of_week: rule.day_of_week ?? null,
-                day_of_month: rule.day_of_month ?? null,
-                occurrence_date: rule.occurrence_date || null,
-                start_time: rule.start_time,
-                end_time: rule.end_time
-            })),
-            p_session_id: id || null
-        })
-        if (error) throw new Error(error.message)
-        return this.getClassSession(String(savedId))
+        const payload = { name: session.name || '', classroom_id: session.classroom_id || null, course_ids: session.course_ids || [], capacity: session.capacity ?? 10, lesson_number: session.lesson_number ?? null, external_link: session.external_link || null, start_date: session.start_date || null, end_date: session.end_date || null, time_zone: DateUtils.isValidTimeZone(session.time_zone) ? session.time_zone : DateUtils.getDefaultTimeZone(), session_type: session.session_type || 'regular', schedule_mode: session.schedule_mode || (session.session_type === 'camp' ? 'specific_dates' : 'weekly'), schedule_rules: rules.map(this.toScheduleRuleInput) }
+        const response = id ? await apiResourceClient.update<any>('class-sessions', id, payload) : await apiResourceClient.create<any>('class-sessions', payload)
+        return this.hydrateSession(response.data)
     }
 
     static async getClassSession(id: string): Promise<ClassSessionDTO> {
-        if (getApiV1Mode() === 'v1') {
-            const response = await apiResourceClient.get<any>('class-sessions', id, 'v1')
-            return this.hydrateSession(response.data)
-        }
-        const { data, error } = await apiDataClient
-            .from('class_sessions')
-            .select(this.scheduleSelect)
-            .eq('id', id)
-            .single()
-        if (error) throw new Error(error.message)
-        return this.hydrateSession(data)
+        const response = await apiResourceClient.get<any>('class-sessions', id)
+        return this.hydrateSession(response.data)
     }
 
     /**
@@ -280,79 +174,18 @@ export class SessionService {
     }
 
     static async deleteClassSession(id: string): Promise<void> {
-        if (getApiV1Mode() === 'v1') {
-            await apiResourceClient.remove('class-sessions', id, 'v1')
-            return
-        }
-        const { error } = await apiDataClient.from('class_sessions').delete().eq('id', id)
-        if (error) throw new Error(error.message)
+        await apiResourceClient.remove('class-sessions', id)
+        return
     }
 
     static async getSessionDetails(sessionId: string) {
-        if (getApiV1Mode() === 'v1') {
-            const response = await apiV1Client.get<any>('/class-sessions/' + encodeURIComponent(sessionId) + '/details')
-            return response.data
-        }
-        const { data: session, error: sessionError } = await apiDataClient
-            .from('class_sessions')
-            .select(`
-          *,
-          class_session_schedule_rules(*),
-          classroom:classrooms!classroom_id(id, name, address, external_link)
-        `)
-            .eq('id', sessionId)
-            .single()
-
-        if (sessionError) throw new Error(sessionError.message)
-
-        const { count, error: countError } = await apiDataClient
-            .from('enrollments')
-            .select('*', { count: 'exact', head: true })
-            .eq('class_session_id', sessionId)
-            .eq('status', 'regular')
-
-        if (countError) throw new Error(countError.message)
-
-        return {
-            ...this.hydrateSession(session),
-            classroom_name: session.classroom?.name || 'Unknown',
-            classroom_address: session.classroom?.address || '',
-            current_enrollments: count || 0
-        }
+        const response = await apiV1Client.get<any>('/class-sessions/' + encodeURIComponent(sessionId) + '/details')
+        return response.data
     }
 
     static async getMaxEnrollmentInDateRange(sessionId: string, startDate: string, endDate: string): Promise<number> {
-        if (getApiV1Mode() === 'v1') {
-            const params = new URLSearchParams({ start_date: startDate, end_date: endDate })
-            const response = await apiV1Client.get<{ max_occupancy?: number; max_enrollment?: number }>('/class-sessions/' + encodeURIComponent(sessionId) + '/enrollment-peak?' + params.toString())
-            return Number(response.data?.max_occupancy ?? response.data?.max_enrollment ?? 0)
-        }
-        const { data: occurrences, error } = await apiDataClient
-            .from('class_occurrences')
-            .select(`
-                id,
-                occurrence_date,
-                occurrence_reports ( count )
-            `)
-            .eq('class_session_id', sessionId)
-            .gte('occurrence_date', startDate)
-            .lte('occurrence_date', endDate)
-
-        if (error) throw new Error(error.message)
-        if (!occurrences || occurrences.length === 0) return 0
-
-        let maxCount = 0
-        for (const occ of occurrences) {
-            let count = 0
-            if (Array.isArray(occ.occurrence_reports)) {
-                count = occ.occurrence_reports[0]?.count || 0
-            } else if (occ.occurrence_reports && typeof occ.occurrence_reports === 'object') {
-                count = (occ.occurrence_reports as any).count || 0
-            }
-            if (count > maxCount) {
-                maxCount = count
-            }
-        }
-        return maxCount
+        const params = new URLSearchParams({ start_date: startDate, end_date: endDate })
+        const response = await apiV1Client.get<{ max_occupancy?: number }>('/class-sessions/' + encodeURIComponent(sessionId) + '/enrollment-peak?' + params.toString())
+        return Number(response.data?.max_occupancy ?? 0)
     }
 }

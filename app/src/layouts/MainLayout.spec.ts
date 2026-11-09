@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 
 const panel = vi.hoisted(() => ({ value: false }))
+vi.mock('@/stores/useCapabilityStore', () => ({ useCapabilityStore: () => ({ ensureLoaded: vi.fn(), can: () => true, canPlatform: () => true }) }))
 vi.mock('@/composables/useExtensionPanel', () => ({ inExtensionPanel: () => panel.value }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }), RouterLink: { template: '<a><slot /></a>' } }))
 vi.mock('@/stores/useAuthStore', () => ({ useAuthStore: () => ({ user: { nickname: 'Teacher' }, signOut: vi.fn() }) }))

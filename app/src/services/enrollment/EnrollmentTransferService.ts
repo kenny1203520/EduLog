@@ -1,7 +1,5 @@
-import { apiDataClient } from '@/services/api/ApiDataClient'
 import { Enrollment } from '@/models/Enrollment'
-import { DateUtils } from '@/utils/DateUtils'
-import { OccurrenceService } from '../occurrence/OccurrenceService'
+import { DateUtils } from '@/utils/dateUtils'
 import { EnrollmentTransferQueryService } from './EnrollmentTransferQueryService'
 import { EnrollmentTransferToolService } from './EnrollmentTransferToolService'
 import { SessionService } from '../session/SessionService'
@@ -12,8 +10,8 @@ import {
 } from './SingleLessonTransferConflictService'
 import type { TransferReportFieldSelections } from '@/services/report/ReportFieldConflictService'
 import { apiV1Client } from '@/services/api/ApiV1Client'
-import { getApiV1Mode } from '@/services/api/ApiModeClient'
 import { hasDomainErrorCode } from '@/services/errors/mapDomainError'
+import { OccurrenceCommandService } from '@/services/occurrence/OccurrenceCommandService'
 
 export interface SingleLessonTransferCancelResult {
     transferId: string
@@ -95,19 +93,8 @@ export class EnrollmentTransferService {
         targetOccurrenceId: string,
         reportId: string | null
     ): Promise<string> {
-        if (getApiV1Mode() === 'v1') {
-            const response = await apiV1Client.post<{ status: string; transfer_id: string }>('/enrollment-transfers/single-lesson', { enrollment_id: enrollmentId, source_occurrence_id: sourceOccurrenceId, target_occurrence_id: targetOccurrenceId, report_id: reportId })
-            return response.data.transfer_id
-        }
-        const { data, error } = await apiDataClient.rpc('transfer_single_lesson', {
-            p_enrollment_id: enrollmentId,
-            p_source_occurrence_id: sourceOccurrenceId,
-            p_target_occurrence_id: targetOccurrenceId,
-            p_report_id: reportId
-        })
-
-        if (error) throw new Error(error.message)
-        return data as string
+        const response = await apiV1Client.post<{ status: string; transfer_id: string }>('/enrollment-transfers/single-lesson', { enrollment_id: enrollmentId, source_occurrence_id: sourceOccurrenceId, target_occurrence_id: targetOccurrenceId, report_id: reportId })
+        return response.data.transfer_id
     }
 
     static async transferSingleLesson(
@@ -168,7 +155,7 @@ export class EnrollmentTransferService {
         await this.assertTargetDateMatchesSession(targetSessionId, targetDate)
 
         const target = DateUtils.parseLocalDate(targetDate) || new Date(targetDate)
-        await OccurrenceService.generateOccurrences(targetSessionId, target, target).catch((err: any) => {
+        await OccurrenceCommandService.generateOccurrences(targetSessionId, target, target).catch((err: any) => {
             console.error('Failed to generate the target occurrence for single-lesson transfer:', err)
         })
 
@@ -182,7 +169,7 @@ export class EnrollmentTransferService {
         )
 
         const original = DateUtils.parseLocalDate(originalDate) || new Date(originalDate)
-        await OccurrenceService.generateOccurrences(originalSessionId, original, original).catch((err: any) => {
+        await OccurrenceCommandService.generateOccurrences(originalSessionId, original, original).catch((err: any) => {
             console.error('Failed to generate the original occurrence for single-lesson transfer:', err)
         })
 
@@ -243,7 +230,7 @@ export class EnrollmentTransferService {
         const originalSessionId = originalOccurrence?.class_session_id || null
 
         const target = DateUtils.parseLocalDate(targetDate) || new Date(targetDate)
-        await OccurrenceService.generateOccurrences(targetSessionId, target, target).catch((err: any) => {
+        await OccurrenceCommandService.generateOccurrences(targetSessionId, target, target).catch((err: any) => {
             console.error('Failed to generate the target occurrence for single-lesson report transfer:', err)
         })
 

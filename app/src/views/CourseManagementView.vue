@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useCapabilityStore } from '@/stores/useCapabilityStore'
 import { ref, onMounted, computed, watch } from 'vue' // Added watch
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { Course, Lesson, type CourseDTO } from '@/models/Course'
@@ -7,15 +8,16 @@ import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import { useFeedback } from '@/composables/useFeedback'
 
-import ConfirmModal from '../components/common/ConfirmModal.vue'
-import BasePageHeader from '@/components/common/BasePageHeader.vue'
-import TextEditor from '@/components/common/text-editor/TextEditor.vue'
-import RichTextViewer from '@/components/common/text-editor/RichTextViewer.vue'
-import { createTextEditorContent } from '@/components/common/text-editor/content'
-import type { TextEditorContent } from '@/components/common/text-editor/types'
+import ConfirmModal from '../components/ui/ConfirmModal.vue'
+import BasePageHeader from '@/components/ui/BasePageHeader.vue'
+import TextEditor from '@/components/text-editor/TextEditor.vue'
+import RichTextViewer from '@/components/text-editor/RichTextViewer.vue'
+import { createTextEditorContent } from '@/components/text-editor/content'
+import type { TextEditorContent } from '@/components/text-editor/types'
 
 const { t } = useI18n()
 const toast = useToast()
+const capabilities = useCapabilityStore()
 const { reportError } = useFeedback()
 const courses = ref<Course[]>([])
 const loading = ref(true)
@@ -138,7 +140,7 @@ async function fetchCourses() {
 }
 
 watch(() => pagination.value.page, fetchCourses)
-watch(() => pagination.value.perPage, () => { pagination.value.page = 1; fetchCourses() })
+watch(() => pagination.value.perPage, () => { pagination.value.page = 1; void fetchCourses() })
 
 // ... (rest of functions)
 
@@ -283,7 +285,7 @@ async function deleteLesson(id: string) {
                 </div>
             </template>
             <template #actions>
-                <button @click="openCreateModal"
+                <button v-if="capabilities.canPlatform('teaching.courses.create')" @click="openCreateModal"
                     class="bg-emerald-600 text-white px-6 py-3 rounded-2xl hover:bg-emerald-700 transition shadow-lg shadow-emerald-200 flex items-center gap-2 font-bold active:scale-95">
                     <span class="text-xl">+</span> {{ t('common.add') }}
                 </button>
@@ -412,7 +414,7 @@ async function deleteLesson(id: string) {
                                 </p>
                             </div>
                             <div class="flex gap-2 self-end lg:self-start">
-                                <button @click="openEditModal(selectedCourse)"
+                                <button v-if="capabilities.canPlatform('teaching.courses.update')" @click="openEditModal(selectedCourse)"
                                     class="p-3 lg:p-4 bg-gray-50 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-2xl transition-all shadow-sm border border-gray-100 active:scale-90"
                                     :title="$t('common.edit')">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none"
@@ -421,7 +423,7 @@ async function deleteLesson(id: string) {
                                             d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                                     </svg>
                                 </button>
-                                <button @click="deleteCourse(selectedCourse.id!)"
+                                <button v-if="capabilities.canPlatform('teaching.courses.delete')" @click="deleteCourse(selectedCourse.id!)"
                                     class="p-3 lg:p-4 bg-gray-50 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all shadow-sm border border-gray-100 active:scale-90"
                                     :title="$t('common.delete')">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none"
@@ -446,7 +448,7 @@ async function deleteLesson(id: string) {
                                         {{ selectedCourse.lessons.length }}
                                     </span>
                                 </h3>
-                                <button @click="startAddLesson(selectedCourse)"
+                                <button v-if="capabilities.canPlatform('teaching.lessons.create')" @click="startAddLesson(selectedCourse)"
                                     class="text-emerald-600 font-black text-sm flex items-center gap-2 hover:translate-x-1 transition-transform">
                                     + {{ $t('course.add_lesson') }}
                                 </button>
@@ -459,17 +461,17 @@ async function deleteLesson(id: string) {
                                     <div class="flex flex-col lg:flex-row gap-4">
                                         <div class="w-full lg:w-16 space-y-1">
                                             <label
-                                                class="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">#SEQ</label>
+                                                class="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1" for="edulog-coursemanagementview-192-13880">#SEQ</label>
                                             <input v-model.number="lessonForm.sequence" type="number"
-                                                class="w-full bg-white border-emerald-100 rounded-xl px-3 py-2 text-center font-black focus:ring-emerald-500 focus:border-emerald-500">
+                                                class="w-full bg-white border-emerald-100 rounded-xl px-3 py-2 text-center font-black focus:ring-emerald-500 focus:border-emerald-500" id="edulog-coursemanagementview-192-13880">
                                         </div>
                                         <div class="flex-1 space-y-1">
                                             <label
-                                                class="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">{{
+                                                class="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1" for="edulog-coursemanagementview-198-14475">{{
                                                     $t('course.lesson_title') }}</label>
                                             <input v-model="lessonForm.title"
                                                 class="w-full bg-white border-emerald-100 rounded-xl px-4 py-2 font-bold focus:ring-emerald-500 focus:border-emerald-500"
-                                                @keyup.enter="saveLesson(selectedCourse.id!)" auto-focus>
+                                                @keyup.enter="saveLesson(selectedCourse.id!)" auto-focus id="edulog-coursemanagementview-198-14475">
                                         </div>
                                     </div>
                                     <div class="flex justify-end gap-3 mt-4">
@@ -498,8 +500,8 @@ async function deleteLesson(id: string) {
                                     <div v-if="editingLessonId === lesson.id"
                                         class="flex-1 w-full flex flex-col lg:flex-row gap-4 items-center animate-in fade-in duration-300">
                                         <input v-model.number="lessonForm.sequence" type="number"
-                                            class="w-full lg:w-16 text-center bg-gray-50 border-gray-100 rounded-xl py-2 font-black">
-                                        <input v-model="lessonForm.title"
+                                            :aria-label="$t('course.lesson_sequence')" class="w-full lg:w-16 text-center bg-gray-50 border-gray-100 rounded-xl py-2 font-black">
+                                        <input v-model="lessonForm.title" :aria-label="$t('course.lesson_title')"
                                             class="flex-1 w-full bg-gray-50 border-gray-100 rounded-xl px-4 py-2 font-bold"
                                             @keyup.enter="saveLesson(selectedCourse.id!)">
                                         <div class="flex gap-2 w-full lg:w-auto justify-end">
@@ -534,7 +536,7 @@ async function deleteLesson(id: string) {
                                         </div>
                                         <div
                                             class="flex gap-1 opacity-100 lg:opacity-0 group-hover:opacity-100 transition-all">
-                                            <button @click="editLesson(lesson)"
+                                            <button v-if="capabilities.canPlatform('teaching.lessons.update')" @click="editLesson(lesson)"
                                                 class="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all h-10 w-10 flex items-center justify-center shadow-sm bg-white"
                                                 :title="$t('common.edit')">
                                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
@@ -544,7 +546,7 @@ async function deleteLesson(id: string) {
                                                         d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                                                 </svg>
                                             </button>
-                                            <button @click="deleteLesson(lesson.id!)"
+                                            <button v-if="capabilities.canPlatform('teaching.lessons.delete')" @click="deleteLesson(lesson.id!)"
                                                 class="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all h-10 w-10 flex items-center justify-center shadow-sm bg-white"
                                                 :title="$t('common.delete')">
                                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
@@ -603,29 +605,29 @@ async function deleteLesson(id: string) {
                     $t('course.add_course') }}</h3>
                 <div class="space-y-4">
                     <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('course.subject')
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5" for="edulog-coursemanagementview-337-26122">{{ $t('course.subject')
                         }}</label>
                         <input v-model="courseForm.subject" :placeholder="$t('course.subject_placeholder')"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500" id="edulog-coursemanagementview-337-26122">
                     </div>
                     <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('course.stage') }}</label>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5" for="edulog-coursemanagementview-343-26549">{{ $t('course.stage') }}</label>
                         <input v-model="courseForm.stage" :placeholder="$t('course.stage_placeholder')"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500" id="edulog-coursemanagementview-343-26549">
                     </div>
                     <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5" for="edulog-coursemanagementview-348-26946">
                             {{ $t('course.display_name') }}
                             <span class="text-xs text-gray-400 block font-normal mt-0.5">{{
                                 $t('course.display_name_hint') }}</span>
                         </label>
                         <input v-model="courseForm.display_name" :placeholder="$t('course.display_name_placeholder')"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500" id="edulog-coursemanagementview-348-26946">
                     </div>
                     <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('course.description')
-                        }}</label>
-                        <TextEditor v-model="courseDescriptionContent" preset="form" :min-height="96" />
+                        <p class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('course.description')
+                        }}</p>
+                        <TextEditor v-model="courseDescriptionContent" :aria-label="$t('course.description')" preset="form" :min-height="96" />
                     </div>
                 </div>
                 <div class="flex justify-end gap-3 mt-8 pt-4 border-t border-gray-50">

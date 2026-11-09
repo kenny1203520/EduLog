@@ -7,23 +7,12 @@ import { csrfProtection } from '../../auth/auth.js'
 import { errorHandler } from '../../http/errors.js'
 import { redeemTicket } from '../../realtime/realtimeTicket.js'
 import { createRealtimeTicketRouter } from './realtimeTicketRouter.js'
+import { testConfig } from '../../test/testConfig.js'
 
 const SECRET = 'a'.repeat(32)
 const ROOM = 'bbe2ea83-8e94-4197-83c5-f126cf027abc'
 
-const env = {
-  NODE_ENV: 'test',
-  API_PORT: '3000',
-  EDULOG_WEB_BASE_URL: 'http://localhost:4173',
-  SUPABASE_URL: 'http://supabase.test',
-  SUPABASE_ANON_KEY: 'anon-test-key',
-  SUPABASE_SERVICE_ROLE_KEY: 'service-role-test-key',
-  COOKIE_SECRET: SECRET,
-  COOKIE_SECURE: 'false',
-  RATE_LIMIT_STORE: 'memory',
-  API_ALLOWED_ORIGINS: 'http://localhost:4173',
-  API_EXTENSION_ALLOWED_ORIGINS: '',
-}
+const config = testConfig({ COOKIE_SECRET: SECRET })
 
 /** Mounts the router behind CSRF and a stand-in for requireAuth. */
 function ticketApp() {
@@ -41,13 +30,13 @@ function ticketApp() {
 
 describe('POST /api/realtime/ticket', () => {
   it('requires authentication on the protected API', async () => {
-    const response = await request(createApp(env)).post('/api/realtime/ticket').send({ room: ROOM })
+    const response = await request(createApp(config)).post('/api/realtime/ticket').send({ room: ROOM })
     expect(response.status).toBe(401)
     expect(response.body.error.code).toBe('AUTH_REQUIRED')
   })
 
   it('requires the CSRF token when the session cookie is present', async () => {
-    const response = await request(createApp(env)).post('/api/realtime/ticket')
+    const response = await request(createApp(config)).post('/api/realtime/ticket')
       .set('Cookie', 'edulog_access=access-token; edulog_csrf=csrf-value')
       .send({ room: ROOM })
     expect(response.status).toBe(403)

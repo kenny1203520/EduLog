@@ -40,18 +40,61 @@ describe('fetchModelCatalog', () => {
     expect(ids(catalog, true)).toEqual(['anthropic/claude-sonnet-5.5'])
   })
 
-  it('lists local Ollama models as free and uses the credential base URL', async () => {
+  it('lists Ollama models with full IDs, free prices, and the optional Bearer token', async () => {
     const fetchImpl = reply({ models: [{ name: 'qwen3.5:9b' }, { name: 'nomic-embed-text' }] })
-    const catalog = await fetchModelCatalog({ provider: 'ollama', authType: 'none', baseUrl: 'http://ollama:11434/' }, fetchImpl)
-    expect(fetchImpl.mock.calls[0][0]).toBe('http://ollama:11434/api/tags')
+    const catalog = await fetchModelCatalog({ provider: 'ollama', authType: 'api_key', apiKey: 'ollama-token', baseUrl: 'https://ollama.example.test/prefix////' }, fetchImpl)
+    expect(fetchImpl.mock.calls[0][0]).toBe('https://ollama.example.test/prefix/api/tags')
+    expect(fetchImpl.mock.calls[0][1].headers.authorization).toBe('Bearer ollama-token')
     expect(catalog.supported && catalog.models.find((m) => m.id === 'qwen3.5:9b')).toMatchObject({ textCapable: true, priceInputPerMtok: 0 })
     expect(ids(catalog, true)).toEqual(['qwen3.5:9b'])
+  })
+
+  it('does not send Authorization for tokenless Ollama and caps catalog responses', async () => {
+    const noTokenFetch = reply({ models: [{ name: 'qwen3:8b' }] })
+    await fetchModelCatalog({ provider: 'ollama', authType: 'none', baseUrl: 'http://ollama:11434' }, noTokenFetch)
+    expect(noTokenFetch.mock.calls[0][1].headers.authorization).toBeUndefined()
+
+    const largeFetch = vi.fn().mockResolvedValue(new Response('x'.repeat(2 * 1024 * 1024 + 1), { status: 200 }))
+    const result = await fetchModelCatalog({ provider: 'ollama', authType: 'none', baseUrl: 'http://ollama:11434' }, largeFetch)
+    expect(result).toEqual({ supported: false, reason: 'too_large', detail: 'Model list response exceeds 2 MiB' })
+  })
+
+  it('classifies network and timeout failures', async () => {
+    const tls = vi.fn().mockRejectedValue(new TypeError('fetch failed', { cause: new Error('certificate verify failed') }))
+    expect(await fetchModelCatalog({ provider: 'ollama', authType: 'none', baseUrl: 'https://ollama.example.com' }, tls)).toEqual({ supported: false, reason: 'network', detail: 'certificate verify failed' })
+    const timeout = vi.fn().mockRejectedValue(new DOMException('The operation timed out', 'TimeoutError'))
+    expect(await fetchModelCatalog({ provider: 'ollama', authType: 'none', baseUrl: 'https://ollama.example.com' }, timeout)).toMatchObject({ supported: false, reason: 'timeout' })
+  })
+
+  it('classifies provider HTTP errors and keeps the provider message', async () => {
+    const invalidKey = reply({ error: { code: 400, message: 'API key not valid. Please pass a valid API key.', status: 'INVALID_ARGUMENT' } }, 400)
+    expect(await fetchModelCatalog({ provider: 'google', authType: 'api_key', apiKey: 'g' }, invalidKey)).toEqual({
+      supported: false, reason: 'auth_failed', detail: 'HTTP 400 INVALID_ARGUMENT: API key not valid. Please pass a valid API key.',
+    })
+    const echoedKey = reply({ error: { message: 'Incorrect API key provided: sk-proj-abc***************wxyz.', type: 'invalid_request_error' } }, 401)
+    const echoed = await fetchModelCatalog({ provider: 'openai', authType: 'api_key', apiKey: 'sk-proj-abc' }, echoedKey)
+    expect(echoed).toMatchObject({ reason: 'auth_failed' })
+    expect(JSON.stringify(echoed)).not.toContain('sk-proj')
+    expect(await fetchModelCatalog({ provider: 'openai', authType: 'api_key', apiKey: 'k' }, reply({}, 404))).toMatchObject({ reason: 'not_found', detail: 'HTTP 404' })
+    expect(await fetchModelCatalog({ provider: 'openai', authType: 'api_key', apiKey: 'k' }, reply({}, 429))).toMatchObject({ reason: 'rate_limited' })
+    expect(await fetchModelCatalog({ provider: 'openai', authType: 'api_key', apiKey: 'k' }, reply({}, 503))).toMatchObject({ reason: 'provider_error' })
+    const notJson = vi.fn().mockResolvedValue(new Response('<html>', { status: 200 }))
+    expect(await fetchModelCatalog({ provider: 'openai', authType: 'api_key', apiKey: 'k' }, notJson)).toMatchObject({ reason: 'invalid_response' })
+  })
+
+  it('adds the Gemini API version when the base URL is only a host', async () => {
+    const fetchImpl = reply({ models: [] })
+    await fetchModelCatalog({ provider: 'google', authType: 'api_key', apiKey: 'g', baseUrl: 'https://generativelanguage.googleapis.com/' }, fetchImpl)
+    expect(fetchImpl.mock.calls[0][0]).toBe('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000')
+    const custom = reply({ models: [] })
+    await fetchModelCatalog({ provider: 'google', authType: 'api_key', apiKey: 'g', baseUrl: 'https://proxy.example.test/v1' }, custom)
+    expect(custom.mock.calls[0][0]).toBe('https://proxy.example.test/v1/models?pageSize=1000')
   })
 
   it('falls back to manual entry for ChatGPT plans, missing keys and errors', async () => {
     expect(await fetchModelCatalog({ provider: 'openai', authType: 'oauth', apiKey: 'token' }, vi.fn())).toEqual({ supported: false, reason: 'chatgpt_plan' })
     expect(await fetchModelCatalog({ provider: 'anthropic', authType: 'api_key' }, vi.fn())).toEqual({ supported: false, reason: 'no_key' })
-    expect(await fetchModelCatalog({ provider: 'openai', authType: 'api_key', apiKey: 'bad' }, reply({}, 401))).toEqual({ supported: false, reason: 'HTTP 401' })
+    expect(await fetchModelCatalog({ provider: 'openai', authType: 'api_key', apiKey: 'bad' }, reply({}, 401))).toEqual({ supported: false, reason: 'auth_failed', detail: 'HTTP 401' })
   })
 })
 
@@ -70,7 +113,7 @@ describe('ModelCatalogCache', () => {
     await cache.get('c1', false, load)
     expect(load).toHaveBeenCalledTimes(3)
 
-    const failing = vi.fn().mockResolvedValue({ supported: false, reason: 'HTTP 500' })
+    const failing = vi.fn().mockResolvedValue({ supported: false, reason: 'provider_error', detail: 'HTTP 500' })
     await cache.get('c2', false, failing)
     await cache.get('c2', false, failing)
     expect(failing).toHaveBeenCalledTimes(2)

@@ -120,5 +120,5 @@ export async function copyRichTextToClipboard(
 
     return copyToClipboard(contentPromise.then(content => content.plainText))
 }
-import { createTextEditorContent, richTextToHTML } from '@/components/common/text-editor/content'
-import type { TextEditorContentInput } from '@/components/common/text-editor/types'
+import { createTextEditorContent, richTextToHTML } from '@/components/text-editor/content'
+import type { TextEditorContentInput } from '@/components/text-editor/types'

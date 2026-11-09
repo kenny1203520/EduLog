@@ -8,8 +8,12 @@ export function useEmailValidation() {
    */
   const validateEmail = (email: string): boolean => {
     if (!email || !email.trim()) return true // Empty is valid (optional field)
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    return emailRegex.test(email.trim())
+    const normalized = email.trim()
+    if (normalized.length > 254 || /\s/.test(normalized)) return false
+    const atIndex = normalized.indexOf('@')
+    if (atIndex <= 0 || atIndex !== normalized.lastIndexOf('@')) return false
+    const domainDot = normalized.indexOf('.', atIndex + 1)
+    return domainDot > atIndex + 1 && domainDot < normalized.length - 1
   }
 
   /**

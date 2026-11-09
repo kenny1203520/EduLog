@@ -1,5 +1,9 @@
 # Envoy override for Kong
-# Usage: docker compose -f docker-compose.yml -f docker-compose.envoy.yml up
+# Usage: docker compose -f docker-compose.yml -f supabase/docker-compose.envoy.yml up
+# The direct Envoy port is host-only. Put Envoy behind a TLS reverse proxy for
+# remote access; the Caddy and Nginx overlays provide the dashboard login.
+# To use Caddy with Envoy, include both overlays (in either order):
+# docker compose -f docker-compose.yml -f supabase/docker-compose.envoy.yml -f supabase/docker-compose.caddy.yml up -d
 
 services:
   # Disable the original Kong service
@@ -7,8 +11,8 @@ services:
     profiles:
       - disabled
 
-  # Rewire dependencies that require Kong to Envoy
-  functions:
+  # Keep the EduLog API healthy behind the same gateway replacement.
+  api:
     depends_on: !override
       api-gw:
         condition: service_healthy
@@ -19,12 +23,12 @@ services:
     image: envoyproxy/envoy:v1.37.2
     restart: unless-stopped
     ports:
-      - ${KONG_HTTP_PORT}:8000/tcp
+      - 127.0.0.1:${KONG_HTTP_PORT}:8000/tcp
     volumes:
-      - ./volumes/api/envoy/envoy.yaml:/etc/envoy/envoy.yaml:ro
-      - ./volumes/api/envoy/cds.yaml:/etc/envoy/cds.yaml:ro
-      - ./volumes/api/envoy/lds.template.yaml:/etc/envoy/lds.template.yaml:ro
-      - ./volumes/api/envoy/docker-entrypoint.sh:/docker-entrypoint.sh:ro
+      - ./supabase/volumes/api/envoy/envoy.yaml:/etc/envoy/envoy.yaml:ro
+      - ./supabase/volumes/api/envoy/cds.yaml:/etc/envoy/cds.yaml:ro
+      - ./supabase/volumes/api/envoy/lds.template.yaml:/etc/envoy/lds.template.yaml:ro
+      - ./supabase/volumes/api/envoy/docker-entrypoint.sh:/docker-entrypoint.sh:ro
     depends_on:
       studio:
         condition: service_healthy
@@ -35,8 +39,6 @@ services:
       SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
       ANON_KEY_ASYMMETRIC: ${ANON_KEY_ASYMMETRIC:-}
       SERVICE_ROLE_KEY_ASYMMETRIC: ${SERVICE_ROLE_KEY_ASYMMETRIC:-}
-      DASHBOARD_USERNAME: ${DASHBOARD_USERNAME}
-      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD}
     entrypoint: ["/bin/sh", "/docker-entrypoint.sh"]
     healthcheck:
       # Using a TCP port check because this image does not include curl or wget.
@@ -45,7 +47,7 @@ services:
       timeout: 5s
       retries: 3
     networks:
-      default:
+      net:
         aliases:
           - kong
           - envoy

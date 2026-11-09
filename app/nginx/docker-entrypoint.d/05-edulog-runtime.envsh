@@ -31,15 +31,25 @@ frame_ancestors() {
   printf '%s' "${allowed:-$none}"
 }
 
-js_string() {
-  printf '"'
-  printf '%s' "${1:-}" | sed 's/\\/\\\\/g; s/"/\\"/g'
-  printf '"'
+# EDULOG_API_BODY_LIMIT uses the API's Express syntax (512kb, 1mb, 1gb, or bytes) so one value
+# configures both containers; nginx wants k/m/g.
+nginx_size() {
+  value="$(printf '%s' "${1:-1mb}" | tr '[:upper:]' '[:lower:]' | tr -d ' ')"
+  case "$value" in
+    *[0-9]kb|*[0-9]mb|*[0-9]gb) value="${value%b}" ;;
+    *[0-9]b) value="${value%b}" ;;
+  esac
+  if printf '%s' "$value" | grep -Eq '^[0-9]+[kmg]?$'; then
+    printf '%s' "$value"
+  else
+    echo "edulog: invalid EDULOG_API_BODY_LIMIT '${1:-}'; using 1m" >&2
+    printf '1m'
+  fi
 }
 
 api_location() {
   api_upstream="${EDULOG_API_UPSTREAM:-api:3000}"
-  api_body_limit="${EDULOG_API_BODY_LIMIT:-1m}"
+  api_body_limit="$(nginx_size "${EDULOG_API_BODY_LIMIT:-1mb}")"
   cat <<EOF
   location ^~ /api/ {
     proxy_pass http://$api_upstream;
@@ -66,16 +76,6 @@ map $http_upgrade $connection_upgrade {
 }
 EOF
 }
-write_runtime_config() {
-  runtime_config_path="/usr/share/nginx/html/runtime-config.js"
-  {
-    printf 'window.__EDULOG_CONFIG__ = Object.freeze({\n'
-    printf '  VITE_LEGACY_API_BASE_URL: %s,\n' "$(js_string "${VITE_LEGACY_API_BASE_URL:-}")"
-    printf '  VITE_API_V1_MODE: %s\n' "$(js_string "${VITE_API_V1_MODE:-mock}")"
-    printf '});\n'
-  } > "$runtime_config_path"
-}
-
 write_security_headers() {
   ancestors="$(frame_ancestors)"
   csp_header="${EDULOG_CSP_HEADER:-$(printf '%s' "$DEFAULT_CSP_HEADER" | sed "s|__FRAME_ANCESTORS__|$ancestors|")}"
@@ -115,12 +115,6 @@ common_locations() {
     default_type text/plain;
     include $headers_include;
     return 200 "ok\n";
-  }
-
-  location = /runtime-config.js {
-    try_files /runtime-config.js =404;
-    add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate" always;
-    include $headers_include;
   }
 
   location /assets/ {
@@ -231,7 +225,6 @@ EOF
 }
 
 write_connection_map
-write_runtime_config
 write_security_headers
 
 http_enabled="${EDULOG_HTTP_ENABLED:-true}"

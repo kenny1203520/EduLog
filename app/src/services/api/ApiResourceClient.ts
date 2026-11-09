@@ -1,5 +1,4 @@
-import { ApiModeClient, getApiV1Mode, type ApiV1Mode } from './ApiModeClient'
-import { ApiV1Error, type ApiEnvelope } from './ApiV1Client'
+import { apiV1Client, ApiV1Error, type ApiEnvelope, type ApiV1Client } from './ApiV1Client'
 import { AppError, AuthorizationError, ConflictError, NetworkError, ValidationError } from '../errors/AppError'
 
 export type ApiCollectionMeta = {
@@ -37,7 +36,6 @@ export type ResourceListOptions = {
   templateType?: string
   scopeType?: string
   scopeEntityId?: string
-  mode?: ApiV1Mode
 }
 
 function queryString(options: ResourceListOptions = {}) {
@@ -78,48 +76,48 @@ export function mapApiError(error: unknown): Error {
 }
 
 export class ApiResourceClient {
-  private readonly client: ApiModeClient
+  private readonly client: Pick<ApiV1Client, 'get' | 'post' | 'patch' | 'delete'>
 
-  constructor(client: ApiModeClient = new ApiModeClient()) {
+  constructor(client: Pick<ApiV1Client, 'get' | 'post' | 'patch' | 'delete'> = apiV1Client) {
     this.client = client
   }
 
   async list<T>(resource: string, options: ResourceListOptions = {}): Promise<ApiCollection<T>> {
     try {
       const query = queryString(options)
-      return await this.client.get<T[]>(`/${resource}?${query}`, undefined, options.mode ?? getApiV1Mode()) as ApiCollection<T>
+      return await this.client.get<T[]>(`/${resource}?${query}`) as ApiCollection<T>
     } catch (error) {
       throw mapApiError(error)
     }
   }
 
-  async get<T>(resource: string, id: string, mode?: ApiV1Mode): Promise<ApiEnvelope<T>> {
+  async get<T>(resource: string, id: string): Promise<ApiEnvelope<T>> {
     try {
-      return await this.client.get<T>(`/${resource}/${encodeURIComponent(id)}`, undefined, mode)
+      return await this.client.get<T>(`/${resource}/${encodeURIComponent(id)}`)
     } catch (error) {
       throw mapApiError(error)
     }
   }
 
-  async create<T>(resource: string, body: unknown, mode?: ApiV1Mode): Promise<ApiEnvelope<T>> {
+  async create<T>(resource: string, body: unknown): Promise<ApiEnvelope<T>> {
     try {
-      return await this.client.post<T>(`/${resource}`, body, undefined, mode)
+      return await this.client.post<T>(`/${resource}`, body)
     } catch (error) {
       throw mapApiError(error)
     }
   }
 
-  async update<T>(resource: string, id: string, body: unknown, mode?: ApiV1Mode): Promise<ApiEnvelope<T>> {
+  async update<T>(resource: string, id: string, body: unknown): Promise<ApiEnvelope<T>> {
     try {
-      return await this.client.patch<T>(`/${resource}/${encodeURIComponent(id)}`, body, undefined, mode)
+      return await this.client.patch<T>(`/${resource}/${encodeURIComponent(id)}`, body)
     } catch (error) {
       throw mapApiError(error)
     }
   }
 
-  async remove<T>(resource: string, id: string, mode?: ApiV1Mode): Promise<ApiEnvelope<T>> {
+  async remove<T>(resource: string, id: string): Promise<ApiEnvelope<T>> {
     try {
-      return await this.client.delete<T>(`/${resource}/${encodeURIComponent(id)}`, undefined, mode)
+      return await this.client.delete<T>(`/${resource}/${encodeURIComponent(id)}`)
     } catch (error) {
       throw mapApiError(error)
     }

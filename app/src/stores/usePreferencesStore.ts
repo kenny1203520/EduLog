@@ -1,11 +1,11 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import i18n, { type SupportedLocale } from '@/i18n'
-import { DateUtils } from '@/utils/DateUtils'
-import { TimeZoneService } from '@/services/TimeZoneService'
-import { UserPreferenceService } from '@/services/UserPreferenceService'
-import { AggregateService } from '@/services/AggregateService'
-import { DEFAULT_EDITOR_USER_SETTINGS, normalizeEditorUserSettings } from '@/components/common/text-editor/settings'
+import { DateUtils } from '@/utils/dateUtils'
+import { TimeZoneService } from '@/services/preference/TimeZoneService'
+import { UserPreferenceService } from '@/services/preference/UserPreferenceService'
+import { AggregateService } from '@/services/api/AggregateService'
+import { DEFAULT_EDITOR_USER_SETTINGS, normalizeEditorUserSettings } from '@/components/text-editor/settings'
 
 function readStoredLocale(): SupportedLocale {
     // Guards against a stale/corrupted localStorage value (e.g. from an older

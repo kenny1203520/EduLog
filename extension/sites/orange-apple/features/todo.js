@@ -115,8 +115,10 @@
     const isCurrent = !year || !month ? null : year === today.year && month === today.month + 1
     // Text between tables, in document order: segment i + 1 follows table i.
     const copy = content.cloneNode(true), tables = [...copy.querySelectorAll('table')]
-    tables.forEach((table, index) => table.replaceWith(copy.ownerDocument.createTextNode(`\u0000${index}\u0000`)))
-    const after = copy.textContent.split(/\u0000\d+\u0000/).slice(1)
+    let boundary = 'EDULOG_TABLE_BOUNDARY'
+    while (copy.textContent.includes(boundary)) boundary += '_'
+    tables.forEach((table, index) => table.replaceWith(copy.ownerDocument.createTextNode(`${boundary}${index}${boundary}`)))
+    const after = copy.textContent.split(new RegExp(`${boundary}\\d+${boundary}`)).slice(1)
     const lessons = [], events = [], other = []
     let unreadable = 0, sum = 0, providerTotal = 0, allTotals = true
     for (const [index, table] of [...content.querySelectorAll('table')].entries()) {
@@ -127,7 +129,7 @@
         if (cells.length < 3) continue
         const label = collapse(cells[0].textContent), dateText = collapse(cells[1].textContent), amountText = collapse(cells.at(-1).textContent)
         const dates = dateText.match(words.hourDate) || []
-        const amount = /\d/.test(amountText) ? Number(amountText.replace(/NT\$|,|\s/g, '')) : NaN
+        const amount = /\d/.test(amountText) ? Number(amountText.replace(/NT\$|,|\s/g, '')) : Number.NaN
         if (!label || !Number.isFinite(amount)) { unreadable++; continue }
         sum += amount
         const schedule = model.classSchedule(label)

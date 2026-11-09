@@ -8,11 +8,12 @@ import { SessionService } from '@/services/session/SessionService'
 import { RoleService } from '@/services/rbac/RoleService'
 import {
     INCOMPLETE_REPORT_PERMISSION,
-    PermissionPolicyService
+    PermissionPolicyService,
+    type KeyedPolicy
 } from '@/services/rbac/PermissionPolicyService'
-import type { PermissionDTO, PolicyScope, RoleDTO, RolePermissionPolicyDTO } from '@/models/Rbac'
+import type { PolicyScope, RoleDTO, RolePermissionPolicyDTO } from '@/models/Rbac'
 import ScopedRolePolicyEditor, { type PolicySelection } from '@/components/settings/ScopedRolePolicyEditor.vue'
-import SearchableSelect from '@/components/common/SearchableSelect.vue'
+import SearchableSelect from '@/components/ui/SearchableSelect.vue'
 
 const { t } = useI18n()
 const props = withDefaults(defineProps<{ titleKey?: string; descriptionKey?: string }>(), {
@@ -27,8 +28,7 @@ const sessionId = ref('')
 const classrooms = ref<any[]>([])
 const sessions = ref<any[]>([])
 const roles = ref<RoleDTO[]>([])
-const permission = ref<PermissionDTO | null>(null)
-const policies = ref<RolePermissionPolicyDTO[]>([])
+const policies = ref<KeyedPolicy[]>([])
 const selections = ref<Record<string, PolicySelection>>({})
 const loading = ref(false)
 const saving = ref(false)
@@ -64,13 +64,12 @@ async function load() {
     loading.value = true
     try {
         canManageRbac.value = await PermissionPolicyService.canManageRbac()
-        const [roleData, permissionData] = await Promise.all([
+        const [roleData, policyData] = await Promise.all([
             RoleService.getRoles(),
-            PermissionPolicyService.getPermission(INCOMPLETE_REPORT_PERMISSION)
+            PermissionPolicyService.getPolicies(INCOMPLETE_REPORT_PERMISSION)
         ])
         roles.value = roleData
-        permission.value = permissionData
-        policies.value = await PermissionPolicyService.getPolicies(permissionData.id)
+        policies.value = policyData
         // Global policy management should remain usable even when the operator
         // has no permission to browse classroom/session records. These lookups
         // only populate scope selectors and must not block system scope.
@@ -92,20 +91,20 @@ async function save() {
     if (!canSave.value) return
     saving.value = true
     try {
-        const overrides = roles.value.flatMap(role => {
-            const effect = selections.value[role.id]
-            return effect === 'allow' || effect === 'deny' ? [{ role_id: role.id, effect }] : []
-        })
-        await PermissionPolicyService.replacePolicies(
-            INCOMPLETE_REPORT_PERMISSION,
+        await PermissionPolicyService.applyPolicyChanges(
             { type: scopeType.value, id: scopeId.value },
-            overrides
+            PermissionPolicyService.selectionChanges(INCOMPLETE_REPORT_PERMISSION, selections.value),
+            policies.value
         )
-        if (permission.value) policies.value = await PermissionPolicyService.getPolicies(permission.value.id)
+        policies.value = await PermissionPolicyService.getPolicies(INCOMPLETE_REPORT_PERMISSION)
         syncSelections()
         toast.success(t('settings.incomplete_notifications.saved'))
     } catch (error: any) {
         reportError(error)
+        if (error?.kind === 'conflict') {
+            policies.value = await PermissionPolicyService.getPolicies(INCOMPLETE_REPORT_PERMISSION).catch(() => policies.value)
+            syncSelections()
+        }
     } finally {
         saving.value = false
     }
@@ -134,7 +133,7 @@ onMounted(load)
         </div>
         <div class="space-y-6 p-6 sm:p-8">
             <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-                <label class="space-y-2">
+                <label class="space-y-2" for="edulog-incompletereportnotificationsettings-9-521">
                     <span class="text-xs font-black uppercase tracking-widest text-gray-400">{{ $t('settings.incomplete_notifications.scope') }}</span>
                     <select v-model="scopeType" class="w-full rounded-xl border-gray-200 bg-gray-50 px-4 py-3 font-bold">
                         <option value="system">{{ $t('settings.incomplete_notifications.system') }}</option>
@@ -144,7 +143,7 @@ onMounted(load)
                 </label>
                 <div v-if="scopeType !== 'system'" class="space-y-2">
                     <span class="text-xs font-black uppercase tracking-widest text-gray-400">{{ $t('classroom.room') }}</span>
-                    <SearchableSelect v-model="classroomId" :options="classroomOptions" :placeholder="$t('common.select_placeholder')" :aria-label="$t('classroom.room')" />
+                    <SearchableSelect v-model="classroomId" :options="classroomOptions" :placeholder="$t('common.select_placeholder')" :aria-label="$t('classroom.room')"  id="edulog-incompletereportnotificationsettings-9-521"/>
                 </div>
                 <div v-if="scopeType === 'class_session'" class="space-y-2">
                     <span class="text-xs font-black uppercase tracking-widest text-gray-400">{{ $t('classroom.session') }}</span>

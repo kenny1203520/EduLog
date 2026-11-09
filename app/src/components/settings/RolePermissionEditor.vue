@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { RoleService } from '@/services/rbac/RoleService'
 import type { PolicyScope, RbacDomain, RoleDTO, RolePermissionMatrixRow } from '@/models/Rbac'
 import { useFeedback } from '@/composables/useFeedback'
+import ConfirmModal from '@/components/ui/ConfirmModal.vue'
 
 const props = withDefaults(defineProps<{
     domain: RbacDomain
@@ -15,11 +16,12 @@ const props = withDefaults(defineProps<{
 }>(), { canManage: true, canManageRoleDefinitions: true })
 
 const { t } = useI18n()
-const { reportError, success } = useFeedback()
+const { reportError, success, errorKey } = useFeedback()
 const roles = ref<RoleDTO[]>([])
 const rows = ref<RolePermissionMatrixRow[]>([])
 const selectedRoleId = ref('')
 const newRoleName = ref('')
+const deleteConfirmOpen = ref(false)
 const draftName = ref('')
 const draftDescription = ref('')
 const epoch = ref(1)
@@ -176,10 +178,24 @@ async function createRole() {
     } catch (error) { reportError(error) } finally { saving.value = false }
 }
 
+function requestDeleteRole() {
+    if (!selectedRole.value || selectedRole.value.is_builtin || selectedRole.value.is_protected) return
+    deleteConfirmOpen.value = true
+}
+
 async function deleteRole() {
     if (!selectedRole.value || selectedRole.value.is_builtin || selectedRole.value.is_protected) return
     saving.value = true
-    try { await RoleService.deleteRole(selectedRole.value.id, epoch.value); await loadRoles(); success('rbac.role_deleted') } catch (error) { reportError(error) } finally { saving.value = false }
+    try {
+        await RoleService.deleteRole(selectedRole.value.id, epoch.value)
+        deleteConfirmOpen.value = false
+        await loadRoles()
+        success('rbac.role_deleted')
+    } catch (error) {
+        deleteConfirmOpen.value = false
+        if ((error as { code?: string } | null)?.code === 'RBAC_ROLE_IN_USE') errorKey('rbac.role_in_use')
+        else reportError(error)
+    } finally { saving.value = false }
 }
 
 function jumpToResource(resource: string) {
@@ -213,14 +229,14 @@ onMounted(loadRoles)
         <div class="grid min-w-0 gap-5 lg:grid-cols-[18rem_minmax(0,1fr)]">
             <div class="max-h-64 overflow-y-auto rounded-2xl border border-gray-100 bg-white p-4 lg:sticky lg:top-20 lg:max-h-[70vh]">
                 <div v-if="canEdit && canManageRoleDefinitions" class="mb-3 flex gap-2">
-                    <input v-model="newRoleName" class="min-w-0 flex-1 rounded-lg border px-2 py-2 text-sm" :placeholder="t('rbac.new_role', 'New role')" />
+                    <input v-model="newRoleName" class="min-w-0 flex-1 rounded-lg border px-2 py-2 text-sm" :placeholder="t('rbac.new_role', 'New role')"  :aria-label="t('rbac.new_role', 'New role')"/>
                     <button class="min-h-11 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-bold text-white disabled:opacity-40" :disabled="saving || !newRoleName.trim()" @click="createRole">{{ t('common.add', 'Add') }}</button>
                 </div>
                 <p v-if="loading" class="py-4 text-sm text-gray-400">{{ t('common.loading', 'Loading…') }}</p>
                 <button v-for="role in roles" :key="role.id" type="button" :aria-pressed="selectedRoleId === role.id" class="mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600" :class="selectedRoleId === role.id ? 'bg-emerald-50 text-emerald-700' : 'hover:bg-gray-50'" @click="selectedRoleId = role.id">
                     <span>{{ roleName(role) }}</span><span v-if="role.is_builtin" class="text-[10px] text-gray-400">{{ t('rbac.builtin', 'Built-in') }}</span>
                 </button>
-                <button v-if="selectedRole && !selectedRole.is_builtin && !selectedRole.is_protected && canEdit && canManageRoleDefinitions" class="mt-3 min-h-11 rounded-lg px-3 text-sm font-bold text-red-600 hover:bg-red-50 disabled:opacity-40" :disabled="saving" @click="deleteRole">{{ saving ? t('common.processing') : t('common.delete', 'Delete') }}</button>
+                <button v-if="selectedRole && !selectedRole.is_builtin && !selectedRole.is_protected && canEdit && canManageRoleDefinitions" class="mt-3 min-h-11 rounded-lg px-3 text-sm font-bold text-red-600 hover:bg-red-50 disabled:opacity-40" :disabled="saving" @click="requestDeleteRole">{{ saving ? t('common.processing') : t('common.delete', 'Delete') }}</button>
             </div>
 
             <div class="min-w-0 rounded-2xl border border-gray-100 bg-white p-4 sm:p-5">
@@ -264,5 +280,9 @@ onMounted(loadRoles)
                 <button :disabled="readOnly || saving || !dirty" class="min-h-11 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-40" @click="save">{{ saving ? t('common.saving', 'Saving…') : t('rbac.save_permissions', 'Save permissions') }}</button>
             </div>
         </div>
+        <ConfirmModal :is-open="deleteConfirmOpen" :title="t('rbac.delete_role_title')"
+            :message="t('rbac.delete_role_message', { name: selectedRole ? roleName(selectedRole) : '' })"
+            :confirm-text="t('common.delete', 'Delete')" :is-dangerous="true" :is-loading="saving"
+            @confirm="deleteRole" @close="deleteConfirmOpen = false" />
     </section>
 </template>

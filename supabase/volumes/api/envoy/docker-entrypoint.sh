@@ -1,10 +1,6 @@
 #!/bin/sh
 set -e
 
-# Generate SHA1 base64 hash for Envoy basic auth user list
-PASSWORD_HASH=$(printf '%s' "${DASHBOARD_PASSWORD}" | openssl sha1 -binary | openssl base64)
-DASHBOARD_BASIC_AUTH="${DASHBOARD_USERNAME}:{SHA}${PASSWORD_HASH}"
-
 echo "Generating Envoy configuration..."
 
 # Process the lds.yaml template with environment variables using sed
@@ -15,7 +11,6 @@ sed -e "s|\${ANON_KEY}|${ANON_KEY}|g" \
     -e "s|\${SERVICE_ROLE_KEY_ASYMMETRIC}|${SERVICE_ROLE_KEY_ASYMMETRIC}|g" \
     -e "s|\${SUPABASE_PUBLISHABLE_KEY}|${SUPABASE_PUBLISHABLE_KEY}|g" \
     -e "s|\${SUPABASE_SECRET_KEY}|${SUPABASE_SECRET_KEY}|g" \
-    -e "s|\${DASHBOARD_BASIC_AUTH}|${DASHBOARD_BASIC_AUTH}|g" \
     /etc/envoy/lds.template.yaml > /etc/envoy/lds.yaml
 
 if [ -n "$SUPABASE_SECRET_KEY" ] && \

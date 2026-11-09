@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import SearchableSelect from '@/components/common/SearchableSelect.vue'
-import { apiV1Client } from '@/services/api/ApiV1Client'
+import SearchableSelect from '@/components/ui/SearchableSelect.vue'
+import { AuthUserSearchService, type AuthUserSearchResultDTO } from '@/services/auth/AuthUserSearchService'
+import { TeacherAccountLinkService, type TeacherLinkField, type TeacherLinkProfile } from '@/services/teacher/TeacherAccountLinkService'
 
-type Profile = { id: string; auth_user_id: string | null; profile_version: number; full_name: string | null; nickname: string | null; contact_email: string | null; phone: string | null; government_id: string | null; address: string | null; mailing_address: string | null; birthday: string | null; bio: string | null; bio_document: unknown }
-type Account = { id: string; email: string; display_name: string | null }
-type Field = keyof Pick<Profile, 'full_name' | 'nickname' | 'contact_email' | 'phone' | 'government_id' | 'address' | 'mailing_address' | 'birthday' | 'bio' | 'bio_document'>
+type Profile = TeacherLinkProfile
+type Account = AuthUserSearchResultDTO
+type Field = TeacherLinkField
 const props = defineProps<{ teacherId: string }>()
 const emit = defineEmits<{ close: []; saved: [] }>()
 const { t } = useI18n()
@@ -47,10 +48,9 @@ async function loadProfiles() {
   loading.value = true
   error.value = ''
   try {
-    const queryString = selectedAccountId.value ? `?target_auth_user_id=${encodeURIComponent(selectedAccountId.value)}` : ''
-    const response = await apiV1Client.get<{ current_profile: Profile; target_profile: Profile | null }>(`/teachers/${encodeURIComponent(props.teacherId)}/account-link${queryString}`)
-    profile.value = response.data?.current_profile ?? null
-    targetProfile.value = response.data?.target_profile ?? null
+    const preview = await TeacherAccountLinkService.preview(props.teacherId, selectedAccountId.value)
+    profile.value = preview.current_profile
+    targetProfile.value = preview.target_profile
     fieldList.forEach(({ key }) => { ownership.value[key] = null })
   } catch { error.value = t('teacher.account_link.load_failed') } finally { loading.value = false }
 }
@@ -61,8 +61,7 @@ function searchAccounts(value: string) {
   if (!value.trim()) { accounts.value = []; return }
   searchTimer = setTimeout(async () => {
     try {
-      const response = await apiV1Client.get<Account[]>(`/users/search?query=${encodeURIComponent(value.trim())}`)
-      accounts.value = response.data ?? []
+      accounts.value = await AuthUserSearchService.searchUsers(value)
     } catch { accounts.value = []; error.value = t('teacher.account_link.search_failed') }
   }, 250)
 }
@@ -76,7 +75,7 @@ async function save() {
   saving.value = true
   error.value = ''
   try {
-    await apiV1Client.patch(`/teachers/${encodeURIComponent(props.teacherId)}/account-link`, {
+    await TeacherAccountLinkService.link(props.teacherId, {
       target_auth_user_id: selectedAccountId.value,
       expected_profile_id: profile.value.id,
       expected_profile_version: profile.value.profile_version,
@@ -104,12 +103,13 @@ function displayValue(value: unknown) {
         <button type="button" class="rounded-lg px-3 py-2 text-slate-500 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600" @click="emit('close')">{{ t('common.close') }}</button>
       </header>
       <div class="space-y-5 p-5">
-        <label class="block text-sm font-semibold text-slate-700">{{ t('teacher.account_link.target_account') }}
+        <div class="block text-sm font-semibold text-slate-700">
+          <span>{{ t('teacher.account_link.target_account') }}</span>
           <div class="mt-2 flex gap-2">
             <SearchableSelect v-model="selectedAccountId" class="min-w-0 flex-1" :options="options" remote-search :loading="loading" :placeholder="t('teacher.account_link.search_account')" :aria-label="t('teacher.account_link.target_account')" :no-results-text="!query.trim() ? t('teacher.account_link.search_hint') : t('teacher.account_link.no_accounts')" @search="searchAccounts" />
             <button v-if="selectedAccountId" type="button" class="rounded-lg border border-slate-300 px-3 text-sm hover:bg-slate-50" @click="selectedAccountId = null">{{ t('teacher.account_link.unlink') }}</button>
           </div>
-        </label>
+        </div>
         <p v-if="error" role="alert" class="rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{{ error }}</p>
         <p class="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{{ t('teacher.account_link.ownership_help') }}</p>
         <div v-if="loading" class="py-8 text-center text-slate-500">{{ t('common.loading') }}</div>

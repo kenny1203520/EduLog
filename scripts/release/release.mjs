@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { appendFileSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { optionalEnv, requireEnv } from '../lib/env.mjs'
 
 const TAG_PATTERN = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?$/
 
@@ -74,7 +75,7 @@ export function extractChangelogSection(markdown, version) {
 }
 
 function runGit(args, cwd) {
-  return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
+  return execFileSync('git', args, { cwd, encoding: 'utf8', shell: false }).trim() // NOSONAR: This CLI intentionally uses the caller's Git installation; arguments are passed without a shell.
 }
 
 export function validateRelease({ tag, cwd = process.cwd(), outputPath, git = runGit }) {
@@ -99,10 +100,11 @@ function commitNotes({ base, sha, cwd, repository, git = runGit }) {
 }
 
 function imageNotes({ version, frontendDigest, apiDigest, previous }) {
-  const repositoryUrl = `${process.env.GITHUB_SERVER_URL ?? 'https://github.com'}/${process.env.GITHUB_REPOSITORY ?? 'kenny1203520/EduLog'}`
+  // GitHub Actions provides both; the defaults keep local dry runs pointing at this repository.
+  const repositoryUrl = `${optionalEnv('GITHUB_SERVER_URL', 'https://github.com')}/${optionalEnv('GITHUB_REPOSITORY', 'kenny1203520/EduLog')}`
   const comparisonUrl = previous
-    ? `${repositoryUrl}/compare/${previous}...${process.env.RELEASE_TAG || `v${version}`}`
-    : `${repositoryUrl}/commits/${process.env.RELEASE_TAG || `v${version}`}`
+    ? `${repositoryUrl}/compare/${previous}...${optionalEnv('RELEASE_TAG', `v${version}`)}`
+    : `${repositoryUrl}/commits/${optionalEnv('RELEASE_TAG', `v${version}`)}`
   return [
     '## Container images', '',
     `- Frontend: \`ghcr.io/kenny1203520/edulog:${version}\` (digest \`${frontendDigest}\`)`,
@@ -116,7 +118,7 @@ function imageNotes({ version, frontendDigest, apiDigest, previous }) {
 }
 
 export async function publishRelease({
-  tag, sha, cwd = process.cwd(), repository = process.env.GITHUB_REPOSITORY,
+  tag, sha, cwd = process.cwd(), repository = optionalEnv('GITHUB_REPOSITORY'),
   frontendDigest, apiDigest, gh = defaultGh, git = runGit,
 }) {
   const parsed = parseTag(tag)
@@ -152,19 +154,19 @@ export async function publishRelease({
 }
 
 async function defaultGh(args) {
-  const result = execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] })
+  const result = execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'], shell: false }) // NOSONAR: This CLI intentionally uses the caller's GitHub CLI installation; arguments are passed without a shell.
   return result.trim() ? JSON.parse(result) : null
 }
 
 async function main() {
   const [command, tag] = process.argv.slice(2)
   if (command === 'validate') {
-    const result = validateRelease({ tag, outputPath: process.env.GITHUB_OUTPUT })
+    const result = validateRelease({ tag, outputPath: optionalEnv('GITHUB_OUTPUT') })
     console.log(`Validated ${result.tag} at ${result.commit}`)
   } else if (command === 'publish') {
     const result = await publishRelease({
-      tag, sha: process.env.RELEASE_SHA, frontendDigest: process.env.FRONTEND_DIGEST,
-      apiDigest: process.env.API_DIGEST,
+      tag, sha: requireEnv('RELEASE_SHA'), frontendDigest: requireEnv('FRONTEND_DIGEST'),
+      apiDigest: requireEnv('API_DIGEST'),
     })
     console.log(`Release ${result.tag}: ${result.status}`)
   } else {

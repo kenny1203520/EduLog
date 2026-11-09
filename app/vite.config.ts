@@ -7,7 +7,14 @@ import { buildHttpsOptions, buildSecurityHeaders, parseAllowedHosts } from './vi
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
-  const env = { ...loadEnv(mode, path.resolve(import.meta.dirname, '..'), ''), ...process.env }
+  // Dev/preview server settings: the repo-root .env (shared with Docker Compose),
+  // overridden by app/.env*, overridden by the shell.  Only VITE_* keys reach the
+  // browser bundle; the EDULOG_* keys here configure this Node process only.
+  const env: Record<string, string | undefined> = {
+    ...loadEnv(mode, path.resolve(import.meta.dirname, '..'), ''),
+    ...loadEnv(mode, import.meta.dirname, ''),
+    ...process.env,
+  }
   const allowedHosts = parseAllowedHosts(env.EDULOG_ALLOWED_HOSTS)
   const securityHeaders = buildSecurityHeaders(env)
   const https = buildHttpsOptions(env)
@@ -17,9 +24,6 @@ export default defineConfig(({ mode }) => {
       vue(),
       VitePWA({
         registerType: 'autoUpdate',
-        workbox: {
-          globIgnores: ['**/runtime-config.js']
-        },
         devOptions: {
           enabled: true
         },

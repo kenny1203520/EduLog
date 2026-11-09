@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { apiV1Client } from '@/services/api/ApiV1Client'
+import { RoleAssignmentService } from '@/services/rbac/RoleAssignmentService'
+import { UserAccountService } from '@/services/auth/UserAccountService'
 import { RoleService } from '@/services/rbac/RoleService'
 import type { RoleDTO } from '@/models/Rbac'
 import { useFeedback } from '@/composables/useFeedback'
@@ -12,14 +13,20 @@ import AuditLogPanel from '@/components/settings/AuditLogPanel.vue'
 import AiAdminPanel from '@/components/settings/ai/AiAdminPanel.vue'
 import IncompleteReportNotificationSettings from '@/components/settings/IncompleteReportNotificationSettings.vue'
 import DashboardScheduleVisibilitySettings from '@/components/settings/DashboardScheduleVisibilitySettings.vue'
-import SearchableSelect from '@/components/common/SearchableSelect.vue'
-import Pagination from '@/components/common/Pagination.vue'
+import SearchableSelect from '@/components/ui/SearchableSelect.vue'
+import Pagination from '@/components/ui/Pagination.vue'
 import { AuthUserSearchService, type AuthUserSearchResultDTO } from '@/services/auth/AuthUserSearchService'
 import { roleDisplayDescription } from '@/utils/roleDisplay'
-import { DateUtils } from '@/utils/DateUtils'
+import { DateUtils } from '@/utils/dateUtils'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 
 type Assignment = { id: string; user_id: string; role_id: string; roles?: { code?: string; name?: string }; effective_from?: string; effective_to?: string | null }
+type SystemSection = 'permissions' | 'teaching_permissions' | 'assignments' | 'teaching_assignments' | 'users' | 'notifications' | 'dashboard_schedule' | 'audit' | 'ai'
+
+const ALL_SECTIONS: readonly SystemSection[] = ['permissions', 'teaching_permissions', 'assignments', 'teaching_assignments', 'users', 'notifications', 'dashboard_schedule', 'audit', 'ai']
+
+/** Settings overview capability flags; absent means "show every section" (older API). */
+const props = defineProps<{ sections?: Record<string, Record<string, boolean>> }>()
 
 const { errorKey, reportError, success } = useFeedback()
 const { t } = useI18n()
@@ -36,7 +43,28 @@ const selectedRoleId = ref('')
 const selectedStatus = ref<'active' | 'disabled'>('active')
 const statusReason = ref('')
 const epoch = ref(1)
-const activeSection = ref<'permissions' | 'teaching_permissions' | 'teaching_assignments' | 'notifications' | 'dashboard_schedule' | 'assignments' | 'users' | 'audit' | 'ai'>('permissions')
+const visibleSections = computed<SystemSection[]>(() => {
+    if (!props.sections) return [...ALL_SECTIONS]
+    const system = props.sections.system ?? {}
+    const teaching = props.sections.teaching ?? {}
+    const owner = system.is_owner === true
+    const allowed: Record<SystemSection, boolean> = {
+        permissions: owner || system.roles_manage === true || system.permissions_read === true,
+        teaching_permissions: teaching.roles === true || teaching.permissions === true,
+        assignments: owner || system.assignments_manage === true,
+        teaching_assignments: teaching.roles === true,
+        users: owner || system.users_manage === true,
+        // Both edit teaching-role policies.
+        notifications: teaching.roles === true,
+        dashboard_schedule: teaching.roles === true,
+        audit: owner || system.audit_read === true,
+        ai: system.ai_manage === true || system.ai_logs_view_all === true,
+    }
+    return ALL_SECTIONS.filter(section => allowed[section])
+})
+/** System role data is only loaded for the sections that use it. */
+const needsSystemRoles = computed(() => visibleSections.value.includes('assignments') || visibleSections.value.includes('users'))
+const activeSection = ref<SystemSection>(visibleSections.value[0] ?? 'permissions')
 const loading = ref(false)
 const userLoading = ref(false)
 const assignmentLoading = ref(false)
@@ -98,6 +126,7 @@ async function refreshEpoch() {
 }
 
 async function load() {
+    if (!needsSystemRoles.value) return
     loading.value = true
     try {
         const [roleResult] = await Promise.all([
@@ -152,16 +181,10 @@ async function loadAssignments() {
     if (!userId) { assignmentLoading.value = false; return }
     assignmentLoading.value = true
     try {
-        const params = new URLSearchParams({
-            user_id: userId,
-            limit: String(assignmentPageSize.value),
-            offset: String((assignmentPage.value - 1) * assignmentPageSize.value),
-            sort: '-effective_from',
-        })
-        const result = await apiV1Client.get<Assignment[]>(`/system-role-assignments?${params}`)
+        const result = await RoleAssignmentService.listSystemAssignments<Assignment>(userId, assignmentPage.value, assignmentPageSize.value)
         if (sequence !== assignmentSequence || selectedUserId.value !== userId) return
-        assignments.value = result.data ?? []
-        assignmentTotal.value = Number(result.meta?.total ?? 0)
+        assignments.value = result.rows
+        assignmentTotal.value = result.total
     } catch (error) {
         if (sequence === assignmentSequence && selectedUserId.value === userId) { assignmentLoadError.value = true; reportError(error) }
     } finally { if (sequence === assignmentSequence) assignmentLoading.value = false }
@@ -171,7 +194,7 @@ async function assignRole() {
     if (!selectedUserId.value || !selectedRoleId.value) return
     saving.value = true
     try {
-        await apiV1Client.post('/system-role-assignments', {
+        await RoleAssignmentService.createSystemAssignment({
             user_id: selectedUserId.value,
             role_id: selectedRoleId.value,
             effective_from: effectiveFrom.value,
@@ -195,15 +218,15 @@ async function updateStatus() {
     saving.value = true
     try {
         const reason = targetStatus === 'disabled' ? statusReason.value.trim() : null
-        const result = await apiV1Client.patch<{ account_status: 'active' | 'disabled'; disabled_at: string | null }>(`/users/${targetUserId}/status`, { status: targetStatus, reason, expected_epoch: epoch.value })
+        const result = await UserAccountService.updateStatus(targetUserId, targetStatus, reason, epoch.value)
         const updated = {
-            account_status: result.data.account_status,
-            disabled_at: result.data.disabled_at,
-            disabled_reason: result.data.account_status === 'disabled' ? reason : null,
+            account_status: result.account_status,
+            disabled_at: result.disabled_at,
+            disabled_reason: result.account_status === 'disabled' ? reason : null,
         }
         if (selectedUser.value?.id === targetUserId) {
             selectedUser.value = { ...selectedUser.value, ...updated }
-            selectedStatus.value = result.data.account_status
+            selectedStatus.value = result.account_status
             statusReason.value = ''
         }
         users.value = users.value.map(user => user.id === targetUserId ? { ...user, ...updated } : user)
@@ -215,15 +238,19 @@ async function removeAssignment(assignment: Assignment) {
     if (!window.confirm(t('rbac.system_ui.remove_assignment_confirm'))) return
     saving.value = true
     try {
-        await apiV1Client.delete(`/system-role-assignments/${assignment.id}`, { expected_epoch: epoch.value })
+        await RoleAssignmentService.deleteSystemAssignment(assignment.id, epoch.value)
         await loadAssignments()
         success('common.deleted')
     } catch (error) { reportError(error) } finally { saving.value = false }
 }
 
-function selectSection(section: typeof activeSection.value) {
+function selectSection(section: SystemSection) {
     activeSection.value = section
 }
+
+watch(visibleSections, (sections) => {
+    if (!sections.includes(activeSection.value) && sections[0]) activeSection.value = sections[0]
+})
 
 onMounted(load)
 watch(assignmentPage, loadAssignments)
@@ -236,7 +263,7 @@ watch(assignmentPageSize, () => { assignmentPage.value = 1; void loadAssignments
             <h2 class="text-xl font-black text-gray-900">{{ t('rbac.system_title') }}</h2>
             <p class="mt-1 text-sm font-bold text-gray-400">{{ t('rbac.system_subtitle') }}</p>
             <nav class="mt-5 flex flex-wrap gap-2" role="group" :aria-label="t('rbac.system_sections.label')">
-                <button v-for="section in ['permissions', 'teaching_permissions', 'assignments', 'teaching_assignments', 'users', 'notifications', 'dashboard_schedule', 'audit', 'ai'] as const" :key="section" type="button" :aria-pressed="activeSection === section" class="min-h-11 rounded-xl px-4 py-2 text-sm font-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600" :class="activeSection === section ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600'" @click="selectSection(section)">
+                <button v-for="section in visibleSections" :key="section" type="button" :aria-pressed="activeSection === section" class="min-h-11 rounded-xl px-4 py-2 text-sm font-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600" :class="activeSection === section ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600'" @click="selectSection(section)">
                     {{ t(`rbac.system_sections.${section}`) }}
                 </button>
             </nav>
@@ -281,7 +308,7 @@ watch(assignmentPageSize, () => { assignmentPage.value = 1; void loadAssignments
                     </div>
                     <div class="mt-4 grid gap-3 sm:grid-cols-[minmax(10rem,1fr)_minmax(12rem,2fr)_auto] sm:items-end">
                         <label class="space-y-1 text-xs font-bold text-gray-600"><span>{{ t('rbac.system_ui.change_to') }}</span><select v-model="selectedStatus" class="min-h-11 w-full rounded-xl border border-gray-200 bg-white px-3 py-2" :aria-label="t('rbac.system_ui.change_to')"><option value="active">{{ t('rbac.system_ui.active') }}</option><option value="disabled">{{ t('rbac.system_ui.disabled') }}</option></select></label>
-                        <label v-if="selectedStatus === 'disabled' && currentStatus !== 'disabled'" class="space-y-1 text-xs font-bold text-gray-600"><span>{{ t('rbac.system_ui.disable_reason') }}</span><input v-model="statusReason" class="min-h-11 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm" :placeholder="t('rbac.system_ui.disable_reason')" /></label>
+                        <label v-if="selectedStatus === 'disabled' && currentStatus !== 'disabled'" class="space-y-1 text-xs font-bold text-gray-600"><span>{{ t('rbac.system_ui.disable_reason') }}</span><input v-model="statusReason" class="min-h-11 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm" :placeholder="t('rbac.system_ui.disable_reason')"  :aria-label="t('rbac.system_ui.disable_reason')"/></label>
                         <div v-else></div>
                         <button :disabled="saving || !statusChanged || (selectedStatus === 'disabled' && statusReason.trim().length < 3)" class="min-h-11 rounded-xl bg-emerald-600 px-4 py-2 font-black text-white disabled:opacity-40" @click="updateStatus">{{ saving ? t('common.saving') : t('common.save') }}</button>
                     </div>

@@ -1,28 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { OccurrenceRosterService } from './OccurrenceRosterService'
 
-const { rpcMock } = vi.hoisted(() => ({ rpcMock: vi.fn() }))
+const { getMock } = vi.hoisted(() => ({ getMock: vi.fn() }))
 
-vi.mock('@/services/api/ApiDataClient', () => ({ apiDataClient: { rpc: rpcMock } }))
+vi.mock('@/services/api/ApiV1Client', () => ({ apiV1Client: { get: getMock } }))
 
 describe('OccurrenceRosterService', () => {
     beforeEach(() => vi.clearAllMocks())
 
-    it('returns the canonical enrollment ids resolved by the database', async () => {
-        rpcMock.mockResolvedValue({
-            data: [{ enrollment_id: 'enrollment-1' }, { enrollment_id: 'enrollment-guest' }],
-            error: null
-        })
+    it('returns the canonical enrollment ids resolved by the server', async () => {
+        getMock.mockResolvedValue({ data: ['enrollment-1', 'enrollment-guest'] })
 
         await expect(OccurrenceRosterService.getEffectiveEnrollmentIds('occurrence-1'))
             .resolves.toEqual(['enrollment-1', 'enrollment-guest'])
-        expect(rpcMock).toHaveBeenCalledWith('get_effective_occurrence_enrollment_ids', {
-            p_occurrence_id: 'occurrence-1'
-        })
+        expect(getMock).toHaveBeenCalledWith('/occurrences/occurrence-1/roster')
     })
 
     it('fails closed when the effective roster cannot be resolved', async () => {
-        rpcMock.mockResolvedValue({ data: null, error: { message: 'permission denied' } })
+        getMock.mockRejectedValue(new Error('permission denied'))
 
         await expect(OccurrenceRosterService.getEffectiveEnrollmentIds('occurrence-1'))
             .rejects.toThrow('Failed to resolve occurrence roster: permission denied')

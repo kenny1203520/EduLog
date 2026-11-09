@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import crypto from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createExtensionIntegrationRouter, buildExtensionSettingsUrl } from './extensionIntegrationRouter.js'
-import { loadConfig } from '../../config/config.js'
+import { testConfig } from '../../test/testConfig.js'
 import type { SupabaseClients } from '../../infra/supabase.js'
 
 const extensionOrigin = `chrome-extension://${'a'.repeat(32)}`
@@ -35,17 +35,8 @@ describe('extension pairing authorization URL', () => {
     query.select.mockReturnValue(query)
     const adminClient = { from: vi.fn(() => query), rpc: vi.fn().mockResolvedValue({ data: { workspace_version: 1 }, error: null }) } as unknown as SupabaseClient
     const clients = { adminClient, publicClient: {} as SupabaseClient } as SupabaseClients
-    const loadedConfig = loadConfig({
-      NODE_ENV: 'test',
-      SUPABASE_URL: 'http://supabase.test',
-      SUPABASE_ANON_KEY: 'anon-test-key',
-      SUPABASE_SERVICE_ROLE_KEY: 'service-role-test-key',
-      COOKIE_SECRET: 'a'.repeat(32),
-      EDULOG_WEB_BASE_URL: webBaseUrl,
-      API_EXTENSION_ALLOWED_ORIGINS: extensionOrigin,
-    })
-    // Simulate an old deployment value that points at the API; it must be ignored.
-    const config = { ...loadedConfig, API_BASE_URL: 'http://localhost:3000' }
+    // An old deployment value that points at the API must be ignored.
+    const config = testConfig({ EDULOG_WEB_BASE_URL: webBaseUrl, API_EXTENSION_ALLOWED_ORIGINS: extensionOrigin, API_BASE_URL: 'http://localhost:3000' })
     const app = express()
     app.use(express.json())
     app.use('/api/extension', createExtensionIntegrationRouter(clients, config))
@@ -81,15 +72,7 @@ describe('extension token origin validation', () => {
     for (const method of [query.select, query.eq, query.is, query.gt, query.update]) method.mockReturnValue(query)
     const adminClient = { from: vi.fn(() => query), rpc } as unknown as SupabaseClient
     const clients = { adminClient, publicClient: {} as SupabaseClient } as SupabaseClients
-    const config = loadConfig({
-      NODE_ENV: 'test',
-      SUPABASE_URL: 'http://supabase.test',
-      SUPABASE_ANON_KEY: 'anon-test-key',
-      SUPABASE_SERVICE_ROLE_KEY: 'service-role-test-key',
-      COOKIE_SECRET: 'a'.repeat(32),
-      EDULOG_WEB_BASE_URL: 'http://localhost:5173',
-      API_EXTENSION_ALLOWED_ORIGINS: allowedOrigins,
-    })
+    const config = testConfig({ EDULOG_WEB_BASE_URL: 'http://localhost:5173', API_EXTENSION_ALLOWED_ORIGINS: allowedOrigins })
     const app = express()
     app.use('/api/extension', createExtensionIntegrationRouter(clients, config))
     return { app, query }

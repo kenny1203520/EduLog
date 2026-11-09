@@ -1,8 +1,8 @@
 <script setup lang="ts">
+import { useCapabilityStore } from '@/stores/useCapabilityStore'
 import { computed, ref, onMounted } from 'vue'
-import { HolidayService } from '@/services/holiday/HolidayService'
 import { ClassroomService } from '@/services/classroom/ClassroomService'
-import { AggregateService } from '@/services/AggregateService'
+import { AggregateService } from '@/services/api/AggregateService'
 import { SessionService } from '@/services/session/SessionService'
 import { TeacherService, type TeacherDTO } from '@/services/teacher/TeacherService'
 import { Holiday, type HolidayDTO } from '@/models/Holiday'
@@ -11,12 +11,14 @@ import { useToast } from 'vue-toastification'
 import { useFeedback } from '@/composables/useFeedback'
 import type { ClassroomDTO, ClassSessionDTO } from '@/models/Classroom'
 
-import ConfirmModal from '../components/common/ConfirmModal.vue'
-import SearchableSelect from '@/components/common/SearchableSelect.vue'
-import BasePageHeader from '@/components/common/BasePageHeader.vue'
+import ConfirmModal from '../components/ui/ConfirmModal.vue'
+import SearchableSelect from '@/components/ui/SearchableSelect.vue'
+import BasePageHeader from '@/components/ui/BasePageHeader.vue'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
-import { DateUtils } from '@/utils/DateUtils'
+import { DateUtils } from '@/utils/dateUtils'
 import { formatClassSessionSchedule } from '@/utils/sessionSchedule'
+import { HolidayQueryService } from '@/services/holiday/HolidayQueryService'
+import { HolidayCommandService } from '@/services/holiday/HolidayCommandService'
 
 type HolidayTab = 'closures' | 'teacherLeaves'
 type HolidayStatus = 'active' | 'upcoming' | 'ended'
@@ -31,6 +33,7 @@ interface TeacherLeaveGroup {
 
 const { t } = useI18n()
 const toast = useToast()
+const capabilities = useCapabilityStore()
 const { reportError, errorKey } = useFeedback()
 const preferences = usePreferencesStore()
 const holidays = ref<Holiday[]>([])
@@ -224,12 +227,12 @@ async function loadHolidays() {
             const agg = await AggregateService.getHolidaysAggregate(true)
             const rows = Array.isArray(agg) ? agg : []
             if (rows.length > 0 && rows.some((row: any) => !hasHolidayKindFields(row))) {
-                holidays.value = await HolidayService.listHolidays()
+                holidays.value = await HolidayQueryService.listHolidays()
             } else {
                 holidays.value = rows.map((d: any) => new Holiday(normalizeHolidayDTO(d)))
             }
         } catch (e) {
-            holidays.value = await HolidayService.listHolidays()
+            holidays.value = await HolidayQueryService.listHolidays()
         }
     } catch (e) {
         console.error(e)
@@ -373,9 +376,9 @@ async function handleSaveHoliday() {
         }
 
         if (editingId.value) {
-            await HolidayService.updateHoliday(editingId.value, payload as any)
+            await HolidayCommandService.updateHoliday(editingId.value, payload as any)
         } else {
-            await HolidayService.createHoliday({
+            await HolidayCommandService.createHoliday({
                 startDate: payload.start_date,
                 endDate: payload.end_date,
                 timeZone: payload.time_zone,
@@ -408,7 +411,7 @@ async function confirmDelete() {
     if (!deleteId.value) return
     try {
         isDeleting.value = true
-        await HolidayService.deleteHoliday(deleteId.value)
+        await HolidayCommandService.deleteHoliday(deleteId.value)
         await loadHolidays()
         toast.success(t('holiday.delete_success') || 'Holiday deleted successfully')
     } catch (e: any) {
@@ -493,7 +496,7 @@ function closeModal() {
                             </svg>
                         </div>
                         <input v-model="searchQuery" type="text" :placeholder="t('holiday.search_placeholder')"
-                            class="flex-1 bg-transparent border-none outline-none text-sm font-bold text-gray-700 placeholder:text-gray-300 py-2 min-w-0" />
+                            class="flex-1 bg-transparent border-none outline-none text-sm font-bold text-gray-700 placeholder:text-gray-300 py-2 min-w-0"  :aria-label="t('holiday.search_placeholder')"/>
                         <button v-if="searchQuery" @click="searchQuery = ''"
                             class="p-2 text-gray-300 hover:text-gray-500 transition-colors">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
@@ -519,7 +522,7 @@ function closeModal() {
                     </div>
                 </div>
 
-                <button @click="openAddModal()"
+                <button v-if="capabilities.can('teaching.holidays.create')" @click="openAddModal()"
                     class="bg-emerald-600 text-white px-6 py-3 rounded-2xl hover:bg-emerald-700 transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-200 font-bold active:scale-95 w-full lg:w-auto shrink-0">
                     <span class="text-xl leading-none">+</span>
                     {{ activeTab === 'teacherLeaves' ? t('holiday.add_teacher_leave') : t('holiday.add_closure') }}
@@ -588,7 +591,7 @@ function closeModal() {
                         </div>
 
                         <div class="flex gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all">
-                            <button @click="openEditModal(holiday)"
+                            <button v-if="capabilities.can('teaching.holidays.update')" @click="openEditModal(holiday)"
                                 class="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"
                                 :title="$t('common.edit')">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20"
@@ -597,7 +600,7 @@ function closeModal() {
                                         d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
                                 </svg>
                             </button>
-                            <button @click="handleDeleteHoliday(holiday.id!)"
+                            <button v-if="capabilities.can('teaching.holidays.delete')" @click="handleDeleteHoliday(holiday.id!)"
                                 class="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
                                 :title="$t('common.delete')">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20"
@@ -801,7 +804,7 @@ function closeModal() {
                                 </div>
 
                                 <div class="flex gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all">
-                                    <button @click="openEditModal(holiday)"
+                                    <button v-if="capabilities.can('teaching.holidays.update')" @click="openEditModal(holiday)"
                                         class="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"
                                         :title="$t('common.edit')">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20"
@@ -810,7 +813,7 @@ function closeModal() {
                                                 d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
                                         </svg>
                                     </button>
-                                    <button @click="handleDeleteHoliday(holiday.id!)"
+                                    <button v-if="capabilities.can('teaching.holidays.delete')" @click="handleDeleteHoliday(holiday.id!)"
                                         class="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
                                         :title="$t('common.delete')">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20"
@@ -906,9 +909,9 @@ function closeModal() {
 
                 <div class="space-y-8">
                     <div class="space-y-3">
-                        <label class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">
-                            {{ $t('holiday.kind_label') }}</label>
-                        <div class="grid grid-cols-2 gap-1 bg-gray-50 p-1.5 rounded-2xl border border-gray-100">
+                        <p class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">
+                            {{ $t('holiday.kind_label') }}</p>
+                        <div role="group" :aria-label="$t('holiday.kind_label')" class="grid grid-cols-2 gap-1 bg-gray-50 p-1.5 rounded-2xl border border-gray-100">
                             <button @click="holidayForm.kind = 'closure'"
                                 class="px-4 py-2.5 rounded-xl text-xs font-bold transition-all"
                                 :class="holidayForm.kind === 'closure' ? 'bg-white text-emerald-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'">
@@ -924,12 +927,12 @@ function closeModal() {
 
                     <div v-if="holidayForm.kind === 'teacher_leave'"
                         class="space-y-3 animate-in fade-in slide-in-from-top-2">
-                        <label class="block text-[10px] font-black text-amber-600 uppercase tracking-widest ml-1">
+                        <label class="block text-[10px] font-black text-amber-600 uppercase tracking-widest ml-1" for="edulog-holidaymanagementview-458-32597">
                             {{ $t('holiday.teacher_leave_teachers') }}</label>
 
                         <SearchableSelect v-model="holidayForm.teacherIds" :options="teacherOptions" :multiple="true"
                             :placeholder="$t('holiday.teacher_leave_teachers')"
-                            font-size-class="text-sm font-bold text-gray-700" />
+                            font-size-class="text-sm font-bold text-gray-700"  id="edulog-holidaymanagementview-458-32597"/>
 
                         <p
                             class="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 mt-2">
@@ -938,9 +941,9 @@ function closeModal() {
                     </div>
 
                     <div class="space-y-3">
-                        <label class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">
-                            {{ $t('holiday.scope_label') }}</label>
-                        <div class="flex bg-gray-50 p-1.5 rounded-2xl border border-gray-100 gap-1">
+                        <p class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">
+                            {{ $t('holiday.scope_label') }}</p>
+                        <div role="group" :aria-label="$t('holiday.scope_label')" class="flex bg-gray-50 p-1.5 rounded-2xl border border-gray-100 gap-1">
                             <button @click="scopeType = 'global'"
                                 class="flex-1 px-4 py-2.5 rounded-xl text-xs font-bold transition-all"
                                 :class="scopeType === 'global' ? 'bg-white text-emerald-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'">
@@ -960,29 +963,29 @@ function closeModal() {
                     </div>
 
                     <div v-if="scopeType === 'classroom'" class="space-y-3 animate-in fade-in slide-in-from-top-2">
-                        <label class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">
+                        <label class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1" for="edulog-holidaymanagementview-494-35190">
                             {{ $t('holiday.scope_classroom') }}</label>
                         <SearchableSelect v-model="holidayForm.classroomIds" :options="classroomOptions" :multiple="true"
                             :placeholder="$t('holiday.scope_classroom')"
-                            font-size-class="text-sm font-bold text-gray-700" />
+                            font-size-class="text-sm font-bold text-gray-700"  id="edulog-holidaymanagementview-494-35190"/>
                     </div>
 
                     <div v-if="scopeType === 'session'" class="space-y-3 animate-in fade-in slide-in-from-top-2">
                         <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                             <div>
-                                <label class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">
-                                    {{ $t('holiday.scope_session') }}</label>
+                                <p class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">
+                                    {{ $t('holiday.scope_session') }}</p>
                                 <p class="mt-1 text-[11px] font-bold text-gray-400">
                                     {{ $t('holiday.session_schedule_hint') }}</p>
                             </div>
                             <div class="w-full sm:w-56">
                                 <label
-                                    class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1">
+                                    class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1" for="edulog-holidaymanagementview-510-36403">
                                     {{ $t('holiday.filter_by_classroom') }}
                                 </label>
                                 <SearchableSelect v-model="selectedSessionClassroomFilter"
                                     :options="classroomFilterOptions" :placeholder="$t('classroom.all_rooms')"
-                                    font-size-class="text-sm font-bold text-gray-700" />
+                                    font-size-class="text-sm font-bold text-gray-700"  id="edulog-holidaymanagementview-510-36403"/>
                             </div>
                         </div>
                         <div
@@ -1016,25 +1019,25 @@ function closeModal() {
                     <div class="grid grid-cols-2 gap-6">
                         <div class="space-y-2">
                             <label
-                                class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">
+                                class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1" for="edulog-holidaymanagementview-549-39433">
                                 {{ $t('holiday.date_label') }} ({{ $t('common.start') }})</label>
                             <input type="date" v-model="holidayForm.startDate"
-                                class="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all font-bold text-gray-700">
+                                class="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all font-bold text-gray-700" id="edulog-holidaymanagementview-549-39433">
                         </div>
                         <div class="space-y-2">
                             <label
-                                class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">
+                                class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1" for="edulog-holidaymanagementview-556-40055">
                                 {{ $t('common.end') }}</label>
                             <input type="date" v-model="holidayForm.endDate"
-                                class="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all font-bold text-gray-700">
+                                class="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all font-bold text-gray-700" id="edulog-holidaymanagementview-556-40055">
                         </div>
                     </div>
 
                     <div class="space-y-2">
-                        <label class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">
+                        <label class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1" for="edulog-holidaymanagementview-565-40660">
                             {{ $t('holiday.name_label') }}</label>
                         <input v-model="holidayForm.name" :placeholder="$t('holiday.holiday_placeholder')"
-                            class="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all font-bold text-gray-700 placeholder:text-gray-300">
+                            class="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all font-bold text-gray-700 placeholder:text-gray-300" id="edulog-holidaymanagementview-565-40660">
                     </div>
                 </div>
 

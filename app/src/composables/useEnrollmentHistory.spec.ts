@@ -3,7 +3,7 @@ import { effectScope, nextTick, ref } from 'vue'
 import { useEnrollmentHistory } from './useEnrollmentHistory'
 import type { EnrollmentHistoryReport } from '@/models/EnrollmentHistoryReport'
 const api=vi.hoisted(()=>({list:vi.fn(),candidates:vi.fn(),bind:vi.fn()}))
-vi.mock('@/services/EnrollmentHistoryService',()=>({EnrollmentHistoryService:api}))
+vi.mock('@/services/enrollment/EnrollmentHistoryService',()=>({EnrollmentHistoryService:api}))
 const row=(id='history')=>({id,enrollment_id:'enrollment',report_date:'2026-10-04',version:2,identity_status:'evidence_only',source_fields:[]} as EnrollmentHistoryReport)
 describe('history view model',()=>{
  let scope:ReturnType<typeof effectScope>

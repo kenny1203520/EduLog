@@ -1,6 +1,6 @@
 import { AppError } from './AppError'
 import { domainErrorCode, mapDomainError } from './mapDomainError'
-import { mapSupabaseError } from './mapSupabaseError'
+import { mapErrorKey } from './mapErrorKey'
 
 /** A user-facing description of an error: what to show, and a code for support. */
 export interface ErrorDescription {
@@ -63,7 +63,7 @@ export function describeError(error: unknown): ErrorDescription {
         return { i18nKey: API_STATUS_KEYS[status]!, code, requestId }
     }
 
-    return { i18nKey: mapSupabaseError(error).i18nKey, code, requestId }
+    return { i18nKey: mapErrorKey(error).i18nKey, code, requestId }
 }
 
 function domainCodeIn(message: string | undefined): string | null {

@@ -26,14 +26,16 @@ EduLog 前端使用 Vue 3 + TypeScript + Vite，提供教師/助教的日常報�
 cp .env.example .env
 ```
 
-前端只讀取 Nginx 啟動時產生的 `/runtime-config.js`。瀏覽器不需要 Supabase URL、anon key 或 Functions URL。
+前端不讀取任何 `VITE_*` 變數，瀏覽器一律呼叫同源 `/api/*`，不需要 Supabase URL、anon key 或 Functions URL。
 
 本機可使用：
 
 ```env
-VITE_API_V1_MODE=mock
-VITE_LEGACY_API_BASE_URL=/api
+# 開發伺服器 /api 代理目標
+EDULOG_API_DEV_TARGET=http://localhost:3000
 ```
+
+完整變數說明請見 `../docs/deployment/environment.md`。
 ## 開發
 
 ```bash
@@ -70,5 +72,3 @@ Production Docker image 使用 Nginx 服務 `dist` 靜態檔，不使用 `vite p
 ## 相關文件
 
 請優先參考專案根目錄的 `../README.md` 取得完整啟動流程（含 Supabase 與 Migration）。
-
-EDULOG_API_DEV_TARGET=http://localhost:3000

@@ -99,18 +99,20 @@ export function refreshChatGptToken(client: SiwcClient, refreshToken: string, fe
   return tokenRequest(client, { grant_type: 'refresh_token', refresh_token: refreshToken, resource: CHATGPT_RESOURCE }, fetchImpl)
 }
 
+/** OpenAI's fixed "Sign in with ChatGPT" endpoints (vendor constants, not deployment config). */
+export const OPENAI_SIWC_AUTHORIZE_URL = 'https://auth.openai.com/api/accounts/authorize'
+export const OPENAI_SIWC_TOKEN_URL = 'https://auth.openai.com/api/accounts/oauth/token'
+
 /** The configured website client, or null while the feature is off. */
 export function siwcClientFromConfig(config: {
   OPENAI_SIWC_CLIENT_ID?: string
   OPENAI_SIWC_CLIENT_SECRET?: string
-  OPENAI_SIWC_AUTHORIZE_URL: string
-  OPENAI_SIWC_TOKEN_URL: string
 }): SiwcClient | null {
   if (!config.OPENAI_SIWC_CLIENT_ID) return null
   return {
     clientId: config.OPENAI_SIWC_CLIENT_ID,
     clientSecret: config.OPENAI_SIWC_CLIENT_SECRET,
-    authorizeUrl: config.OPENAI_SIWC_AUTHORIZE_URL,
-    tokenUrl: config.OPENAI_SIWC_TOKEN_URL,
+    authorizeUrl: OPENAI_SIWC_AUTHORIZE_URL,
+    tokenUrl: OPENAI_SIWC_TOKEN_URL,
   }
 }

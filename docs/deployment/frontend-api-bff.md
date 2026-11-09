@@ -13,7 +13,7 @@ Browser -> Nginx -> /api/* -> Express -> Supabase internal network
 - `api` is the Express Auth BFF. It has no published port and receives Supabase credentials only through server-side environment variables.
 - `docker-compose.prod.yml` removes public Kong, analytics, and pooler ports. Use `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d` with the required secret environment variables.
 
-Required API variables include `EDULOG_COOKIE_SECRET` (at least 32 characters), `SERVICE_ROLE_KEY`, `ANON_KEY`, `EDULOG_SUPABASE_INTERNAL_URL`, `EDULOG_WEB_BASE_URL` (the browser-facing HTTPS frontend origin in production), `RATE_LIMIT_STORE=supabase`, and `VITE_API_V1_MODE=v1`.
+Required root `.env` values are `EDULOG_COOKIE_SECRET` (at least 32 characters), `EDULOG_WEB_BASE_URL` (the browser-facing HTTPS frontend origin in production), `EDULOG_ALLOWED_ORIGINS`, and the Supabase `ANON_KEY` / `SERVICE_ROLE_KEY`. The other defaults (`EDULOG_SUPABASE_INTERNAL_URL`, `RATE_LIMIT_STORE=supabase`) are production-ready. See [environment.md](environment.md) for every variable and how Compose maps it into each container.
 
 The browser uses HttpOnly cookies through `/api/auth/*`; it must not receive `SUPABASE_SERVICE_ROLE_KEY`. The normal database path uses a Supabase client carrying the authenticated user JWT so PostgreSQL RLS remains active. Service role is isolated to validation, audit/idempotency/rate-limit operations, and explicit management tasks.
 

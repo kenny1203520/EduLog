@@ -37,8 +37,12 @@ export function mapDatabaseError(error: { code?: string; message?: string } | nu
       [/VERSION_CONFLICT/i, 409, 'VERSION_CONFLICT', 'The resource version is stale'],
       [/SYSTEM_ROLE_ASSIGNMENT_OVERLAP/i, 409, 'SYSTEM_ROLE_ASSIGNMENT_OVERLAP', 'The user already has this system role during an overlapping date range'],
       [/CLASSROOM_ROLE_ASSIGNMENT_OVERLAP/i, 409, 'CLASSROOM_ROLE_ASSIGNMENT_OVERLAP', 'The user already has this teaching role in this classroom during an overlapping date range'],
-      [/PROTECTED_ROLE|LAST_SYSTEM_OWNER|ROLE_IN_USE/i, 409, 'RBAC_PROTECTED_RESOURCE', 'The protected RBAC resource cannot be changed'],
+      [/ROLE_IN_USE/i, 409, 'RBAC_ROLE_IN_USE', 'The role is still assigned and cannot be deleted'],
+      [/PROTECTED_ROLE|LAST_SYSTEM_OWNER/i, 409, 'RBAC_PROTECTED_RESOURCE', 'The protected RBAC resource cannot be changed'],
       [/SYSTEM_MANAGED_REPORT/i, 422, 'SYSTEM_MANAGED_REPORT', 'Attendance is managed by the system'],
+      [/TEACHER_HAS_ACTIVE_ASSIGNMENTS/i, 409, 'TEACHER_HAS_ACTIVE_ASSIGNMENTS', 'Remove the teacher from current and future classes before archiving'],
+      [/TEACHER_ARCHIVED/i, 409, 'TEACHER_ARCHIVED', 'An archived teacher cannot be assigned to a class'],
+      [/TEACHER_NOT_FOUND/i, 404, 'NOT_FOUND', 'Resource was not found'],
       [/ALREADY_EXISTS|REPORT_ALREADY_EXISTS|SUSPENSION_OVERLAP|OVERLAP|CONFLICT|STALE/i, 409, 'BUSINESS_CONFLICT', 'The request conflicts with the current resource state'],
       [/INVALID_POLICY_SCOPE|INVALID_|MISMATCH|REQUIRED|SOURCE_AND_TARGET|DATE_NOT/i, 422, 'BUSINESS_VALIDATION_FAILED', 'The request violates a business rule'],
     ]

@@ -1,6 +1,6 @@
 import { Enrollment, type EnrollmentDTO } from './Enrollment'
-import type { RichTextDocumentV1 } from '@/components/common/text-editor/types'
-import { createTextEditorContent } from '@/components/common/text-editor/content'
+import type { RichTextDocumentV1 } from '@/components/text-editor/types'
+import { createTextEditorContent } from '@/components/text-editor/content'
 
 export interface StudentContactDTO {
   id?: string

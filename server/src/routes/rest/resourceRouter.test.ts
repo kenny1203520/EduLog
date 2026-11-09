@@ -97,7 +97,7 @@ describe('resource mutation validation boundary', () => {
   })
 
   it('exposes report version cleanup as a scoped item delete, not a mutable collection', () => {
-    expect(resources['report-versions'].genericMethods).toEqual(['GET', 'DELETE'])
+    expect(resources['report-versions'].genericOperations).toEqual(['list', 'read', 'delete'])
     expect(resources['report-versions'].writable).toEqual([])
     expect(resources['report-versions'].permissions?.delete).toBe('teaching.reports.delete')
   })

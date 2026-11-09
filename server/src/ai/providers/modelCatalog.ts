@@ -18,7 +18,27 @@ export interface CatalogModel {
   supportsStructuredOutput?: boolean
 }
 
-export type ModelCatalog = { supported: true, models: CatalogModel[], fetchedAt: string } | { supported: false, reason: string }
+/**
+ * Why a list could not be read. Stable codes the app translates:
+ * chatgpt_plan, no_key, auth_failed, not_found, bad_request, rate_limited,
+ * provider_error, redirected, timeout, network, too_large, invalid_response.
+ */
+export type CatalogFailureReason =
+  | 'chatgpt_plan' | 'no_key' | 'auth_failed' | 'not_found' | 'bad_request' | 'rate_limited'
+  | 'provider_error' | 'redirected' | 'timeout' | 'network' | 'too_large' | 'invalid_response'
+
+export type ModelCatalog =
+  | { supported: true, models: CatalogModel[], fetchedAt: string }
+  /** `detail` is a short diagnostic (HTTP status and the provider's own error text), never a secret. */
+  | { supported: false, reason: CatalogFailureReason, detail?: string }
+
+/** A failed list request, already classified. */
+export class CatalogError extends Error {
+  constructor(readonly reason: CatalogFailureReason, readonly detail: string) {
+    super(detail)
+    this.name = 'CatalogError'
+  }
+}
 
 export interface CatalogTarget {
   provider: AiProvider
@@ -37,20 +57,114 @@ const DEFAULT_BASE: Record<Exclude<AiProvider, 'ollama'>, string> = {
 }
 
 function joinUrl(base: string, path: string): string {
-  return `${base.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`
+  let baseEnd = base.length
+  while (baseEnd > 0 && base[baseEnd - 1] === '/') baseEnd -= 1
+
+  let pathStart = 0
+  while (pathStart < path.length && path[pathStart] === '/') pathStart += 1
+
+  return `${base.slice(0, baseEnd)}/${path.slice(pathStart)}`
 }
 
 /** OpenRouter lists prices as USD per token strings; store USD per million tokens. */
 function perMillion(value: unknown): number | undefined {
-  const parsed = typeof value === 'string' || typeof value === 'number' ? Number(value) : NaN
+  const parsed = typeof value === 'string' || typeof value === 'number' ? Number(value) : Number.NaN
   if (!Number.isFinite(parsed) || parsed < 0) return undefined
   return Math.round(parsed * 1_000_000 * 10_000) / 10_000
 }
 
+/** Gemini's documented base includes the API version; add it when an admin entered only the host. */
+export function googleBaseUrl(baseUrl: string | null | undefined): string {
+  if (!baseUrl) return DEFAULT_BASE.google
+  try {
+    const url = new URL(baseUrl)
+    // A path made only of slashes means the admin entered just the host.
+    if ([...url.pathname].every((char) => char === '/')) return `${url.origin}/v1beta`
+  } catch {
+    return baseUrl
+  }
+  return baseUrl
+}
+
+const MAX_ERROR_TEXT = 160
+
+/** Providers sometimes echo part of the key ("Incorrect API key provided: sk-ab***yz"); drop anything key-like. */
+function redactSecrets(text: string): string {
+  return text.replace(/\b(?:sk|rk|pk|AIza|ghp|xox[a-z])[-_A-Za-z0-9*.]{6,}/g, '[redacted]')
+}
+
+/** Reads a short, single-line error message from a failed provider response. */
+async function errorText(response: Response): Promise<string> {
+  try {
+    const text = (await response.text()).slice(0, 4096)
+    try {
+      const body = JSON.parse(text) as { error?: { message?: unknown, status?: unknown, type?: unknown } | string, message?: unknown }
+      const error = body.error
+      const message = typeof error === 'string' ? error
+        : typeof error?.message === 'string' ? [error.status ?? error.type, error.message].filter((part) => typeof part === 'string').join(': ')
+          : typeof body.message === 'string' ? body.message : ''
+      return redactSecrets(message.replace(/\s+/g, ' ').trim()).slice(0, MAX_ERROR_TEXT)
+    } catch {
+      return ''
+    }
+  } catch {
+    return ''
+  }
+}
+
+function statusReason(status: number, message: string): CatalogFailureReason {
+  if (status === 401 || status === 403) return 'auth_failed'
+  // Gemini answers an invalid key with 400 API_KEY_INVALID.
+  if (status === 400 && /api[ _-]?key/i.test(message)) return 'auth_failed'
+  if (status === 404) return 'not_found'
+  if (status === 429) return 'rate_limited'
+  if (status >= 300 && status < 400) return 'redirected'
+  if (status >= 500) return 'provider_error'
+  return 'bad_request'
+}
+
 async function getJson(url: string, headers: Record<string, string>, fetchImpl: typeof fetch): Promise<Record<string, unknown>> {
-  const response = await fetchImpl(url, { headers: { accept: 'application/json', ...headers }, signal: AbortSignal.timeout(15_000) })
-  if (!response.ok) throw new Error(`HTTP ${response.status}`)
-  return await response.json() as Record<string, unknown>
+  let response: Response
+  try {
+    response = await fetchImpl(url, { headers: { accept: 'application/json', ...headers }, signal: AbortSignal.timeout(15_000), redirect: 'manual' })
+  } catch (error) {
+    const name = error instanceof Error ? error.name : ''
+    if (name === 'TimeoutError' || name === 'AbortError') throw new CatalogError('timeout', 'No response within 15 seconds')
+    const cause = error instanceof Error && error.cause instanceof Error ? error.cause.message : error instanceof Error ? error.message : ''
+    throw new CatalogError('network', cause.replace(/\s+/g, ' ').slice(0, MAX_ERROR_TEXT) || 'Could not reach the provider')
+  }
+  if (!response.ok) {
+    const message = response.status >= 300 && response.status < 400 ? '' : await errorText(response)
+    if (!response.bodyUsed) await response.body?.cancel()
+    throw new CatalogError(statusReason(response.status, message), [`HTTP ${response.status}`, message].filter(Boolean).join(' '))
+  }
+  const declaredLength = Number(response.headers.get('content-length'))
+  if (Number.isFinite(declaredLength) && declaredLength > 2 * 1024 * 1024) {
+    await response.body?.cancel()
+    throw new CatalogError('too_large', 'Model list response exceeds 2 MiB')
+  }
+  if (!response.body) throw new CatalogError('invalid_response', 'Model list response is empty')
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let size = 0
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    size += value.byteLength
+    if (size > 2 * 1024 * 1024) {
+      await reader.cancel()
+      throw new CatalogError('too_large', 'Model list response exceeds 2 MiB')
+    }
+    chunks.push(value)
+  }
+  const bytes = new Uint8Array(size)
+  let offset = 0
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength }
+  try {
+    return JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>
+  } catch {
+    throw new CatalogError('invalid_response', 'The provider did not return JSON')
+  }
 }
 
 const asArray = (value: unknown): Array<Record<string, unknown>> => (Array.isArray(value) ? value as Array<Record<string, unknown>> : [])
@@ -69,7 +183,8 @@ export async function fetchModelCatalog(target: CatalogTarget, fetchImpl: typeof
       fetchedAt: now().toISOString(),
     }
   } catch (error) {
-    return { supported: false, reason: error instanceof Error ? error.message.slice(0, 120) : 'request_failed' }
+    if (error instanceof CatalogError) return { supported: false, reason: error.reason, detail: error.detail }
+    return { supported: false, reason: 'invalid_response', detail: error instanceof Error ? error.message.slice(0, MAX_ERROR_TEXT) : undefined }
   }
 }
 
@@ -87,7 +202,7 @@ async function listModels(target: CatalogTarget, fetchImpl: typeof fetch): Promi
       return asArray(body.data).map((row) => ({ id: String(row.id), name: String(row.display_name ?? row.id), textCapable: true }))
     }
     case 'google': {
-      const body = await getJson(joinUrl(target.baseUrl ?? DEFAULT_BASE.google, 'models?pageSize=1000'), { 'x-goog-api-key': target.apiKey! }, fetchImpl)
+      const body = await getJson(joinUrl(googleBaseUrl(target.baseUrl), 'models?pageSize=1000'), { 'x-goog-api-key': target.apiKey! }, fetchImpl)
       return asArray(body.models).map((row) => {
         const id = String(row.name ?? '').replace(/^models\//, '')
         const methods = asArray(row.supportedGenerationMethods as unknown).length ? row.supportedGenerationMethods as unknown[] : []
@@ -114,7 +229,7 @@ async function listModels(target: CatalogTarget, fetchImpl: typeof fetch): Promi
       })
     }
     case 'ollama': {
-      const body = await getJson(joinUrl(target.baseUrl ?? 'http://localhost:11434', 'api/tags'), {}, fetchImpl)
+      const body = await getJson(joinUrl(target.baseUrl ?? 'http://localhost:11434', 'api/tags'), target.apiKey ? { authorization: `Bearer ${target.apiKey}` } : {}, fetchImpl)
       return asArray(body.models).map((row) => {
         const id = String(row.name ?? row.model)
         // Local models cost nothing to call.

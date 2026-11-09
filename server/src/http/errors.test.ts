@@ -28,6 +28,10 @@ describe('database error taxonomy', () => {
       status: 409,
       code: 'CLASSROOM_ROLE_ASSIGNMENT_OVERLAP',
     })
+    expect(mapDatabaseError({ code: 'P0001', message: 'TEACHER_HAS_ACTIVE_ASSIGNMENTS' })).toMatchObject({ status: 409, code: 'TEACHER_HAS_ACTIVE_ASSIGNMENTS' })
+    expect(mapDatabaseError({ code: 'P0001', message: 'TEACHER_ARCHIVED' })).toMatchObject({ status: 409, code: 'TEACHER_ARCHIVED' })
+    expect(mapDatabaseError({ code: 'P0001', message: 'ROLE_IN_USE' })).toMatchObject({ status: 409, code: 'RBAC_ROLE_IN_USE' })
+    expect(mapDatabaseError({ code: 'P0001', message: 'PROTECTED_ROLE' })).toMatchObject({ status: 409, code: 'RBAC_PROTECTED_RESOURCE' })
     expect(mapDatabaseError({ code: 'P0001', message: 'internal SQL details' }).message).toBe('The request violates a business rule')
   })
 

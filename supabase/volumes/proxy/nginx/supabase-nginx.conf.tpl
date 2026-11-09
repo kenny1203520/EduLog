@@ -81,10 +81,6 @@ server {
         client_max_body_size 0;
     }
 
-    location /functions {
-        proxy_pass http://kong_upstream;
-    }
-
     location /mcp {
         proxy_pass http://kong_upstream;
     }

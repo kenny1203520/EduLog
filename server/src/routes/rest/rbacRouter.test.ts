@@ -5,8 +5,9 @@ describe('RBAC API contract', () => {
   it('publishes capability and scoped policy operations in OpenAPI', () => {
     const document = buildOpenApi() as { paths: Record<string, Record<string, unknown>> }
     expect(document.paths['/api/rbac/capability'].get).toBeTruthy()
-    expect(document.paths['/api/permissions/{permissionId}/policies'].get).toBeTruthy()
-    expect(document.paths['/api/permissions/{permissionId}/policies'].patch).toBeTruthy()
+    expect(document.paths['/api/roles/permission-policies'].get).toBeTruthy()
+    expect(document.paths['/api/roles/{id}/permissions'].patch).toBeTruthy()
+    expect(document.paths['/api/permissions/{permissionId}/policies']).toBeUndefined()
   })
 
   it('publishes classroom-scoped teaching role assignment operations', () => {

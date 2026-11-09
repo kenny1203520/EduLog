@@ -2,7 +2,7 @@
 // edulogUi catalog (shared/ui-core.js); views never match on Chinese strings.
 export const strings = {
   'ws.title': ['整合工作台', 'Workspace'],
-  'ws.skip': ['跳至工作內容', 'Skip to content'],
+  'ws.skip-to-content': ['跳至工作內容', 'Skip to content'],
   'ws.language': ['介面語言', 'Language'],
   'ws.connected': ['已連線 EduLog', 'Connected'],
   'ws.tab.import': ['匯入', 'Import'],
@@ -108,7 +108,7 @@ export const strings = {
   'ws.matchConfirmed': ['已確認', 'Confirmed'],
   'ws.willAddEnrollment': ['將新增本班報名，狀態 {status} · 開始 {date}', 'Adds an enrollment: {status} · from {date}'],
   'ws.skipped': ['已略過', 'Skipped'],
-  'ws.skip': ['略過此筆', 'Skip'],
+  'ws.skip-item': ['略過此筆', 'Skip'],
   'ws.restore': ['恢復處理', 'Restore'],
   'ws.resolved': ['已處理', 'Done'],
   'ws.reportMeta': ['{date} · {course}', '{date} · {course}'],

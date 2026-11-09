@@ -3,7 +3,7 @@ import en from './en'
 import zhTW from './zh-TW'
 
 // changelog is release-log content (its own entries are asserted to stay
-// aligned per-release by ReleaseVersionContract.spec.ts), not a fixed set of
+// aligned per-release by ReleaseVersion.contract.spec.ts), not a fixed set of
 // UI keys -- comparing its key shape here would be noise, not signal.
 const NAMESPACES_TO_SKIP = new Set(['changelog'])
 

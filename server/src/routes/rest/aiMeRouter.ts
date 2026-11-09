@@ -1,12 +1,13 @@
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod'
 import type { ApiConfig } from '../../config/config.js'
+import type { AiServices } from '../../ai/aiServices.js'
 import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { setAuditContext } from '../../http/context.js'
-import { SecretCipher } from '../../ai/credentials/secretCipher.js'
 import {
   createCredential,
   credentialPatchInput,
+  personalCredentialPatchInput,
   CREDENTIAL_FIELDS,
   MODEL_FIELDS,
   modelInput,
@@ -16,6 +17,7 @@ import {
   updateCredential,
 } from '../../ai/credentials/credentialStore.js'
 import { fetchModelCatalog, sharedModelCatalogCache } from '../../ai/providers/modelCatalog.js'
+import { createPublicOllamaFetch } from '../../ai/providers/publicOllamaTransport.js'
 import {
   buildAuthorizationUrl,
   createPkcePair,
@@ -28,9 +30,8 @@ import {
   ChatGptOAuthError,
   createOAuthState,
   exchangeChatGptCode,
-  siwcClientFromConfig,
 } from '../../ai/credentials/chatgptPlanOAuth.js'
-import { isChatGptPlanCredential, sharedChatGptPlanTokens, type ChatGptPlanTokens } from '../../ai/credentials/chatgptPlanTokens.js'
+import { isChatGptPlanCredential } from '../../ai/credentials/chatgptPlanTokens.js'
 
 const uuid = z.string().uuid()
 const personalModelInput = modelInput.pick({ model_id: true, display_name: true, enabled: true }).strict()
@@ -55,9 +56,10 @@ function idParam(req: Request, name = 'id'): string {
 
 /** The teacher's own credential, or 404 (never reveals other users' rows). */
 async function ownCredential(req: Request, id: string) {
-  const row = await req.adminDb!.from('ai_credentials').select('id,owner_user_id,scope').eq('id', id).maybeSingle()
+  const row = await req.adminDb!.from('ai_credentials').select('id,owner_user_id,scope,provider').eq('id', id).maybeSingle()
   if (row.error) throw mapDatabaseError(row.error)
   if (!row.data || row.data.scope !== 'user' || row.data.owner_user_id !== req.user!.id) throw new ApiError(404, 'NOT_FOUND', 'Credential was not found')
+  return row.data as { id: string, owner_user_id: string, scope: 'user', provider: string }
 }
 
 /**
@@ -74,16 +76,13 @@ async function ownCredential(req: Request, id: string) {
  * - POST   /ai/me/openrouter/exchange             turn the returned code into a credential
  */
 export function createAiMeRouter(
-  config: ApiConfig,
+  config: Pick<ApiConfig, 'EDULOG_WEB_BASE_URL' | 'API_ALLOWED_ORIGINS' | 'NODE_ENV'>,
+  { cipher, siwc, chatgptTokens }: Pick<AiServices, 'cipher' | 'siwc' | 'chatgptTokens'>,
   pending = new PendingPkceStore(),
   fetchImpl: typeof fetch = fetch,
   chatgptPending = new PendingPkceStore(),
-  chatgptTokensOverride?: ChatGptPlanTokens,
+  createOllamaFetch: (baseUrl: string) => typeof fetch = createPublicOllamaFetch,
 ) {
-  const cipher = config.AI_SECRET_KEY ? SecretCipher.fromBase64(config.AI_SECRET_KEY) : null
-  // "Sign in with ChatGPT" stays hidden until an OpenAI-approved client is configured.
-  const siwc = siwcClientFromConfig(config)
-  const chatgptTokens = chatgptTokensOverride ?? (siwc && cipher ? sharedChatGptPlanTokens(siwc, cipher) : null)
   const resolveTokenFor = (req: Request) => async (credential: { provider: string, authType: string, credentialId: string }) =>
     chatgptTokens && isChatGptPlanCredential(credential) ? chatgptTokens.getAccessToken(req.adminDb!, credential.credentialId) : undefined
   const chatgptCallback = () => {
@@ -114,7 +113,7 @@ export function createAiMeRouter(
     const input = personalCredentialInput.parse(req.body)
     setAuditContext(req, { domain: 'teaching', resource: 'ai_credentials', action: 'create' })
     const created = await createCredential(req.adminDb!, cipher, {
-      scope: 'user', ownerUserId: userId, provider: input.provider, authType: 'api_key', secret: input.secret, label: input.label, createdBy: userId,
+      scope: 'user', ownerUserId: userId, provider: input.provider, authType: input.secret ? 'api_key' : 'none', secret: input.secret, baseUrl: input.base_url, label: input.label, createdBy: userId,
     })
     return res.status(201).json(envelope(req, created))
   }))
@@ -122,9 +121,11 @@ export function createAiMeRouter(
   router.patch('/ai/me/credentials/:id', wrap(async (req, res) => {
     userOf(req)
     const id = idParam(req)
-    // Personal credentials never get a custom endpoint (see PERSONAL_PROVIDERS).
-    const input = credentialPatchInput.omit({ base_url: true }).strict().parse(req.body)
-    await ownCredential(req, id)
+    const credential = await ownCredential(req, id)
+    const input = credential.provider === 'ollama'
+      ? personalCredentialPatchInput.parse(req.body)
+      : credentialPatchInput.omit({ base_url: true }).strict().parse(req.body)
+    if (credential.provider !== 'ollama' && input.secret === null) throw new ApiError(400, 'INVALID_CREDENTIAL', 'Only Ollama credentials may remove their secret')
     setAuditContext(req, { domain: 'teaching', resource: 'ai_credentials', resourceId: id, action: 'update' })
     sharedModelCatalogCache.forget(id)
     return res.json(envelope(req, await updateCredential(req.adminDb!, cipher, id, input)))
@@ -149,7 +150,10 @@ export function createAiMeRouter(
     await ownCredential(req, id)
     const catalog = await sharedModelCatalogCache.get(id, req.query.refresh === '1', async () => {
       const credential = await loadUsableCredential(req.adminDb!, cipher, id)
-      return fetchModelCatalog({ provider: credential.provider, authType: credential.authType, apiKey: credential.apiKey, baseUrl: credential.baseUrl })
+      return fetchModelCatalog(
+        { provider: credential.provider, authType: credential.authType, apiKey: credential.apiKey, baseUrl: credential.baseUrl },
+        credential.provider === 'ollama' && credential.baseUrl ? createOllamaFetch(credential.baseUrl) : fetch,
+      )
     })
     return res.json(envelope(req, catalog))
   }))
@@ -288,7 +292,6 @@ export function openRouterReturnOrigin(config: Pick<ApiConfig, 'EDULOG_WEB_BASE_
     return base
   }
   if (parsed.origin !== origin) return base
-  const configured = config.API_ALLOWED_ORIGINS.split(',').map((value) => value.trim()).filter(Boolean)
   const localDevelopment = config.NODE_ENV !== 'production' && parsed.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(parsed.hostname)
-  return origin === base || configured.includes(origin) || localDevelopment ? origin : base
+  return origin === base || config.API_ALLOWED_ORIGINS.includes(origin) || localDevelopment ? origin : base
 }

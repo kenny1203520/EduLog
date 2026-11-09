@@ -2,7 +2,7 @@ import express from 'express'
 import request from 'supertest'
 import { describe, expect, it, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { createExtensionWorkspaceRouter, importBatch, importRow, pendingPush, importJob, memoryConfirmation, fieldMappingResolve, fieldMappingConfirm, reportDecisionResolve, reportDecisionConfirm, attendanceEvidence, sourceReportConflictsQuery } from './extensionWorkspaceRouter.js'
+import { createExtensionWorkspaceRouter, importBatch, importRow, pendingPush, importJob, memoryConfirmation, fieldMappingResolve, fieldMappingConfirm, reportDecisionResolve, reportDecisionConfirm, attendanceEvidence } from './extensionWorkspaceRouter.js'
 import { errorHandler } from '../../http/errors.js'
 const id = '00000000-0000-4000-8000-000000000001'
 const row = { source_id: '101', target_id: id, overwrite: [], record: { kind: 'student', data: { name: 'Test A' } } }
@@ -293,17 +293,6 @@ describe('workspace API contract', () => {
     const {app,rpc}=appWith({items:[item]})
     const saved=await request(app).post('/api/extension/v1/attendance-evidence').set('Authorization','Bearer test').send(body)
     expect(saved.status).toBe(200);expect(rpc.mock.calls[0]![0]).toBe('web_extension_attendance_evidence');expect(rpc.mock.calls[0]![1]).toMatchObject({p_operation:'record',p_input:body})
-    const listed=await request(app).get(`/api/extension/v1/attendance-evidence?enrollment_id=${id}&before_date=2026-10-05&limit=20`).set('Authorization','Bearer test')
-    expect(listed.status).toBe(200);expect(rpc.mock.calls[1]![1]).toMatchObject({p_operation:'list',p_input:{enrollment_id:id,before_date:'2026-10-05',limit:20}})
-    expect((await request(app).get('/api/extension/v1/attendance-evidence?enrollment_id=bad').set('Authorization','Bearer test')).status).toBe(400)
-  })
-  it('lists the source report conflict report with bounded filters and pagination',async()=>{
-    expect(sourceReportConflictsQuery.safeParse({action:'superseded',limit:'10',cursor:id}).success).toBe(true)
-    for(const invalid of [{action:'deleted'},{limit:'51'},{cursor:'../x'},{user_id:id}])expect(sourceReportConflictsQuery.safeParse(invalid).success).toBe(false)
-    const {app,rpc}=appWith({summary:{kept:1,superseded:1},items:[],next_cursor:null})
-    const response=await request(app).get('/api/extension/v1/source-report-conflicts?action=superseded&limit=10').set('Authorization','Bearer test')
-    expect(response.status).toBe(200);expect(response.body.data.summary.superseded).toBe(1)
-    expect(rpc.mock.calls[0]![0]).toBe('web_extension_source_report_conflicts');expect(rpc.mock.calls[0]![1]).toMatchObject({p_operation:'list',p_input:{action:'superseded',limit:10}})
   })
   it('names the row and reason of a source report identity conflict without raw details',async()=>{
     const body={key:id,rows:[row]}

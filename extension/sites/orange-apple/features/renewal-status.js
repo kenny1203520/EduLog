@@ -15,6 +15,33 @@
   const BADGE = Object.freeze({ renewed: ['text-bg-success', '已續班'], pending: ['text-bg-warning', '未續班'], 'not-renew': ['text-bg-default', '不續班'] })
   const PHONE = /(?:\+?886[-\s]?|0)9\d{2}[-\s]?\d{3}[-\s]?\d{3}|0\d{1,2}[-\s]?\d{3,4}[-\s]?\d{4}/
   const collapse = value => String(value || '').trim().replace(/\s+/g, ' ')
+  const ratio = value => {
+    const text = String(value || '')
+    const digit = character => character >= '0' && character <= '9'
+    const whitespace = character => character !== undefined && character.trim() === ''
+    let start = 0
+    while (start < text.length) {
+      let position = start
+      if (text[position] === '-') position++
+      if (!digit(text[position])) { start++; continue }
+      while (digit(text[position])) position++
+      const firstEnd = position
+      const first = Number(text.slice(start, position))
+      while (whitespace(text[position])) position++
+      if (text[position] !== '/') { start = firstEnd; continue }
+      position++
+      while (whitespace(text[position])) position++
+      const secondStart = position
+      if (text[position] === '-') position++
+      const secondDigitsStart = position
+      while (digit(text[position])) position++
+      if (position === secondDigitsStart) { start = firstEnd; continue }
+      const values = [first, Number(text.slice(secondStart, position))]
+      if (values.every(Number.isSafeInteger)) return values
+      start = firstEnd
+    }
+    return null
+  }
   // A cell's text split at <br>, as the provider stacks values in one cell.
   function lines(cell) {
     const out = ['']
@@ -35,7 +62,7 @@
     if (!table) return []
     const header = [...table.rows].find(row => row.querySelector('th'))
     const labels = [...(header?.cells || [])].map(cell => collapse(cell.textContent))
-    const column = (test, fallback) => { const index = labels.findIndex(test); return index < 0 ? fallback : index }
+    const column = (test, fallback) => { const index = labels.findIndex(label => test(label)); return index < 0 ? fallback : index }
     const at = {
       name: column(label => site.isTerm(label, '姓名'), 0), contact: column(label => site.pattern('聯絡人').test(label), 1),
       course: column(label => site.isTerm(label, '課程'), 2), order: column(label => site.pattern('訂單狀態').test(label), 3),
@@ -49,7 +76,7 @@
       const courseCell = cell('course'), classAnchor = courseCell?.querySelector('a[href]')
       let classPath = null
       try { const url = new URL(classAnchor?.getAttribute('href') || '', ORIGIN); if (url.origin === ORIGIN && lexicon.paths.classPage.test(url.pathname)) classPath = url.pathname } catch { /* no class link */ }
-      const remaining = /(-?\d+)\s*\/\s*(-?\d+)/.exec(collapse(cell('remaining')?.textContent))
+      const remaining = ratio(collapse(cell('remaining')?.textContent))
       const actions = [...row.querySelectorAll(lexicon.selectors.renewAction)]
       const id = actions.map(a => a.getAttribute('data-id')).find(value => /^\d+$/.test(value || '')) || null
       return {
@@ -58,7 +85,7 @@
         className: collapse(classAnchor?.textContent) || null, classPath,
         course: lines(courseCell).filter(line => line !== collapse(classAnchor?.textContent)).join(' ') || null,
         order: badgeFact(cell('order')), next: badgeFact(cell('next')),
-        remaining: remaining ? Number(remaining[1]) : null, makeup: remaining ? Number(remaining[2]) : null,
+        remaining: remaining ? remaining[0] : null, makeup: remaining ? remaining[1] : null,
         renew: renewOf(cell('renew')?.querySelector(lexicon.selectors.renewStatus)),
         owner: collapse(cell('owner')?.textContent) || null,
         codes: new Set(actions.map(a => a.getAttribute('data-renew-status')).filter(code => STATUSES.includes(code))),

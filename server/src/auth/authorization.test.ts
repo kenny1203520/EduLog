@@ -85,7 +85,7 @@ describe('resource-aware authorization', () => {
     const rpc = vi.fn().mockResolvedValue({ data: true, error: null })
     await authorizeResource(
       requestWithRpc(rpc),
-      resources['class-session-schedule-rules'],
+      resources['class-session-teachers'],
       'teaching.class_sessions.read',
       '00000000-0000-4000-8000-000000000011',
       { class_session_id: '00000000-0000-4000-8000-000000000012' },
@@ -98,16 +98,37 @@ describe('resource-aware authorization', () => {
     })
   })
 
-  it('resolves broad teaching collections through the platform root', async () => {
+  it('accepts unscoped collection reads granted in any classroom or class session', async () => {
     const rpc = vi.fn().mockResolvedValue({ data: true, error: null })
     const req = requestWithRpc(rpc)
     await authorizeCollection(req, resources.courses, 'teaching.courses.list')
-    expect(rpc).toHaveBeenCalledWith('has_api_permission', {
+    expect(rpc).toHaveBeenCalledWith('has_teaching_permission_any_scope', {
       p_user_id: '00000000-0000-4000-8000-000000000001',
       p_permission_key: 'teaching.courses.list',
+    })
+  })
+
+  it('keeps unscoped collection writes at platform level', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null })
+    await authorizeCollection(requestWithRpc(rpc), resources.courses, 'teaching.courses.create', {}, { subject: 'Math' })
+    expect(rpc).toHaveBeenCalledWith('has_api_permission', {
+      p_user_id: '00000000-0000-4000-8000-000000000001',
+      p_permission_key: 'teaching.courses.create',
       p_classroom_id: null,
       p_class_session_id: null,
     })
+  })
+
+  it('keeps the service-role teachers list at platform level', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null })
+    await authorizeCollection(requestWithRpc(rpc), resources.teachers, 'teaching.teachers.list')
+    expect(rpc).toHaveBeenCalledWith('has_api_permission', expect.objectContaining({ p_permission_key: 'teaching.teachers.list', p_classroom_id: null }))
+  })
+
+  it('does not treat sensitive reads as plain reads', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null })
+    await authorizeCollection(requestWithRpc(rpc), resources['student-contacts'], 'teaching.students.read_sensitive')
+    expect(rpc).toHaveBeenCalledWith('has_api_permission', expect.objectContaining({ p_permission_key: 'teaching.students.read_sensitive' }))
   })
 
   it('keeps self-owned resources independent from system permissions', async () => {

@@ -1,13 +1,26 @@
-import { apiDataClient } from '@/services/api/ApiDataClient'
 import { ClassOccurrence } from '@/models/ClassOccurrence'
-import { DateUtils } from '@/utils/DateUtils'
+import { DateUtils } from '@/utils/dateUtils'
 import { apiV1Client } from '@/services/api/ApiV1Client'
-import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 export class OccurrenceQueryService {
     /** The API's maximum page size for /occurrences. */
     private static readonly PAGE_SIZE = 100
     private static readonly MAX_PAGES = 50
+
+    /** Report totals and completed counts per lesson date (YYYY-MM-DD) for one class. */
+    static async getReportCompletionByDate(sessionId: string, from: string, to: string): Promise<Record<string, { total: number; completed: number }>> {
+        const response = await apiV1Client.get<Array<{ occurrence_date: string; total: number; completed: number }>>(
+            `/class-sessions/${encodeURIComponent(sessionId)}/report-completion?from=${from}&to=${to}`
+        )
+        const byDate: Record<string, { total: number; completed: number }> = {}
+        for (const row of response.data || []) {
+            const entry = byDate[row.occurrence_date] ?? { total: 0, completed: 0 }
+            entry.total += row.total
+            entry.completed += row.completed
+            byDate[row.occurrence_date] = entry
+        }
+        return byDate
+    }
 
     private static formatDate(date: Date): string {
         return DateUtils.formatLocalDate(date)
@@ -33,26 +46,8 @@ export class OccurrenceQueryService {
         page: number = 1,
         perPage: number = 50
     ): Promise<{ data: ClassOccurrence[]; count: number }> {
-        if (getApiV1Mode() === 'v1') {
-            const response = await apiV1Client.get<any[]>('/occurrences?class_session_id=' + encodeURIComponent(sessionId) + '&limit=' + perPage + '&offset=' + ((page - 1) * perPage) + '&sort=occurrence_date')
-            return { data: (response.data || []).map((row) => new ClassOccurrence(row)), count: Number((response.meta as any)?.total || 0) }
-        }
-        const from = (page - 1) * perPage
-        const to = from + perPage - 1
-
-        const { data, error, count } = await apiDataClient
-            .from('class_occurrences')
-            .select('*', { count: 'exact' })
-            .eq('class_session_id', sessionId)
-            .order('occurrence_date', { ascending: true })
-            .range(from, to)
-
-        if (error) throw new Error(`Failed to fetch occurrences: ${error.message}`)
-
-        return {
-            data: (data as any[]).map((dto: any) => new ClassOccurrence(dto)),
-            count: count || 0
-        }
+        const response = await apiV1Client.get<any[]>('/occurrences?class_session_id=' + encodeURIComponent(sessionId) + '&limit=' + perPage + '&offset=' + ((page - 1) * perPage) + '&sort=occurrence_date')
+        return { data: (response.data || []).map((row) => new ClassOccurrence(row)), count: Number((response.meta as any)?.total || 0) }
     }
 
     static async getOccurrencesByDateRange(
@@ -60,156 +55,43 @@ export class OccurrenceQueryService {
         endDate: Date,
         sessionIds?: string[]
     ): Promise<ClassOccurrence[]> {
-        if (getApiV1Mode() === 'v1') {
-            // The API returns at most PAGE_SIZE rows per request; page through
-            // meta.total so a long range never silently drops its later lessons.
-            const rows: any[] = []
-            for (let page = 0; page < this.MAX_PAGES; page++) {
-                const params = new URLSearchParams({ start: this.formatDate(startDate), end: this.formatDate(endDate), limit: String(this.PAGE_SIZE), offset: String(page * this.PAGE_SIZE), sort: 'occurrence_date' })
-                if (sessionIds?.length) params.set('session_ids', sessionIds.join(','))
-                const response = await apiV1Client.get<any[]>(`/occurrences?${params}`)
-                const batch = response.data || []
-                rows.push(...batch)
-                const total = Number((response.meta as any)?.total)
-                if (batch.length < this.PAGE_SIZE || (Number.isFinite(total) && rows.length >= total)) break
-            }
-            return rows.map((row) => this.fromApi(row))
+        const rows: any[] = []
+        for (let page = 0; page < this.MAX_PAGES; page++) {
+            const params = new URLSearchParams({ start: this.formatDate(startDate), end: this.formatDate(endDate), limit: String(this.PAGE_SIZE), offset: String(page * this.PAGE_SIZE), sort: 'occurrence_date' })
+            if (sessionIds?.length) params.set('session_ids', sessionIds.join(','))
+            const response = await apiV1Client.get<any[]>(`/occurrences?${params}`)
+            const batch = response.data || []
+            rows.push(...batch)
+            const total = Number((response.meta as any)?.total)
+            if (batch.length < this.PAGE_SIZE || (Number.isFinite(total) && rows.length >= total)) break
         }
-        let query = apiDataClient
-            .from('class_occurrences')
-            .select(`
-                *,
-                class_sessions (
-                    name,
-                    time_zone,
-                    classrooms (name, color)
-                )
-            `)
-            .gte('occurrence_date', this.formatDate(startDate))
-            .lte('occurrence_date', this.formatDate(endDate))
-            .order('occurrence_date', { ascending: true })
-
-        if (sessionIds && sessionIds.length > 0) {
-            query = query.in('class_session_id', sessionIds)
-        }
-
-        const { data, error } = await query
-
-        if (error) throw new Error(error.message)
-
-        return (data as any[]).map((dto: any) => {
-            const occ = new ClassOccurrence(dto)
-
-            if (dto.class_sessions) {
-                occ.sessionName = dto.class_sessions.name
-                if (!dto.time_zone && DateUtils.isValidTimeZone(dto.class_sessions.time_zone)) {
-                    occ.timeZone = dto.class_sessions.time_zone
-                }
-            }
-
-            if (dto.class_sessions?.classrooms) {
-                occ.classroomName = dto.class_sessions.classrooms.name
-                occ.classroomColor = dto.class_sessions.classrooms.color
-            }
-
-            return occ
-        })
+        return rows.map((row) => this.fromApi(row))
     }
 
     static async getOccurrenceBySessionAndDate(sessionId: string, occurrenceDate: string): Promise<ClassOccurrence | null> {
-        if (getApiV1Mode() === 'v1') {
-            const params = new URLSearchParams({
-                class_session_id: sessionId,
-                date: occurrenceDate,
-                limit: '1',
-                sort: '-created_at'
-            })
-            const response = await apiV1Client.get<any[]>(`/occurrences?${params}`)
-            const row = response.data?.[0]
-            return row ? this.fromApi(row) : null
-        }
-
-        const { data, error } = await apiDataClient
-            .from('class_occurrences')
-            .select('*')
-            .eq('class_session_id', sessionId)
-            .eq('occurrence_date', occurrenceDate)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle()
-
-        if (error) throw new Error(`Failed to fetch occurrence: ${error.message}`)
-        return data ? new ClassOccurrence(data as any) : null
+        const params = new URLSearchParams({
+            class_session_id: sessionId,
+            date: occurrenceDate,
+            limit: '1',
+            sort: '-created_at'
+        })
+        const response = await apiV1Client.get<any[]>(`/occurrences?${params}`)
+        const row = response.data?.[0]
+        return row ? this.fromApi(row) : null
     }
 
     static async getPreferredOccurrence(
         sessionId: string,
         referenceDate: Date
     ): Promise<ClassOccurrence | null> {
-        if (getApiV1Mode() === 'v1') {
-            const response = await apiV1Client.get<any>(`/occurrences/${encodeURIComponent(sessionId)}/preferred?date=${encodeURIComponent(this.formatDate(referenceDate))}`)
-            return response.data ? this.fromApi(response.data) : null
-        }
-        const reference = this.formatDate(referenceDate)
-        const { data: previous, error: previousError } = await apiDataClient
-            .from('class_occurrences')
-            .select('*')
-            .eq('class_session_id', sessionId)
-            .lte('occurrence_date', reference)
-            .order('occurrence_date', { ascending: false })
-            .limit(1)
-            .maybeSingle()
-
-        if (previousError) throw new Error(previousError.message)
-        if (previous) return new ClassOccurrence(previous as any)
-
-        const { data: next, error: nextError } = await apiDataClient
-            .from('class_occurrences')
-            .select('*')
-            .eq('class_session_id', sessionId)
-            .gt('occurrence_date', reference)
-            .order('occurrence_date', { ascending: true })
-            .limit(1)
-            .maybeSingle()
-
-        if (nextError) throw new Error(nextError.message)
-        return next ? new ClassOccurrence(next as any) : null
+        const response = await apiV1Client.get<any>(`/occurrences/${encodeURIComponent(sessionId)}/preferred?date=${encodeURIComponent(this.formatDate(referenceDate))}`)
+        return response.data ? this.fromApi(response.data) : null
     }
 
     static async getOccurrencesByIds(occurrenceIds: string[]): Promise<ClassOccurrence[]> {
         if (occurrenceIds.length === 0) return []
-        if (getApiV1Mode() === 'v1') {
-            const response = await apiV1Client.get<any[]>(`/occurrences?ids=${encodeURIComponent(occurrenceIds.join(','))}&limit=${Math.min(100, occurrenceIds.length)}&offset=0&sort=occurrence_date`)
-            return (response.data || []).map((row) => this.fromApi(row))
-        }
-        const { data, error } = await apiDataClient
-            .from('class_occurrences')
-            .select(`
-                *,
-                class_sessions (
-                    name,
-                    time_zone,
-                    classrooms (name, color)
-                )
-            `)
-            .in('id', occurrenceIds)
-
-        if (error) throw new Error(error.message)
-
-        return (data as any[]).map((dto: any) => {
-            const occurrence = new ClassOccurrence(dto)
-            if (dto.class_sessions) {
-                occurrence.sessionName = dto.class_sessions.name
-                if (!dto.time_zone && DateUtils.isValidTimeZone(dto.class_sessions.time_zone)) {
-                    occurrence.timeZone = dto.class_sessions.time_zone
-                }
-            }
-            if (dto.class_sessions?.classrooms) {
-                occurrence.classroomName = dto.class_sessions.classrooms.name
-                occurrence.classroomColor = dto.class_sessions.classrooms.color
-            }
-            return occurrence
-        })
+        const response = await apiV1Client.get<any[]>(`/occurrences?ids=${encodeURIComponent(occurrenceIds.join(','))}&limit=${Math.min(100, occurrenceIds.length)}&offset=0&sort=occurrence_date`)
+        return (response.data || []).map((row) => this.fromApi(row))
     }
 
     static async getAdjacentOccurrence(
@@ -217,24 +99,9 @@ export class OccurrenceQueryService {
         occurrenceDate: Date,
         direction: 'previous' | 'next'
     ): Promise<ClassOccurrence | null> {
-        if (getApiV1Mode() === 'v1') {
-            const response = await apiV1Client.get<any>(`/occurrences/${encodeURIComponent(sessionId)}/navigation?date=${encodeURIComponent(this.formatDate(occurrenceDate))}`)
-            const row = direction === 'previous' ? (response.data as any)?.previous : (response.data as any)?.next
-            return row ? this.fromApi(row) : null
-        }
-        const date = this.formatDate(occurrenceDate)
-        let query = apiDataClient
-            .from('class_occurrences')
-            .select('*')
-            .eq('class_session_id', sessionId)
-
-        query = direction === 'previous'
-            ? query.lt('occurrence_date', date).order('occurrence_date', { ascending: false })
-            : query.gt('occurrence_date', date).order('occurrence_date', { ascending: true })
-
-        const { data, error } = await query.limit(1).maybeSingle()
-        if (error) throw new Error(error.message)
-        return data ? new ClassOccurrence(data as any) : null
+        const response = await apiV1Client.get<any>(`/occurrences/${encodeURIComponent(sessionId)}/navigation?date=${encodeURIComponent(this.formatDate(occurrenceDate))}`)
+        const row = direction === 'previous' ? (response.data as any)?.previous : (response.data as any)?.next
+        return row ? this.fromApi(row) : null
     }
 
     static async getOccurrenceNavigationState(
@@ -249,16 +116,7 @@ export class OccurrenceQueryService {
     }
 
     static async getOccurrenceById(occurrenceId: string): Promise<ClassOccurrence> {
-        if (getApiV1Mode() === 'v1') { const response = await apiV1Client.get<any>('/occurrences/' + encodeURIComponent(occurrenceId)); return this.fromApi(response.data) }
-        const { data, error } = await apiDataClient
-            .from('class_occurrences')
-            .select('*')
-            .eq('id', occurrenceId)
-            .single()
-
-        if (error) throw new Error(error.message)
-
-        return new ClassOccurrence(data as any)
+        const response = await apiV1Client.get<any>('/occurrences/' + encodeURIComponent(occurrenceId)); return this.fromApi(response.data)
     }
 
     static async getTodayOccurrences(timeZone: string = DateUtils.getDefaultTimeZone()): Promise<ClassOccurrence[]> {

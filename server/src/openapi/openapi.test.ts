@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { permissionForResource } from '../auth/authorization.js'
 import { buildOpenApi } from './openapi.js'
-import { resources } from '../routes/rest/resources.js'
-import { allowedRpcs } from '../routes/rest/rpcContract.js'
-import { isAllowedRpc as routerAllowsRpc } from '../routes/rest/rpcRouter.js'
+import { genericOperationsOf, resources } from '../routes/rest/resources.js'
 
 describe('generated API contract', () => {
   it('documents blank email clearing for student and contact mutations', () => {
@@ -41,7 +39,8 @@ describe('generated API contract', () => {
     expect(fullSpec.components.schemas.RoleCreateMutation.required).toEqual(expect.arrayContaining(['expected_epoch']))
     expect(fullSpec.components.schemas.RoleUpdateMutation.required).toEqual(expect.arrayContaining(['expected_epoch']))
     expect(fullSpec.components.schemas.RoleDeleteMutation.required).toEqual(['expected_epoch'])
-    expect(fullSpec.paths['/api/permissions/{permissionId}/policies']?.get?.deprecated).toBe(true)
+    expect(fullSpec.paths['/api/permissions/{permissionId}/policies']).toBeUndefined()
+    expect(fullSpec.components.schemas.RolePermissionPatchMutation.required).toEqual(['scope_type', 'expected_epoch', 'changes'])
   })
 
   it('documents the typed role permission matrix and user display sorting', () => {
@@ -86,7 +85,7 @@ describe('generated API contract', () => {
     expect(studentCreate.properties.birthday).toEqual(expect.objectContaining({ anyOf: expect.arrayContaining([expect.objectContaining({ type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' })]) }))
     expect(studentUpdate).toMatchObject({ type: 'object', additionalProperties: false })
     expect(studentUpdate.required).toBeUndefined()
-    expect(spec.paths['/api/roles']?.post?.['x-request-schema-source']).toBe('resource-registry')
+    expect(spec.paths['/api/roles']?.post?.['x-request-schema-source']).toBeUndefined()
   })
 
   it('documents blank classroom external links as a nullable clear operation', () => {
@@ -98,46 +97,54 @@ describe('generated API contract', () => {
   })
 
   it('keeps generated generic methods and permissions aligned with the registry', () => {
-    const spec = buildOpenApi() as { paths: Record<string, Record<string, { 'x-permission'?: string } | undefined>> }
+    const spec = buildOpenApi() as { paths: Record<string, Record<string, { 'x-permission'?: string; operationId?: string } | undefined>> }
     const specialized = new Map([
       ['enrollments:post', 'teaching.enrollments.create'], ['enrollments:patch', 'teaching.enrollments.update'], ['enrollments:delete', 'teaching.enrollments.delete'],
       ['reports:post', 'teaching.reports.create'], ['reports:patch', 'teaching.reports.update'], ['reports:delete', 'teaching.reports.delete'],
       ['occurrences:patch', 'teaching.occurrences.update'], ['occurrences:delete', 'teaching.occurrences.delete'],
       ['student-suspensions:post', 'teaching.students.update'], ['student-suspensions:patch', 'teaching.students.update'], ['student-suspensions:delete', 'teaching.students.update'],
       ['holidays:post', 'teaching.holidays.create'], ['holidays:patch', 'teaching.holidays.update'], ['holidays:delete', 'teaching.holidays.delete'],
+      ['students:delete', 'teaching.students.delete'],
     ])
     for (const def of Object.values(resources)) {
-      if (def.route === 'roles') continue
-      const methods = new Set(def.genericMethods ?? ['GET', 'POST', 'PATCH', 'DELETE'])
+      const operations = genericOperationsOf(def)
       const collection = spec.paths[`/api/${def.route}`]
       const item = spec.paths[`/api/${def.route}/{id}`]
-      if (methods.has('GET')) {
-        expect(collection?.get?.['x-permission']).toBe(def.selfAuthorization ? undefined : permissionForResource(def, 'list'))
-        expect(item?.get?.['x-permission']).toBe(def.selfAuthorization ? undefined : permissionForResource(def, 'read'))
-      } else {
-        expect(collection?.get).toBeUndefined()
-        expect(item?.get).toBeUndefined()
-      }
-      if (methods.has('POST')) expect(collection?.post?.['x-permission']).toBe(def.selfAuthorization ? undefined : permissionForResource(def, 'create'))
+      if (operations.has('list')) expect(collection?.get?.['x-permission']).toBe(def.selfAuthorization ? undefined : permissionForResource(def, 'list'))
+      else if (def.route !== 'class-sessions') expect(collection?.get).toBeUndefined()
+      if (operations.has('read')) expect(item?.get?.['x-permission']).toBe(def.selfAuthorization ? undefined : permissionForResource(def, 'read'))
+      else if (def.route !== 'class-sessions') expect(item?.get).toBeUndefined()
+      if (operations.has('create')) expect(collection?.post?.['x-permission']).toBe(def.selfAuthorization ? undefined : permissionForResource(def, 'create'))
       else if (def.route !== 'class-sessions') expect(collection?.post?.['x-permission']).toBe(specialized.get(`${def.route}:post`))
-      if (methods.has('PATCH')) expect(item?.patch?.['x-permission']).toBe(def.selfAuthorization ? undefined : permissionForResource(def, 'update'))
+      if (operations.has('update')) expect(item?.patch?.['x-permission']).toBe(def.selfAuthorization ? undefined : permissionForResource(def, 'update'))
       else if (def.route !== 'class-sessions') expect(item?.patch?.['x-permission']).toBe(specialized.get(`${def.route}:patch`))
-      if (methods.has('DELETE')) expect(item?.delete?.['x-permission']).toBe(def.selfAuthorization ? undefined : permissionForResource(def, 'delete'))
+      if (operations.has('delete')) expect(item?.delete?.['x-permission']).toBe(def.selfAuthorization ? undefined : permissionForResource(def, 'delete'))
       else if (def.route !== 'class-sessions') expect(item?.delete?.['x-permission']).toBe(specialized.get(`${def.route}:delete`))
     }
+    // Routes owned by domain routers are documented from those handlers, not the registry.
+    expect(spec.paths['/api/class-sessions/{id}']?.get?.operationId).toBe('class_sessions_get')
+    expect(spec.paths['/api/occurrences']?.get?.operationId).toBe('occurrences_list_scoped')
+    expect(spec.paths['/api/occurrences/{id}']?.get?.operationId).toBe('occurrences_get')
+    expect(spec.paths['/api/roles/{id}']?.get?.operationId).toBe('role_get')
+    expect(spec.paths).not.toHaveProperty('/api/class-session-schedule-rules')
   })
 
   it('documents specialized nested resource scope parameters and permissions', () => {
     const spec = buildOpenApi() as { paths: Record<string, Record<string, { 'x-permission'?: string; parameters?: Array<{ name?: string }> } | undefined>> }
     expect(spec.paths['/api/class-sessions/{sessionId}/teachers'].get?.parameters?.some((parameter) => parameter.name === 'sessionId')).toBe(true)
-    expect(spec.paths['/api/class-sessions/{sessionId}/teachers/{assignmentId}'].patch?.['x-permission']).toBe('teaching.class_sessions.update')
-    expect(spec.paths['/api/class-sessions/{sessionId}/teachers/{assignmentId}'].patch?.parameters?.some((parameter) => parameter.name === 'assignmentId')).toBe(true)
+    expect(spec.paths).not.toHaveProperty('/api/class-sessions/{sessionId}/teachers/{assignmentId}')
     expect(spec.paths).not.toHaveProperty('/api/teachings/{teachingId}/members')
     expect(spec.paths['/api/teaching-role-assignments'].post?.['x-permission']).toBe('teaching.roles.manage')
     expect(spec.paths['/api/teaching-role-assignments/scoped'].get?.parameters?.some((parameter) => parameter.name === 'scope_type')).toBe(true)
-    expect(spec.paths['/api/teaching-role-assignments/scoped/{id}'].patch?.['x-permission']).toBe('teaching.roles.manage')
+    expect(spec.paths['/api/teaching-role-assignments/scoped/{id}'].delete?.['x-permission']).toBe('teaching.roles.manage')
+    expect(spec.paths['/api/teaching-role-assignments/scoped/{id}'].patch).toBeUndefined()
     expect(spec.paths['/api/teaching-role-exclusions'].post?.['x-permission']).toBe('teaching.roles.manage')
-    expect(spec.paths['/api/teaching-role-exclusions/{id}'].patch?.['x-permission']).toBe('teaching.roles.manage')
+    expect(spec.paths['/api/teaching-role-exclusions/{id}'].delete?.['x-permission']).toBe('teaching.roles.manage')
+    expect(spec.paths['/api/teaching-role-exclusions/{id}'].patch).toBeUndefined()
+    expect(spec.paths['/api/system-role-assignments/{id}'].patch).toBeUndefined()
+    expect(spec.paths['/api/teaching-role-assignments/{id}'].patch).toBeUndefined()
+    expect(spec.paths).not.toHaveProperty('/api/roles/{id}/parent')
+    expect(spec.paths).not.toHaveProperty('/api/rbac/effective-permissions')
     expect(spec.paths['/api/class-sessions/{id}'].delete?.parameters?.some((parameter) => parameter.name === 'id')).toBe(true)
   })
 
@@ -226,7 +233,6 @@ describe('generated API contract', () => {
         if (operation['x-self-service'] === true) continue
         const hasPermission = typeof operation['x-permission'] === 'string'
           || (Array.isArray(operation['x-permissions']) && operation['x-permissions'].length > 0)
-          || (Array.isArray(operation['x-rpc-allowlist']) && operation['x-rpc-allowlist'].length > 0)
         const authorizationModel = operation['x-authorization-model']
         if (!hasPermission && !authorizationModels.has(authorizationModel)) withoutFeaturePermission.push(`${method.toUpperCase()} ${path} (${operation.operationId})`)
         if (authorizationModel !== undefined) expect(authorizationModels.has(authorizationModel), `${method.toUpperCase()} ${path}`).toBe(true)
@@ -355,14 +361,15 @@ describe('generated API contract', () => {
     expect(operation?.['x-response-fields']).toContain('max_occupancy')
     expect(operation?.['x-response-fields']).toContain('roster_count')
     expect(operation?.responses?.['200']?.content?.['application/json']?.schema?.allOf?.[1]?.properties?.data?.$ref).toBe('#/components/schemas/EnrollmentPeak')
-    expect(spec.components.schemas.EnrollmentPeak.properties.max_enrollment.description).toContain('compatibility')
+    expect(spec.components.schemas.EnrollmentPeak.properties).not.toHaveProperty('max_enrollment')
   })
 
-  it('keeps RPC exposure, runtime guard, and OpenAPI metadata in sync', () => {
-    const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined> }
-    expect(spec.paths['/api/rpc/{name}']?.post?.['x-rpc-allowlist']).toEqual([...allowedRpcs])
-    for (const name of allowedRpcs) expect(routerAllowsRpc(name)).toBe(true)
-    expect(routerAllowsRpc('arbitrary_postgres_function')).toBe(false)
+  it('names the enrollment history operations instead of exposing a generic RPC endpoint', () => {
+    const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined>; components: { schemas: Record<string, any> } }
+    expect(Object.keys(spec.paths).filter((path) => path.startsWith('/api/rpc'))).toEqual([])
+    const operation = spec.paths['/api/enrollment-history/{operation}']?.post
+    expect(operation?.parameters?.[0]?.schema?.enum).toEqual(['list', 'candidates', 'bind-preview', 'bind-apply'])
+    expect(spec.components.schemas.EnrollmentHistoryInput.additionalProperties).toBe(false)
   })
 
   it('declares valid cookie and bearer security schemes', () => {
@@ -392,7 +399,7 @@ describe('generated API contract', () => {
     for (const [path, pathItem] of Object.entries(spec.paths)) {
       for (const [method, operation] of Object.entries(pathItem ?? {})) {
         const schema = operation?.requestBody?.content?.['application/json']?.schema
-        if (schema?.additionalProperties === true && path !== '/api/rpc/{name}') unrestricted.push(`${method.toUpperCase()} ${path}`)
+        if (schema?.additionalProperties === true) unrestricted.push(`${method.toUpperCase()} ${path}`)
       }
     }
     expect(unrestricted).toEqual([])

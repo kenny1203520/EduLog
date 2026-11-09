@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { domainErrorCode, hasDomainErrorCode, mapDomainError } from './mapDomainError'
-import { mapSupabaseError } from './mapSupabaseError'
+import { mapErrorKey } from './mapErrorKey'
 import { AppError, NetworkError, ValidationError, ConflictError, AuthorizationError } from './AppError'
 
 describe('mapDomainError', () => {
@@ -44,23 +44,23 @@ describe('mapDomainError', () => {
     })
 })
 
-describe('mapSupabaseError', () => {
+describe('mapErrorKey', () => {
     it('maps known Postgres/PostgREST codes to specific keys', () => {
-        expect(mapSupabaseError({ code: 'PGRST116' }).i18nKey).toBe('errors.conflict')
-        expect(mapSupabaseError({ code: '23505' }).i18nKey).toBe('errors.unique_violation')
-        expect(mapSupabaseError({ code: '23503' }).i18nKey).toBe('errors.foreign_key_violation')
-        expect(mapSupabaseError({ code: '42501' }).i18nKey).toBe('errors.permission_denied')
-        expect(mapSupabaseError({ code: 'PGRST301' }).i18nKey).toBe('errors.session_expired')
+        expect(mapErrorKey({ code: 'PGRST116' }).i18nKey).toBe('errors.conflict')
+        expect(mapErrorKey({ code: '23505' }).i18nKey).toBe('errors.unique_violation')
+        expect(mapErrorKey({ code: '23503' }).i18nKey).toBe('errors.foreign_key_violation')
+        expect(mapErrorKey({ code: '42501' }).i18nKey).toBe('errors.permission_denied')
+        expect(mapErrorKey({ code: 'PGRST301' }).i18nKey).toBe('errors.session_expired')
     })
 
     it('falls back to a generic unknown-error key instead of leaking raw error text', () => {
-        expect(mapSupabaseError(new Error('new row violates row-level security policy for table "x"')).i18nKey).toBe('errors.unknown')
-        expect(mapSupabaseError('some raw string')).not.toBe('some raw string')
-        expect(mapSupabaseError(undefined).i18nKey).toBe('errors.unknown')
+        expect(mapErrorKey(new Error('new row violates row-level security policy for table "x"')).i18nKey).toBe('errors.unknown')
+        expect(mapErrorKey('some raw string')).not.toBe('some raw string')
+        expect(mapErrorKey(undefined).i18nKey).toBe('errors.unknown')
     })
 
     it('detects network failures from the message when offline status is unavailable', () => {
-        expect(mapSupabaseError(new Error('Failed to fetch')).i18nKey).toBe('errors.network')
+        expect(mapErrorKey(new Error('Failed to fetch')).i18nKey).toBe('errors.network')
     })
 })
 

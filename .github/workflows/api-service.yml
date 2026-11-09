@@ -8,9 +8,17 @@ on:
       - 'app/**'
       - 'docker-compose.yml'
       - 'docker-compose.prod.yml'
+      - '.env.example'
+      - 'supabase/.env.example'
+      - 'scripts/check-env-example.mjs'
+      - 'supabase/docker-compose.caddy.yml'
+      - 'supabase/docker-compose.envoy.yml'
+      - 'supabase/volumes/proxy/caddy/**'
+      - 'supabase/volumes/api/envoy/**'
       - '.github/workflows/api-service.yml'
       - '.github/workflows/docker-publish.yml'
       - 'scripts/release/**'
+      - 'scripts/lib/**'
       - '.github/releases/**'
       - 'CHANGELOG.md'
   pull_request:
@@ -19,9 +27,17 @@ on:
       - 'app/**'
       - 'docker-compose.yml'
       - 'docker-compose.prod.yml'
+      - '.env.example'
+      - 'supabase/.env.example'
+      - 'scripts/check-env-example.mjs'
+      - 'supabase/docker-compose.caddy.yml'
+      - 'supabase/docker-compose.envoy.yml'
+      - 'supabase/volumes/proxy/caddy/**'
+      - 'supabase/volumes/api/envoy/**'
       - '.github/workflows/api-service.yml'
       - '.github/workflows/docker-publish.yml'
       - 'scripts/release/**'
+      - 'scripts/lib/**'
       - '.github/releases/**'
       - 'CHANGELOG.md'
 
@@ -55,7 +71,9 @@ jobs:
         with:
           node-version: 26
       - name: Test tag release automation
-        run: node --test scripts/release/release.test.mjs
+        run: node --test scripts/release/release.test.mjs scripts/lib/env.test.mjs
+      - name: Check .env.example matches the Compose files
+        run: node scripts/check-env-example.mjs
       - name: Validate production compose
         env:
           EDULOG_COOKIE_SECRET: 0123456789abcdef0123456789abcdef
@@ -63,6 +81,25 @@ jobs:
           SERVICE_ROLE_KEY: test-service-role-key
           DOCKER_SOCKET_LOCATION: /var/run/docker.sock
         run: docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet
+      - name: Validate Caddy and Envoy compose overlays
+        env:
+          EDULOG_COOKIE_SECRET: 0123456789abcdef0123456789abcdef
+          EDULOG_WEB_BASE_URL: http://localhost
+          EDULOG_PROXY_DOMAIN: proxy.example.com
+        run: |
+          docker compose --env-file supabase/.env.example -f docker-compose.yml -f supabase/docker-compose.caddy.yml config --quiet
+          docker compose --env-file supabase/.env.example -f docker-compose.yml -f supabase/docker-compose.envoy.yml -f supabase/docker-compose.caddy.yml config --quiet
+          docker compose --env-file supabase/.env.example -f docker-compose.yml -f supabase/docker-compose.caddy.yml -f supabase/docker-compose.envoy.yml config --quiet
+          docker compose --env-file supabase/.env.example -f docker-compose.yml -f supabase/docker-compose.envoy.yml -f supabase/docker-compose.caddy.yml config --format json > "$RUNNER_TEMP/caddy-envoy-compose.json"
+          jq -e --arg root "$GITHUB_WORKSPACE" '
+            (.services.caddy.networks | has("net") and has("frontend")) and
+            any(.services.caddy.volumes[]; .target == "/etc/caddy" and .source == ($root + "/supabase/volumes/proxy/caddy")) and
+            any(.services["api-gw"].volumes[]; .target == "/etc/envoy/envoy.yaml" and .source == ($root + "/supabase/volumes/api/envoy/envoy.yaml")) and
+            any(.services["api-gw"].ports[]; .target == 8000 and .host_ip == "127.0.0.1") and
+            (.services.caddy.depends_on.kong.required == false) and
+            (.services["api-gw"].networks.net.aliases | index("kong")) and
+            (.services["api-gw"].networks.net.aliases | index("envoy"))
+          ' "$RUNNER_TEMP/caddy-envoy-compose.json" >/dev/null
       - name: Assert Node 26 API runtime
         shell: bash
         run: |

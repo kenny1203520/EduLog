@@ -2,8 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { StudentQueryService } from './StudentQueryService'
 
 const mocks = vi.hoisted(() => ({ profile: vi.fn(), privateDetails: vi.fn(), credentials: vi.fn() }))
-vi.mock('@/services/api/ApiModeClient', () => ({ getApiV1Mode: () => 'v1' }))
-vi.mock('@/services/api/ApiDataClient', () => ({ apiDataClient: {} }))
 vi.mock('@/services/api/PageApiService', () => ({ PageApiService: { getStudentProfile: mocks.profile, getStudentPrivateDetails: mocks.privateDetails } }))
 vi.mock('./StudentCredentialsQueryService', () => ({ StudentCredentialsQueryService: { getForStudent: mocks.credentials } }))
 

@@ -1,12 +1,12 @@
-import { loadPlaywright, browserTargets } from './browser-runtime.mjs'
+import { loadPlaywright, browserTargets, resolveScreenshotDirectory } from './browser-runtime.mjs'
 import { siteFiles } from '../site-files.mjs'
 // Synthetic startup/renderer recording: scripts run while the HTML is parsing.
 // Does not read a user's profile or contact the real website.
 import assert from 'node:assert/strict'
 import { readFileSync, mkdirSync, existsSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-const { chromium } = await loadPlaywright(process.argv.slice(2).find(arg => !arg.startsWith('--')))
-const output = process.argv[3]
+const { chromium } = await loadPlaywright()
+const output = resolveScreenshotDirectory(process.argv[3], 'startup')
 mkdirSync(output, { recursive: true })
 const read = file => readFileSync(new URL(file, import.meta.url), 'utf8')
 const early = ['shared/runtime-bridge.js', 'sites/orange-apple/core/lexicon.js', 'sites/orange-apple/core/model.js', 'sites/orange-apple/core/adapter.js', 'content/bootstrap.js'].map(file => read(`../../${file}`)).join('\n;\n')

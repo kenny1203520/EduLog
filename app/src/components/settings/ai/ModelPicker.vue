@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import SearchableSelect from '@/components/common/SearchableSelect.vue'
+import SearchableSelect from '@/components/ui/SearchableSelect.vue'
 import { AiSettingsService, type CatalogModel } from '@/services/ai/AiSettingsService'
 
 /**
@@ -17,9 +17,11 @@ const OTHER = '__other__'
 const loading = ref(false)
 const models = ref<CatalogModel[]>([])
 const unsupportedReason = ref<string | null>(null)
+const unsupportedDetail = ref('')
 const showAll = ref(false)
 const selected = ref('')
 const manualId = ref('')
+let loadRevision = 0
 
 const visible = computed(() => models.value.filter((model) => showAll.value || model.textCapable))
 const hiddenCount = computed(() => models.value.length - models.value.filter((model) => model.textCapable).length)
@@ -33,6 +35,14 @@ const options = computed(() => [
     { value: OTHER, label: t('ai.settings.picker_other'), searchText: 'other 其他 manual' },
 ])
 const manual = computed(() => unsupportedReason.value !== null || selected.value === OTHER)
+const KNOWN_REASONS = ['chatgpt_plan', 'no_key', 'auth_failed', 'not_found', 'bad_request', 'rate_limited', 'provider_error', 'redirected', 'timeout', 'network', 'too_large', 'invalid_response', 'request_failed']
+/** Translated cause; unknown codes (older servers sent raw messages) fall back to the generic text. */
+const reasonText = computed(() => {
+    const reason = unsupportedReason.value
+    if (!reason) return ''
+    return KNOWN_REASONS.includes(reason) ? t(`ai.settings.picker_reason.${reason}`) : t('ai.settings.picker_manual_unavailable')
+})
+const reasonDetail = computed(() => unsupportedDetail.value || (unsupportedReason.value && !KNOWN_REASONS.includes(unsupportedReason.value) ? unsupportedReason.value : ''))
 
 function priceText(model: CatalogModel): string {
     if (model.priceInputPerMtok == null || model.priceOutputPerMtok == null) return ''
@@ -41,21 +51,27 @@ function priceText(model: CatalogModel): string {
 }
 
 async function load(refresh = false) {
+    const revision = ++loadRevision
     loading.value = true
     try {
         const catalog = await AiSettingsService.catalog(props.scope, props.credentialId, refresh)
+        if (revision !== loadRevision) return
         if (catalog.supported) {
             models.value = catalog.models
             unsupportedReason.value = null
+            unsupportedDetail.value = ''
         } else {
             models.value = []
             unsupportedReason.value = catalog.reason
+            unsupportedDetail.value = catalog.detail ?? ''
         }
     } catch {
+        if (revision !== loadRevision) return
         models.value = []
         unsupportedReason.value = 'request_failed'
+        unsupportedDetail.value = ''
     } finally {
-        loading.value = false
+        if (revision === loadRevision) loading.value = false
     }
 }
 
@@ -78,6 +94,7 @@ function typeManual(value: string) {
 function reset() {
     selected.value = ''
     manualId.value = ''
+    emit('pick', null)
 }
 defineExpose({ reset, reload: () => load(true) })
 
@@ -98,17 +115,26 @@ onMounted(() => load())
                 </svg>
             </button>
         </div>
-        <label v-if="unsupportedReason === null && hiddenCount > 0" class="flex min-h-11 cursor-pointer items-center gap-2 text-xs font-bold text-gray-600">
-            <input v-model="showAll" type="checkbox" class="h-4 w-4 accent-emerald-600" />
+        <div v-else class="flex flex-wrap items-start gap-2 rounded-xl px-3 py-2"
+            :class="unsupportedReason === 'chatgpt_plan' ? 'bg-gray-50' : 'bg-amber-50'" role="status" aria-live="polite">
+            <div class="min-w-0 flex-1 text-xs leading-5" :class="unsupportedReason === 'chatgpt_plan' ? 'text-gray-600' : 'text-amber-900'">
+                <p class="font-bold">{{ reasonText }}</p>
+                <p v-if="unsupportedReason !== 'chatgpt_plan'">{{ t('ai.settings.picker_reason.manual_hint') }}</p>
+                <p v-if="reasonDetail" class="mt-1 break-words font-mono text-[11px] opacity-80">
+                    <span class="sr-only">{{ t('ai.settings.picker_reason.detail_label') }}: </span>{{ reasonDetail }}
+                </p>
+            </div>
+            <button v-if="unsupportedReason !== 'chatgpt_plan'" type="button" class="min-h-11 shrink-0 rounded-xl border border-gray-200 bg-white px-3 text-sm font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                :disabled="loading" @click="load(true)">{{ loading ? t('common.loading') : t('ai.settings.picker_retry') }}</button>
+        </div>
+        <label v-if="unsupportedReason === null && hiddenCount > 0" class="flex min-h-11 cursor-pointer items-center gap-2 text-xs font-bold text-gray-600" for="model-picker-show-all">
+            <input id="model-picker-show-all" v-model="showAll" type="checkbox" class="h-4 w-4 accent-emerald-600" />
             {{ t('ai.settings.picker_show_all', { n: hiddenCount }) }}
         </label>
         <div v-if="manual">
-            <p v-if="unsupportedReason !== null" class="mb-1 text-xs text-gray-600">
-                {{ unsupportedReason === 'chatgpt_plan' ? t('ai.settings.picker_manual_chatgpt') : t('ai.settings.picker_manual_unavailable') }}
-            </p>
             <input :value="manualId" maxlength="200" class="min-h-11 w-full rounded-xl border border-gray-200 px-3 text-sm"
                 :placeholder="t('ai.settings.model_id_placeholder')" :aria-label="t('ai.settings.model_id')"
-                @input="typeManual(($event.target as HTMLInputElement).value)" />
+                @input="typeManual(($event.target as HTMLInputElement).value)"  id="edulog-modelpicker-22-1868"/>
         </div>
     </div>
 </template>
