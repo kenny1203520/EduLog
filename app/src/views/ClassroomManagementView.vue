@@ -452,16 +452,16 @@ async function loadAllRooms() {
 }
 
 watch(() => roomsPagination.value.page, loadRooms)
-watch(() => roomsPagination.value.perPage, () => { roomsPagination.value.page = 1; loadRooms() })
+watch(() => roomsPagination.value.perPage, () => { roomsPagination.value.page = 1; void loadRooms() })
 watch(() => sessionsPagination.value.page, loadSessions)
-watch(() => sessionsPagination.value.perPage, () => { sessionsPagination.value.page = 1; loadSessions() })
+watch(() => sessionsPagination.value.perPage, () => { sessionsPagination.value.page = 1; void loadSessions() })
 watch(selectedSessionClassroomFilter, () => {
     sessionsPagination.value.page = 1
-    loadSessions()
+    void loadSessions()
 })
 watch(activeTab, () => {
     if (activeTab.value === 'rooms') {
-        loadRooms()
+        void loadRooms()
         return
     }
 
@@ -470,19 +470,19 @@ watch(activeTab, () => {
 watch(displayMode, () => {
     if (activeTab.value === 'rooms') {
         roomsPagination.value.page = 1
-        loadRooms()
+        void loadRooms()
     } else if (activeTab.value === 'sessions') {
         sessionsPagination.value.page = 1
-        loadSessions()
+        void loadSessions()
     }
 })
 watch(searchQuery, () => {
     if (activeTab.value === 'rooms') {
         roomsPagination.value.page = 1
-        loadRooms()
+        void loadRooms()
     } else if (activeTab.value === 'sessions') {
         sessionsPagination.value.page = 1
-        loadSessions()
+        void loadSessions()
     }
 })
 

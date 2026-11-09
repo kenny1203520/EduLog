@@ -73,7 +73,7 @@ function toggleLanguage(code: DeidLanguage, enabled: boolean) {
     const current = overview.value.enabled_languages
     const next = enabled ? [...current, code] : current.filter((item) => item !== code)
     if (next.length === 0) return
-    save(async () => {
+    void save(async () => {
         const saved = await AiDeidService.saveLanguages(next)
         overview.value = { ...overview.value!, enabled_languages: saved.enabled_languages }
     })
@@ -167,7 +167,7 @@ async function saveRule() {
 }
 
 function toggleRule(rule: DeidRuleDTO, enabled: boolean) {
-    save(async () => {
+    void save(async () => {
         const saved = await AiDeidService.updateRule(rule.id, { enabled })
         overview.value = { ...overview.value!, rules: overview.value!.rules.map((item) => item.id === saved.id ? saved : item) }
     })
@@ -175,7 +175,7 @@ function toggleRule(rule: DeidRuleDTO, enabled: boolean) {
 
 function deleteRule(rule: DeidRuleDTO) {
     if (!window.confirm(t('aiDeid.rules.delete_confirm', { name: rule.name }))) return
-    save(async () => {
+    void save(async () => {
         await AiDeidService.deleteRule(rule.id)
         overview.value = { ...overview.value!, rules: overview.value!.rules.filter((item) => item.id !== rule.id) }
     })
@@ -191,7 +191,7 @@ function toggleDraftLanguage(code: DeidLanguage, checked: boolean) {
 const allowInput = ref('')
 
 function saveAllowList(entries: string[]) {
-    save(async () => {
+    void save(async () => {
         const saved = await AiDeidService.saveAllowList(entries)
         overview.value = { ...overview.value!, allow_list: saved.allow_list }
     })
