@@ -29,9 +29,16 @@ cp .env.example .env
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
-`docker-compose.prod.yml` 只公開前端 Nginx 的 port，Kong、Auth、Realtime、Storage、Postgres 都不對外。前端與 API 映像檔分別從 `ghcr.io/kenny1203520/edulog` 與 `EDULOG_API_IMAGE` 下載。
+`docker-compose.prod.yml` 只公開前端 Nginx 的 port，API gateway（`api-gw`）、Auth、Realtime、Storage、Postgres 都不對外。前端與 API 映像檔分別從 `ghcr.io/kenny1203520/edulog` 與 `EDULOG_API_IMAGE` 下載。
 
-需要 TLS 反向代理時，可另外疊加 `supabase/docker-compose.caddy.yml` 或 `supabase/docker-compose.nginx.yml`；改用 Envoy 取代 Kong 時疊加 `supabase/docker-compose.envoy.yml`（用法見各檔案開頭註解）。
+Supabase 元件對齊官方 self-hosted v0.8.4，但 Postgres 維持 15。API gateway 預設為 Envoy（服務名稱 `api-gw`，網路別名 `kong` / `envoy`）。以下 overlay 可依需求疊加（用法見各檔案開頭註解）：
+
+- `supabase/docker-compose.caddy.yml` 或 `supabase/docker-compose.nginx.yml`：TLS 反向代理與 Studio 登入
+- `supabase/docker-compose.kong.yml`：改用 Kong 取代 Envoy
+- `supabase/docker-compose.logs.yml`：啟用 Logflare 與 Vector（Studio 日誌）
+- `supabase/docker-compose.pg17.yml`：Postgres 17（新安裝，或執行 `supabase/utils/upgrade-pg17.sh` 升級後使用）
+
+`supabase/docker-compose.envoy.yml` 已不再需要，保留成不做任何事的檔案，讓舊指令仍可執行。
 
 ## 3. 驗證
 
@@ -46,6 +53,8 @@ Supabase Studio 與 `/rest/v1/` 在 production 部署不對外。需要直接操
 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --remove-orphans
 ```
+
+升級 Supabase 元件版本（例如從 2026 年 1 月的組合升到 `self-hosted/v0.8.4`）請依照 [supabase-upgrade.zh-TW.md](supabase-upgrade.zh-TW.md)（[English](supabase-upgrade.md)）。
 
 新版本若包含資料庫 migration，請先閱讀對應的 GitHub Release 說明與 [supabase/migrations/README.md](../../supabase/migrations/README.md)。
 

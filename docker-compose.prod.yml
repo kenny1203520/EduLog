@@ -18,10 +18,7 @@ services:
     expose:
       - "3000"
 
-  kong:
-    ports: !reset []
-
-  analytics:
+  api-gw:
     ports: !reset []
 
   supavisor:

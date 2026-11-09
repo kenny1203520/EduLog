@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Self-hosted Supabase services follow the upstream `self-hosted/v0.8.4` release (2026-11-05): Studio, Auth, PostgREST, Realtime, Storage, imgproxy v4, postgres-meta and Supavisor. Postgres stays on 15; `supabase/docker-compose.pg17.yml` and the EduLog-adapted `supabase/utils/upgrade-pg17.sh` move a database to 17. See `docs/deployment/supabase-upgrade.md`.
+- Envoy replaces Kong as the default API gateway. The service is now `api-gw`, and the `kong` network alias keeps `http://kong:8000` working. Kong remains available through `supabase/docker-compose.kong.yml`.
+- Logflare and Vector are no longer part of the default stack; `supabase/docker-compose.logs.yml` adds them back.
+- `API_EXTERNAL_URL` now ends in `/auth/v1` and is also the token issuer. Deployments that set `SUPABASE_JWT_ISSUER` must update it to match.
+- `PGRST_DB_SCHEMAS` defaults to `public,graphql_public`, so the `storage` schema is no longer exposed over REST.
+- The base Compose file puts the API container on the `net` network, so it can reach the gateway without the production override.
+
+### Fixed
+- The nginx TLS overlay is attached to the `net` and `frontend` networks, so it can reach the gateway and the frontend.
+
+### Security
+- The API gateway blocks Realtime's `/api/tenants` and `/api/openapi` routes.
+- The upstream Realtime and Storage releases include fixes for forged broadcast messages, a tenant ID issue, and signed upload URLs that bypassed row-level security.
+
 ## [2.0.0-alpha.5] - 2026-11-09
 
 ### Added
