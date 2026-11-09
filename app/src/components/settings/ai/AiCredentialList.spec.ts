@@ -4,7 +4,7 @@ import i18n from '@/i18n'
 import type { AiCredentialDTO, CredentialTestResult } from '@/services/ai/AiSettingsService'
 import AiCredentialList from './AiCredentialList.vue'
 
-const service = vi.hoisted(() => ({ testMyCredential: vi.fn(), testSiteCredential: vi.fn() }))
+const service = vi.hoisted(() => ({ testMyCredential: vi.fn(), testSiteCredential: vi.fn(), updateSiteModel: vi.fn(), updateSiteCredential: vi.fn() }))
 vi.mock('@/services/ai/AiSettingsService', async (importOriginal) => ({
     ...(await importOriginal<typeof import('@/services/ai/AiSettingsService')>()),
     AiSettingsService: service,
@@ -70,5 +70,51 @@ describe('AiCredentialList test model', () => {
     it('needs no picker when there is a single model', () => {
         const wrapper = mount(AiCredentialList, { props: { mode: 'personal', modelValue: [{ ...credential }] }, global: { plugins: [i18n] } })
         expect(wrapper.find('[data-testid="test-model-c1"]').exists()).toBe(false)
+    })
+})
+
+describe('AiCredentialList enable switches', () => {
+    const siteCredential: AiCredentialDTO = { ...credential, scope: 'site' }
+    const mountSite = (models = siteCredential.models) =>
+        mount(AiCredentialList, { props: { mode: 'site', defaultModelId: null, modelValue: [{ ...siteCredential, models }] }, global: { plugins: [i18n] } })
+
+    it('disables a model through its switch', async () => {
+        service.updateSiteModel.mockResolvedValue({ ...siteCredential.models[0], enabled: false })
+        const wrapper = mountSite()
+        const toggle = wrapper.get('[data-testid="model-switch-m1"]')
+        expect(toggle.attributes()).toMatchObject({ role: 'switch', 'aria-checked': 'true', 'aria-label': '啟用模型 Gemma' })
+
+        await toggle.trigger('click')
+        await flushPromises()
+        expect(service.updateSiteModel).toHaveBeenCalledWith('m1', { enabled: false })
+        expect(wrapper.emitted('update:modelValue')!.at(-1)![0]).toMatchObject([{ models: [{ id: 'm1', enabled: false }] }])
+    })
+
+    it('marks a disabled model and hides 設為預設', () => {
+        const wrapper = mountSite([{ ...siteCredential.models[0], enabled: false }])
+        const row = wrapper.get('[data-testid="model-row-m1"]')
+        expect(row.classes()).toContain('opacity-60')
+        expect(row.get('[data-testid="model-disabled-badge"]').text()).toBe('已停用')
+        expect(row.get('[data-testid="model-switch-m1"]').attributes('aria-checked')).toBe('false')
+        expect(row.text()).not.toContain('設為預設')
+    })
+
+    it('offers 設為預設 on an enabled model', () => {
+        const row = mountSite().get('[data-testid="model-row-m1"]')
+        expect(row.classes()).not.toContain('opacity-60')
+        expect(row.find('[data-testid="model-disabled-badge"]').exists()).toBe(false)
+        expect(row.text()).toContain('設為預設')
+    })
+
+    it('disables the provider through its switch', async () => {
+        service.updateSiteCredential.mockResolvedValue({ ...siteCredential, status: 'disabled' })
+        const wrapper = mountSite()
+        const toggle = wrapper.get('[data-testid="provider-switch-c1"]')
+        expect(toggle.attributes()).toMatchObject({ 'aria-checked': 'true', 'aria-label': '啟用供應商 OpenRouter' })
+
+        await toggle.trigger('click')
+        await flushPromises()
+        expect(service.updateSiteCredential).toHaveBeenCalledWith('c1', { status: 'disabled' })
+        expect(wrapper.get('[data-testid="provider-switch-c1"]').attributes('aria-checked')).toBe('false')
     })
 })
