@@ -12,7 +12,7 @@ FROM mcr.microsoft.com/presidio-analyzer:latest
 ARG PRESIDIO_LANGUAGES=zh,en
 USER root
 COPY configure_languages.py /app/conf-edulog/configure_languages.py
-RUN python /app/conf-edulog/configure_languages.py "$PRESIDIO_LANGUAGES" /app/conf-edulog
+RUN python /app/conf-edulog/configure_languages.py "$PRESIDIO_LANGUAGES"
 ENV NLP_CONF_FILE=/app/conf-edulog/nlp.yaml \
     ANALYZER_CONF_FILE=/app/conf-edulog/analyzer.yaml \
     RECOGNIZER_REGISTRY_CONF_FILE=/app/conf-edulog/recognizers.yaml

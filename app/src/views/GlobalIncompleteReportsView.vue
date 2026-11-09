@@ -534,7 +534,7 @@ async function loadReports(refreshEditor = true) {
         totalReports.value = total
 
         if (!selectedReport.value && normalized.length > 0) {
-            selectReport(normalized[0])
+            void selectReport(normalized[0])
         } else if (selectedReport.value) {
             const found = normalized.find(r => r.id === selectedReport.value.id)
             if (found) {
@@ -626,7 +626,7 @@ async function handleSaveSuccess() {
 
 function handleReportRestored() {
     toast.success(t('report.editor.restore_success'))
-    loadReports(true)
+    void loadReports(true)
 }
 
 function handleSaveError(msg: string) {

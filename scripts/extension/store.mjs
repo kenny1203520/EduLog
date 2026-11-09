@@ -41,11 +41,13 @@ export function createStoreClient({ publisher, item, token, fetchImpl = fetch })
   }
   return { status: () => request('fetchStatus'), upload: bytes => request('upload', bytes, true), publish: () => request('publish', { publishType: 'DEFAULT_PUBLISH', skipReview: false, blockOnWarnings: true }) }
 }
+const RECEIPT_STATES = Object.freeze(['packed', 'uploading', 'uploaded', 'submitting', 'pending', 'published', 'rejected', 'superseded'])
+
 export async function publishRelease({ client, metadata, archive, item, previous, save, sleep = ms => new Promise(r => setTimeout(r, ms)) }) {
   verifyRelease(archive, metadata)
   if (metadata.distribution !== 'store' || metadata.extensionId !== item) throw new Error('Store package/target ID mismatch')
   if (previous && (previous.sha256 !== metadata.sha256 || previous.version !== metadata.version || previous.item !== item)) throw new Error('Release already records different package bytes or item')
-  if (previous && !['packed', 'uploading', 'uploaded', 'submitting', 'pending', 'published', 'rejected', 'superseded'].includes(previous.state)) throw new Error('Invalid previous release receipt state')
+  if (previous && !RECEIPT_STATES.includes(previous.state)) throw new Error('Invalid previous release receipt state')
   let receipt = previous || { schemaVersion: 1, state: 'packed', channel: metadata.channel, version: metadata.version, sha256: metadata.sha256, item }
   const record = async state => { receipt = { ...receipt, state }; await save(receipt); return receipt }
   let status = await client.status()
@@ -160,7 +162,7 @@ async function main() {
   const receipt = await publishRelease({ client, metadata, archive, item, previous: readReceipt(release.body || ''), save: async receipt => {
     await gh({ kind: 'release', id: release.id }, { body: renderReceipt(release.body || '', { ...receipt, publisher }) })
   } })
-  console.log('Chrome Web Store: ' + receipt.state)
+  console.log('Chrome Web Store: ' + (RECEIPT_STATES.find(state => state === receipt.state) ?? 'unknown'))
   if (receipt.state === 'rejected') process.exitCode = 1
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main().catch(error => { console.error(error.message); process.exitCode = 1 })

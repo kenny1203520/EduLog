@@ -33,7 +33,7 @@ const visible = ref(false)
             :disabled="disabled"
             :class="[inputClass, 'pr-12']"
             @input="emit('update:modelValue', ($event.target as HTMLInputElement).value)"
-         :aria-label="placeholder"/>
+        />
         <button
             type="button"
             class="absolute inset-y-0 right-1 flex min-h-10 min-w-10 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600 disabled:opacity-50"
