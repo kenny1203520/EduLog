@@ -22,8 +22,17 @@ const saving = ref(false)
 const credentialForm = reactive<{ provider: AiProvider, label: string, secret: string, base_url: string }>({ provider: 'anthropic', label: '', secret: '', base_url: '' })
 const promptDraft = ref('')
 
+/**
+ * Models a teacher could actually use. The current default stays listed even
+ * when it is not, marked as disabled, so the choice is never silently blank.
+ */
 const siteModels = computed(() => (overview.value?.credentials ?? []).flatMap((credential) =>
-    credential.models.map((model) => ({ id: model.id, label: `${model.display_name}（${credential.label}）` }))))
+    credential.models.flatMap((model) => {
+        const usable = model.enabled && credential.status === 'active'
+        if (!usable && model.id !== overview.value?.settings?.default_model_id) return []
+        const suffix = usable ? '' : `・${t('ai.settings.model_disabled')}`
+        return [{ id: model.id, label: `${model.display_name}（${credential.label}）${suffix}` }]
+    })))
 const activePrompt = computed(() => overview.value?.prompt.versions.find((version) => version.is_active) ?? null)
 const credentials = computed({
     get: () => overview.value?.credentials ?? [],
