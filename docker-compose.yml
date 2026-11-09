@@ -548,8 +548,8 @@ services:
       ]
 
   api:
-    build:
-      context: ./server
+    # Build from source instead with -f docker-compose.build.yml.
+    image: ghcr.io/kenny1203520/edulog-api:${EDULOG_IMAGE_TAG:-alpha}
     container_name: edulog-api
     restart: unless-stopped
     depends_on:
@@ -589,13 +589,13 @@ services:
       - net
       - ai
   presidio-analyzer:
-    build:
-      context: ./docker/presidio
-      args:
-        # Installed languages (zh, en, ja, ko); rebuild after changing.
-        PRESIDIO_LANGUAGES: ${EDULOG_PRESIDIO_LANGUAGES:-zh,en}
+    # The image ships every supported language; PRESIDIO_LANGUAGES picks the
+    # ones loaded at start, so changing it needs only a restart.
+    image: ghcr.io/kenny1203520/edulog-presidio:${EDULOG_IMAGE_TAG:-alpha}
     container_name: edulog-presidio-analyzer
     restart: unless-stopped
+    environment:
+      PRESIDIO_LANGUAGES: ${EDULOG_PRESIDIO_LANGUAGES:-zh,en}
     # Point the API at it with EDULOG_PRESIDIO_ANALYZER_URL=http://presidio-analyzer:3000.
     # No published ports: only the API may reach it. Text sent here is raw
     # report content, so it must stay on the internal network.
@@ -603,7 +603,7 @@ services:
       - ai
   edulog:
     container_name: edulog-frontend
-    image: ghcr.io/kenny1203520/edulog:${EDULOG_IMAGE_TAG:-latest}
+    image: ghcr.io/kenny1203520/edulog:${EDULOG_IMAGE_TAG:-alpha}
     depends_on:
       api:
         condition: service_healthy

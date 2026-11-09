@@ -12,7 +12,7 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 const sorted = (values) => [...values].sort((a, b) => a.localeCompare(b))
 const read = (file) => readFileSync(path.join(root, file), 'utf8')
 
-const ROOT_COMPOSE = ['docker-compose.yml', 'docker-compose.prod.yml']
+const ROOT_COMPOSE = ['docker-compose.yml', 'docker-compose.prod.yml', 'docker-compose.build.yml']
 // Overlays that also read EduLog keys from the root `.env` (they are not edited here).
 const OVERLAY_COMPOSE = ['supabase/docker-compose.caddy.yml', 'supabase/docker-compose.nginx.yml']
 // Provided by the shell, not by `.env`.

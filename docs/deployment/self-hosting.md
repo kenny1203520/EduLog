@@ -17,7 +17,7 @@ cp .env.example .env
 
 - Supabase 密鑰：`POSTGRES_PASSWORD`、`JWT_SECRET`、`ANON_KEY`、`SERVICE_ROLE_KEY` 等，正式環境務必全部重新產生。
 - EduLog API：`EDULOG_COOKIE_SECRET`（至少 32 字元）、`EDULOG_WEB_BASE_URL`（瀏覽器使用的前端網址）、`EDULOG_ALLOWED_ORIGINS`（未設定時 production API 會拒絕啟動）。
-- 映像檔版本：`EDULOG_IMAGE_TAG`（前端）與 `EDULOG_API_IMAGE`（API），可指定版本號或 `latest`。
+- 映像檔版本：`EDULOG_IMAGE_TAG` 同時決定前端、API 與 Presidio 三個映像檔的 tag，可以填明確版本號（例如 `2.0.0-alpha.5`）、通道（`alpha`、`beta`、`rc`，追蹤該通道最新的預發布版本），或 `latest`（最新正式版）。正式版發布前預設為 `alpha`。舊的 `EDULOG_API_IMAGE` 已移除。
 - 前端 Nginx：`EDULOG_PORT` / `EDULOG_HTTPS_PORT`、`EDULOG_HTTP_ENABLED` / `EDULOG_HTTPS_ENABLED` 與 `EDULOG_SSL_*`。原生 HTTPS 需掛載憑證（預設目錄 `./ssl`，可用 `EDULOG_SSL_DIR` 改變）。
 - 瀏覽器擴充功能：`API_EXTENSION_ALLOWED_ORIGINS` 與 `EDULOG_FRAME_ANCESTORS`，詳見 [web-extension.md](web-extension.md)。自訂 `EDULOG_CSP_HEADER` 會完全取代預設 CSP，須自行在 `frame-ancestors` 列出擴充功能 origin。
 
@@ -29,7 +29,9 @@ cp .env.example .env
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
-`docker-compose.prod.yml` 只公開前端 Nginx 的 port，API gateway（`api-gw`）、Auth、Realtime、Storage、Postgres 都不對外。前端與 API 映像檔分別從 `ghcr.io/kenny1203520/edulog` 與 `EDULOG_API_IMAGE` 下載。
+`docker-compose.prod.yml` 只公開前端 Nginx 的 port，API gateway（`api-gw`）、Auth、Realtime、Storage、Postgres 都不對外。前端、API 與 Presidio 的映像檔分別從 `ghcr.io/kenny1203520/edulog`、`edulog-api` 與 `edulog-presidio` 下載。若要從原始碼建置，加上 `-f docker-compose.build.yml` 並使用 `up -d --build`。
+
+Presidio 映像檔內建 24 種語言，啟動時只載入 `EDULOG_PRESIDIO_LANGUAGES` 指定的語言（預設 `zh,en`）。要換語言，只需修改 `.env` 後執行 `docker compose up -d presidio-analyzer`，不必重新建置。
 
 Supabase 元件對齊官方 self-hosted v0.8.4，但 Postgres 維持 15。API gateway 預設為 Envoy（服務名稱 `api-gw`，網路別名 `kong` / `envoy`）。以下 overlay 可依需求疊加（用法見各檔案開頭註解）：
 

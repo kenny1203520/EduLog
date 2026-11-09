@@ -14,6 +14,17 @@ test('accepts stable and prerelease SemVer tags, including valid identifiers', (
   assert.equal(parseTag('v0.1.0-alpha-x.12').version, '0.1.0-alpha-x.12')
 })
 
+test('derives the floating image channel from the first prerelease identifier', () => {
+  assert.equal(parseTag('v2.0.0-alpha.6').channel, 'alpha')
+  assert.equal(parseTag('v2.0.0-beta.1').channel, 'beta')
+  assert.equal(parseTag('v2.0.0-rc.1').channel, 'rc')
+  assert.equal(parseTag('v2.0.0-RC.2').channel, 'rc')
+  assert.equal(parseTag('v0.1.0-alpha-x.12').channel, 'alpha-x')
+  assert.equal(parseTag('v2.0.0').channel, '')
+  assert.equal(parseTag('v2.0.0-1').channel, '')
+  assert.equal(parseTag('v2.0.0-latest.1').channel, '')
+})
+
 test('rejects malformed, noncanonical and oversized tags', () => {
   for (const tag of ['v01.0.0', 'v1.2', 'v1.2.3+build.1', 'v1.2.3-alpha..1', 'v1.2.3-alpha.01', `v1.2.3-${'a'.repeat(128)}`]) {
     assert.throws(() => parseTag(tag), undefined, tag)
@@ -60,11 +71,15 @@ test('prefers tag-specific release notes over the changelog section', async () =
     const harness = publicationHarness()
     await publishRelease({
       tag: 'v2.0.0-alpha.3', sha: 'sha123', cwd, repository: 'kenny1203520/EduLog',
-      frontendDigest: 'sha256:front', apiDigest: 'sha256:api', ...harness,
+      frontendDigest: 'sha256:front', apiDigest: 'sha256:api', presidioDigest: 'sha256:presidio', ...harness,
     })
     const create = harness.ghCalls.at(-1)
     assert.ok(create.some(value => value.includes('Manual migration notes')))
     assert.ok(!create.some(value => value.includes('Generated changelog section')))
+    const body = create.find(value => value.startsWith('body='))
+    assert.ok(body.includes('ghcr.io/kenny1203520/edulog-presidio:2.0.0-alpha.3` (digest `sha256:presidio`)'))
+    assert.ok(body.includes('also tagged `alpha`'))
+    assert.ok(!body.includes('also tagged `latest`'))
   } finally { rmSync(cwd, { recursive: true, force: true }) }
 })
 
@@ -90,7 +105,7 @@ test('generates notes, adds commits when GitHub notes have no PR, and creates a 
   const harness = publicationHarness({ generated: 'No pull requests were included.' })
   const result = await publishRelease({
     tag: 'v2.0.0', sha: 'sha123', cwd: process.cwd(), repository: 'kenny1203520/EduLog',
-    frontendDigest: 'sha256:front', apiDigest: 'sha256:api', ...harness,
+    frontendDigest: 'sha256:front', apiDigest: 'sha256:api', presidioDigest: 'sha256:presidio', ...harness,
   })
   assert.equal(result.status, 'published')
   assert.ok(harness.ghCalls.some(args => args.includes('previous_tag_name=v1.0.0')))
@@ -106,7 +121,7 @@ test('uses full history without a prior release tag and marks prereleases accord
   const harness = publicationHarness({ releases: [], generated: '' })
   const result = await publishRelease({
     tag: 'v0.1.0-alpha.1', sha: 'sha123', cwd: process.cwd(), repository: 'kenny1203520/EduLog',
-    frontendDigest: 'sha256:front', apiDigest: 'sha256:api', ...harness,
+    frontendDigest: 'sha256:front', apiDigest: 'sha256:api', presidioDigest: 'sha256:presidio', ...harness,
   })
   assert.equal(result.previous, null)
   const create = harness.ghCalls.at(-1)

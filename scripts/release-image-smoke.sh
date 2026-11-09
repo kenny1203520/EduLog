@@ -6,8 +6,9 @@ export MSYS_NO_PATHCONV=1
 network="edulog-release-smoke-${RANDOM}-$$"
 api="${network}-api"
 frontend="${network}-frontend"
+presidio="${network}-presidio"
 cleanup() {
-  docker rm -f "$frontend" "$api" >/dev/null 2>&1 || true
+  docker rm -f "$frontend" "$api" "$presidio" >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -41,3 +42,29 @@ version="$(node -p "require('./app/package.json').version")"
 docker exec "$frontend" grep -r -q "$version" /usr/share/nginx/html/assets
 docker exec "$api" node -e "fetch('http://127.0.0.1:3000/api/student-schools').then(r=>{if(r.status!==401)process.exit(1)}).catch(()=>process.exit(1))"
 echo 'Frontend/API image health, proxy, runtime configuration and authentication boundary passed.'
+
+# Presidio: an unknown language must stop the container, and only the chosen
+# languages may be served.
+if docker run --rm -e PRESIDIO_LANGUAGES=zz edulog-release-smoke:presidio >/dev/null 2>&1; then
+  echo 'Presidio started with an unknown language.'
+  exit 1
+fi
+docker run -d --name "$presidio" --network "$network" -e PRESIDIO_LANGUAGES=zh,en,pl   edulog-release-smoke:presidio >/dev/null
+presidio_get() {
+  docker exec "$presidio" python -c "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:3000$1', timeout=5).status == 200 else 1)" >/dev/null 2>&1
+}
+for attempt in {1..60}; do
+  if presidio_get /health; then break; fi
+  if [[ "$attempt" == 60 ]]; then
+    docker logs "$presidio"
+    exit 1
+  fi
+  sleep 3
+done
+presidio_get '/supportedentities?language=zh'
+presidio_get '/supportedentities?language=pl'
+if presidio_get '/supportedentities?language=ja'; then
+  echo 'Presidio served a language that was not selected.'
+  exit 1
+fi
+echo 'Presidio language selection passed.'

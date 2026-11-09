@@ -1,0 +1,21 @@
+# Build the EduLog images from source instead of pulling them from GHCR.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+# Add it after any other overrides (prod, proxies); the built images keep the
+# same names, so a later `docker compose pull` replaces them with the
+# published ones.
+
+services:
+  api:
+    build:
+      context: ./server
+
+  edulog:
+    build:
+      context: ./app
+
+  presidio-analyzer:
+    build:
+      context: ./docker/presidio

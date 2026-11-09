@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- The Presidio analyzer is published as `ghcr.io/kenny1203520/edulog-presidio`, with the spaCy pipelines of 24 languages built in. `EDULOG_PRESIDIO_LANGUAGES` now picks the languages loaded at start, so changing them needs only a restart, not a rebuild; an unknown code stops the container.
+- Prerelease images also get a channel tag (`alpha`, `beta`, `rc`) that follows the newest release of that channel. `latest` still moves only with stable releases.
+- `docker-compose.build.yml` builds the frontend, API and Presidio images from source.
+
 ### Changed
+- `EDULOG_IMAGE_TAG` sets the tag of all three EduLog images and defaults to `alpha` until the first stable release. `EDULOG_API_IMAGE` is removed: deployments that set it should set `EDULOG_IMAGE_TAG` instead. The base Compose file now pulls the API image instead of building `./server`.
+- The Presidio image is built on a pinned `presidio-analyzer` 2.2.362 base (tag and digest) instead of `latest`.
 - Self-hosted Supabase services follow the upstream `self-hosted/v0.8.4` release (2026-11-05): Studio, Auth, PostgREST, Realtime, Storage, imgproxy v4, postgres-meta and Supavisor. Postgres stays on 15; `supabase/docker-compose.pg17.yml` and the EduLog-adapted `supabase/utils/upgrade-pg17.sh` move a database to 17. See `docs/deployment/supabase-upgrade.md`.
 - Envoy replaces Kong as the default API gateway. The service is now `api-gw`, and the `kong` network alias keeps `http://kong:8000` working. Kong remains available through `supabase/docker-compose.kong.yml`.
 - Logflare and Vector are no longer part of the default stack; `supabase/docker-compose.logs.yml` adds them back.
