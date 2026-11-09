@@ -33,6 +33,8 @@ import { createAiMeRouter } from './routes/rest/aiMeRouter.js'
 import { createAiAdminRouter } from './routes/rest/aiAdminRouter.js'
 import { createAiDeidRouter } from './routes/rest/aiDeidRouter.js'
 import { createRealtimeTicketRouter } from './routes/rest/realtimeTicketRouter.js'
+import { createAccountRouter } from './routes/rest/accountRouter.js'
+import { EMAIL_TEMPLATES, isEmailTemplateName } from './mail/emailTemplates.js'
 
 /** Builds the Express app from an already-validated config (see `loadConfig`). */
 export function createApp(config: ApiConfig, clients: SupabaseClients = createSupabaseClients(config)) {
@@ -60,6 +62,12 @@ export function createApp(config: ApiConfig, clients: SupabaseClients = createSu
   app.get('/healthz', (_req, res) => res.json({ status: 'ok' }))
   app.get('/api/healthz', (_req, res) => res.json({ data: { status: 'ok' }, meta: {}, request_id: _req.requestId, trace_id: _req.traceId }))
   app.get('/api/openapi.json', (_req, res) => res.json(buildOpenApi()))
+  // GoTrue fetches its email templates here over the internal network.
+  app.get('/email-templates/:name.html', (req, res) => {
+    const name = req.params.name
+    if (!isEmailTemplateName(name)) return res.status(404).end()
+    res.type('html').send(EMAIL_TEMPLATES[name])
+  })
   app.use('/api/auth', csrfProtection, rateLimitMiddleware(config, clients.adminClient), createAuthRouter(clients, config))
   app.use('/api/extension', rateLimitMiddleware(config, clients.adminClient), createExtensionIntegrationRouter(clients, config))
   const protectedApi = Router()
@@ -68,6 +76,7 @@ export function createApp(config: ApiConfig, clients: SupabaseClients = createSu
   protectedApi.use('/users', createUserSearchRouter())
   protectedApi.use(createRealtimeTicketRouter(config))
   protectedApi.use(createRbacRouter())
+  protectedApi.use(createAccountRouter(config))
   protectedApi.use(createEnrollmentRouter())
   protectedApi.use(createReportRouter())
   protectedApi.use(createAiReportAssistRouter(defaultAiReportAssistDeps(ai)))

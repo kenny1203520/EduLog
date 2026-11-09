@@ -82,6 +82,18 @@ const ConfigSchema = z.object({
   // hidden until OPENAI_SIWC_CLIENT_ID is set.
   OPENAI_SIWC_CLIENT_ID: optional(z.string().min(1).max(200)),
   OPENAI_SIWC_CLIENT_SECRET: optional(z.string().min(1).max(500)),
+  // Browser-facing Supabase URL (the gateway the user's browser reaches).
+  // OAuth sign-in sends the browser to its /auth/v1/authorize; without it the
+  // login page offers no OAuth providers.
+  SUPABASE_PUBLIC_URL: optional(z.url()),
+  // SMTP for the API's own mail (administrator notices about accounts
+  // waiting for approval). The same server GoTrue uses; unset = no mail.
+  SMTP_HOST: optional(z.string().min(1).max(255)),
+  SMTP_PORT: z.preprocess(emptyAsUnset, z.coerce.number().int().positive().max(65535).default(587)),
+  SMTP_USER: optional(z.string().max(320)),
+  SMTP_PASS: optional(z.string().max(1024)),
+  SMTP_ADMIN_EMAIL: optional(z.email()),
+  SMTP_SENDER_NAME: optional(z.string().max(120)),
 })
 
 type ParsedConfig = z.infer<typeof ConfigSchema>

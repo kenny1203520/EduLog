@@ -83,6 +83,12 @@ export function buildOpenApi() {
     '/api/auth/me': { get: { operationId: 'me', security: [{ cookieAuth: [] }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } },
     '/api/auth/me/email': { post: { operationId: 'changeAccountEmail', security: [{ cookieAuth: [] }], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/EmailChangeRequest' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } },
     '/api/auth/me/password': { post: { operationId: 'changeAccountPassword', security: [{ cookieAuth: [] }], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/PasswordChangeRequest' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } },
+    '/api/auth/providers': { get: { operationId: 'oauthProviders', summary: 'OAuth providers enabled in GoTrue', responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } },
+    '/api/auth/oauth/{provider}': { get: { operationId: 'oauthStart', summary: 'Redirect to the provider (PKCE); unknown or disabled providers return to /login?error=oauth', parameters: [{ name: 'provider', in: 'path', required: true, schema: { type: 'string', pattern: '^[a-z][a-z0-9_]{1,40}$' } }], responses: { '303': { description: 'Redirect to GoTrue authorize' } } } },
+    '/api/auth/oauth/callback': { get: { operationId: 'oauthCallback', summary: 'Exchange the PKCE code, set the session cookies and redirect into the app', parameters: [{ name: 'code', in: 'query', required: false, schema: { type: 'string' } }], responses: { '303': { description: 'Redirect to /dashboard, /account-pending or /login?error=oauth' } } } },
+    '/api/auth/confirm': { get: { operationId: 'confirmEmailLink', summary: 'Consume an invite, recovery, email-change or sign-up link from an email', parameters: [{ name: 'token_hash', in: 'query', required: true, schema: { type: 'string' } }, { name: 'type', in: 'query', required: true, schema: { type: 'string', enum: ['invite', 'recovery', 'email_change', 'signup', 'email'] } }], responses: { '303': { description: 'Redirect into the app' } } } },
+    '/api/auth/recover': { post: { operationId: 'requestPasswordRecovery', summary: 'Mail a password-reset link; always 204', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', additionalProperties: false, required: ['email'], properties: { email: { type: 'string', format: 'email' } } } } } }, responses: { '204': { description: 'Accepted' }, ...errorResponses } } },
+    '/api/auth/set-password': { post: { operationId: 'setAccountPassword', summary: 'Set a password after an invite or reset link (needs the short-lived setup cookie)', security: [{ cookieAuth: [] }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', additionalProperties: false, required: ['new_password', 'confirm_password'], properties: { new_password: { type: 'string', minLength: 8 }, confirm_password: { type: 'string', minLength: 8 } } } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } },
     '/api/users/search': { get: { operationId: 'users_search', security: [{ cookieAuth: [] }], 'x-permission': 'system.users.list', parameters: [{ name: 'query', in: 'query', required: true, schema: { type: 'string', minLength: 1, maxLength: 200 } }, { name: 'only_unlinked', in: 'query', required: false, schema: { type: 'boolean' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } },
   }
   const extensionId = { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }
@@ -574,6 +580,23 @@ export function buildOpenApi() {
   }
   paths['/api/users/{id}/status'] = {
     patch: { ...pageBase, operationId: 'user_status_update', 'x-permission': 'system.users.manage', parameters: [idParam, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/UserStatusMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+  }
+  const roleIdsBody = { required: true, content: { 'application/json': { schema: { type: 'object', additionalProperties: false, properties: { role_ids: { type: 'array', maxItems: 20, items: { type: 'string', format: 'uuid' } } } } } } }
+  paths['/api/accounts/pending'] = {
+    get: { ...pageBase, operationId: 'pending_accounts_list', 'x-permission': 'system.users.manage', responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+  }
+  paths['/api/accounts/pending/count'] = {
+    get: { ...pageBase, operationId: 'pending_accounts_count', 'x-permission': 'system.users.manage', responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+  }
+  paths['/api/accounts/{id}/approve'] = {
+    post: { ...pageBase, operationId: 'account_approve', 'x-permission': 'system.users.manage + <domain>.role_assignments.manage per granted role', parameters: [idParam], requestBody: roleIdsBody, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+  }
+  paths['/api/accounts/invite'] = {
+    post: { ...pageBase, operationId: 'account_invite', 'x-permission': 'system.users.manage', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', additionalProperties: false, required: ['email'], properties: { email: { type: 'string', format: 'email' } } } } } }, responses: { '201': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+  }
+  paths['/api/settings/account-default-roles'] = {
+    get: { ...pageBase, operationId: 'account_default_roles_get', 'x-permission': 'system.users.manage', responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+    put: { ...pageBase, operationId: 'account_default_roles_update', 'x-permission': 'system.users.manage + <domain>.role_assignments.manage per role', requestBody: roleIdsBody, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
   paths['/api/realtime'] = {
     get: {

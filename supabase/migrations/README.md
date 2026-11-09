@@ -158,6 +158,7 @@ The former consolidated migration names are intentionally absent. `1000041a_has_
 | 1000155 | `1000155_enrollment_transfer_log.sql` | Append-only class transfer log, retroactive transfers that keep the report count, stricter blank-report check, closures skip report slots |
 | 1000157 | `1000157_drop_teaching_workspace_model.sql` | Drop the archived teaching-workspace tables, migration bookkeeping tables and workspace helpers; RLS and RPCs use scope-free permission helpers |
 | 1000160 | `1000160_presidio_languages.sql` | De-identification language checks accept the 24 languages the Presidio image ships |
+| 1000163 | `1000163_account_approval_and_default_roles.sql` | New accounts wait for approval; default roles for invited and approved accounts |
 
 The missing versions `1000010`, `1000015`, and `1000016` are historical unused numbers, not missing files. Apply migrations in lexical order; `1000041a` sorts between `1000041` and `1000042`, and `1000057a` sorts between `1000057` and `1000058`.
 
@@ -262,3 +263,7 @@ The backfill opens one segment per enrollment for its current class. A previous 
 Kept: the `teaching_id` columns on `classrooms`, `courses`, `class_sessions`, `report_templates`, `roles` and `api_idempotency_keys` (their foreign keys to `teachings` are dropped). Many RPCs and the API still compare them, so `normalize_global_teaching_row` keeps stamping the former global teaching id, frozen into the function when 1000157 runs. `clear_legacy_owner` also stays: it clears the legacy `user_id` owner column that RPCs still write. Removing either needs its own migration that drops those columns.
 
 Older reconciliation migrations (1000100–1000129 reruns) read `teachings`, so rerun them before 1000157; the CI reconciliation step applies 1000157 twice after its rerun loop. `supabase/tests/migration_chain_integration.sql` asserts the objects are gone.
+
+## Account approval and default roles (1000163)
+
+`1000163_account_approval_and_default_roles.sql` adds `'pending'` to `profiles.account_status` and makes every account GoTrue creates from then on (OAuth, self sign-up, Studio) start pending, with no role. Existing accounts keep their status; an update of an `auth.users` row never changes it. `account_default_roles` lists the roles invited accounts receive when created and pending accounts receive when approved, always at platform scope; protected (owner) roles are refused. `approve_account(user, roles, actor)` moves a pending account to active, records `approved_at`/`approved_by` and a `user_status_events` row, and grants the roles it does not already hold. `list_pending_accounts`, `count_pending_accounts`, `mark_pending_account_notified` (true once, so administrators are mailed once) and `list_account_approver_emails` serve the review screen and the notice. All of them are service-role only; the API checks `system.users.manage` and, for each granted role, `<domain>.role_assignments.manage`. Rejecting uses the existing `set_system_user_status` (pending → disabled). `bootstrap_system_owner` also activates the account it makes owner. Run `supabase/tests/account_approval_integration.sql` after applying it.

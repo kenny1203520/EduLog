@@ -13,6 +13,9 @@ import AuditLogPanel from '@/components/settings/AuditLogPanel.vue'
 import AiAdminPanel from '@/components/settings/ai/AiAdminPanel.vue'
 import IncompleteReportNotificationSettings from '@/components/settings/IncompleteReportNotificationSettings.vue'
 import DashboardScheduleVisibilitySettings from '@/components/settings/DashboardScheduleVisibilitySettings.vue'
+import AccountApprovalPanel from '@/components/settings/AccountApprovalPanel.vue'
+import { useRoute } from 'vue-router'
+import { usePendingAccounts } from '@/composables/usePendingAccounts'
 import SearchableSelect from '@/components/ui/SearchableSelect.vue'
 import Pagination from '@/components/ui/Pagination.vue'
 import { AuthUserSearchService, type AuthUserSearchResultDTO } from '@/services/auth/AuthUserSearchService'
@@ -21,9 +24,9 @@ import { DateUtils } from '@/utils/dateUtils'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 
 type Assignment = { id: string; user_id: string; role_id: string; roles?: { code?: string; name?: string }; effective_from?: string; effective_to?: string | null }
-type SystemSection = 'permissions' | 'teaching_permissions' | 'assignments' | 'teaching_assignments' | 'users' | 'notifications' | 'dashboard_schedule' | 'audit' | 'ai'
+type SystemSection = 'permissions' | 'teaching_permissions' | 'assignments' | 'teaching_assignments' | 'users' | 'account_approval' | 'notifications' | 'dashboard_schedule' | 'audit' | 'ai'
 
-const ALL_SECTIONS: readonly SystemSection[] = ['permissions', 'teaching_permissions', 'assignments', 'teaching_assignments', 'users', 'notifications', 'dashboard_schedule', 'audit', 'ai']
+const ALL_SECTIONS: readonly SystemSection[] = ['permissions', 'teaching_permissions', 'assignments', 'teaching_assignments', 'users', 'account_approval', 'notifications', 'dashboard_schedule', 'audit', 'ai']
 
 /** Settings overview capability flags; absent means "show every section" (older API). */
 const props = defineProps<{ sections?: Record<string, Record<string, boolean>> }>()
@@ -54,6 +57,7 @@ const visibleSections = computed<SystemSection[]>(() => {
         assignments: owner || system.assignments_manage === true,
         teaching_assignments: teaching.roles === true,
         users: owner || system.users_manage === true,
+        account_approval: owner || system.users_manage === true,
         // Both edit teaching-role policies.
         notifications: teaching.roles === true,
         dashboard_schedule: teaching.roles === true,
@@ -64,7 +68,13 @@ const visibleSections = computed<SystemSection[]>(() => {
 })
 /** System role data is only loaded for the sections that use it. */
 const needsSystemRoles = computed(() => visibleSections.value.includes('assignments') || visibleSections.value.includes('users'))
-const activeSection = ref<SystemSection>(visibleSections.value[0] ?? 'permissions')
+const route = useRoute()
+const pendingAccounts = usePendingAccounts()
+/** A link such as ?section=account_approval (from the approval email) opens that section. */
+const sectionQuery = route?.query.section
+const requestedSection = typeof sectionQuery === 'string' && (ALL_SECTIONS as readonly string[]).includes(sectionQuery)
+    ? sectionQuery as SystemSection : null
+const activeSection = ref<SystemSection>(requestedSection && visibleSections.value.includes(requestedSection) ? requestedSection : visibleSections.value[0] ?? 'permissions')
 const loading = ref(false)
 const userLoading = ref(false)
 const assignmentLoading = ref(false)
@@ -77,7 +87,7 @@ let searchTimer: ReturnType<typeof setTimeout> | undefined
 let searchSequence = 0
 let assignmentSequence = 0
 
-const currentStatus = computed<'active' | 'disabled'>(() => selectedUser.value?.account_status === 'disabled' ? 'disabled' : 'active')
+const currentStatus = computed<'active' | 'disabled' | 'pending'>(() => selectedUser.value?.account_status === 'disabled' ? 'disabled' : selectedUser.value?.account_status === 'pending' ? 'pending' : 'active')
 const statusChanged = computed(() => selectedStatus.value !== currentStatus.value)
 
 function todayLocal() {
@@ -265,6 +275,7 @@ watch(assignmentPageSize, () => { assignmentPage.value = 1; void loadAssignments
             <nav class="mt-5 flex flex-wrap gap-2" role="group" :aria-label="t('rbac.system_sections.label')">
                 <button v-for="section in visibleSections" :key="section" type="button" :aria-pressed="activeSection === section" class="min-h-11 rounded-xl px-4 py-2 text-sm font-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600" :class="activeSection === section ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600'" @click="selectSection(section)">
                     {{ t(`rbac.system_sections.${section}`) }}
+                    <span v-if="section === 'account_approval' && pendingAccounts.count.value > 0" class="ml-1 inline-flex min-w-5 items-center justify-center rounded-full bg-rose-600 px-1.5 text-xs font-black text-white" :aria-label="t('rbac.account_approval.pending_count', { n: pendingAccounts.count.value })">{{ pendingAccounts.count.value }}</span>
                 </button>
             </nav>
         </div>
@@ -329,6 +340,8 @@ watch(assignmentPageSize, () => { assignmentPage.value = 1; void loadAssignments
         <IncompleteReportNotificationSettings v-else-if="activeSection === 'notifications'" />
 
         <DashboardScheduleVisibilitySettings v-else-if="activeSection === 'dashboard_schedule'" />
+
+        <AccountApprovalPanel v-if="activeSection === 'account_approval'" />
 
         <AuditLogPanel v-if="activeSection === 'audit'" />
         <AiAdminPanel v-if="activeSection === 'ai'" />

@@ -10,7 +10,7 @@ export type SupabaseClients = {
 
 type ValidationCacheEntry = { user: User; expiresAt: number; pending?: Promise<User> }
 const validationCache = new Map<string, ValidationCacheEntry>()
-const accountStatusCache = new Map<string, { active: boolean; expiresAt: number }>()
+const accountStatusCache = new Map<string, { status: 'active' | 'disabled' | 'pending'; expiresAt: number }>()
 const VALIDATION_CACHE_TTL_MS = 30_000
 const VALIDATION_CACHE_MAX_ENTRIES = 512
 
@@ -40,18 +40,27 @@ export function clearUserValidation(userId: string) {
   }
 }
 
-export async function assertUserActive(adminClient: SupabaseClient, userId: string) {
+export type AccountStatus = 'active' | 'disabled' | 'pending'
+
+/**
+ * The account's status, cached briefly. Disabled accounts always fail with
+ * AUTH_DISABLED; pending ones (waiting for administrator approval) fail with
+ * AUTH_PENDING unless `allowPending`, which lets them see who they are.
+ */
+export async function assertUserActive(adminClient: SupabaseClient, userId: string, options: { allowPending?: boolean } = {}): Promise<'active' | 'pending'> {
   const now = Date.now()
+  let status: AccountStatus
   const cached = accountStatusCache.get(userId)
-  if (cached && cached.expiresAt > now) {
-    if (!cached.active) throw new Error('AUTH_DISABLED')
-    return
+  if (cached && cached.expiresAt > now) status = cached.status
+  else {
+    const { data, error } = await adminClient.from('profiles').select('account_status').eq('auth_user_id', userId).maybeSingle()
+    if (error || !data) throw new Error('AUTH_INVALID')
+    status = data.account_status === 'disabled' ? 'disabled' : data.account_status === 'pending' ? 'pending' : 'active'
+    accountStatusCache.set(userId, { status, expiresAt: now + VALIDATION_CACHE_TTL_MS })
   }
-  const { data, error } = await adminClient.from('profiles').select('account_status').eq('auth_user_id', userId).maybeSingle()
-  if (error || !data) throw new Error('AUTH_INVALID')
-  const active = data.account_status !== 'disabled'
-  accountStatusCache.set(userId, { active, expiresAt: now + VALIDATION_CACHE_TTL_MS })
-  if (!active) throw new Error('AUTH_DISABLED')
+  if (status === 'disabled') throw new Error('AUTH_DISABLED')
+  if (status === 'pending' && !options.allowPending) throw new Error('AUTH_PENDING')
+  return status
 }
 
 export function createSupabaseClients(config: ApiConfig): SupabaseClients {
