@@ -8,11 +8,13 @@ import LanguageSwitcher from '@/components/ui/LanguageSwitcher.vue'
 import { useFeedback } from '@/composables/useFeedback'
 import { useAccountIdentity } from '@/composables/useAccountIdentity'
 import { inExtensionPanel } from '@/composables/useExtensionPanel'
+import { usePendingAccounts } from '@/composables/usePendingAccounts'
 
 const auth = useAuthStore()
 const router = useRouter()
 const preferences = usePreferencesStore()
 const capabilities = useCapabilityStore()
+const pendingAccounts = usePendingAccounts()
 const { info, reportError } = useFeedback()
 const isSidebarOpen = ref(false)
 const isDesktopSidebarOpen = ref(true)
@@ -34,6 +36,7 @@ function onAccountKeydown(event: KeyboardEvent) {
 }
 
 onMounted(() => {
+    void pendingAccounts.refresh()
     preferences.loadUserPreferences()
     void capabilities.ensureLoaded()
     window.addEventListener('online', onOnline)
@@ -256,6 +259,9 @@ async function handleLogout() {
                                 d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                         </svg>
                         {{ $t('nav.settings') }}
+                        <span v-if="pendingAccounts.count.value > 0" class="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-rose-600 px-1.5 text-xs font-black text-white" data-testid="pending-accounts-badge">
+                            {{ pendingAccounts.count.value }}<span class="sr-only">{{ $t('rbac.account_approval.pending_badge') }}</span>
+                        </span>
                     </div>
                 </router-link>
 

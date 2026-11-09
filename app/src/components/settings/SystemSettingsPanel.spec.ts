@@ -13,7 +13,7 @@ import SystemSettingsPanel from './SystemSettingsPanel.vue'
 const stubs = {
     RolePermissionEditor: true, TeachingRolePermissionsPanel: true, PlatformTeachingRoleAssignmentsPanel: true,
     AuditLogPanel: true, AiAdminPanel: true, IncompleteReportNotificationSettings: true,
-    DashboardScheduleVisibilitySettings: true, SearchableSelect: true, Pagination: true,
+    DashboardScheduleVisibilitySettings: true, SearchableSelect: true, Pagination: true, AccountApprovalPanel: true,
 }
 
 function sectionLabels(wrapper: ReturnType<typeof mount>) {
@@ -44,6 +44,6 @@ describe('SystemSettingsPanel sections', () => {
             global: { stubs, mocks: { $t: (key: string) => key } },
         })
         await flushPromises()
-        expect(sectionLabels(wrapper)).toHaveLength(9)
+        expect(sectionLabels(wrapper)).toHaveLength(10)
     })
 })

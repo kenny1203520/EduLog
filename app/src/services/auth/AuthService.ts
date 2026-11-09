@@ -1,6 +1,6 @@
 import { apiV1Client, registerApiAuthRecovery } from '@/services/api/ApiV1Client'
 
-export type BffUser = { id: string; email?: string | null; full_name?: string | null; nickname?: string | null; display_name?: string | null; user_metadata?: { full_name?: string; [key: string]: unknown }; [key: string]: unknown }
+export type BffUser = { id: string; email?: string | null; account_status?: 'active' | 'pending'; full_name?: string | null; nickname?: string | null; display_name?: string | null; user_metadata?: { full_name?: string; [key: string]: unknown }; [key: string]: unknown }
 export type BffSession = { user: BffUser }
 type AuthResult = { user: BffUser | null; session: BffSession | null; error: Error | null }
 type AuthSubscription = { data: { subscription: { unsubscribe: () => void } } }
@@ -37,6 +37,21 @@ export class AuthService {
       const authError = error instanceof Error ? error : new Error('Authentication request failed')
       return { session: null, error: (error as { code?: string })?.code === 'AUTH_REQUIRED' ? null : authError }
     }
+  }
+  /** OAuth providers GoTrue has enabled; empty when none or unknown. */
+  async oauthProviders(): Promise<string[]> {
+    try {
+      const result = await apiV1Client.get<{ providers: string[] }>('/auth/providers')
+      return Array.isArray(result.data?.providers) ? result.data.providers : []
+    } catch { return [] }
+  }
+  /** Ask for a password-reset email. The server answers the same whether or not the account exists. */
+  async requestPasswordReset(email: string): Promise<void> {
+    await apiV1Client.post('/auth/recover', { email })
+  }
+  /** Set a password after following an invite or reset link. */
+  async setPassword(newPassword: string, confirmPassword: string): Promise<void> {
+    await apiV1Client.post('/auth/set-password', { new_password: newPassword, confirm_password: confirmPassword })
   }
   onAuthStateChange(callback: (event: string, session: BffSession | null) => void): AuthSubscription { let active = true; void this.getSession().then(({ session }) => { if (active) callback(session ? 'SIGNED_IN' : 'SIGNED_OUT', session) }); return { data: { subscription: { unsubscribe: () => { active = false } } } } }
 }

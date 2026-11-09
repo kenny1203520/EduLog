@@ -89,6 +89,8 @@ Supabase uses more aliases for its own services. For example, `SERVICE_ROLE_KEY`
 | `AI_SECRET_KEY` | | | 32 bytes as base64; AI credential storage is off without it |
 | `PRESIDIO_ANALYZER_URL` | | | de-identification is off without it |
 | `OPENAI_SIWC_CLIENT_ID`, `OPENAI_SIWC_CLIENT_SECRET` | | | Sign in with ChatGPT is hidden without them. OpenAI's endpoints are constants in code, not env |
+| `SUPABASE_PUBLIC_URL` | for OAuth | | browser-facing Supabase gateway; the login page shows no OAuth providers without it |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_ADMIN_EMAIL`, `SMTP_SENDER_NAME` | | `SMTP_PORT=587` | the API's own mail (pending-account notices to administrators); off without `SMTP_HOST` and `SMTP_ADMIN_EMAIL`. Compose passes GoTrue's SMTP settings |
 | `SYSTEM_OWNER_USER_ID` | for `npm run bootstrap:system-owner` | | uuid; read by that script only |
 
 Test-only variables (suites skip when they are unset): `PRESIDIO_ANALYZER_URL`, `AI_TEST_OLLAMA_MODEL`, `AI_TEST_OLLAMA_URL`.

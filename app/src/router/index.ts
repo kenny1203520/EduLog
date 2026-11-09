@@ -26,6 +26,24 @@ const router = createRouter({
       meta: { title: 'auth.account_disabled_title', description: 'nav.subtitle' }
     },
     {
+      path: '/account-pending',
+      name: 'account-pending',
+      component: () => import('@/views/AccountPendingView.vue'),
+      meta: { requiresAuth: true, title: 'auth.account_pending_title', description: 'nav.subtitle' }
+    },
+    {
+      path: '/forgot-password',
+      name: 'forgot-password',
+      component: () => import('@/views/ForgotPasswordView.vue'),
+      meta: { title: 'auth.forgot_title', description: 'nav.subtitle' }
+    },
+    {
+      path: '/auth/set-password',
+      name: 'set-password',
+      component: () => import('@/views/SetPasswordView.vue'),
+      meta: { requiresAuth: true, title: 'auth.set_password_title', description: 'nav.subtitle' }
+    },
+    {
       path: '/dashboard',
       component: () => import('@/layouts/MainLayout.vue'),
       meta: { requiresAuth: true },
@@ -123,6 +141,8 @@ const router = createRouter({
   ]
 })
 
+const PENDING_ALLOWED = new Set(['account-pending', 'set-password', 'landing'])
+
 // Navigation Guard
 router.beforeEach(async (to: RouteLocationNormalized) => {
   const authStore = useAuthStore()
@@ -140,6 +160,13 @@ router.beforeEach(async (to: RouteLocationNormalized) => {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
   
+  // An account waiting for approval sees only its waiting page (and may set a
+  // password from an email link, or sign out from the waiting page).
+  if (authStore.accountPending) {
+    return PENDING_ALLOWED.has(String(to.name)) ? true : { name: 'account-pending' }
+  }
+  if (to.name === 'account-pending' && authStore.isAuthenticated) return { name: 'dashboard' }
+
   if (to.path === '/login' && authStore.isAuthenticated) {
     return getSafePostLoginTarget(to.query.redirect, router)
   }
