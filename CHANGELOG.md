@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Presidio analyzer is published as `ghcr.io/kenny1203520/edulog-presidio`, with the spaCy pipelines of 24 languages built in. `EDULOG_PRESIDIO_LANGUAGES` now picks the languages loaded at start, so changing them needs only a restart, not a rebuild; an unknown code stops the container.
 - Prerelease images also get a channel tag (`alpha`, `beta`, `rc`) that follows the newest release of that channel. `latest` still moves only with stable releases.
 - `docker-compose.build.yml` builds the frontend, API and Presidio images from source.
+- De-identification supports all 24 languages the Presidio image ships: ca, da, de, el, en, es, fi, fr, hr, it, ja, ko, lt, mk, nb, nl, pl, pt, ro, ru, sl, sv, uk and zh. Migration `1000160_presidio_languages.sql` widens the database checks. Settings show languages that are not loaded and the command that restarts Presidio with them, instead of a rebuild command.
 
 ### Changed
 - `EDULOG_IMAGE_TAG` sets the tag of all three EduLog images and defaults to `alpha` until the first stable release. `EDULOG_API_IMAGE` is removed: deployments that set it should set `EDULOG_IMAGE_TAG` instead. The base Compose file now pulls the API image instead of building `./server`.

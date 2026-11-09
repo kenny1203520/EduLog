@@ -157,6 +157,7 @@ The former consolidated migration names are intentionally absent. `1000041a_has_
 | 1000154 | `1000154_ai_generation_details.sql` | AI generation error details and system prompt text; model structured-output support |
 | 1000155 | `1000155_enrollment_transfer_log.sql` | Append-only class transfer log, retroactive transfers that keep the report count, stricter blank-report check, closures skip report slots |
 | 1000157 | `1000157_drop_teaching_workspace_model.sql` | Drop the archived teaching-workspace tables, migration bookkeeping tables and workspace helpers; RLS and RPCs use scope-free permission helpers |
+| 1000160 | `1000160_presidio_languages.sql` | De-identification language checks accept the 24 languages the Presidio image ships |
 
 The missing versions `1000010`, `1000015`, and `1000016` are historical unused numbers, not missing files. Apply migrations in lexical order; `1000041a` sorts between `1000041` and `1000042`, and `1000057a` sorts between `1000057` and `1000058`.
 

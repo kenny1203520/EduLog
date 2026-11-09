@@ -62,10 +62,10 @@ async function save(work: () => Promise<void>) {
 
 const missingLanguages = computed(() => (overview.value?.available_languages ?? []).filter((code) => !overview.value?.installed_languages.includes(code)))
 const languagesToAdd = ref<DeidLanguage[]>([])
-const rebuildCommand = computed(() => {
+const restartCommand = computed(() => {
     const installed = overview.value?.installed_languages ?? []
     const wanted = [...installed, ...languagesToAdd.value.filter((code) => !installed.includes(code))]
-    return `EDULOG_PRESIDIO_LANGUAGES=${wanted.join(',')} docker compose build presidio-analyzer && docker compose up -d presidio-analyzer`
+    return `EDULOG_PRESIDIO_LANGUAGES=${wanted.join(',')} docker compose up -d presidio-analyzer`
 })
 
 function toggleLanguage(code: DeidLanguage, enabled: boolean) {
@@ -81,7 +81,7 @@ function toggleLanguage(code: DeidLanguage, enabled: boolean) {
 
 async function copyCommand() {
     try {
-        await navigator.clipboard.writeText(rebuildCommand.value)
+        await navigator.clipboard.writeText(restartCommand.value)
         success('aiDeid.status.copied')
     } catch (error) { reportError(error) }
 }
@@ -320,9 +320,9 @@ onMounted(load)
                                 {{ languageLabel(code) }}
                             </label>
                         </div>
-                        <p class="mt-3 block text-xs font-bold text-gray-700">{{ t('aiDeid.status.rebuild_command') }}</p>
+                        <p class="mt-3 block text-xs font-bold text-gray-700">{{ t('aiDeid.status.restart_command') }}</p>
                         <div class="mt-1 flex flex-wrap items-stretch gap-2">
-                            <code id="deid-rebuild" class="min-w-0 flex-1 break-all rounded-xl bg-gray-900 px-3 py-2 font-mono text-xs leading-relaxed text-gray-100">{{ rebuildCommand }}</code>
+                            <code id="deid-restart" class="min-w-0 flex-1 break-all rounded-xl bg-gray-900 px-3 py-2 font-mono text-xs leading-relaxed text-gray-100">{{ restartCommand }}</code>
                             <button type="button" class="min-h-11 rounded-xl border border-gray-200 px-3 text-sm font-bold text-gray-700 hover:bg-gray-50" @click="copyCommand">{{ t('aiDeid.status.copy') }}</button>
                         </div>
                     </template>

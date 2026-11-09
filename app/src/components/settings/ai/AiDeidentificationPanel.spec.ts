@@ -37,15 +37,15 @@ beforeEach(() => {
 })
 
 describe('AiDeidentificationPanel', () => {
-    it('shows installed languages and a rebuild command for the ones to add', async () => {
+    it('shows loaded languages and a restart command for the ones to add', async () => {
         const wrapper = mount(AiDeidentificationPanel, { props: {}, global })
         await flushPromises()
 
         expect(wrapper.find('[data-test="deid-connection"]').text()).toBe('Presidio 連線正常')
-        expect(wrapper.text()).toContain('日文（ja） · 未安裝')
+        expect(wrapper.text()).toContain('日文（ja） · 未載入')
         const toAdd = wrapper.findAll('input[type="checkbox"]').find((input) => (input.element as HTMLInputElement).value === 'ja')!
         await toAdd.setValue(true)
-        expect(wrapper.find('#deid-rebuild').text()).toBe('EDULOG_PRESIDIO_LANGUAGES=zh,en,ja docker compose build presidio-analyzer && docker compose up -d presidio-analyzer')
+        expect(wrapper.find('#deid-restart').text()).toBe('EDULOG_PRESIDIO_LANGUAGES=zh,en,ja docker compose up -d presidio-analyzer')
     })
 
     it('colours and labels each hit in the original and lists where it came from', async () => {
