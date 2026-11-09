@@ -85,7 +85,7 @@ async function handleLogin() {
                     <label class="block text-[12px] font-black text-emerald-600 uppercase tracking-[0.2em] ml-1" for="edulog-loginview-28-1916">{{
                         $t('auth.email') }}</label>
                     <div class="relative group">
-                        <input v-model="email" type="email" required
+                        <input v-model="email" type="email" required autocomplete="username"
                             class="w-full border-gray-100 rounded-2xl px-5 py-4 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all outline-none bg-gray-50/50 focus:bg-white text-gray-800 placeholder-gray-400 font-medium"
                             :placeholder="$t('auth.email_placeholder')" id="edulog-loginview-28-1916">
                         <div

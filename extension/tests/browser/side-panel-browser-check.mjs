@@ -114,7 +114,7 @@ try {
       await panelPage.goto(`chrome-extension://${id}/sidepanel/panel.html?tab=999`)
       await panelPage.locator('#allow').waitFor({ state: 'visible' })
       assert.equal(await panelPage.locator('#editor').isVisible(), false)
-      assert.match(await panelPage.locator('#message-text').textContent(), new RegExp(web.replace(/[.:/]/g, '\\$&')))
+      assert.ok((await panelPage.locator('#message-text').textContent()).includes(web))
       await panelPage.screenshot({ path: join(output, `${name}-panel-no-access.png`) })
       await worker.evaluate(() => chrome.storage.local.remove('edulogExtension'))
       await panelPage.waitForFunction(() => document.querySelector('#message').dataset.tone === 'error')

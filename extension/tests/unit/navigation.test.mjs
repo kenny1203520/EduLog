@@ -125,7 +125,7 @@ test('more than six classes are grouped by weekday with today first, and counts 
 })
 
 test('known menu links and module titles follow EduLog language, not the provider wording', async () => {
-  const dom = new JSDOM(read('../fixtures/real-sidebar.html').replace('<a class="nav-link" href="/">總覽</a>', '<a class="nav-link" href="/">總覽</a>').replace('<ul class="btn-toggle-nav list-unstyled"></ul>', '<ul class="btn-toggle-nav list-unstyled"><li><a href="/dt_admissions">剩餘課堂</a></li><li><a href="/x/unknown">原站自訂項目</a></li></ul>'), { url: 'https://corp.orangeapple.co/courses/dt/101', runScripts: 'outside-only', pretendToBeVisual: true })
+  const dom = new JSDOM(read('../fixtures/real-sidebar.html').replace('<ul class="btn-toggle-nav list-unstyled"></ul>', '<ul class="btn-toggle-nav list-unstyled"><li><a href="/dt_admissions">剩餘課堂</a></li><li><a href="/x/unknown">原站自訂項目</a></li></ul>'), { url: 'https://corp.orangeapple.co/courses/dt/101', runScripts: 'outside-only', pretendToBeVisual: true })
   const w = dom.window
   for (const file of ['shared/ui-core.js', 'shared/ui-phrases.js']) w.eval(read(`../../${file}`))
   await new Promise(resolve => setTimeout(resolve, 0))
