@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- A commented-out Keycloak sign-in option for the Auth service (`KEYCLOAK_*` in `.env.example`).
+
 ### Changed
 - Self-hosted Supabase services follow the upstream `self-hosted/v0.8.4` release (2026-11-05): Studio, Auth, PostgREST, Realtime, Storage, imgproxy v4, postgres-meta and Supavisor. Postgres stays on 15; `supabase/docker-compose.pg17.yml` and the EduLog-adapted `supabase/utils/upgrade-pg17.sh` move a database to 17. See `docs/deployment/supabase-upgrade.md`.
 - Envoy replaces Kong as the default API gateway. The service is now `api-gw`, and the `kong` network alias keeps `http://kong:8000` working. Kong remains available through `supabase/docker-compose.kong.yml`.
@@ -16,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The base Compose file puts the API container on the `net` network, so it can reach the gateway without the production override.
 
 ### Fixed
+- The commented-out Google, GitHub and Azure sign-in examples in `docker-compose.yml` now use `${API_EXTERNAL_URL}/callback`. Since `API_EXTERNAL_URL` ends in `/auth/v1`, the old `/auth/v1/callback` suffix produced `/auth/v1/auth/v1/callback`.
 - The nginx TLS overlay is attached to the `net` and `frontend` networks, so it can reach the gateway and the frontend.
 
 ### Security
