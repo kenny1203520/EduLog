@@ -54,7 +54,7 @@ BEGIN
   EXCEPTION WHEN check_violation THEN NULL;
   END;
   BEGIN
-    INSERT INTO public.ai_deid_rules(name, kind, pattern, placeholder_kind, languages) VALUES ('Lang', 'regex', 'x+', 'person', ARRAY['fr']);
+    INSERT INTO public.ai_deid_rules(name, kind, pattern, placeholder_kind, languages) VALUES ('Lang', 'regex', 'x+', 'person', ARRAY['zz']);
     RAISE EXCEPTION 'rule languages must be known';
   EXCEPTION WHEN check_violation THEN NULL;
   END;

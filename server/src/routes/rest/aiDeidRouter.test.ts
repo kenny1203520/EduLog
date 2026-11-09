@@ -3,7 +3,7 @@ import request from 'supertest'
 import { describe, expect, it } from 'vitest'
 import { errorHandler } from '../../http/errors.js'
 import type { ApiConfig } from '../../config/config.js'
-import { PresidioRequestError, type AnalyzeRequest, type PresidioSpan } from '../../ai/deidentify/presidioClient.js'
+import { PRESIDIO_LANGUAGES, PresidioRequestError, type AnalyzeRequest, type PresidioSpan } from '../../ai/deidentify/presidioClient.js'
 import { createAiDeidRouter, type DeidAnalyzer } from './aiDeidRouter.js'
 
 type Row = Record<string, unknown>
@@ -109,7 +109,7 @@ describe('de-identification admin routes', () => {
     expect(response.status).toBe(200)
     expect(response.body.data).toMatchObject({
       connection: 'ok', installed_languages: ['zh', 'en'], enabled_languages: ['zh'], allow_list: ['仁愛'],
-      available_languages: ['zh', 'en', 'ja', 'ko'],
+      available_languages: [...PRESIDIO_LANGUAGES],
     })
     expect(response.body.data.rules.map((rule: Row) => rule.id)).toEqual(['r1'])
 
@@ -126,6 +126,19 @@ describe('de-identification admin routes', () => {
     const saved = await request(app(tables, new FakePresidio(['zh', 'en']))).put('/api/ai/admin/deid/languages').send({ languages: ['zh', 'en'] })
     expect(saved.status).toBe(200)
     expect(tables.ai_settings[0].deid_languages).toEqual(['zh', 'en'])
+  })
+
+  it('accepts every language the Presidio image ships and rejects unknown codes', async () => {
+    const tables = baseTables()
+    const analyzer = new FakePresidio(['zh', 'pl', 'sv'])
+    const saved = await request(app(tables, analyzer)).put('/api/ai/admin/deid/languages').send({ languages: ['pl', 'sv'] })
+    expect(saved.status).toBe(200)
+    expect(tables.ai_settings[0].deid_languages).toEqual(['pl', 'sv'])
+
+    const unknown = await request(app(tables, analyzer)).put('/api/ai/admin/deid/languages').send({ languages: ['zz'] })
+    expect(unknown.status).toBeGreaterThanOrEqual(400)
+    expect(unknown.status).toBeLessThan(500)
+    expect(tables.ai_settings[0].deid_languages).toEqual(['pl', 'sv'])
   })
 
   it('creates, edits, toggles and deletes rules after running them through Presidio', async () => {
