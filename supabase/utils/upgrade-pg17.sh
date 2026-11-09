@@ -113,7 +113,7 @@ on_interrupt() {
     echo ""
     warn "Interrupted. Cleaning up..."
     # If db-config was chowned to PG17, restore for PG 15 rollback
-    if [ -n "$db_config_vol" ] && [ -n "$current_image" ]; then
+    if [[ -n "$db_config_vol" && -n "$current_image" ]]; then
         docker run --rm -v "${db_config_vol}:/vol" "$current_image" \
             chown -R postgres:postgres /vol/ 2>/dev/null || true
     fi
