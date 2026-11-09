@@ -140,7 +140,7 @@ async function fetchCourses() {
 }
 
 watch(() => pagination.value.page, fetchCourses)
-watch(() => pagination.value.perPage, () => { pagination.value.page = 1; fetchCourses() })
+watch(() => pagination.value.perPage, () => { pagination.value.page = 1; void fetchCourses() })
 
 // ... (rest of functions)
 

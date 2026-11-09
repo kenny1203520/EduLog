@@ -1131,7 +1131,7 @@ async function handleIncompleteClick(item: any) {
     viewMode.value = 'calendar'
     const targetOcc = occurrences.value.find(o => o.id === item.occurrenceId)
     if (targetOcc) {
-        selectOccurrence(targetOcc)
+        void selectOccurrence(targetOcc)
     }
 }
 
@@ -1139,7 +1139,7 @@ function handleListRowClick(displayReport: any) {
     viewMode.value = 'calendar'
     const targetOcc = occurrences.value.find(o => o.id === displayReport.occurrenceId)
     if (targetOcc) {
-        selectOccurrence(targetOcc)
+        void selectOccurrence(targetOcc)
     }
 }
 
@@ -1500,7 +1500,7 @@ function handleSaveSuccess(updatedReport: OccurrenceReportDTO) {
         selectedReport.value.applyDTO(updatedReport)
     }
 
-    switchToListView() // Refresh list view data
+    void switchToListView() // Refresh list view data
     viewMode.value = 'calendar' // But keep calendar active
 }
 
@@ -1509,7 +1509,7 @@ function handleReportRestored(restoredReport: OccurrenceReportDTO) {
         selectedReport.value = new OccurrenceReport(restoredReport)
     }
     toast.success(t('report.editor.restore_success', '回檔成功'))
-    switchToListView()
+    void switchToListView()
     viewMode.value = 'calendar'
 }
 
@@ -1521,7 +1521,7 @@ function handleDeleted() {
     toast.success(t('report.editor.delete_success'))
     selectedReport.value = null
     selectedOccurrence.value = null
-    loadOccurrences() // Full reload to catch progress changes and remove report
+    void loadOccurrences() // Full reload to catch progress changes and remove report
 }
 
 function handleConflict(serverReport: OccurrenceReportDTO, localReport: OccurrenceReportDTO) {
