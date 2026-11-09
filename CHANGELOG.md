@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A commented-out Keycloak sign-in option for the Auth service (`KEYCLOAK_*` in `.env.example`).
 - The Presidio analyzer is published as `ghcr.io/kenny1203520/edulog-presidio`, with the spaCy pipelines of 24 languages built in. `EDULOG_PRESIDIO_LANGUAGES` now picks the languages loaded at start, so changing them needs only a restart, not a rebuild; an unknown code stops the container.
 - Prerelease images also get a channel tag (`alpha`, `beta`, `rc`) that follows the newest release of that channel. `latest` still moves only with stable releases.
 - `docker-compose.build.yml` builds the frontend, API and Presidio images from source.
@@ -24,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The base Compose file puts the API container on the `net` network, so it can reach the gateway without the production override.
 
 ### Fixed
+- The commented-out Google, GitHub and Azure sign-in examples in `docker-compose.yml` now use `${API_EXTERNAL_URL}/callback`. Since `API_EXTERNAL_URL` ends in `/auth/v1`, the old `/auth/v1/callback` suffix produced `/auth/v1/auth/v1/callback`.
 - The nginx TLS overlay is attached to the `net` and `frontend` networks, so it can reach the gateway and the frontend.
 
 ### Security
