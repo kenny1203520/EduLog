@@ -142,7 +142,7 @@ export function buildOpenApi() {
       operationId: 'students_get_sensitive_credentials',
       summary: 'Read student credentials through the separately authorized sensitive-data route',
       security: [{ cookieAuth: [] }],
-      'x-permission': 'teaching.students.read_sensitive',
+      'x-permission': 'teaching.student_credentials.read',
       'x-sensitive-data': true,
       parameters: [{ $ref: '#/components/parameters/ResourceId' }],
       responses: {
@@ -327,7 +327,7 @@ export function buildOpenApi() {
       ...pageBase,
       operationId: 'page_classrooms_overview',
       summary: 'Read the classroom management page read model',
-      'x-permission': 'teaching.classrooms.list',
+      'x-permission': 'teaching.classrooms.access',
       parameters: [
         { $ref: '#/components/parameters/Limit' },
         { $ref: '#/components/parameters/Offset' },
@@ -342,7 +342,7 @@ export function buildOpenApi() {
       ...pageBase,
       operationId: 'page_holidays_overview',
       summary: 'Read the holiday management page read model',
-      'x-permission': 'teaching.holidays.list',
+      'x-permission': 'teaching.holidays.access',
       parameters: [
         { name: 'expand', in: 'query', schema: { type: 'boolean', default: true } },
         { $ref: '#/components/parameters/Limit' },
@@ -357,7 +357,7 @@ export function buildOpenApi() {
       ...pageBase,
       operationId: 'page_incomplete_reports',
       summary: 'Read incomplete reports for the report workflow page',
-      'x-permission': 'teaching.reports.list',
+      'x-permission': 'teaching.reports.access',
       parameters: [
         { name: 'days_back', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 3650, default: 90 } },
         { name: 'scope', in: 'query', schema: { type: 'string', enum: ['all', 'my_present', 'my_notifications'], default: 'all' } },
@@ -374,7 +374,7 @@ export function buildOpenApi() {
       ...pageBase,
       operationId: 'page_dashboard',
       summary: 'Read the dashboard page read model',
-      'x-permission': 'teaching.reports.list',
+      'x-permission': 'teaching.dashboard.access',
       parameters: [
         { name: 'start', in: 'query', required: false, schema: { type: 'string', format: 'date' } },
         { name: 'end', in: 'query', required: false, schema: { type: 'string', format: 'date' } },
@@ -389,12 +389,12 @@ export function buildOpenApi() {
   ]
   paths['/api/pages/courses/overview'] = { get: {
     ...pageBase, operationId: 'page_courses_overview', summary: 'Read the course management page read model',
-    'x-permission': 'teaching.courses.list', parameters: pageListParameters,
+    'x-permission': 'teaching.courses.access', parameters: pageListParameters,
     responses: { '200': pageResponse('PageCoursesOverviewData'), ...errorResponses },
   } }
   paths['/api/pages/students/overview'] = { get: {
     ...pageBase, operationId: 'page_students_overview', summary: 'Read the student management page read model without contact or credential values',
-    'x-permission': 'teaching.students.list', parameters: [
+    'x-permission': 'teaching.students.access', parameters: [
       ...pageListParameters.slice(0, 3),
       { name: 'sort', in: 'query', schema: { type: 'string', enum: ['name', '-name', 'created_at', '-created_at', 'updated_at', '-updated_at'], default: 'name' } },
     ],
@@ -406,8 +406,8 @@ export function buildOpenApi() {
     responses: { '200': pageResponse('PageStudentProfileData'), ...errorResponses },
   } }
   paths['/api/pages/students/{studentId}/private-details'] = { get: {
-    ...pageBase, operationId: 'page_student_private_details', summary: 'Read explicitly authorized student personal details and contacts',
-    'x-permission': 'teaching.students.read_sensitive', parameters: [{ name: 'studentId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+    ...pageBase, operationId: 'page_student_private_details', summary: 'Read explicitly authorized student personal details',
+    'x-permission': 'teaching.student_personal.read', parameters: [{ name: 'studentId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
     responses: { '200': pageResponse('PageStudentPrivateDetailsData'), ...errorResponses },
   } }
   paths['/api/pages/students/{studentId}/reports'] = { get: {
@@ -732,13 +732,14 @@ export function buildOpenApi() {
       },
     },
     PageCoursesOverviewData: { type: 'array', items: { type: 'object', required: ['id', 'subject', 'stage'], properties: { id: { type: 'string', format: 'uuid' }, subject: { type: 'string' }, stage: { type: 'string' }, display_name: { type: ['string', 'null'] }, description: { type: ['string', 'null'] }, description_document: { type: ['object', 'null'] }, lessons: { type: 'array', items: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, course_id: { type: 'string', format: 'uuid' }, title: { type: 'string' }, sequence: { type: 'integer' } } } } } } },
-    StudentSchoolSummary: { type: 'object', required: ['name', 'status'], additionalProperties: false, properties: { name: { type: 'string' }, status: { type: 'string', enum: ['enrolled'] }, grade: { type: ['string', 'null'] }, class: { type: ['string', 'null'] } } },
+    StudentSchoolSummary: { type: 'object', description: 'Without teaching.student_schools.read only grade is returned.', additionalProperties: false, properties: { name: { type: 'string' }, status: { type: 'string', enum: ['enrolled'] }, grade: { type: ['string', 'null'] }, class: { type: ['string', 'null'] } } },
     PageStudentsOverviewData: { type: 'array', items: { type: 'object', required: ['id', 'name'], properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' }, notes: { type: ['string', 'null'] }, notes_document: { type: ['object', 'null'] }, external_link: { type: ['string', 'null'] }, created_at: { type: 'string', format: 'date-time' }, updated_at: { type: ['string', 'null'], format: 'date-time' }, current_school: { anyOf: [{ $ref: '#/components/schemas/StudentSchoolSummary' }, { type: 'null' }] } } } },
-    PageStudentProfileData: { type: 'object', required: ['id', 'name', 'enrollments', 'capabilities'], properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' }, notes: { type: ['string', 'null'] }, notes_document: { type: ['object', 'null'] }, external_link: { type: ['string', 'null'] }, created_at: { type: 'string', format: 'date-time' }, updated_at: { type: ['string', 'null'], format: 'date-time' }, current_school: { anyOf: [{ $ref: '#/components/schemas/StudentSchoolSummary' }, { type: 'null' }] }, enrollments: { type: 'array', items: { type: 'object' } }, capabilities: { type: 'object', required: ['read_sensitive', 'update_sensitive'], properties: { read_sensitive: { type: 'boolean' }, update_sensitive: { type: 'boolean' } } } } },
+    PageStudentProfileData: { type: 'object', required: ['id', 'name', 'enrollments', 'capabilities'], properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' }, notes: { type: ['string', 'null'] }, notes_document: { type: ['object', 'null'] }, external_link: { type: ['string', 'null'] }, created_at: { type: 'string', format: 'date-time' }, updated_at: { type: ['string', 'null'], format: 'date-time' }, current_school: { anyOf: [{ $ref: '#/components/schemas/StudentSchoolSummary' }, { type: 'null' }] }, enrollments: { type: 'array', items: { type: 'object' } }, capabilities: { type: 'object', required: ['schools', 'personal', 'contacts', 'credentials'], additionalProperties: false, properties: { schools: { $ref: '#/components/schemas/StudentSectionCapability' }, personal: { $ref: '#/components/schemas/StudentSectionCapability' }, contacts: { $ref: '#/components/schemas/StudentSectionCapability' }, credentials: { $ref: '#/components/schemas/StudentSectionCapability' } } } } },
+    StudentSectionCapability: { type: 'object', required: ['read', 'update'], additionalProperties: false, properties: { read: { type: 'boolean' }, update: { type: 'boolean' } } },
     StudentSensitiveProfile: { type: 'object', required: ['id'], additionalProperties: false, properties: { id: { type: 'string', format: 'uuid' }, gov_id: { type: ['string', 'null'] }, email: { type: ['string', 'null'], format: 'email' }, phone: { type: ['string', 'null'] }, residence_address: { type: ['string', 'null'] }, mailing_address: { type: ['string', 'null'] }, birthday: { type: ['string', 'null'], format: 'date' } } },
     StudentContactSensitiveData: { type: 'object', required: ['id', 'name'], additionalProperties: false, properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' }, relation: { type: ['string', 'null'] }, phone: { type: ['string', 'null'] }, email: { type: ['string', 'null'], format: 'email' }, created_at: { type: 'string', format: 'date-time' }, updated_at: { type: ['string', 'null'], format: 'date-time' } } },
     StudentSchoolSensitiveData: { type: 'object', required: ['id', 'student_id', 'name'], additionalProperties: false, properties: { id: { type: 'string', format: 'uuid' }, student_id: { type: 'string', format: 'uuid' }, name: { type: 'string' }, status: { type: ['string', 'null'] }, grade: { type: ['string', 'null'] }, class: { type: ['string', 'null'] }, school_student_id: { type: ['string', 'null'] }, start_date: { type: ['string', 'null'] }, end_date: { type: ['string', 'null'] }, time_zone: { type: ['string', 'null'] }, created_at: { type: 'string', format: 'date-time' }, updated_at: { type: ['string', 'null'], format: 'date-time' } } },
-    PageStudentPrivateDetailsData: { type: 'object', required: ['student', 'contacts', 'schools'], properties: { student: { $ref: '#/components/schemas/StudentSensitiveProfile' }, contacts: { type: 'array', items: { $ref: '#/components/schemas/StudentContactSensitiveData' } }, schools: { type: 'array', items: { $ref: '#/components/schemas/StudentSchoolSensitiveData' } } } },
+    PageStudentPrivateDetailsData: { type: 'object', required: ['student'], properties: { student: { $ref: '#/components/schemas/StudentSensitiveProfile' } } },
     StudentCredentialSensitiveData: { type: 'array', items: { type: 'object', required: ['id', 'student_id', 'platform'], properties: { id: { type: 'string', format: 'uuid' }, student_id: { type: 'string', format: 'uuid' }, platform: { type: 'string' }, username: { type: ['string', 'null'] }, password: { type: ['string', 'null'], writeOnly: false }, url: { type: ['string', 'null'] }, created_at: { type: 'string', format: 'date-time' }, updated_at: { type: ['string', 'null'], format: 'date-time' } } } },
     PageStudentReportsData: { type: 'object', required: ['student', 'enrollments'], properties: { student: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' } } }, enrollments: { type: 'array', items: { type: 'object' } } } },
     IncompleteReportPageItem: {

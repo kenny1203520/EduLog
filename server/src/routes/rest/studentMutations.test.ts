@@ -81,7 +81,7 @@ describe.each(['students', 'student-contacts'] as const)('%s optional email muta
   }
 
   it('still requires sensitive update permission to clear an email', async () => {
-    const { app, db, query } = fixture(resource, 'teaching.students.update_sensitive')
+    const { app, db, query } = fixture(resource, resource === 'students' ? 'teaching.student_personal.update' : 'teaching.student_contacts.update')
     const res = await request(app).patch(`/api/${resource}/${id}`).set('Idempotency-Key', 'student-email-test').send({ email: '' })
     expect(res.status).toBe(403)
     expect(res.body.error.code).toBe('PERMISSION_DENIED')

@@ -38,7 +38,7 @@ export type StudentProfileDTO = Pick<StudentDTO, 'id' | 'name' | 'notes' | 'note
   current_school?: StudentSchoolSummaryDTO | null
   capabilities: StudentCapabilitiesDTO
 }
-export type StudentPrivateDetailsDTO = { student: Pick<StudentDTO, 'id' | 'gov_id' | 'email' | 'phone' | 'residence_address' | 'mailing_address' | 'birthday'>; contacts: StudentDTO['student_contacts']; schools: StudentDTO['student_schools'] }
+export type StudentPrivateDetailsDTO = { student: Pick<StudentDTO, 'id' | 'gov_id' | 'email' | 'phone' | 'residence_address' | 'mailing_address' | 'birthday'> }
 export type StudentReportsDTO = { student: Pick<StudentDTO, 'id' | 'name'>; enrollments: EnrollmentDTO[] }
 // Sensitive properties are optional for shared view-model compatibility only;
 // the overview endpoint never requests or returns them.

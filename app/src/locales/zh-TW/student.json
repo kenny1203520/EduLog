@@ -6,6 +6,18 @@
     "profile_subtitle": "管理學生基本資料與修課紀錄",
     "not_found": "找不到該學生",
     "not_found_subtitle": "學生檔案可能已被移除或移動。",
+    "restricted": {
+        "title": "部分資料需要額外權限",
+        "description": "你目前無法查看此學生的{sections}。",
+        "separator": "、",
+        "grade_label": "年級／班級：",
+        "sections": {
+            "schools": "學籍資料",
+            "personal": "個人資料",
+            "contacts": "聯絡人",
+            "credentials": "帳號密碼"
+        }
+    },
     "name": "學生姓名",
     "grade": "年級 / 班級",
     "current_school": "當前學校",

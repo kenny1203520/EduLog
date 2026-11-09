@@ -6,6 +6,18 @@
     "profile_subtitle": "Manage student information and class records",
     "not_found": "Student Not Found",
     "not_found_subtitle": "The student record may have been moved or deleted.",
+    "restricted": {
+        "title": "Some details need extra permissions",
+        "description": "You cannot view this student’s {sections}.",
+        "separator": ", ",
+        "grade_label": "Grade / class: ",
+        "sections": {
+            "schools": "school records",
+            "personal": "personal details",
+            "contacts": "contacts",
+            "credentials": "credentials"
+        }
+    },
     "name": "Student Name",
     "grade": "Grade / Class",
     "current_school": "Current School",
