@@ -15,8 +15,8 @@ const csrfCookie = 'edulog_csrf'
 const oauthCookie = 'edulog_oauth'
 const oauthCookiePath = '/api/auth/oauth'
 /** Lets a session opened from an invite or reset link set a password without the old one. */
-const passwordSetupCookie = 'edulog_pw_setup'
-const PASSWORD_SETUP_MS = 15 * 60 * 1000
+const setupLinkCookie = 'edulog_setup_link'
+const SETUP_LINK_TTL_MS = 15 * 60 * 1000
 const recoverSchema = z.object({ email: z.string().trim().email().max(320) }).strict()
 const setPasswordSchema = z.object({ new_password: z.string().min(8).max(1024), confirm_password: z.string().min(8).max(1024) }).strict().superRefine((value, context) => {
   if (value.new_password !== value.confirm_password) context.addIssue({ code: z.ZodIssueCode.custom, path: ['confirm_password'], message: 'New passwords do not match' })
@@ -26,17 +26,17 @@ const confirmQuery = z.object({
   type: z.enum(['invite', 'recovery', 'email_change', 'signup', 'email']),
 }).passthrough()
 
-export function passwordSetupToken(config: Pick<ApiConfig, 'COOKIE_SECRET'>, userId: string, expiresAt: number) {
-  const signature = crypto.createHmac('sha256', config.COOKIE_SECRET).update(`pw-setup:${userId}:${expiresAt}`).digest('base64url')
+export function setupLinkToken(config: Pick<ApiConfig, 'COOKIE_SECRET'>, userId: string, expiresAt: number) {
+  const signature = crypto.createHmac('sha256', config.COOKIE_SECRET).update(`setup-link:${userId}:${expiresAt}`).digest('base64url')
   return `${userId}.${expiresAt}.${signature}`
 }
 
-export function validPasswordSetup(config: Pick<ApiConfig, 'COOKIE_SECRET'>, token: string | undefined, userId: string, now = Date.now()) {
+export function validSetupLink(config: Pick<ApiConfig, 'COOKIE_SECRET'>, token: string | undefined, userId: string, now = Date.now()) {
   if (!token) return false
   const [id, expires, signature] = token.split('.')
   const expiresAt = Number(expires)
   if (id !== userId || !Number.isFinite(expiresAt) || expiresAt < now || !signature) return false
-  const expected = Buffer.from(passwordSetupToken(config, userId, expiresAt))
+  const expected = Buffer.from(setupLinkToken(config, userId, expiresAt))
   const received = Buffer.from(token)
   return expected.length === received.length && crypto.timingSafeEqual(expected, received)
 }
@@ -156,8 +156,8 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
       const session = await verifyEmailLink(config, parsed.data.token_hash, type)
       const status = await startSession(req, res, session)
       if (type === 'invite' || type === 'recovery') {
-        const expiresAt = Date.now() + PASSWORD_SETUP_MS
-        res.cookie(passwordSetupCookie, passwordSetupToken(config, session.user!.id, expiresAt), { httpOnly: true, secure: config.COOKIE_SECURE, sameSite: 'lax', path: '/api/auth', maxAge: PASSWORD_SETUP_MS })
+        const expiresAt = Date.now() + SETUP_LINK_TTL_MS
+        res.cookie(setupLinkCookie, setupLinkToken(config, session.user!.id, expiresAt), { httpOnly: true, secure: config.COOKIE_SECURE, sameSite: 'lax', path: '/api/auth', maxAge: SETUP_LINK_TTL_MS })
         return res.redirect(303, '/auth/set-password')
       }
       if (type === 'email_change') return res.redirect(303, '/dashboard/settings?tab=personal&email_changed=1')
@@ -182,14 +182,14 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
     try {
       const input = setPasswordSchema.parse(req.body)
       const user = req.user!
-      if (!validPasswordSetup(config, req.cookies?.[passwordSetupCookie], user.id)) throw new ApiError(403, 'PASSWORD_SETUP_EXPIRED', 'The password link has expired; request a new one')
+      if (!validSetupLink(config, req.cookies?.[setupLinkCookie], user.id)) throw new ApiError(403, 'PASSWORD_SETUP_EXPIRED', 'The password link has expired; request a new one')
       setAuditContext(req, { domain: 'system', resource: 'account-security', resourceId: user.id, action: 'password-set' })
       const { error } = await clients.adminClient.auth.admin.updateUserById(user.id, { password: input.new_password })
       if (error) {
         req.log.warn({ auth_error_code: error.code ?? 'UNKNOWN' }, 'auth_password_set_failed')
         throw new ApiError(422, 'AUTH_PASSWORD_CHANGE_FAILED', 'The password could not be changed')
       }
-      res.clearCookie(passwordSetupCookie, { path: '/api/auth' })
+      res.clearCookie(setupLinkCookie, { path: '/api/auth' })
       return res.json({ data: { changed: true }, meta: {}, request_id: req.requestId, trace_id: req.traceId })
     } catch (error) { next(error) }
   })

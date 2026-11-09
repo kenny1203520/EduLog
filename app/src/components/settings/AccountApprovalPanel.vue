@@ -37,7 +37,12 @@ const inviteEmail = ref('')
 const roleGroups = computed(() => (['teaching', 'system'] as const)
     .map((domain) => ({ domain, roles: roles.value.filter((role) => role.domain === domain) }))
     .filter((group) => group.roles.length))
-const defaultsChanged = computed(() => [...defaultRoleIds.value].sort().join() !== [...savedDefaultRoleIds.value].sort().join())
+const defaultsChanged = computed(() => !sameIds(defaultRoleIds.value, savedDefaultRoleIds.value))
+
+function sameIds(a: readonly string[], b: readonly string[]) {
+    const sorted = (ids: readonly string[]) => [...ids].sort((x, y) => x.localeCompare(y)).join()
+    return sorted(a) === sorted(b)
+}
 
 function roleName(role: GrantableRole) {
     return roleDisplayName({ code: role.code, name: role.name, is_system: role.domain === 'system' }, t)

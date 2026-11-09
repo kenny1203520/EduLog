@@ -16,8 +16,14 @@ type GoTrueConfig = Pick<ApiConfig, 'SUPABASE_URL' | 'SUPABASE_ANON_KEY'>
 const NON_OAUTH = new Set(['email', 'phone', 'anonymous_users', 'saml'])
 const PROVIDER_PATTERN = /^[a-z][a-z0-9_]{1,40}$/
 
+function withoutTrailingSlashes(url: string) {
+  let end = url.length
+  while (end > 0 && url[end - 1] === '/') end--
+  return url.slice(0, end)
+}
+
 function authUrl(config: GoTrueConfig, path: string) {
-  return `${config.SUPABASE_URL.replace(/\/+$/, '')}/auth/v1${path}`
+  return `${withoutTrailingSlashes(config.SUPABASE_URL)}/auth/v1${path}`
 }
 
 async function call<T>(config: GoTrueConfig, path: string, init: RequestInit = {}): Promise<T> {
@@ -45,7 +51,7 @@ export async function enabledOAuthProviders(config: GoTrueConfig, now = Date.now
     const providers = Object.entries(settings?.external ?? {})
       .filter(([name, enabled]) => enabled === true && !NON_OAUTH.has(name) && PROVIDER_PATTERN.test(name))
       .map(([name]) => name)
-      .sort()
+      .sort((a, b) => a.localeCompare(b))
     providerCache = { at: now, providers }
     return providers
   } catch {
@@ -68,7 +74,7 @@ export function createPkcePair() {
 
 /** Where the browser goes to sign in with a provider (PKCE flow). */
 export function oauthAuthorizeUrl(publicUrl: string, provider: string, redirectTo: string, challenge: string) {
-  const url = new URL(`${publicUrl.replace(/\/+$/, '')}/auth/v1/authorize`)
+  const url = new URL(`${withoutTrailingSlashes(publicUrl)}/auth/v1/authorize`)
   url.searchParams.set('provider', provider)
   url.searchParams.set('redirect_to', redirectTo)
   url.searchParams.set('code_challenge', challenge)

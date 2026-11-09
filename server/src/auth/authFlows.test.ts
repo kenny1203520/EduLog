@@ -4,7 +4,7 @@ import cookieParser from 'cookie-parser'
 import pino from 'pino'
 import request from 'supertest'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createAuthRouter, passwordSetupToken, validPasswordSetup } from './auth.js'
+import { createAuthRouter, csrfProtection, setupLinkToken, validSetupLink } from './auth.js'
 import { resetProviderCache } from './gotrue.js'
 import { requestContext } from '../http/context.js'
 import { errorHandler } from '../http/errors.js'
@@ -47,7 +47,7 @@ function app(statuses: Record<string, string>, mailer: Mailer = { enabled: true,
   instance.use(cookieParser())
   instance.use(express.json())
   instance.use(requestContext(pino({ level: 'silent' })))
-  instance.use('/api/auth', createAuthRouter(fake.clients, config, mailer))
+  instance.use('/api/auth', csrfProtection, createAuthRouter(fake.clients, config, mailer))
   instance.use(errorHandler)
   return { instance, ...fake, mailer }
 }
@@ -134,7 +134,7 @@ describe('email links and passwords', () => {
     const confirm = await request(harness.instance).get('/api/auth/confirm?token_hash=hash-12345&type=recovery')
     expect(confirm.headers.location).toBe('/auth/set-password')
     const cookies = (confirm.headers['set-cookie'] as unknown as string[]).map((cookie) => cookie.split(';')[0])
-    expect(cookies.some((cookie) => cookie.startsWith('edulog_pw_setup='))).toBe(true)
+    expect(cookies.some((cookie) => cookie.startsWith('edulog_setup_link='))).toBe(true)
 
     const csrf = cookies.find((cookie) => cookie.startsWith('edulog_csrf='))!.split('=')[1]
     const set = await request(harness.instance).post('/api/auth/set-password').set('Cookie', cookies.join('; ')).set('x-csrf-token', csrf)
@@ -166,11 +166,11 @@ describe('email links and passwords', () => {
   })
 
   it('signs the password-setup token to one user and a deadline', () => {
-    const token = passwordSetupToken(config, 'user-a', Date.now() + 1000)
-    expect(validPasswordSetup(config, token, 'user-a')).toBe(true)
-    expect(validPasswordSetup(config, token, 'user-b')).toBe(false)
-    expect(validPasswordSetup(config, token.replace(/.$/, (char) => (char === 'A' ? 'B' : 'A')), 'user-a')).toBe(false)
-    expect(validPasswordSetup(config, passwordSetupToken(config, 'user-a', Date.now() - 1), 'user-a')).toBe(false)
+    const token = setupLinkToken(config, 'user-a', Date.now() + 1000)
+    expect(validSetupLink(config, token, 'user-a')).toBe(true)
+    expect(validSetupLink(config, token, 'user-b')).toBe(false)
+    expect(validSetupLink(config, token.replace(/.$/, (char) => (char === 'A' ? 'B' : 'A')), 'user-a')).toBe(false)
+    expect(validSetupLink(config, setupLinkToken(config, 'user-a', Date.now() - 1), 'user-a')).toBe(false)
   })
 })
 
