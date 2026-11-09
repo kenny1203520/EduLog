@@ -121,6 +121,17 @@ describe('AI report assist router', () => {
     expect(repo.logs.map((row) => row.status)).toEqual(['succeeded'])
   })
 
+  it('offers the default model only while the teacher can use it', async () => {
+    const repo = new Repo()
+    const usable = await request(app(repo)).get(`/api/ai/report-assist/reports/${REPORT}`)
+    expect(usable.status).toBe(200)
+    expect(usable.body.data.default_model_row_id).toBe(MODEL)
+
+    repo.getSettings = async () => ({ enabled: true, noticeVersion: 2, defaultModelId: 'b1000000-0000-4000-8000-00000000dead' })
+    const disabled = await request(app(repo)).get(`/api/ai/report-assist/reports/${REPORT}`)
+    expect(disabled.body.data.default_model_row_id).toBeNull()
+  })
+
   it('cancels only a running generation of the caller', async () => {
     const registry = new GenerationRegistry()
     const controller = registry.register(GENERATION, 'u1')
