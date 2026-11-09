@@ -1,4 +1,4 @@
-import { loadPlaywright, browserTargets, resolveNativeAssetFile, resolveNativeAssetsDirectory, resolveScreenshotDirectory } from './browser-runtime.mjs'
+import { loadPlaywright, browserTargets, resolveNativeAssetFile, resolveNativeAssetsDirectory, resolveScreenshotDirectory, stripScriptElements } from './browser-runtime.mjs'
 import { siteFiles } from '../site-files.mjs'
 // Optional visual/keyboard check. No real site requests or personal fixtures.
 // node tests/browser-check.mjs <playwright/index.mjs> [screenshots-dir] [native-css-dir]
@@ -56,7 +56,7 @@ for (const [browserName, launchOptions] of executables) {
     ]
     for (const [name, state, tabUrl] of popupCases) {
       const page = await browser.newPage({ locale:'zh-TW', viewport: { width: 360, height: 600 } })
-      await page.setContent(read('../../popup/popup.html').replace('</head>', `<style>${read('../../styles/edulog-tokens.css')}</style><style>${read('../../popup/popup.css')}</style></head>`).replace(/<script[^>]*src=[^>]*><\/script>/g, ''))
+      await page.setContent(stripScriptElements(read('../../popup/popup.html').replace('</head>', `<style>${read('../../styles/edulog-tokens.css')}</style><style>${read('../../popup/popup.css')}</style></head>`)))
       await page.evaluate(({ state, tabUrl }) => {
         window.chrome = {
           storage: { local: { get: async () => ({ edulogExtension: { origin: 'http://localhost:5173', pending: state === 'pending' ? { expiresAt: new Date(Date.now() + 60000).toISOString() } : null } }) } },
