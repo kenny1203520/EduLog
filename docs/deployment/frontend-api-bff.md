@@ -11,7 +11,7 @@ Browser -> Nginx -> /api/* -> Express -> Supabase internal network
 
 - `edulog` is the Vue/Nginx static frontend. Its Nginx runtime config sends `^~ /api/` to `api:3000` before the Vue history fallback.
 - `api` is the Express Auth BFF. It has no published port and receives Supabase credentials only through server-side environment variables.
-- `docker-compose.prod.yml` removes public Kong, analytics, and pooler ports. Use `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d` with the required secret environment variables.
+- `docker-compose.prod.yml` removes the public API gateway (`api-gw`) and pooler ports. Use `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d` with the required secret environment variables.
 
 Required root `.env` values are `EDULOG_COOKIE_SECRET` (at least 32 characters), `EDULOG_WEB_BASE_URL` (the browser-facing HTTPS frontend origin in production), `EDULOG_ALLOWED_ORIGINS`, and the Supabase `ANON_KEY` / `SERVICE_ROLE_KEY`. The other defaults (`EDULOG_SUPABASE_INTERNAL_URL`, `RATE_LIMIT_STORE=supabase`) are production-ready. See [environment.md](environment.md) for every variable and how Compose maps it into each container.
 
