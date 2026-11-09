@@ -36,9 +36,9 @@ describe('student API resource boundaries', () => {
     expect(resources['student-contacts'].table).toBe('student_contacts')
     expect(resources['student-schools'].table).toBe('student_schools')
     expect(resources['student-credentials'].table).toBe('student_credentials')
-    expect(resources['student-contacts'].permission).toBe('teaching.students.read_sensitive')
-    expect(resources['student-schools'].permission).toBe('teaching.students.read_sensitive')
-    expect(resources['student-credentials'].permission).toBe('teaching.students.read_sensitive')
+    expect(resources['student-contacts'].permission).toBe('teaching.student_contacts.read')
+    expect(resources['student-schools'].permission).toBe('teaching.student_schools.read')
+    expect(resources['student-credentials'].permission).toBe('teaching.student_credentials.read')
   })
 
   it('never includes credential passwords in generic readable fields', () => {

@@ -1,6 +1,6 @@
 import type { Request } from 'express'
 import { describe, expect, it, vi } from 'vitest'
-import { authorizeCollection, authorizeResource, requireAuthorizationDecision, requireAuthorizationRpcDecision } from './authorization.js'
+import { authorizeCollection, authorizeResource, requireAuthorizationDecision, requireAuthorizationRpcDecision, studentSensitivePermissions } from './authorization.js'
 import { resources } from '../routes/rest/resources.js'
 
 function requestWithRpc(rpc: ReturnType<typeof vi.fn>) {
@@ -127,8 +127,8 @@ describe('resource-aware authorization', () => {
 
   it('does not treat sensitive reads as plain reads', async () => {
     const rpc = vi.fn().mockResolvedValue({ data: true, error: null })
-    await authorizeCollection(requestWithRpc(rpc), resources['student-contacts'], 'teaching.students.read_sensitive')
-    expect(rpc).toHaveBeenCalledWith('has_api_permission', expect.objectContaining({ p_permission_key: 'teaching.students.read_sensitive' }))
+    await authorizeCollection(requestWithRpc(rpc), resources['student-contacts'], 'teaching.student_contacts.read')
+    expect(rpc).toHaveBeenCalledWith('has_api_permission', expect.objectContaining({ p_permission_key: 'teaching.student_contacts.read' }))
   })
 
   it('keeps self-owned resources independent from system permissions', async () => {
@@ -183,18 +183,42 @@ describe('resource-aware authorization', () => {
     expect(rpc).not.toHaveBeenCalled()
   })
 
+  it.each([
+    ['teaching.student_schools.update', 'can_access_sensitive_student'],
+    ['teaching.student_personal.read', 'can_access_sensitive_student'],
+    ['teaching.students.read', 'can_access_student'],
+    // A `_sensitive` suffix alone no longer selects the sensitive helper.
+    ['teaching.students.read_sensitive', 'can_access_student'],
+  ])('resolves %s on a student through %s', async (permission, functionName) => {
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null })
+    await authorizeResource(requestWithRpc(rpc), resources.students, permission, '00000000-0000-4000-8000-000000000032')
+    expect(rpc).toHaveBeenCalledWith(functionName, {
+      p_student_id: '00000000-0000-4000-8000-000000000032',
+      p_permission_key: permission,
+    })
+  })
+
+  it('lists exactly the eight student sensitive-section keys', () => {
+    expect([...studentSensitivePermissions].sort()).toEqual([
+      'teaching.student_contacts.read', 'teaching.student_contacts.update',
+      'teaching.student_credentials.read', 'teaching.student_credentials.update',
+      'teaching.student_personal.read', 'teaching.student_personal.update',
+      'teaching.student_schools.read', 'teaching.student_schools.update',
+    ])
+  })
+
   it('uses the sensitive student scope helper instead of the ordinary owner shortcut', async () => {
     const rpc = vi.fn().mockResolvedValue({ data: true, error: null })
     await authorizeResource(
       requestWithRpc(rpc),
       resources['student-credentials'],
-      'teaching.students.read_sensitive',
+      'teaching.student_credentials.read',
       '00000000-0000-4000-8000-000000000030',
       { student_id: '00000000-0000-4000-8000-000000000031' },
     )
     expect(rpc).toHaveBeenCalledWith('can_access_sensitive_student', {
       p_student_id: '00000000-0000-4000-8000-000000000031',
-      p_permission_key: 'teaching.students.read_sensitive',
+      p_permission_key: 'teaching.student_credentials.read',
     })
   })
 })

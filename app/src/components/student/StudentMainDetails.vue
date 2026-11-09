@@ -14,11 +14,13 @@ import type { RichTextDocumentV1, TextEditorContent } from '@/components/text-ed
 
 const props = withDefaults(defineProps<{
     studentId: string
-    canReadSensitive?: boolean
-    canUpdateSensitive?: boolean
+    /** teaching.student_personal.read for this student. */
+    canReadPersonal?: boolean
+    /** teaching.student_personal.update for this student. */
+    canUpdatePersonal?: boolean
 }>(), {
-    canReadSensitive: false,
-    canUpdateSensitive: false,
+    canReadPersonal: false,
+    canUpdatePersonal: false,
 })
 
 const { t } = useI18n()
@@ -119,7 +121,7 @@ async function saveMainDetails() {
             external_link: form.value.external_link || null,
             notes: form.value.notes,
             notes_document: form.value.notes_document,
-            ...(props.canUpdateSensitive ? {
+            ...(props.canUpdatePersonal ? {
                 gov_id: form.value.gov_id,
                 email: form.value.email,
                 phone: form.value.phone,
@@ -190,7 +192,7 @@ watch(isEditingMainDetails, (val) => {
                     {{ form.name || '-' }}</div>
             </div>
 
-            <div v-if="canReadSensitive" class="space-y-1.5">
+            <div v-if="canReadPersonal" class="space-y-1.5">
                 <div class="flex items-center gap-2 mb-1.5">
                     <label for="student-government-id" class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                         $t('student.gov_id') }}</label>
@@ -211,7 +213,7 @@ watch(isEditingMainDetails, (val) => {
                         </svg>
                     </button>
                 </div>
-                <input v-if="isEditingMainDetails && canUpdateSensitive" v-model="form.gov_id" :type="showGovId ? 'text' : 'password'"
+                <input v-if="isEditingMainDetails && canUpdatePersonal" v-model="form.gov_id" :type="showGovId ? 'text' : 'password'"
                     id="student-government-id" class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
                 <div v-else
                     class="text-gray-800 px-4 py-3 text-base font-bold bg-gray-50/50 rounded-lg border border-transparent min-h-[46px] font-mono flex items-center">
@@ -220,10 +222,10 @@ watch(isEditingMainDetails, (val) => {
                 </div>
             </div>
 
-            <div v-if="canReadSensitive" class="space-y-1.5">
+            <div v-if="canReadPersonal" class="space-y-1.5">
                 <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentmaindetails-57-4465">{{ $t('student.birthday')
                 }}</label>
-                <input v-if="isEditingMainDetails && canUpdateSensitive" v-model="form.birthday" type="date"
+                <input v-if="isEditingMainDetails && canUpdatePersonal" v-model="form.birthday" type="date"
                     class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400" id="edulog-studentmaindetails-57-4465">
                 <div v-else
                     class="text-gray-800 px-4 py-3 text-base font-bold bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">
@@ -250,10 +252,10 @@ watch(isEditingMainDetails, (val) => {
                 </div>
             </div>
 
-            <div v-if="canReadSensitive" class="space-y-1.5">
+            <div v-if="canReadPersonal" class="space-y-1.5">
                 <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentmaindetails-87-6956">{{ $t('auth.email')
                 }}</label>
-                <input v-if="isEditingMainDetails && canUpdateSensitive" v-model="form.email" type="email" @blur="emailTouched = true"
+                <input v-if="isEditingMainDetails && canUpdatePersonal" v-model="form.email" type="email" @blur="emailTouched = true"
                     class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400"
                     :class="{ 'border-red-500 focus:ring-red-500': emailError }" id="edulog-studentmaindetails-87-6956">
                 <div v-else
@@ -261,29 +263,29 @@ watch(isEditingMainDetails, (val) => {
                     {{ form.email || '-' }}</div>
                 <p v-if="emailError && isEditingMainDetails" class="text-xs text-red-500 mt-1">{{ emailError }}</p>
             </div>
-            <div v-if="canReadSensitive" class="space-y-1.5">
+            <div v-if="canReadPersonal" class="space-y-1.5">
                 <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentmaindetails-98-7980">{{
                     $t('student.contacts.phone') }}</label>
-                <input v-if="isEditingMainDetails && canUpdateSensitive" v-model="form.phone" type="tel"
+                <input v-if="isEditingMainDetails && canUpdatePersonal" v-model="form.phone" type="tel"
                     class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400" id="edulog-studentmaindetails-98-7980">
                 <div v-else
                     class="text-gray-800 px-4 py-3 text-base font-bold bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">
                     {{ form.phone || '-' }}</div>
             </div>
 
-            <div v-if="canReadSensitive" class="space-y-1.5 md:col-span-2">
+            <div v-if="canReadPersonal" class="space-y-1.5 md:col-span-2">
                 <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentmaindetails-108-8808">{{
                     $t('student.residence_address') }}</label>
-                <input v-if="isEditingMainDetails && canUpdateSensitive" v-model="form.residence_address" type="text"
+                <input v-if="isEditingMainDetails && canUpdatePersonal" v-model="form.residence_address" type="text"
                     class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400" id="edulog-studentmaindetails-108-8808">
                 <div v-else
                     class="text-gray-800 px-4 py-3 text-base font-bold bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">
                     {{ form.residence_address || '-' }}</div>
             </div>
-            <div v-if="canReadSensitive" class="space-y-1.5 md:col-span-2">
+            <div v-if="canReadPersonal" class="space-y-1.5 md:col-span-2">
                 <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block" for="edulog-studentmaindetails-117-9663">{{
                     $t('student.mailing_address') }}</label>
-                <input v-if="isEditingMainDetails && canUpdateSensitive" v-model="form.mailing_address" type="text"
+                <input v-if="isEditingMainDetails && canUpdatePersonal" v-model="form.mailing_address" type="text"
                     class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400" id="edulog-studentmaindetails-117-9663">
                 <div v-else
                     class="text-gray-800 px-4 py-3 text-base font-bold bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">

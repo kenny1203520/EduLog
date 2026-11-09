@@ -300,7 +300,7 @@ export async function item(req: Request, res: Response, def: ResourceDefinition)
   const sensitivePatch = Object.fromEntries(Object.entries(patch).filter(([key]) => sensitiveFields.has(key)))
   const safePatch = Object.fromEntries(Object.entries(patch).filter(([key]) => !sensitiveFields.has(key)))
   if (Object.keys(sensitivePatch).length) {
-    const sensitivePermission = def.route === 'students' ? 'teaching.students.update_sensitive' : 'teaching.teachers.update_sensitive'
+    const sensitivePermission = def.route === 'students' ? 'teaching.student_personal.update' : 'teaching.teachers.update_sensitive'
     await authorizeResource(req, def, sensitivePermission, id, existing.data as unknown as Record<string, unknown>)
     const functionName = def.route === 'students' ? 'update_student_sensitive' : 'update_teacher_sensitive'
     const parameterName = def.route === 'students' ? 'p_student_id' : 'p_teacher_id'

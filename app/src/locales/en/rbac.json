@@ -80,7 +80,7 @@
   "version_conflict": "The permission configuration changed. Your draft is preserved; reload before saving again.",
 "save_permissions": "Save permissions",
 "scope": { "label": "Policy scope", "global_teaching": "Entire platform", "teaching": "Teaching", "teaching_context": "Teaching context", "classroom": "Classroom", "class_session": "Class session", "select_context": "Select a scope to review teaching role permissions." },
-"sensitive_student_data_hint": "Sensitive student permissions control access to personal details, contact information, school records and credentials. Reports use the classroom or class-session scope of the related class.",
+"sensitive_student_data_hint": "Sensitive student data has four sections with their own read and update permissions: school records, personal details, contacts and credentials. Without school read access, student lists and profiles show the grade only. Page access permissions only open a page; the data shown still follows each resource's list and read scope.",
   "permissions": {
     "title": "Role permissions",
     "subtitle": "Configure local policy and review inherited access."
@@ -115,10 +115,15 @@
     "templates": { "name": "Templates", "description": "Report and teaching templates" },
     "report-templates": { "name": "Report templates", "description": "Reusable templates for student reports" },
     "dashboard": { "name": "Dashboard", "description": "Home dashboard and today's schedule" },
+    "student_schools": { "name": "Student school records", "description": "School, grade, class and school student ID" },
+    "student_personal": { "name": "Student personal details", "description": "Government ID, email, phone, addresses and birthday" },
+    "student_contacts": { "name": "Student contacts", "description": "Guardians and emergency contacts" },
+    "student_credentials": { "name": "Student credentials", "description": "Learning platform accounts and passwords" },
     "holidays": { "name": "Holidays", "description": "Teaching calendar holidays" },
     "ai": { "name": "AI report assistant", "description": "AI-generated learning reports and teaching suggestions, provider credentials and generation logs" }
   },
   "actions": {
+    "access": { "name": "Open page", "description": "Open the page; the data shown still follows list and read scope" },
     "list": { "name": "List", "description": "View a collection of records" },
     "read": { "name": "Read", "description": "View a record" },
     "create": { "name": "Create", "description": "Create a new record" },
@@ -142,7 +147,8 @@
     "teaching_manager": { "name": "Teaching Manager", "description": "Manages teaching data and operations within assigned scopes" },
     "teacher": { "name": "Teacher", "description": "Creates and maintains teaching records" },
     "assistant": { "name": "Teaching Assistant", "description": "Assists teachers with classroom and student learning activities" },
-    "viewer": { "name": "Viewer", "description": "Read-only access to teaching data" }
+    "viewer": { "name": "Viewer", "description": "Read-only access to teaching data" },
+    "member": { "name": "Member", "description": "Opens the basic pages without granting any data" }
   },
   "permission_search": "Search resources, actions, keys, and descriptions",
   "permission_resource_jump": "Jump to resource",

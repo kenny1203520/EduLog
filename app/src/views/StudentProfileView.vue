@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useStudentStore } from '@/stores/useStudentStore'
+import { STUDENT_SENSITIVE_SECTIONS } from '@/models/Student'
 import StudentMainDetails from '@/components/student/StudentMainDetails.vue'
 import StudentContacts from '@/components/student/StudentContacts.vue'
 import StudentSchools from '@/components/student/StudentSchools.vue'
@@ -12,6 +14,16 @@ const route = useRoute()
 const studentStore = useStudentStore()
 
 const studentId = computed(() => route.params.id as string)
+const { t } = useI18n()
+
+/** Localized names of the sensitive sections this user cannot read. */
+const hiddenSections = computed(() => {
+    const capabilities = studentStore.currentStudent?.capabilities
+    if (!capabilities) return []
+    return STUDENT_SENSITIVE_SECTIONS
+        .filter(section => !capabilities[section].read)
+        .map(section => t(`student.restricted.sections.${section}`))
+})
 
 onMounted(async () => {
     if (studentId.value) {
@@ -84,28 +96,32 @@ async function refreshData() {
                         <!-- Left Column: Main Details & Enrollments -->
                         <div class="min-w-0 space-y-8 xl:col-span-8">
                             <StudentMainDetails :student-id="studentId"
-                                :can-read-sensitive="studentStore.currentStudent.capabilities.read_sensitive"
-                                :can-update-sensitive="studentStore.currentStudent.capabilities.update_sensitive" />
+                                :can-read-personal="studentStore.currentStudent.capabilities.personal.read"
+                                :can-update-personal="studentStore.currentStudent.capabilities.personal.update" />
                             <StudentEnrollments :student-id="studentId"
                                 :enrollments="studentStore.currentStudent.enrollments || []" />
                         </div>
 
                         <!-- Right Column: Contacts, Schools, Credentials -->
                         <div class="min-w-0 space-y-8 xl:col-span-4">
-                            <template v-if="studentStore.currentStudent.capabilities.read_sensitive">
-                                <StudentContacts :student-id="studentId"
-                                    :contacts="studentStore.currentStudent.contacts || []" />
-                                <StudentSchools :student-id="studentId"
-                                    :schools="studentStore.currentStudent.schools || []" />
-                                <StudentCredentials :student-id="studentId"
-                                    :credentials="studentStore.currentStudent.credentials || []" />
-                            </template>
-                            <section v-else class="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
-                                <h2 class="font-bold">需要額外權限</h2>
-                                <p class="mt-1">目前僅顯示學生的在學學校、年級與班級摘要；完整學籍、聯絡資料與帳密受到額外權限保護。</p>
-                                <dl v-if="studentStore.currentStudent.currentSchoolSummary" class="mt-4 space-y-1">
-                                    <div><dt class="inline font-semibold">學校：</dt><dd class="inline">{{ studentStore.currentStudent.currentSchoolSummary.name }}</dd></div>
-                                    <div><dt class="inline font-semibold">年級／班級：</dt><dd class="inline">{{ studentStore.currentStudent.displayGrade || '-' }}</dd></div>
+                            <StudentContacts v-if="studentStore.currentStudent.capabilities.contacts.read"
+                                :student-id="studentId"
+                                :contacts="studentStore.currentStudent.contacts || []"
+                                :can-update="studentStore.currentStudent.capabilities.contacts.update" />
+                            <StudentSchools v-if="studentStore.currentStudent.capabilities.schools.read"
+                                :student-id="studentId"
+                                :schools="studentStore.currentStudent.schools || []"
+                                :can-update="studentStore.currentStudent.capabilities.schools.update" />
+                            <StudentCredentials v-if="studentStore.currentStudent.capabilities.credentials.read"
+                                :student-id="studentId"
+                                :credentials="studentStore.currentStudent.credentials || []"
+                                :can-update="studentStore.currentStudent.capabilities.credentials.update" />
+                            <section v-if="hiddenSections.length" data-testid="student-restricted-sections"
+                                class="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+                                <h2 class="font-bold">{{ $t('student.restricted.title') }}</h2>
+                                <p class="mt-1">{{ $t('student.restricted.description', { sections: hiddenSections.join($t('student.restricted.separator')) }) }}</p>
+                                <dl v-if="!studentStore.currentStudent.capabilities.schools.read && studentStore.currentStudent.currentSchoolSummary" class="mt-4 space-y-1">
+                                    <div><dt class="inline font-semibold">{{ $t('student.restricted.grade_label') }}</dt><dd class="inline">{{ studentStore.currentStudent.displayGrade || '-' }}</dd></div>
                                 </dl>
                             </section>
                         </div>
