@@ -153,7 +153,7 @@ async function handleLogout() {
             <div class="mx-6 mt-2 h-px bg-gray-100/60"></div>
 
             <nav class="flex-1 p-4 space-y-2 overflow-y-auto">
-                <router-link to="/dashboard" @click="isSidebarOpen = false"
+                <router-link v-if="capabilities.can('teaching.dashboard.access')" to="/dashboard" @click="isSidebarOpen = false"
                     class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
                     exact-active-class="bg-emerald-50/60 text-emerald-600 font-bold relative before:absolute before:left-[-1rem] before:top-3 before:bottom-3 before:w-1 before:bg-emerald-500 before:rounded-r-full">
                     <div class="flex items-center gap-3">
@@ -166,7 +166,7 @@ async function handleLogout() {
                     </div>
                 </router-link>
 
-                <router-link v-if="capabilities.can('teaching.students.list')" to="/dashboard/students" @click="isSidebarOpen = false"
+                <router-link v-if="capabilities.can('teaching.students.access')" to="/dashboard/students" @click="isSidebarOpen = false"
                     class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
                     active-class="bg-emerald-50/60 text-emerald-600 font-bold relative before:absolute before:left-[-1rem] before:top-3 before:bottom-3 before:w-1 before:bg-emerald-500 before:rounded-r-full">
                     <div class="flex items-center gap-3">
@@ -179,7 +179,7 @@ async function handleLogout() {
                     </div>
                 </router-link>
 
-                <router-link v-if="capabilities.can('teaching.courses.list')" to="/dashboard/courses" @click="isSidebarOpen = false"
+                <router-link v-if="capabilities.can('teaching.courses.access')" to="/dashboard/courses" @click="isSidebarOpen = false"
                     class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
                     active-class="bg-emerald-50/60 text-emerald-600 font-bold relative before:absolute before:left-[-1rem] before:top-3 before:bottom-3 before:w-1 before:bg-emerald-500 before:rounded-r-full">
                     <div class="flex items-center gap-3">
@@ -192,7 +192,7 @@ async function handleLogout() {
                     </div>
                 </router-link>
 
-                <router-link v-if="capabilities.can('teaching.classrooms.list')" to="/dashboard/classrooms" @click="isSidebarOpen = false"
+                <router-link v-if="capabilities.can('teaching.classrooms.access')" to="/dashboard/classrooms" @click="isSidebarOpen = false"
                     class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
                     active-class="bg-emerald-50/60 text-emerald-600 font-bold relative before:absolute before:left-[-1rem] before:top-3 before:bottom-3 before:w-1 before:bg-emerald-500 before:rounded-r-full">
                     <div class="flex items-center gap-3">
@@ -205,7 +205,7 @@ async function handleLogout() {
                     </div>
                 </router-link>
 
-                <router-link v-if="capabilities.can('teaching.holidays.list')" to="/dashboard/holidays" @click="isSidebarOpen = false"
+                <router-link v-if="capabilities.can('teaching.holidays.access')" to="/dashboard/holidays" @click="isSidebarOpen = false"
                     class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
                     active-class="bg-emerald-50/60 text-emerald-600 font-bold relative before:absolute before:left-[-1rem] before:top-3 before:bottom-3 before:w-1 before:bg-emerald-500 before:rounded-r-full">
                     <div class="flex items-center gap-3">
@@ -234,7 +234,7 @@ async function handleLogout() {
                     </div>
                 </router-link>
 
-                <router-link v-if="capabilities.can('teaching.reports.list')" to="/dashboard/reports/incomplete" @click="isSidebarOpen = false"
+                <router-link v-if="capabilities.can('teaching.reports.access')" to="/dashboard/reports/incomplete" @click="isSidebarOpen = false"
                     class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
                     active-class="bg-emerald-50/60 text-emerald-600 font-bold relative before:absolute before:left-[-1rem] before:top-3 before:bottom-3 before:w-1 before:bg-emerald-500 before:rounded-r-full">
                     <div class="flex items-center gap-3">

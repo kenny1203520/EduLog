@@ -3,12 +3,12 @@ type RoleDisplayInput = { code?: string | null; name: string; is_system?: boolea
 type RoleDescriptionInput = { code?: string | null; description?: string | null; is_builtin?: boolean }
 
 const BUILT_IN_ROLE_CODES = new Set([
-    'owner', 'teaching_owner', 'manager', 'teaching_manager', 'assistant', 'viewer',
+    'owner', 'teaching_owner', 'manager', 'teaching_manager', 'assistant', 'viewer', 'member',
     'instructor', 'assistant_instructor', 'trainee_instructor', 'trainee_assistant',
     'teacher', 'learning_coach', 'coach', 'trainee_teacher', 'trainee_tutor',
     'trainee_learning_coach', 'trainee_coach'
 ])
-const TEACHING_BUILT_IN_ROLE_CODES = new Set(['teaching_owner', 'teaching_manager', 'teacher', 'assistant', 'viewer'])
+const TEACHING_BUILT_IN_ROLE_CODES = new Set(['teaching_owner', 'teaching_manager', 'teacher', 'assistant', 'viewer', 'member'])
 
 /** Returns a localized label for built-in roles and the stored name for custom roles. */
 export function roleDisplayName(role: RoleDisplayInput, translate: Translate): string {

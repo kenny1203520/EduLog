@@ -46,6 +46,18 @@ beforeEach(() => {
 })
 
 describe('AiReportPanel', () => {
+    it('reloads the usable models each time the panel is reopened', async () => {
+        service.bootstrap.mockResolvedValue(bootstrap())
+        const wrapper = mountPanel()
+        await flushPromises()
+        expect(service.bootstrap).toHaveBeenCalledTimes(1)
+
+        await wrapper.setProps({ show: false })
+        await wrapper.setProps({ show: true })
+        await flushPromises()
+        expect(service.bootstrap).toHaveBeenCalledTimes(2)
+    })
+
     it('asks for the usage notice before showing generation controls', async () => {
         service.bootstrap.mockResolvedValue(bootstrap(false))
         service.acknowledgeNotice.mockResolvedValue(undefined)

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { ApiV1Error } from '@/services/api/ApiV1Client'
 import type { GenerationHistoryEntry, ReportAssistBootstrap, ReportAssistService } from '@/services/ai/ReportAssistService'
 import { FOLLOW_INTERVAL_MS, useReportAssist } from './useReportAssist'
@@ -80,6 +80,55 @@ describe('useReportAssist', () => {
         expect(assist.canGenerate.value).toBe(false)
         expect(assist.alternativeSources.value.map((source) => source.model_row_id)).toEqual(['mine'])
         assist.selectSource('mine')
+        expect(assist.canGenerate.value).toBe(true)
+    })
+
+    it('lets the teacher try again once another model is picked after a model error', async () => {
+        const service = fakeService()
+        service.generate.mockRejectedValueOnce(new ApiV1Error(404, { error: { code: 'AI_MODEL_NOT_FOUND', message: '', request_id: '', trace_id: '' } }))
+        const assist = useReportAssist(ref('r1'), service as never)
+        await assist.load()
+        await assist.generate()
+        expect(assist.errorCode.value).toBe('AI_MODEL_NOT_FOUND')
+        expect(assist.canGenerate.value).toBe(false)
+
+        // The picker writes the ref directly, as v-model does.
+        assist.modelRowId.value = 'mine'
+        await nextTick()
+        expect(assist.errorCode.value).toBeNull()
+        expect(assist.canGenerate.value).toBe(true)
+    })
+
+    it('refreshes the models on reopen, keeping versions and falling back to the default', async () => {
+        const service = fakeService(bootstrap({ preferences: { last_model_row_id: 'mine' } }))
+        const assist = useReportAssist(ref('r1'), service as never)
+        await assist.load()
+        await assist.generate()
+        expect(assist.modelRowId.value).toBe('mine')
+
+        service.generate.mockRejectedValueOnce(new ApiV1Error(409, { error: { code: 'AI_CREDENTIAL_INVALID', message: '', request_id: '', trace_id: '' } }))
+        await assist.generate()
+        expect(assist.canGenerate.value).toBe(false)
+
+        // The personal key was disabled while the panel was closed.
+        service.bootstrap.mockResolvedValueOnce(bootstrap({ sources: [site], preferences: { last_model_row_id: 'mine' } }))
+        await assist.refreshSources()
+        expect(service.bootstrap).toHaveBeenCalledTimes(2)
+        expect(assist.modelRowId.value).toBe('site')
+        expect(assist.errorCode.value).toBeNull()
+        expect(assist.canGenerate.value).toBe(true)
+        expect(assist.versions.value).toHaveLength(1)
+    })
+
+    it('clears a model error on reopen even when the same model is still offered', async () => {
+        const service = fakeService()
+        service.generate.mockRejectedValueOnce(new ApiV1Error(409, { error: { code: 'AI_CREDENTIAL_INVALID', message: '', request_id: '', trace_id: '' } }))
+        const assist = useReportAssist(ref('r1'), service as never)
+        await assist.load()
+        await assist.generate()
+        expect(assist.canGenerate.value).toBe(false)
+        await assist.refreshSources()
+        expect(assist.modelRowId.value).toBe('site')
         expect(assist.canGenerate.value).toBe(true)
     })
 

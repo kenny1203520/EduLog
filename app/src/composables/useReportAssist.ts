@@ -18,6 +18,16 @@ export type ReportAssistStatus = 'idle' | 'loading' | 'ready' | 'generating' | '
 /** Quota-related errors that the panel answers by offering another source. */
 const SOURCE_ERRORS = new Set(['AI_QUOTA_EXHAUSTED', 'AI_PLAN_LIMIT_REACHED', 'AI_CREDENTIAL_INVALID', 'AI_MODEL_NOT_FOUND', 'AI_SECRET_KEY_MISSING'])
 
+/**
+ * Errors tied to the chosen model. Picking another model, or reopening the
+ * panel, clears them so the teacher can try again.
+ */
+const MODEL_ERRORS = new Set([
+    ...SOURCE_ERRORS,
+    'AI_MODEL_UNSUPPORTED', 'AI_RATE_LIMITED', 'AI_PROVIDER_ERROR', 'AI_INVALID_OUTPUT', 'AI_EMPTY_OUTPUT',
+    'AI_DATA_POLICY', 'AI_GENERATION_TIMEOUT',
+])
+
 /** How often, and for how long, the panel checks on a generation whose stream it lost. */
 export const FOLLOW_INTERVAL_MS = 5_000
 export const FOLLOW_LIMIT_MS = 5 * 60_000
@@ -109,6 +119,15 @@ export function useReportAssist(reportId: Ref<string | undefined>, service = Rep
     watch(sourceProblem, (problem) => { if (problem) settingsOverride.value = null })
 
     const canGenerate = computed(() => Boolean(reportId.value && bootstrap.value?.enabled && !needsNotice.value && selectedSource.value && status.value !== 'generating' && !sourceProblem.value))
+
+    function clearModelError() {
+        if (errorCode.value && MODEL_ERRORS.has(errorCode.value)) {
+            errorCode.value = null
+            errorReason.value = null
+        }
+    }
+    // The picker writes modelRowId directly; any change of model clears its error.
+    watch(modelRowId, (next, previous) => { if (next !== previous) clearModelError() })
 
     function chooseInitialSource(data: ReportAssistBootstrap) {
         const ids = new Set(data.sources.map((source) => source.model_row_id))
@@ -271,6 +290,26 @@ export function useReportAssist(reportId: Ref<string | undefined>, service = Rep
         if (data && bootstrap.value) bootstrap.value = { ...bootstrap.value, quota: data.quota }
     }
 
+    /**
+     * Reload what can change while the panel is closed (the usable models,
+     * quota, switches and notice), keeping the versions already generated.
+     * A model that is no longer offered gives way to the default one.
+     */
+    async function refreshSources() {
+        if (!reportId.value || status.value === 'generating') return
+        if (!bootstrap.value || status.value === 'error' || status.value === 'idle') return load()
+        let data: ReportAssistBootstrap
+        try {
+            data = await service.bootstrap(reportId.value)
+        } catch (error) {
+            errorCode.value = codeOf(error)
+            return
+        }
+        bootstrap.value = data
+        if (!data.sources.some((source) => source.model_row_id === modelRowId.value)) chooseInitialSource(data)
+        clearModelError()
+    }
+
     /** Stop the generation on the server. Only this stops it; closing the panel or losing the connection does not. */
     async function cancel() {
         const id = runningId.value
@@ -326,10 +365,7 @@ export function useReportAssist(reportId: Ref<string | undefined>, service = Rep
 
     function selectSource(id: string) {
         modelRowId.value = id
-        if (errorCode.value && SOURCE_ERRORS.has(errorCode.value)) {
-            errorCode.value = null
-            errorReason.value = null
-        }
+        clearModelError()
     }
 
     function showVersion(index: number) {
@@ -372,7 +408,7 @@ export function useReportAssist(reportId: Ref<string | undefined>, service = Rep
         needsNotice, sourceProblem, alternativeSources, canGenerate, visibleSections, visibleSuggestions,
         following, history, historyLoading, settingsExpanded, toggleSettings,
         load, acknowledgeNotice, loadPreview, generate, cancel, dispose, selectSource, showVersion, recordAdoption, setSuggestionState,
-        loadHistory, addVersion,
+        loadHistory, addVersion, refreshSources,
     }
 }
 

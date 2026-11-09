@@ -72,6 +72,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/tests/incomplete_report_notification_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/scoped_teaching_access_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/teacher_archive_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/member_role_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/account_approval_integration.sql
       - name: Reconciliation migrations are rerunnable
         shell: bash
@@ -114,6 +115,12 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000156_drop_unused_legacy_objects.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000157_drop_teaching_workspace_model.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000157_drop_teaching_workspace_model.sql
+          # The 1000129 rerun above restores the pre-split sensitive helper;
+          # re-apply the page-access and sensitive-split migrations (twice).
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000161_page_access_permissions_and_member_role.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000161_page_access_permissions_and_member_role.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000162_split_student_sensitive_permissions.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000162_split_student_sensitive_permissions.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/student_create_permission_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/student_sensitive_permission_integration.sql
       - name: Upgrade an existing database and verify owner backfill

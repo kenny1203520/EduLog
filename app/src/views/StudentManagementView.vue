@@ -142,7 +142,8 @@ async function copyToClipboard(text: string) {
                             <h3
                                 class="font-black text-xl text-gray-900 break-words group-hover:text-emerald-700 transition leading-tight">
                                 {{ student.name }}</h3>
-                            <p class="text-sm text-gray-400 truncate font-medium" :title="student.displaySchoolName">
+                            <!-- Without school read access only the grade is known; it shows in the badge below. -->
+                            <p v-if="!student.hasRestrictedSchool" class="text-sm text-gray-400 truncate font-medium" :title="student.displaySchoolName">
                                 {{ student.displaySchoolName || $t('student.management.no_school', 'No School Info') }}
                             </p>
                         </div>

@@ -2,6 +2,7 @@
 import { reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ConfirmModal from '@/components/ui/ConfirmModal.vue'
+import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import AiNotice from '@/components/report/ai/AiNotice.vue'
 import ModelPicker from '@/components/settings/ai/ModelPicker.vue'
 import { useFeedback } from '@/composables/useFeedback'
@@ -207,11 +208,11 @@ async function addModel(credential: AiCredentialDTO) {
     })
 }
 
-async function toggleModel(credential: AiCredentialDTO, model: AiModelDTO) {
+async function setModelEnabled(credential: AiCredentialDTO, model: AiModelDTO, enabled: boolean) {
     await run(`model-toggle:${model.id}`, async () => {
         const updated = site
-            ? await AiSettingsService.updateSiteModel(model.id, { enabled: !model.enabled })
-            : await AiSettingsService.updateMyModel(model.id, { enabled: !model.enabled })
+            ? await AiSettingsService.updateSiteModel(model.id, { enabled })
+            : await AiSettingsService.updateMyModel(model.id, { enabled })
         replaceModel(credential.id, updated)
     })
 }
@@ -275,9 +276,13 @@ const statusClass: Record<AiCredentialDTO['status'], string> = {
                         :disabled="!credential.models.length || busy !== null" :title="credential.models.length ? '' : t('ai.settings.test_needs_model')" @click="test(credential)">
                         {{ busy === `test:${credential.id}` ? t('ai.settings.testing') : t('ai.settings.test') }}
                     </button>
-                    <button type="button" class="min-h-11 rounded-xl border border-gray-200 px-3 text-sm font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-50" :disabled="busy !== null" @click="toggle(credential)">
-                        {{ credential.status === 'disabled' ? t('ai.settings.enable') : t('ai.settings.disable') }}
-                    </button>
+                    <span class="inline-flex items-center gap-1 pr-1">
+                        <ToggleSwitch :model-value="credential.status !== 'disabled'" :label="t('ai.settings.toggle_provider_label', { name: credential.label })"
+                            :disabled="busy !== null" :data-testid="`provider-switch-${credential.id}`" @update:model-value="toggle(credential)" />
+                        <span class="text-sm font-bold" :class="credential.status === 'disabled' ? 'text-gray-600' : 'text-emerald-700'" aria-hidden="true">
+                            {{ credential.status === 'disabled' ? t('ai.settings.model_disabled') : t('ai.settings.model_enabled') }}
+                        </span>
+                    </span>
                     <button type="button" class="min-h-11 rounded-xl border border-red-200 px-3 text-sm font-bold text-red-700 hover:bg-red-50 disabled:opacity-50" :disabled="busy !== null"
                         @click="pendingDelete = { kind: 'credential', id: credential.id, label: credential.label }">{{ t('ai.settings.delete') }}</button>
                 </div>
@@ -301,7 +306,8 @@ const statusClass: Record<AiCredentialDTO['status'], string> = {
             <div class="mt-4 border-t border-gray-100 pt-4">
                 <h5 class="text-sm font-black text-gray-800">{{ t('ai.settings.models') }}</h5>
                 <ul class="mt-2 space-y-2">
-                    <li v-for="model in credential.models" :key="model.id" class="rounded-xl bg-gray-50 px-3 py-2 text-sm">
+                    <li v-for="model in credential.models" :key="model.id" :data-testid="`model-row-${model.id}`" class="rounded-xl px-3 py-2 text-sm"
+                        :class="model.enabled || editingId === model.id ? 'bg-gray-50' : 'bg-gray-50 opacity-60'">
                         <form v-if="editingId === model.id" class="grid gap-2 py-1" :class="site ? 'sm:grid-cols-[1fr_6rem_7rem_7rem]' : ''"
                             :aria-label="t('ai.settings.edit_model', { name: model.display_name })" @submit.prevent="saveEdit(credential, model)" @keydown.esc="editingId = null">
                             <label class="block text-xs font-bold text-gray-700" for="edulog-aicredentiallist-67-7531">{{ t('ai.settings.display_name') }}
@@ -330,19 +336,19 @@ const statusClass: Record<AiCredentialDTO['status'], string> = {
                             <span class="min-w-0">
                                 <span class="font-bold text-gray-900">{{ model.display_name }}</span>
                                 <span class="ml-1 text-gray-600">{{ model.model_id }}</span>
+                                <span v-if="!model.enabled" class="ml-2 rounded-full bg-gray-200 px-2 py-0.5 text-xs font-bold text-gray-700" data-testid="model-disabled-badge">{{ t('ai.settings.model_disabled_badge') }}</span>
                                 <span v-if="site && defaultModelId === model.id" class="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800">{{ t('ai.settings.default_badge') }}</span>
                                 <span v-if="isUnpriced(model)" class="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-900">{{ t('ai.settings.unpriced') }}</span>
                                 <span v-else-if="isFree(model)" class="ml-2 rounded-full bg-sky-100 px-2 py-0.5 text-xs font-bold text-sky-900">{{ t('ai.settings.free') }}</span>
                                 <span v-if="model.supports_structured_output === false" class="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-bold text-gray-700" :title="t('ai.settings.compat_mode_hint')">{{ t('ai.settings.compat_mode') }}</span>
                                 <span v-if="site" class="ml-2 text-xs text-gray-600">{{ t('ai.settings.model_meta', { weight: model.quota_weight, input: model.price_input_per_mtok ?? '—', output: model.price_output_per_mtok ?? '—' }) }}</span>
                             </span>
-                            <span class="flex flex-wrap gap-1">
+                            <span class="flex flex-wrap items-center gap-1">
+                                <ToggleSwitch :model-value="model.enabled" :label="t('ai.settings.toggle_model_label', { name: model.display_name })"
+                                    :disabled="busy !== null" :data-testid="`model-switch-${model.id}`" @update:model-value="setModelEnabled(credential, model, $event)" />
                                 <button type="button" class="min-h-11 rounded-lg px-2 text-xs font-bold text-gray-700 hover:bg-gray-100" @click="startEdit(model)">{{ t('ai.settings.edit') }}</button>
                                 <button v-if="isUnpriced(model)" type="button" class="min-h-11 rounded-lg px-2 text-xs font-bold text-sky-800 hover:bg-sky-50" :disabled="busy !== null" @click="setFree(credential, model)">{{ t('ai.settings.set_free') }}</button>
-                                <button v-if="site && defaultModelId !== model.id" type="button" class="min-h-11 rounded-lg px-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50" @click="emit('set-default', model.id)">{{ t('ai.settings.set_default') }}</button>
-                                <button type="button" class="min-h-11 rounded-lg px-2 text-xs font-bold text-gray-700 hover:bg-gray-100" :aria-pressed="model.enabled" @click="toggleModel(credential, model)">
-                                    {{ model.enabled ? t('ai.settings.model_enabled') : t('ai.settings.model_disabled') }}
-                                </button>
+                                <button v-if="site && model.enabled && defaultModelId !== model.id" type="button" class="min-h-11 rounded-lg px-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50" @click="emit('set-default', model.id)">{{ t('ai.settings.set_default') }}</button>
                                 <button type="button" class="min-h-11 rounded-lg px-2 text-xs font-bold text-red-700 hover:bg-red-50"
                                     @click="pendingDelete = { kind: 'model', id: model.id, label: model.display_name }">{{ t('ai.settings.delete') }}</button>
                             </span>

@@ -4,7 +4,7 @@ import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { sendData } from '../../http/response.js'
 import { filterOccurrencesByScheduleModes, type DashboardScheduleMode, type TeacherSessionAssignment } from '../../domain/dashboardSchedule.js'
 import { measureRequestPhase, recordDatabaseCall, setAuditContext } from '../../http/context.js'
-import { anyScopeTeachingPermission, authorizeCollection, authorizeResource, requireAuthorizationDecision } from '../../auth/authorization.js'
+import { anyScopeTeachingPermission, authorizeResource, requireAuthorizationDecision } from '../../auth/authorization.js'
 import { resources } from '../rest/resources.js'
 import { orderByRelation } from '../../services/relationOrder.js'
 import { attachTeacherProfile, complete, idempotency } from '../rest/resourceRouter.js'
@@ -129,7 +129,7 @@ async function studentReportsPage(req: Request, res: Response) {
 
 async function classroomManager(req: Request, res: Response) {
   const db = requireDb(req); const query = z.object({ limit: z.coerce.number().int().min(1).max(100), offset: z.coerce.number().int().min(0).max(1000000), search: z.string().max(200), visibility: z.enum(['all', 'visible', 'hidden']).default('visible'), session_limit: z.coerce.number().int().min(1).max(100), session_offset: z.coerce.number().int().min(0).max(1000000), classroom_id: z.string().uuid().optional() }).strict().parse({ limit: req.query.limit ?? 100, offset: req.query.offset ?? 0, search: req.query.search ?? '', visibility: req.query.visibility, session_limit: req.query.session_limit ?? 50, session_offset: req.query.session_offset ?? 0, classroom_id: req.query.classroom_id })
-  await requirePagePermission(req, 'teaching.classrooms.list', 'classrooms-overview')
+  await requirePagePermission(req, 'teaching.classrooms.access', 'classrooms-overview')
   const result = await database(req, () => db.rpc('get_classrooms_overview', {
     p_limit: query.limit,
     p_offset: query.offset,
@@ -166,7 +166,7 @@ async function classroomManager(req: Request, res: Response) {
 
 async function holidays(req: Request, res: Response) {
   const db = requireDb(req); const query = z.object({ expand: z.coerce.boolean().default(true), limit: z.coerce.number().int().min(1).max(100).default(100), offset: z.coerce.number().int().min(0).max(1000000).default(0), search: z.string().max(200).default(''), sort: z.enum(['start_date', '-start_date', 'name', '-name']).default('-start_date') }).strict().parse(req.query)
-  await requirePagePermission(req, 'teaching.holidays.list', 'holidays-overview')
+  await requirePagePermission(req, 'teaching.holidays.access', 'holidays-overview')
   const result = await database(req, () => db.rpc('get_holidays_overview', {
     p_limit: query.limit,
     p_offset: query.offset,
@@ -221,7 +221,7 @@ async function loadIncompleteReports(req: Request, query: z.infer<typeof incompl
 
 async function incomplete(req: Request, res: Response) {
   const query = incompleteQuerySchema.parse(req.query)
-  await requirePagePermission(req, 'teaching.reports.list', 'incomplete-reports')
+  await requirePagePermission(req, 'teaching.reports.access', 'incomplete-reports')
   const result = await loadIncompleteReports(req, query, null, 'incomplete_reports.read')
   return sendData(req, res, result.rows, { limit: query.limit, offset: query.offset, total: result.total, sort: query.sort })
 }
@@ -288,7 +288,7 @@ async function dashboard(req: Request, res: Response) {
     if (end < start) context.addIssue({ code: z.ZodIssueCode.custom, path: ['end'], message: 'end must not be earlier than start' })
     if (end - start > 31 * 86400000) context.addIssue({ code: z.ZodIssueCode.custom, path: ['end'], message: 'date range must not exceed 31 days' })
   }).parse(req.query)
-  await requirePagePermission(req, 'teaching.reports.list', 'dashboard', null, 'dashboard.permission')
+  await requirePagePermission(req, 'teaching.dashboard.access', 'dashboard', null, 'dashboard.permission')
   const teacher = await loadCurrentTeacher(req, 'dashboard.teacher_scope')
   const pendingQuery = { days_back: 90, scope: 'my_present' as const, limit: 3, offset: 0, search: '', sort: '-date' as const }
   const [counts, pendingReports, occurrences] = await Promise.all([
@@ -328,7 +328,7 @@ async function coursesOverview(req: Request, res: Response) {
   const db = requireDb(req)
   const query = pageListQuery.parse(req.query)
   const sort = pageSort(query.sort, ['display_name', 'subject', 'stage', 'created_at'], 'display_name')
-  await authorizeCollection(req, resources.courses, 'teaching.courses.list', query)
+  await requirePagePermission(req, 'teaching.courses.access', 'courses-overview')
   const result = await database(req, () => db.rpc('get_courses_overview', {
     p_limit: query.limit, p_offset: query.offset, p_search: query.search, p_sort: sort.value,
   }))
@@ -344,7 +344,7 @@ async function studentsOverview(req: Request, res: Response) {
   const db = requireDb(req)
   const query = pageListQuery.parse(req.query)
   const sort = pageSort(query.sort, ['name', 'created_at', 'updated_at'], 'name')
-  await authorizeCollection(req, resources.students, 'teaching.students.list', query)
+  await requirePagePermission(req, 'teaching.students.access', 'students-overview')
   const result = await db.rpc('get_students_overview', {
     p_limit: query.limit,
     p_offset: query.offset,
@@ -377,7 +377,7 @@ async function studentPrivateDetails(req: Request, res: Response) {
   const db = requireDb(req)
   const studentId = typeof req.params.studentId === 'string' ? req.params.studentId : ''
   if (!z.string().uuid().safeParse(studentId).success) throw new ApiError(400, 'INVALID_ID', 'Student id is invalid')
-  await authorizeResource(req, resources.students, 'teaching.students.read_sensitive', studentId)
+  await authorizeResource(req, resources.students, 'teaching.student_personal.read', studentId)
   const result = await db.rpc('get_student_sensitive_details', { p_student_id: studentId })
   if (result.error) throw mapDatabaseError(result.error)
   if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Student was not found')

@@ -67,7 +67,10 @@ const costLabel = computed(() => {
 })
 
 watch(() => [props.show, props.reportId] as const, ([show, reportId], previous) => {
-    if (show && reportId && (status.value === 'idle' || reportId !== previous?.[1])) void assist.load()
+    if (!show || !reportId) return
+    if (status.value === 'idle' || reportId !== previous?.[1]) void assist.load()
+    // Reopened for the same report: models may have been enabled, disabled or removed meanwhile.
+    else if (!previous?.[0]) void assist.refreshSources()
 }, { immediate: true })
 
 async function acknowledge() {

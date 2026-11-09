@@ -264,6 +264,34 @@ Kept: the `teaching_id` columns on `classrooms`, `courses`, `class_sessions`, `r
 
 Older reconciliation migrations (1000100–1000129 reruns) read `teachings`, so rerun them before 1000157; the CI reconciliation step applies 1000157 twice after its rerun loop. `supabase/tests/migration_chain_integration.sql` asserts the objects are gone.
 
+## Scoped teaching access (1000158)
+
+`1000158_scoped_teaching_access.sql` makes page entry and the overview RPCs scope-aware. `private.teaching_grant_targets` lists the classrooms and class sessions where a user holds an active teaching role; `has_teaching_permission_any_scope` answers "does the user hold this permission anywhere?" and gates page entry; `accessible_class_session_ids` / `accessible_classroom_ids` return the rows a permission reaches (all rows for a platform grant). `has_active_teaching_role` counts classroom and class-session grants, and `can_create_occurrence_report` is permission based. The dashboard, classroom, course, teacher, incomplete-report and holiday overviews and the RLS on classrooms, class sessions, courses, lessons, templates and reports filter by scope; courses, lessons, templates and platform-wide holidays are platform data readable from any scope, writable only with the platform permission. `get_my_teaching_capabilities` returns `{any, platform}` per teaching key for navigation. Run `supabase/tests/scoped_teaching_access_integration.sql`.
+
+## Teacher archive (1000159)
+
+`1000159_teacher_archive.sql` adds `teacher_records.archived_at`. An archived teacher keeps their history but is hidden from the default teacher list and cannot be assigned to a class again; archiving requires no current or future class assignment. `set_teacher_archived(teacher, archived)` archives or restores, and `get_teachers_overview` gains a status filter. Run `supabase/tests/teacher_archive_integration.sql`.
+
+## Presidio languages (1000160)
+
+`1000160_presidio_languages.sql` widens the language checks on `ai_deid_rules` and `ai_settings` (added by 1000151) to the 24 languages the Presidio image ships. The API's `PRESIDIO_LANGUAGES` list must match. Run `supabase/tests/presidio_languages_integration.sql`.
+
+## Page access permissions and member role (1000161)
+
+`1000161_page_access_permissions_and_member_role.sql` separates page entry from data access. It adds `teaching.{dashboard,students,courses,classrooms,holidays,reports}.access`; the API gates those pages with them, while the page RPCs keep filtering rows by list/read scope. Teacher management and system settings have no access key and keep their existing gates.
+
+The new built-in teaching role `member` (基本成員) holds only the six access grants at platform scope, so a member-only user opens the pages and sees empty lists; what they see comes from their other roles. New accounts are not assigned `member` and existing users are not backfilled. Every teaching role (built-in or custom) with an allow for a `.list` key gets `.access` on the same scope, so nobody loses a page; the dashboard follows `teaching.reports.list`, which gated it before. `get_my_teaching_capabilities` reports the access keys.
+
+The overview RPCs (`get_students_overview`, `get_classrooms_overview`, `get_courses_overview`, `get_holidays_overview`, `get_incomplete_reports_page`, `get_dashboard_counts`) already return empty results for a caller without scope and only raise for authentication or argument errors, so none is rewritten. Run `supabase/tests/member_role_integration.sql`.
+
+## Student sensitive permission split (1000162)
+
+`1000162_split_student_sensitive_permissions.sql` replaces `teaching.students.read_sensitive` / `update_sensitive` with four read/update pairs: `teaching.student_schools.*` (`student_schools`), `teaching.student_personal.*` (gov_id, email, phone, residence and mailing address, birthday on `students`), `teaching.student_contacts.*` (`student_contacts`) and `teaching.student_credentials.*` (`student_credentials`). Each policy row with the old read key gains the four `.read` keys on the same role, scope and effect (update likewise), then the old keys and their policies are deleted. `teaching.teachers.*_sensitive` is unchanged.
+
+`can_access_sensitive_student` accepts only the eight section keys, and the RLS on each child table checks its own section. `get_student_sensitive_details` needs `student_personal.read` and returns `{student}` only; contacts, schools and credentials are read through their own tables. `update_student_sensitive` needs `student_personal.update`. The current-school summary in `get_students_overview` and `get_student_profile_page` (via `private.student_current_school_summary`) is `{grade}` without school read access, and the profile's `capabilities` becomes `{schools, personal, contacts, credentials}: {read, update}`.
+
+CI's reconciliation step reruns 1000129, which restores the pre-split helper, so it re-applies 1000161 and 1000162 (twice) afterwards. Run `supabase/tests/student_sensitive_permission_integration.sql`.
+
 ## Account approval and default roles (1000163)
 
 `1000163_account_approval_and_default_roles.sql` adds `'pending'` to `profiles.account_status` and makes every account GoTrue creates from then on (OAuth, self sign-up, Studio) start pending, with no role. Existing accounts keep their status; an update of an `auth.users` row never changes it. `account_default_roles` lists the roles invited accounts receive when created and pending accounts receive when approved, always at platform scope; protected (owner) roles are refused. `approve_account(user, roles, actor)` moves a pending account to active, records `approved_at`/`approved_by` and a `user_status_events` row, and grants the roles it does not already hold. `list_pending_accounts`, `count_pending_accounts`, `mark_pending_account_notified` (true once, so administrators are mailed once) and `list_account_approver_emails` serve the review screen and the notice. All of them are service-role only; the API checks `system.users.manage` and, for each granted role, `<domain>.role_assignments.manage`. Rejecting uses the existing `set_system_user_status` (pending → disabled). `bootstrap_system_owner` also activates the account it makes owner. Run `supabase/tests/account_approval_integration.sql` after applying it.

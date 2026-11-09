@@ -70,8 +70,11 @@ describe('aggregate API contract', () => {
   })
 
   it('uses scoped permission checks and explicit safe projections for new page read models', () => {
-    expect(source).toContain("authorizeCollection(req, resources.courses, 'teaching.courses.list', query)")
-    expect(source).toContain("authorizeCollection(req, resources.students, 'teaching.students.list', query)")
+    expect(source).toContain("requirePagePermission(req, 'teaching.courses.access', 'courses-overview')")
+    expect(source).toContain("requirePagePermission(req, 'teaching.students.access', 'students-overview')")
+    expect(source).toContain("requirePagePermission(req, 'teaching.dashboard.access', 'dashboard'")
+    expect(source).toContain("authorizeResource(req, resources.students, 'teaching.student_personal.read', studentId)")
+    expect(source).not.toContain('authorizeCollection')
     expect(source).toContain("db.rpc('get_students_overview'")
     expect(source).toContain("'students_overview.read'")
     expect(source).toContain("authorizeResource(req, resources.students, 'teaching.students.read', studentId)")
