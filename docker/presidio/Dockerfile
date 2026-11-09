@@ -15,12 +15,14 @@ FROM mcr.microsoft.com/presidio-analyzer:2.2.362@sha256:286e3fa7f3a7426e775e8564
 USER root
 COPY configure_languages.py start.sh /app/conf-edulog/
 RUN chmod 0755 /app/conf-edulog/start.sh \
-    && python /app/conf-edulog/configure_languages.py install
-# Written by start.sh at container start; /tmp is writable by user 1001.
+    && python /app/conf-edulog/configure_languages.py install \
+    && install -d -o 1001 -m 0700 /app/conf-edulog/runtime
+# Written by start.sh at container start into a directory only user 1001 can
+# write (not a shared location such as /tmp).
 ENV PRESIDIO_LANGUAGES=zh,en \
-    EDULOG_PRESIDIO_CONF_DIR=/tmp/conf-edulog \
-    NLP_CONF_FILE=/tmp/conf-edulog/nlp.yaml \
-    ANALYZER_CONF_FILE=/tmp/conf-edulog/analyzer.yaml \
-    RECOGNIZER_REGISTRY_CONF_FILE=/tmp/conf-edulog/recognizers.yaml
+    EDULOG_PRESIDIO_CONF_DIR=/app/conf-edulog/runtime \
+    NLP_CONF_FILE=/app/conf-edulog/runtime/nlp.yaml \
+    ANALYZER_CONF_FILE=/app/conf-edulog/runtime/analyzer.yaml \
+    RECOGNIZER_REGISTRY_CONF_FILE=/app/conf-edulog/runtime/recognizers.yaml
 USER 1001
 CMD ["/app/conf-edulog/start.sh"]

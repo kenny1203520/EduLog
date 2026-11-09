@@ -92,7 +92,10 @@ LABELS_TO_IGNORE = [
 ]
 LOW_SCORE_ENTITY_NAMES = ["ORG", "ORGANIZATION", "OG", "GPE_ORG", "orgName"]
 
-OUT_DIR = Path(os.environ.get("EDULOG_PRESIDIO_CONF_DIR", "/tmp/conf-edulog"))
+# A directory the image creates for the analyzer user only (not a shared,
+# world-writable location such as /tmp, where another process could plant
+# its own configuration first).
+OUT_DIR = Path(os.environ.get("EDULOG_PRESIDIO_CONF_DIR", "/app/conf-edulog/runtime"))
 
 
 def parse_languages(raw: str) -> list[str]:
