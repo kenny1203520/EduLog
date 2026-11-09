@@ -20,7 +20,18 @@ export function parseTag(tag) {
     minor: `${match[1]}.${match[2]}`,
     stable: prerelease.length === 0,
     prerelease,
+    channel: releaseChannel(prerelease),
   }
+}
+
+/**
+ * Floating image tag for a prerelease: its first identifier (`alpha`, `beta`,
+ * `rc`), lowercased. Empty for stable releases and for first identifiers that
+ * would not make a sensible Docker tag (numeric, or the reserved `latest`).
+ */
+function releaseChannel(prerelease) {
+  const first = prerelease[0]?.toLowerCase() ?? ''
+  return /^[a-z][a-z0-9-]*$/.test(first) && first !== 'latest' ? first : ''
 }
 
 function compareIdentifiers(left, right) {
@@ -84,7 +95,7 @@ export function validateRelease({ tag, cwd = process.cwd(), outputPath, git = ru
   const pkg = JSON.parse(readFileSync(`${cwd}/app/package.json`, 'utf8'))
   if (pkg.version !== parsed.version) throw new Error(`Tag ${tag} does not match app/package.json version ${pkg.version}`)
   if (outputPath) {
-    appendFileSync(outputPath, `tag=${tag}\nversion=${parsed.version}\nmajor=${parsed.major}\nminor=${parsed.minor}\nstable=${parsed.stable}\ncommit=${commit}\n`)
+    appendFileSync(outputPath, `tag=${tag}\nversion=${parsed.version}\nmajor=${parsed.major}\nminor=${parsed.minor}\nstable=${parsed.stable}\nchannel=${parsed.channel}\ncommit=${commit}\n`)
   }
   return { ...parsed, commit }
 }
@@ -99,19 +110,25 @@ function commitNotes({ base, sha, cwd, repository, git = runGit }) {
   return commits.length ? `## Commits\n\n${commits.join('\n')}` : 'No commits found in this version range.'
 }
 
-function imageNotes({ version, frontendDigest, apiDigest, previous }) {
+function imageNotes({ version, channel, frontendDigest, apiDigest, presidioDigest, previous }) {
   // GitHub Actions provides both; the defaults keep local dry runs pointing at this repository.
   const repositoryUrl = `${optionalEnv('GITHUB_SERVER_URL', 'https://github.com')}/${optionalEnv('GITHUB_REPOSITORY', 'kenny1203520/EduLog')}`
   const comparisonUrl = previous
     ? `${repositoryUrl}/compare/${previous}...${optionalEnv('RELEASE_TAG', `v${version}`)}`
     : `${repositoryUrl}/commits/${optionalEnv('RELEASE_TAG', `v${version}`)}`
+  const floating = channel
+    ? `These images are also tagged \`${channel}\`, which follows the newest ${channel} release.`
+    : 'These images are also tagged `latest` and with their major and minor versions.'
   return [
     '## Container images', '',
     `- Frontend: \`ghcr.io/kenny1203520/edulog:${version}\` (digest \`${frontendDigest}\`)`,
-    `- API: \`ghcr.io/kenny1203520/edulog-api:${version}\` (digest \`${apiDigest}\`)`, '',
+    `- API: \`ghcr.io/kenny1203520/edulog-api:${version}\` (digest \`${apiDigest}\`)`,
+    `- Presidio analyzer: \`ghcr.io/kenny1203520/edulog-presidio:${version}\` (digest \`${presidioDigest}\`)`, '',
+    floating, `Set \`EDULOG_IMAGE_TAG=${version}\` to pin all three.`, '',
     '```sh',
     `docker pull ghcr.io/kenny1203520/edulog:${version}`,
     `docker pull ghcr.io/kenny1203520/edulog-api:${version}`,
+    `docker pull ghcr.io/kenny1203520/edulog-presidio:${version}`,
     '```', '',
     `Full comparison: ${comparisonUrl}`,
   ].join('\n')
@@ -119,7 +136,7 @@ function imageNotes({ version, frontendDigest, apiDigest, previous }) {
 
 export async function publishRelease({
   tag, sha, cwd = process.cwd(), repository = optionalEnv('GITHUB_REPOSITORY'),
-  frontendDigest, apiDigest, gh = defaultGh, git = runGit,
+  frontendDigest, apiDigest, presidioDigest, gh = defaultGh, git = runGit,
 }) {
   const parsed = parseTag(tag)
   const tags = git(['tag', '--merged', sha, '--list', 'v*'], cwd).split(/\r?\n/).filter(Boolean)
@@ -147,7 +164,7 @@ export async function publishRelease({
   if (!authoredNotes) {
     try { authoredNotes = extractChangelogSection(readFileSync(`${cwd}/CHANGELOG.md`, 'utf8'), parsed.version) } catch { /* optional file */ }
   }
-  const deployments = [authoredNotes, releaseNotes, imageNotes({ version: parsed.version, frontendDigest, apiDigest, previous })].filter(Boolean).join('\n\n---\n\n')
+  const deployments = [authoredNotes, releaseNotes, imageNotes({ version: parsed.version, channel: parsed.channel, frontendDigest, apiDigest, presidioDigest, previous })].filter(Boolean).join('\n\n---\n\n')
   const fields = ['-X', existing ? 'PATCH' : 'POST', existing ? `repos/${repository}/releases/${existing.id}` : `repos/${repository}/releases`, '-f', `tag_name=${tag}`, '-f', `name=${tag}`, '-f', `body=${deployments}`, '-F', `draft=${false}`, '-F', `prerelease=${!parsed.stable}`, '-f', `make_latest=${parsed.stable ? 'legacy' : 'false'}`]
   await gh(['api', ...fields])
   return { status: existing ? 'published-draft' : 'published', tag, previous }
@@ -166,7 +183,7 @@ async function main() {
   } else if (command === 'publish') {
     const result = await publishRelease({
       tag, sha: requireEnv('RELEASE_SHA'), frontendDigest: requireEnv('FRONTEND_DIGEST'),
-      apiDigest: requireEnv('API_DIGEST'),
+      apiDigest: requireEnv('API_DIGEST'), presidioDigest: requireEnv('PRESIDIO_DIGEST'),
     })
     console.log(`Release ${result.tag}: ${result.status}`)
   } else {

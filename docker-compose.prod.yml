@@ -10,7 +10,6 @@ services:
       - "${EDULOG_HTTPS_PORT:-4174}:4174"
 
   api:
-    image: ${EDULOG_API_IMAGE:-ghcr.io/kenny1203520/edulog-api:latest}
     networks:
       - frontend
       - net
