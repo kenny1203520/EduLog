@@ -1,11 +1,11 @@
-import { loadPlaywright, browserTargets, fileURLToPath } from './browser-runtime.mjs'
+import { loadPlaywright, browserTargets, fileURLToPath, stripScriptElements } from './browser-runtime.mjs'
 // Installed-browser checks against the actual workbench DOM/CSS. Synthetic data only.
 import {createServer} from 'node:http'
 import {readFileSync,mkdirSync} from 'node:fs'
 import assert from 'node:assert/strict'
 const { chromium } = await loadPlaywright(process.argv.slice(2).find(arg => !arg.startsWith('--')))
 const root=new URL('../../',import.meta.url),output=new URL('../artifacts/history/',import.meta.url);mkdirSync(output,{recursive:true})
-const server=createServer((req,res)=>{const name=new URL(req.url,'http://localhost').pathname.slice(1);if(!/^(?:[a-z0-9-]+\/)*[a-z0-9.-]+$/.test(name)){res.writeHead(404).end();return}try{let content=readFileSync(new URL(name,root),'utf8');if(name==='workspace/workspace.html')content=content.replace(/<script[\s\S]*?<\/script>/g,'');res.setHeader('Content-Type',name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':'text/html; charset=utf-8');res.end(content)}catch{res.writeHead(404).end()}})
+const server=createServer((req,res)=>{const name=new URL(req.url,'http://localhost').pathname.slice(1);if(!/^(?:[a-z0-9-]+\/)*[a-z0-9.-]+$/.test(name)){res.writeHead(404).end();return}try{let content=readFileSync(new URL(name,root),'utf8');if(name==='workspace/workspace.html')content=stripScriptElements(content);res.setHeader('Content-Type',name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':'text/html; charset=utf-8');res.end(content)}catch{res.writeHead(404).end()}})
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve))
 try{
  for (const [name, launchOptions] of browserTargets()) {
