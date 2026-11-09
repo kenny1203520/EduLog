@@ -164,7 +164,8 @@ export function createAiReportAssistRouter(deps: AiReportAssistDeps) {
     return res.json(envelope(req, {
       enabled: settings.enabled,
       notice: { version: settings.noticeVersion, acknowledged },
-      default_model_row_id: settings.defaultModelId,
+      // Only a default the teacher can actually use; a disabled one would select nothing.
+      default_model_row_id: sources.some((source) => source.modelRowId === settings.defaultModelId) ? settings.defaultModelId : null,
       sources: sources.map((source) => ({
         model_row_id: source.modelRowId,
         model_id: source.modelId,
