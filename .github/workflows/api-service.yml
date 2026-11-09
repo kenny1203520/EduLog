@@ -8,6 +8,8 @@ on:
       - 'app/**'
       - 'docker-compose.yml'
       - 'docker-compose.prod.yml'
+      - 'docker-compose.build.yml'
+      - 'docker/presidio/**'
       - '.env.example'
       - 'supabase/.env.example'
       - 'scripts/check-env-example.mjs'
@@ -26,6 +28,8 @@ on:
       - 'app/**'
       - 'docker-compose.yml'
       - 'docker-compose.prod.yml'
+      - 'docker-compose.build.yml'
+      - 'docker/presidio/**'
       - '.env.example'
       - 'supabase/.env.example'
       - 'scripts/check-env-example.mjs'
@@ -78,7 +82,9 @@ jobs:
           ANON_KEY: test-anon-key
           SERVICE_ROLE_KEY: test-service-role-key
           DOCKER_SOCKET_LOCATION: /var/run/docker.sock
-        run: docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.build.yml config --quiet
       - name: Validate Caddy and Envoy compose overlays
         env:
           EDULOG_COOKIE_SECRET: 0123456789abcdef0123456789abcdef

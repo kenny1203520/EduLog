@@ -56,10 +56,10 @@ These root `.env` keys configure Compose itself (images, ports, mounts, build ar
 | Root `.env` | Used for |
 |---|---|
 | `EDULOG_PORT` (`4173`) | host port published for the frontend; nginx always listens on 4173 inside the container |
-| `EDULOG_IMAGE_TAG` (`latest`), `EDULOG_API_IMAGE` | image references for the frontend and API services |
+| `EDULOG_IMAGE_TAG` (`alpha`) | tag of the `edulog`, `edulog-api` and `edulog-presidio` images: an exact version, a channel (`alpha`, `beta`, `rc`) or `latest`. Replaces `EDULOG_API_IMAGE`; `docker-compose.build.yml` builds all three from source instead |
 | `EDULOG_SSL_DIR` (`./ssl`) | host directory mounted at `/app/ssl` for TLS certificates |
 | `EDULOG_PROXY_DOMAIN`, `EDULOG_PROXY_UPSTREAM_URL` | passed to the proxy container of the optional Caddy/nginx overlays under `supabase/` |
-| `EDULOG_PRESIDIO_LANGUAGES` (`zh,en`) | build argument: languages the Presidio analyzer image is built with |
+| `EDULOG_PRESIDIO_LANGUAGES` (`zh,en`) | languages the Presidio analyzer loads at start (`PRESIDIO_LANGUAGES` in the container); the image ships all 24, so changing it needs only a restart. An unknown code stops the container |
 
 Supabase uses more aliases for its own services. For example, `SERVICE_ROLE_KEY` reaches Studio and Kong as `SUPABASE_SERVICE_KEY` and Storage as `SERVICE_KEY`. Those are upstream and are not changed here.
 

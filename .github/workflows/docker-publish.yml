@@ -21,6 +21,7 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
   API_IMAGE_NAME: ghcr.io/kenny1203520/edulog-api
+  PRESIDIO_IMAGE_NAME: ghcr.io/kenny1203520/edulog-presidio
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -33,6 +34,8 @@ jobs:
       major: ${{ steps.validate.outputs.major }}
       minor: ${{ steps.validate.outputs.minor }}
       stable: ${{ steps.validate.outputs.stable }}
+      # Floating prerelease tag (alpha, beta, rc); empty for stable releases.
+      channel: ${{ steps.validate.outputs.channel }}
       commit: ${{ steps.validate.outputs.commit }}
     steps:
       - name: Check out release tag
@@ -105,6 +108,7 @@ jobs:
     outputs:
       frontend_digest: ${{ steps.build-and-push-frontend.outputs.digest }}
       api_digest: ${{ steps.build-and-push-api.outputs.digest }}
+      presidio_digest: ${{ steps.build-and-push-presidio.outputs.digest }}
     permissions:
       contents: read
       packages: write
@@ -136,6 +140,7 @@ jobs:
             type=raw,value=latest,enable=${{ needs.validate.outputs.stable }}
             type=raw,value=${{ needs.validate.outputs.major }},enable=${{ needs.validate.outputs.stable }}
             type=raw,value=${{ needs.validate.outputs.minor }},enable=${{ needs.validate.outputs.stable }}
+            type=raw,value=${{ needs.validate.outputs.channel }},enable=${{ needs.validate.outputs.channel != '' }}
 
       - name: Extract API Docker metadata
         id: meta-api
@@ -148,6 +153,20 @@ jobs:
             type=raw,value=latest,enable=${{ needs.validate.outputs.stable }}
             type=raw,value=${{ needs.validate.outputs.major }},enable=${{ needs.validate.outputs.stable }}
             type=raw,value=${{ needs.validate.outputs.minor }},enable=${{ needs.validate.outputs.stable }}
+            type=raw,value=${{ needs.validate.outputs.channel }},enable=${{ needs.validate.outputs.channel != '' }}
+
+      - name: Extract Presidio analyzer Docker metadata
+        id: meta-presidio
+        uses: docker/metadata-action@96383f45573cb7f253c731d3b3ab81c87ef81934 # v5.0.0
+        with:
+          images: ${{ env.PRESIDIO_IMAGE_NAME }}
+          flavor: latest=false
+          tags: |
+            type=raw,value=${{ needs.validate.outputs.version }}
+            type=raw,value=latest,enable=${{ needs.validate.outputs.stable }}
+            type=raw,value=${{ needs.validate.outputs.major }},enable=${{ needs.validate.outputs.stable }}
+            type=raw,value=${{ needs.validate.outputs.minor }},enable=${{ needs.validate.outputs.stable }}
+            type=raw,value=${{ needs.validate.outputs.channel }},enable=${{ needs.validate.outputs.channel != '' }}
 
       - name: Build frontend image for smoke testing
         uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
@@ -164,6 +183,15 @@ jobs:
           context: ./server
           load: true
           tags: edulog-release-smoke:api
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build Presidio analyzer image for smoke testing
+        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
+        with:
+          context: ./docker/presidio
+          load: true
+          tags: edulog-release-smoke:presidio
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -193,6 +221,17 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Build and push Presidio analyzer Docker image
+        id: build-and-push-presidio
+        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
+        with:
+          context: ./docker/presidio
+          push: true
+          tags: ${{ steps.meta-presidio.outputs.tags }}
+          labels: ${{ steps.meta-presidio.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   release:
     name: Create GitHub Release
     needs: [validate, build]
@@ -216,6 +255,7 @@ jobs:
           RELEASE_SHA: ${{ needs.validate.outputs.commit }}
           FRONTEND_DIGEST: ${{ needs.build.outputs.frontend_digest }}
           API_DIGEST: ${{ needs.build.outputs.api_digest }}
+          PRESIDIO_DIGEST: ${{ needs.build.outputs.presidio_digest }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_SERVER_URL: ${{ github.server_url }}
         run: node scripts/release/release.mjs publish "$RELEASE_TAG"
