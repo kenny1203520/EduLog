@@ -9,6 +9,7 @@ The first alpha releases the currently available features. It does not deploy pr
 | Storage proxy | Deferred; no current frontend Storage calls | Agree on the upload/download workflow, implement permission-checked server-issued signed URLs, and verify authorization before exposing the feature. |
 | Remaining intended 2.0 features | Not yet enumerated in repository documentation | Confirm the final feature list with the maintainer; record each item's acceptance criteria and target alpha here. |
 | Database upgrade | Required for evaluation installs | Back up and verify the full append-only migration chain through the release's documented endpoint; validate existing data and permission boundaries. |
+| Automatic migrations | Planned before beta or 2.0.0 | Consolidate the migration chain into a small set of files; the database applies and checks them itself when EduLog starts. Duplication checks skip `supabase/migrations/**` until then. |
 
 OAuth and Storage are known deferred capabilities, not automatic requirements for stable 2.0. Their inclusion must be decided when the final feature list is confirmed.
 
