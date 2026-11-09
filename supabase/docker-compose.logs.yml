@@ -6,8 +6,8 @@
 #   docker compose -f docker-compose.yml -f supabase/docker-compose.logs.yml up -d
 #
 # Logflare 1.52.0 and newer break Studio's log queries; stay on 1.50.x.
-# Note: supabase/volumes/logs/vector.yml routes logs by upstream container
-# names (supabase-*), so most EduLog containers (edulog-*) are not matched.
+# supabase/volumes/logs/vector.yml routes logs by container name and matches
+# both the upstream (supabase-*) and EduLog (edulog-*) names.
 
 services:
 

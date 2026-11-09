@@ -7,6 +7,7 @@ sources:
     type: docker_logs
     exclude_containers:
       - supabase-vector
+      - edulog-vector
 
 transforms:
   project_logs:
@@ -29,14 +30,16 @@ transforms:
     type: route
     inputs:
       - project_logs
+    # EduLog names its containers edulog-*; the upstream supabase-* names are
+    # kept so this file stays easy to merge with upstream releases.
     route:
-      kong: '.appname == "supabase-kong" || .appname == "supabase-envoy"'
-      auth: '.appname == "supabase-auth"'
-      rest: '.appname == "supabase-rest"'
+      kong: '.appname == "supabase-kong" || .appname == "supabase-envoy" || .appname == "edulog-kong" || .appname == "edulog-envoy"'
+      auth: '.appname == "supabase-auth" || .appname == "edulog-auth"'
+      rest: '.appname == "supabase-rest" || .appname == "edulog-rest"'
       realtime: '.appname == "realtime-dev.supabase-realtime"'
-      storage: '.appname == "supabase-storage"'
+      storage: '.appname == "supabase-storage" || .appname == "edulog-storage"'
       functions: '.appname == "supabase-edge-functions"'
-      db: '.appname == "supabase-db"'
+      db: '.appname == "supabase-db" || .appname == "edulog-db"'
   # Ignores non nginx errors since they are related with kong booting up
   kong_logs:
     type: remap
