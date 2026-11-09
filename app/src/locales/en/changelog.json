@@ -1,6 +1,28 @@
 {
     "entries": [
         {
+            "version": "2.0.0-alpha.5",
+            "date": "2026-11-09",
+            "changes": {
+                "added": [
+                    "Teaching managers can create, rename and delete custom teaching roles, and see only the settings sections they can use.",
+                    "Teacher management is a searchable list with details, contact and account information, class assignments, and archive or restore."
+                ],
+                "changed": [
+                    "Teachers with a role for one classroom or class session can open that scope's pages and save its reports.",
+                    "When an AI provider's model list can't be loaded, the settings show why and how to enter a model manually."
+                ],
+                "fixed": [
+                    "Password fields are read out by their labels, and the sign-in email works with password-manager autofill.",
+                    "Patched security issues in dependencies, release tooling and unused server functions."
+                ],
+                "deployment": [
+                    "Use matching frontend and API images tagged 2.0.0-alpha.5. Alpha does not update stable image tags.",
+                    "Back up the database first, then apply all unapplied migrations in filename order through 1000159_teacher_archive.sql. 1000156 and 1000157 remove unused objects and cannot be undone."
+                ]
+            }
+        },
+        {
             "version": "2.0.0-alpha.4",
             "date": "2026-10-23",
             "changes": {

@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0-alpha.5] - 2026-11-09
+
+### Added
+- Teaching managers can create, rename and delete custom teaching roles, and the system settings tab shows only the sections each person can use.
+- Teacher management is a searchable list with a detail pane: contact and account details, class and role assignments, archive and restore.
+
+### Changed
+- Teachers whose teaching role is granted only for a classroom or a class session can open that scope's pages and save its reports.
+- Role policy settings (report notifications, today's schedule) save through `/api/roles/:id/permissions`.
+- When an AI provider's model list cannot be loaded, the settings show the reason (invalid key, wrong address, timeout and similar) and a manual-entry hint.
+- Environment variables are read and validated once per layer; names are unchanged. See `docs/deployment/environment.md`.
+
+### Removed
+- The unused Supabase edge functions and their gateway routes. Four of them let any signed-in user read data outside their own scope.
+- Unused API routes, including `/api/rpc` and `GET`/`PATCH /api/permissions/:permissionId/policies`, and the frontend's legacy API mode (`VITE_API_V1_MODE`, `VITE_LEGACY_API_BASE_URL`).
+- The archived teaching-workspace model and unused legacy database functions, views and the `documents` table.
+
+### Security
+- Patched dependency vulnerabilities in the API and frontend tooling, including `proxy-addr`, `body-parser`, `zod`, `qs`, `tinypool` and `vitest`.
+- Release builds no longer restore a dependency cache, and release tooling no longer takes output paths from command-line input.
+- Password fields are announced by their visible labels, and the sign-in email field supports password-manager autofill.
+
+### Deployment Notes
+- Publish matching frontend and API images tagged `2.0.0-alpha.5`; alpha images do not update stable aliases.
+- Back up the database, then apply all unapplied migrations in filename order through `1000159_teacher_archive.sql`. `1000156` and `1000157` drop objects and cannot be reversed; restore the backup to go back.
+- Remove the edge-function service settings (`FUNCTIONS_VERIFY_JWT`, `EDULOG_FUNCTIONS_ENVIRONMENT`) and any proxy routes to `/functions/v1` or `/api/v1`.
+- A production API now stops at startup when `EDULOG_ALLOWED_ORIGINS` (`API_ALLOWED_ORIGINS`) is empty. No production deployment is included.
+
+## [2.0.0-alpha.4] - 2026-10-23
+
+### Fixed
+- Fixed Vue template type errors in student enrollment, suspension editing and session details that blocked prerelease builds.
+
+### Deployment Notes
+- Publish matching frontend and API images tagged `2.0.0-alpha.4`; alpha images do not update stable aliases.
+- Back up the database, then apply all unapplied migrations in filename order through `1000155_enrollment_transfer_log.sql`.
+
+
 ## [2.0.0-alpha.3] - 2026-10-23
 
 ### Added
