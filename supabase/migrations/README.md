@@ -164,6 +164,8 @@ The former consolidated migration names are intentionally absent. `1000041a_has_
 | 1000164 | `1000164_rbac_grant_ceiling.sql` | Nobody grants access they do not hold; owner roles are assigned and inherited by owners only |
 | 1000165 | `1000165_account_status_enforcement.sql` | An account that is not active holds no permission; its extension tokens are revoked |
 | 1000166 | `1000166_rbac_review_fixes.sql` | Approver notice recipients, last-owner guards, teacher account links, student profile enrollments |
+| 1000167 | `1000167_lockdown_public_privileges.sql` | anon loses all public privileges; authenticated may execute only the reviewed function list; default privileges no longer grant new functions; pg_graphql dropped |
+| 1000168 | `1000168_web_extension_policy_initplan.sql` | Web-extension owner policies evaluate `auth.uid()` once per statement |
 
 The missing versions `1000010`, `1000015`, and `1000016` are historical unused numbers, not missing files. Apply migrations in lexical order; `1000041a` sorts between `1000041` and `1000042`, and `1000057a` sorts between `1000057` and `1000058`.
 
@@ -335,3 +337,21 @@ Test fixtures have to activate the accounts they create (`UPDATE public.profiles
 - `get_student_profile_page` lists the student's enrollments only in classrooms or classes where the caller may read students.
 
 Run `supabase/tests/rbac_review_fixes_integration.sql` to check them.
+
+## Privilege lockdown (1000167, 1000168)
+
+The Supabase database linter flagged SECURITY DEFINER functions that `anon` and `authenticated` could call through `/rest/v1/rpc`, and tables visible to `anon` through GraphQL. Supabase's default privileges grant new public functions and tables to `anon`, `authenticated` and `service_role` by name, so the `REVOKE ... FROM PUBLIC` in earlier migrations did not remove them.
+
+`1000167` revokes every table, sequence and function privilege in `public` from `anon`. It revokes EXECUTE on every non-extension function from `PUBLIC`, `anon` and `authenticated`, then grants `authenticated` back only the reviewed list: RPCs the API calls through the user client, helpers RLS policies call, and the invoker helpers those use. Trigger functions and service_role-only functions stay revoked. `service_role` and `authenticated` table grants are unchanged. Default privileges for `postgres` (and `supabase_admin` when the migration role may act as it) no longer grant new public functions to `anon`/`authenticated` or tables to `anon`; for `postgres` new functions no longer get `PUBLIC` EXECUTE. Add every new authenticated RPC to the list in `supabase/tests/privilege_lockdown_integration.sql`.
+
+`1000167` also drops `pg_graphql` (EduLog does not use GraphQL). If the migration role does not own the extension, it prints a warning instead. Then run, as `supabase_admin`:
+
+```sql
+DROP EXTENSION pg_graphql;
+```
+
+and remove `graphql_public` from `PGRST_DB_SCHEMAS` in the deployment's `.env` (the examples already omit it), then restart `rest`. The `/graphql/v1` gateway routes stay as in upstream; with the extension gone they return an error.
+
+Before applying, compare the target database with this chain (for example `pg_dump --schema-only` against a fresh database built from these migrations). The linter output that prompted this change still showed the `role_permission_policies` "manage" policy that `1000106` removed, and a `rls_auto_enable()` function this chain never created. `1000167` keeps `rls_auto_enable()` and only removes API access to it.
+
+`1000168` rewrites the four web-extension owner policies to `(SELECT auth.uid())`. Both migrations are rerunnable.
