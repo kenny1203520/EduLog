@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { AccountApprovalService, type GrantableRole, type PendingAccount } from '@/services/auth/AccountApprovalService'
 import { UserAccountService } from '@/services/auth/UserAccountService'
@@ -86,9 +86,12 @@ function approve(account: PendingAccount) {
     }, 'rbac.account_approval.approved', 'rbac.account_approval.approve_failed')
 }
 
-function startReject(account: PendingAccount) {
+/** Opens the reject form and puts keyboard focus in its reason field. */
+async function startReject(account: PendingAccount) {
     rejecting.value = account.id
     rejectReason.value = ''
+    await nextTick()
+    document.getElementById(`reject-reason-${account.id}`)?.focus()
 }
 
 function reject(account: PendingAccount) {
@@ -150,11 +153,14 @@ onMounted(load)
 
                     <fieldset v-if="roleGroups.length" class="mt-3">
                         <legend class="text-xs font-bold text-gray-600">{{ t('rbac.account_approval.roles_to_grant') }}</legend>
-                        <div v-for="group in roleGroups" :key="group.domain" class="mt-2 flex flex-wrap gap-2">
-                            <label v-for="role in group.roles" :key="role.id" class="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-700 has-[:checked]:border-emerald-300 has-[:checked]:bg-emerald-50 has-[:checked]:text-emerald-900">
-                                <input v-model="chosen[account.id]" type="checkbox" :value="role.id" class="h-4 w-4 accent-emerald-600" />
-                                {{ roleName(role) }}
-                            </label>
+                        <div v-for="group in roleGroups" :key="group.domain" role="group" :aria-label="t(`rbac.account_approval.domain_${group.domain}`)" class="mt-2">
+                            <p class="mb-2 text-xs font-bold text-gray-500" aria-hidden="true">{{ t(`rbac.account_approval.domain_${group.domain}`) }}</p>
+                            <div class="flex flex-wrap gap-2">
+                                <label v-for="role in group.roles" :key="role.id" class="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-700 has-[:checked]:border-emerald-300 has-[:checked]:bg-emerald-50 has-[:checked]:text-emerald-900">
+                                    <input v-model="chosen[account.id]" type="checkbox" :value="role.id" class="h-4 w-4 accent-emerald-600" />
+                                    {{ roleName(role) }}
+                                </label>
+                            </div>
                         </div>
                         <p v-if="!chosen[account.id]?.length" class="mt-2 text-xs font-semibold text-amber-700">{{ t('rbac.account_approval.no_roles_warning') }}</p>
                     </fieldset>
@@ -162,7 +168,7 @@ onMounted(load)
                     <div v-if="rejecting === account.id" class="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-end">
                         <label class="space-y-1 text-xs font-bold text-gray-600">
                             <span>{{ t('rbac.account_approval.reject_reason') }}</span>
-                            <input v-model="rejectReason" maxlength="500" class="min-h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm" />
+                            <input :id="`reject-reason-${account.id}`" v-model="rejectReason" maxlength="500" class="min-h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm" />
                         </label>
                         <button type="button" class="min-h-11 rounded-xl px-4 font-bold text-gray-600 hover:bg-gray-100" @click="rejecting = null">{{ t('common.cancel') }}</button>
                         <button type="button" :disabled="busy !== null || rejectReason.trim().length < 3" class="min-h-11 rounded-xl bg-rose-600 px-4 font-black text-white hover:bg-rose-700 disabled:opacity-40" @click="reject(account)">

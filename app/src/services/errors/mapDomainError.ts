@@ -40,7 +40,22 @@ const DOMAIN_ERROR_KEYS: Record<string, string> = {
     SOURCE_REPORT_HAS_CONTENT: 'errors.domain.SOURCE_REPORT_HAS_CONTENT',
     TRANSFER_CHAIN_HAS_MERGED_REPORT: 'errors.domain.TRANSFER_CHAIN_HAS_MERGED_REPORT',
     REPORT_ALREADY_EXISTS: 'errors.domain.REPORT_ALREADY_EXISTS',
-    TRANSFER_NOTE_TOO_LONG: 'errors.domain.TRANSFER_NOTE_TOO_LONG'
+    TRANSFER_NOTE_TOO_LONG: 'errors.domain.TRANSFER_NOTE_TOO_LONG',
+    ACCOUNT_EXISTS: 'errors.domain.ACCOUNT_EXISTS',
+    PROTECTED_ROLE_NOT_ALLOWED: 'errors.domain.PROTECTED_ROLE_NOT_ALLOWED',
+    ROLE_NOT_FOUND: 'errors.domain.ROLE_NOT_FOUND',
+    ACCOUNT_NOT_PENDING: 'errors.domain.ACCOUNT_NOT_PENDING',
+    AUTH_ADMIN_UNAVAILABLE: 'errors.domain.AUTH_ADMIN_UNAVAILABLE',
+    SENSITIVE_PERMISSION_REQUIRED: 'errors.domain.SENSITIVE_PERMISSION_REQUIRED',
+    STUDENT_ACCESS_DENIED: 'errors.domain.STUDENT_ACCESS_DENIED'
+}
+
+/** Every sentinel code this table translates; the locale contract test checks each has a message. */
+export const DOMAIN_ERROR_CODES: readonly string[] = Object.keys(DOMAIN_ERROR_KEYS)
+
+/** Returns the translated key for an API error code that is exactly a known sentinel code, or null. */
+export function mapDomainErrorCode(code: string | undefined | null): MappedError | null {
+    return code && Object.hasOwn(DOMAIN_ERROR_KEYS, code) ? { i18nKey: DOMAIN_ERROR_KEYS[code]! } : null
 }
 
 /** Returns the matching translated key for a message containing a known sentinel code, or null. */

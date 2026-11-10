@@ -1,5 +1,5 @@
 import { AppError } from './AppError'
-import { domainErrorCode, mapDomainError } from './mapDomainError'
+import { domainErrorCode, mapDomainError, mapDomainErrorCode } from './mapDomainError'
 import { mapErrorKey } from './mapErrorKey'
 
 /** A user-facing description of an error: what to show, and a code for support. */
@@ -55,7 +55,8 @@ export function describeError(error: unknown): ErrorDescription {
         return { i18nKey: error.i18nKey, i18nParams: error.i18nParams, code, requestId }
     }
 
-    const domain = mapDomainError(domainErrorCode(error)) ?? mapDomainError(messageOf(error))
+    // The API puts its own codes (e.g. ACCOUNT_EXISTS) in `code`, with an English message.
+    const domain = mapDomainErrorCode(apiCode) ?? mapDomainError(domainErrorCode(error)) ?? mapDomainError(messageOf(error))
     if (domain) return { i18nKey: domain.i18nKey, code: code ?? domainCodeIn(messageOf(error)), requestId }
 
     const status = field(error, 'status')

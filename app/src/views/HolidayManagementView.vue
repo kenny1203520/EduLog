@@ -413,7 +413,7 @@ async function confirmDelete() {
         isDeleting.value = true
         await HolidayCommandService.deleteHoliday(deleteId.value)
         await loadHolidays()
-        toast.success(t('holiday.delete_success') || 'Holiday deleted successfully')
+        toast.success(t('holiday.success_delete'))
     } catch (e: any) {
         console.error(e)
         reportError(e)

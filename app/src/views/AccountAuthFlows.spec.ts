@@ -108,6 +108,34 @@ describe('AccountApprovalPanel', () => {
         await flushPromises()
         expect(updateStatus).toHaveBeenCalledWith('u1', 'disabled', '不明帳號', 3)
     })
+
+    it('names built-in system roles in the page language, grouped by domain', async () => {
+        const ADMIN = { id: 'role-admin', code: 'system_admin', name: 'System Administrator', domain: 'system' as const }
+        const AUDITOR = { id: 'role-auditor', code: 'auditor', name: 'Auditor', domain: 'system' as const }
+        approvals.defaultRoles.mockResolvedValue({ role_ids: [], roles: [TEACHER, ADMIN, AUDITOR] })
+        const wrapper = mount(AccountApprovalPanel, { global: { plugins: [i18n] } })
+        await flushPromises()
+        const account = wrapper.find('[data-testid="pending-account"]')
+        expect(account.text()).toContain('系統管理員')
+        expect(account.text()).toContain('稽核員')
+        expect(wrapper.text()).not.toContain('System Administrator')
+        expect(account.findAll('[role="group"]').map((group) => group.attributes('aria-label'))).toEqual(['教學角色', '系統角色'])
+
+        i18n.global.locale.value = 'en'
+        await flushPromises()
+        expect(account.text()).toContain('System Administrator')
+        expect(account.text()).toContain('Auditor')
+    })
+
+    it('moves focus to the reason field when the reject form opens', async () => {
+        const wrapper = mount(AccountApprovalPanel, { global: { plugins: [i18n] }, attachTo: document.body })
+        await flushPromises()
+        const account = wrapper.find('[data-testid="pending-account"]')
+        await account.findAll('button').find((button) => button.text() === '拒絕')!.trigger('click')
+        await flushPromises()
+        expect(document.activeElement).toBe(account.find('input:not([type="checkbox"])').element)
+        wrapper.unmount()
+    })
 })
 
 describe('pending accounts in the router', () => {
