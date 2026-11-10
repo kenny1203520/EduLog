@@ -1,6 +1,6 @@
 import express from 'express'
 import request from 'supertest'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import crypto from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createExtensionIntegrationRouter, buildExtensionSettingsUrl } from './extensionIntegrationRouter.js'
@@ -9,6 +9,10 @@ import type { SupabaseClients } from '../../infra/supabase.js'
 
 const extensionOrigin = `chrome-extension://${'a'.repeat(32)}`
 const pairingId = '0051a2b5-fb29-4390-86f6-bd5e81ab7a16'
+
+const accountStatus = vi.hoisted(() => ({ assertUserActive: vi.fn() }))
+vi.mock('../../infra/supabase.js', async (original) => ({ ...(await original<typeof import('../../infra/supabase.js')>()), assertUserActive: accountStatus.assertUserActive }))
+beforeEach(() => { accountStatus.assertUserActive.mockResolvedValue('active') })
 
 describe('extension settings URLs', () => {
   it.each([
@@ -88,6 +92,17 @@ describe('extension token origin validation', () => {
     expect(response.body.data.user_id).toBe(userId)
     expect(response.body.data.settings_url).toBe('http://localhost:5173/dashboard/settings?tab=integrations')
     expect(query.eq).toHaveBeenCalledWith('token_hash', crypto.createHash('sha256').update(token).digest('hex'))
+  })
+
+  it('refuses a valid token whose account is disabled or waiting for approval', async () => {
+    const { app, query } = createTokenApp()
+    for (const reason of ['AUTH_DISABLED', 'AUTH_PENDING']) {
+      accountStatus.assertUserActive.mockRejectedValueOnce(new Error(reason))
+      const response = await request(app).get('/api/extension/v1/me').set('Authorization', `Bearer ${token}`)
+      expect(response.status).toBe(401)
+    }
+    expect(accountStatus.assertUserActive).toHaveBeenCalledWith(expect.anything(), userId)
+    expect(query.update).not.toHaveBeenCalled()
   })
 
   it('reports catalog capability only when migration 1000119 is available', async () => {

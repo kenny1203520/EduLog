@@ -10,8 +10,8 @@ import { clearUserValidation } from '../../infra/supabase.js'
 /**
  * Account review: accounts that signed up themselves (OAuth, email) wait as
  * 'pending' until someone with system.users.manage approves them. Approval
- * can grant roles at platform scope, which also needs the role-assignment
- * permission of each role's domain. Invited accounts are approved at once
+ * can grant roles at platform scope, which the reviewer must be allowed to
+ * assign themselves (rbac_can_grant_role). Invited accounts are approved at once
  * with the default roles. Rejecting uses PATCH /users/:id/status.
  */
 
@@ -44,10 +44,16 @@ async function loadRoles(req: Request, ids: string[]): Promise<RoleRow[]> {
   return rows
 }
 
-/** Granting a role needs the role-assignment permission of its domain. */
+/**
+ * approve_account runs as the service role, so the reviewer's own right to
+ * assign each role is asked here, through their own client: they may assign
+ * roles of that domain and hold everything the role grants.
+ */
 async function requireRolesGrantable(req: Request, roles: RoleRow[]) {
-  for (const domain of new Set(roles.map((role) => role.domain))) {
-    await requirePermission(req, `${domain}.role_assignments.manage`, 'account_role_grant')
+  for (const role of roles) {
+    const decision = await req.db!.rpc('rbac_can_grant_role', { p_role_id: role.id, p_scope_type: 'system', p_scope_id: null })
+    if (decision.error) throw new ApiError(503, 'AUTHORIZATION_CHECK_UNAVAILABLE', 'Authorization could not be verified')
+    if (decision.data !== true) throw new ApiError(403, 'GRANT_EXCEEDS_CALLER', 'You cannot grant a role that gives more access than you have')
   }
 }
 

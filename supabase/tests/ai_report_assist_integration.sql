@@ -37,6 +37,8 @@ BEGIN
     (teacher_a, 'ai-teacher-a@example.test'),
     (teacher_b, 'ai-teacher-b@example.test'),
     (admin_user, 'ai-admin@example.test');
+  -- Accounts start pending (1000163) and hold no permission until active (1000165).
+  UPDATE public.profiles SET account_status = 'active' WHERE account_status = 'pending';
   INSERT INTO public.user_role_assignments(user_id, role_id, scope_type, scope_id, effective_from, status)
   SELECT admin_user, role.id, 'system', NULL, DATE '2026-01-01', 'active'
   FROM public.roles role WHERE role.code = 'system_admin' AND role.domain = 'system' AND role.is_builtin;

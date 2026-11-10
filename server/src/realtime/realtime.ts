@@ -4,7 +4,7 @@ import type { Socket } from 'node:net'
 import { createHash, randomUUID } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ApiConfig } from '../config/config.js'
-import { createUserClient, validateAccessToken } from '../infra/supabase.js'
+import { assertUserActive, createUserClient, onUserValidationCleared, validateAccessToken } from '../infra/supabase.js'
 import { monitorRealtimeSocket } from './realtimeHeartbeat.js'
 import { redeemTicket } from './realtimeTicket.js'
 
@@ -102,6 +102,14 @@ export function attachRealtimeProxy(
   const authorizationTimeoutMs = timeouts.authorizationMs ?? AUTHORIZATION_TIMEOUT_MS
   const upstreamConnectTimeoutMs = timeouts.upstreamConnectMs ?? UPSTREAM_CONNECT_TIMEOUT_MS
   const socketServer = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 })
+  // Open connections by account. When an account's status changes, its
+  // connections are checked again and closed if it is no longer active.
+  const connectionsByUser = new Map<string, Set<() => void>>()
+  onUserValidationCleared((userId) => {
+    const connections = connectionsByUser.get(userId)
+    if (!connections?.size) return
+    assertUserActive(adminClient, userId).catch(() => { for (const close of [...connections]) close() })
+  })
   server.on('upgrade', async (request: IncomingMessage, socket: Socket, head: Buffer) => {
     const url = new URL(request.url ?? '/', 'https://edulog.local')
     if (url.pathname !== '/api/realtime') return
@@ -131,8 +139,11 @@ export function attachRealtimeProxy(
     if (!token) { log('realtime_upgrade_rejected', { phase: 'authentication', outcome: 'invalid_ticket', channel_kind: channelKind, resource_fingerprint: resourceFingerprint }); rejectUpgrade(socket, 401, 'Unauthorized'); return }
     if (!cookieToken) log('realtime_authentication', { channel_kind: channelKind, resource_fingerprint: resourceFingerprint, outcome: 'ticket' })
     const authenticationStartedAt = Date.now()
+    let userId: string
     try {
-      await validateAccessToken(adminClient, token, config)
+      // A valid token is not enough: a disabled or pending account gets no socket.
+      userId = (await validateAccessToken(adminClient, token, config)).id
+      await assertUserActive(adminClient, userId)
       log('realtime_authentication', { channel_kind: channelKind, resource_fingerprint: resourceFingerprint, outcome: 'allowed', duration_ms: Date.now() - authenticationStartedAt })
     } catch {
       log('realtime_upgrade_rejected', { phase: 'authentication', outcome: cookieToken ? 'invalid_cookie' : 'invalid_ticket_token', channel_kind: channelKind, resource_fingerprint: resourceFingerprint, duration_ms: Date.now() - authenticationStartedAt })
@@ -179,6 +190,8 @@ export function attachRealtimeProxy(
       }
 
       const cleanup = () => {
+        connectionsByUser.get(userId)?.delete(closeForAccount)
+        if (!connectionsByUser.get(userId)?.size) connectionsByUser.delete(userId)
         pending.length = 0
         if (authorizationTimer) clearTimeout(authorizationTimer)
         authorizationTimer = null
@@ -191,6 +204,7 @@ export function attachRealtimeProxy(
         client.off('error', onClientError)
         disposeUpstreamListeners()
       }
+      const closeForAccount = () => closePair(REALTIME_CLOSE_FORBIDDEN, 'Forbidden')
       const closePair = (code: number, reason: string) => {
         if (closed) return
         closed = true
@@ -205,6 +219,7 @@ export function attachRealtimeProxy(
         if (upstreamSocket?.readyState === WebSocket.OPEN && code === 1003) upstreamSocket.close(code, reason)
         else stopUpstream()
       }
+      connectionsByUser.set(userId, (connectionsByUser.get(userId) ?? new Set()).add(closeForAccount))
       const onClientClose = (code: number, reason: Buffer) => {
         if (closed) return
         log('realtime_socket_closed', { side: 'client', channel_kind: channelKind, resource_fingerprint: resourceFingerprint, close_code: code, reason_category: classifyRealtimeClientCloseReason(reason.toString()) })

@@ -631,16 +631,23 @@ export function createRbacRouter() {
   router.patch('/users/:id/status', wrap(async (req, res) => {
     requireRequest(req); const userId = uuid.parse(req.params.id); const input = userStatusMutation.parse(req.body)
     setAuditContext(req, { domain: 'system', resource: 'users', resourceId: userId, action: 'status', permission: 'system.users.manage' })
+    // Authorize before anything else: the Auth ban below runs as the service
+    // role, and an unauthorized caller must not learn whether the account exists.
+    const allowed = await req.db!.rpc('has_api_permission', { p_user_id: req.user!.id, p_permission_key: 'system.users.manage', p_classroom_id: null, p_class_session_id: null })
+    if (allowed.error) throw new ApiError(503, 'AUTHORIZATION_CHECK_UNAVAILABLE', 'Authorization could not be verified')
+    if (allowed.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to perform this action')
     const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
-    // The profile read remains on the caller's JWT/RLS client. The
-    // service-role client is used only for the Auth ban/unban operation.
     const previous = await req.adminDb!.from('profiles').select('account_status').eq('auth_user_id', userId).maybeSingle()
     if (previous.error) throw mapDatabaseError(previous.error); if (!previous.data) throw new ApiError(404, 'NOT_FOUND', 'User was not found')
     const authResult = await req.adminDb!.auth.admin.updateUserById(userId, { ban_duration: input.status === 'disabled' ? '876000h' : 'none' })
     if (authResult.error) throw new ApiError(503, 'AUTH_ADMIN_UNAVAILABLE', 'The account status could not be updated')
     const result = await req.db!.rpc('set_system_user_status', { p_user_id: userId, p_status: input.status, p_reason: input.status === 'disabled' ? input.reason ?? null : null, p_expected_epoch: input.expected_epoch })
     if (result.error) {
-      await req.adminDb!.auth.admin.updateUserById(userId, { ban_duration: previous.data.account_status === 'disabled' ? '876000h' : 'none' }).catch(() => undefined)
+      // The status was not changed, so put the Auth ban back as it was. If that
+      // fails the two disagree: say so in the log instead of hiding it.
+      const restored = await req.adminDb!.auth.admin.updateUserById(userId, { ban_duration: previous.data.account_status === 'disabled' ? '876000h' : 'none' })
+        .catch((error: unknown) => ({ error }))
+      if (restored.error) req.log.error({ target_user_id: userId, expected_status: previous.data.account_status }, 'user_status_ban_restore_failed')
       throw mapDatabaseError(result.error)
     }
     clearUserValidation(userId)

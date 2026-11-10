@@ -14,6 +14,8 @@ INSERT INTO auth.users(id, email) VALUES
   ('a8000000-0000-4000-8000-000000000003', 'student-create-unassigned@example.test'),
   ('a8000000-0000-4000-8000-000000000004', 'student-create-denied@example.test'),
   ('a8000000-0000-4000-8000-000000000005', 'student-create-only@example.test');
+-- Accounts start pending (1000163) and hold no permission until active (1000165).
+UPDATE public.profiles SET account_status = 'active' WHERE account_status = 'pending';
 
 INSERT INTO public.roles(id, name, domain)
 VALUES

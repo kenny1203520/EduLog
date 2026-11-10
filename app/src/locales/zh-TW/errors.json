@@ -44,7 +44,10 @@
         "ACCOUNT_NOT_PENDING": "此帳號已不在待核准狀態，請重新載入清單。",
         "AUTH_ADMIN_UNAVAILABLE": "帳號服務暫時無法使用，未做任何變更。",
         "SENSITIVE_PERMISSION_REQUIRED": "您沒有檢視或編輯此學生敏感資料的權限。",
-        "STUDENT_ACCESS_DENIED": "您沒有此學生的存取權限。"
+        "STUDENT_ACCESS_DENIED": "您沒有此學生的存取權限。",
+        "GRANT_EXCEEDS_CALLER": "無法授予您自己沒有的權限，請由具備該權限的人員操作。",
+        "OWNER_ROLE_REQUIRED": "只有擁有者可以指派或移除擁有者角色。",
+        "PROTECTED_ROLE_PARENT": "角色不能繼承擁有者角色。"
     },
     "rate_limited": "操作太頻繁，請稍候再試。",
     "service_unavailable": "服務暫時無法使用。",
