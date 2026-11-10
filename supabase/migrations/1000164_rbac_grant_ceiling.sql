@@ -72,6 +72,21 @@ RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalo
   );
 $$;
 
+-- Accounts that are system owners today: an active account with an active,
+-- current system_owner assignment. The last-owner guards count these, so a
+-- disabled owner or a suspended assignment does not keep the system "owned".
+CREATE OR REPLACE FUNCTION private.active_system_owner_ids()
+RETURNS SETOF uuid LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+  SELECT DISTINCT assignment.user_id
+  FROM public.user_role_assignments assignment
+  JOIN public.roles role ON role.id = assignment.role_id AND role.domain = 'system' AND role.code = 'system_owner'
+  JOIN public.profiles profile ON profile.auth_user_id = assignment.user_id AND profile.account_status = 'active'
+  WHERE assignment.scope_type = 'system' AND assignment.status = 'active'
+    AND assignment.effective_from <= CURRENT_DATE
+    AND (assignment.effective_to IS NULL OR assignment.effective_to >= CURRENT_DATE);
+$$;
+REVOKE ALL ON FUNCTION private.active_system_owner_ids() FROM PUBLIC, anon, authenticated;
+
 -- True when the caller holds p_permission_key at the scope. The domain comes
 -- from the permission row: the system key rbac.manage has no system. prefix.
 CREATE OR REPLACE FUNCTION private.rbac_caller_holds(p_permission_key text, p_scope_type text, p_scope_id uuid)
@@ -374,12 +389,10 @@ BEGIN
       RAISE EXCEPTION 'OWNER_ROLE_REQUIRED';
     END IF;
     IF v_previous_role.code='system_owner' AND v_role.code<>'system_owner' THEN
-      SELECT count(DISTINCT assignment.user_id) INTO v_active_owner_count
-      FROM public.user_role_assignments assignment JOIN public.roles owner_role ON owner_role.id=assignment.role_id
-      WHERE owner_role.domain='system' AND owner_role.code='system_owner' AND assignment.scope_type='system'
-        AND assignment.effective_from <= CURRENT_DATE
-        AND (assignment.effective_to IS NULL OR assignment.effective_to >= CURRENT_DATE);
-      IF v_active_owner_count <= 1 THEN RAISE EXCEPTION 'LAST_SYSTEM_OWNER'; END IF;
+      -- Another active owner must remain after this one is demoted.
+      SELECT count(*) INTO v_active_owner_count FROM private.active_system_owner_ids() owner_id
+      WHERE owner_id <> (SELECT user_id FROM public.user_role_assignments WHERE id = p_assignment_id);
+      IF v_active_owner_count < 1 THEN RAISE EXCEPTION 'LAST_SYSTEM_OWNER'; END IF;
     END IF;
     UPDATE public.user_role_assignments SET user_id=p_user_id, role_id=p_role_id,
       effective_from=COALESCE(p_effective_from,CURRENT_DATE), effective_to=p_effective_to
