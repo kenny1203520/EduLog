@@ -103,4 +103,11 @@ describe('mailer', () => {
     expect(message.html).not.toContain('<b>x</b>')
     expect(message.html).toContain('&lt;b&gt;x&lt;/b&gt;')
   })
+
+  it('names the sign-in method instead of printing its id', () => {
+    expect(pendingAccountMessage('a@example.test', 'github', 'http://localhost:4173/x').text).toContain('（GitHub）')
+    expect(pendingAccountMessage('a@example.test', 'azure', 'http://localhost:4173/x').text).toContain('(Microsoft)')
+    expect(pendingAccountMessage('a@example.test', 'email', 'http://localhost:4173/x').html).toContain('（Email）')
+    expect(pendingAccountMessage('a@example.test', 'some_idp', 'http://localhost:4173/x').text).toContain('(Some Idp)')
+  })
 })

@@ -37,7 +37,19 @@ function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!)
 }
 
-export function pendingAccountMessage(email: string, provider: string, reviewUrl: string): Omit<MailMessage, 'to'> {
+/** Names of the sign-in methods as people know them; GoTrue reports ids such as `azure`. */
+const PROVIDER_LABELS: Record<string, string> = {
+  email: 'Email', apple: 'Apple', azure: 'Microsoft', github: 'GitHub', gitlab: 'GitLab', google: 'Google',
+  keycloak: 'Keycloak', linkedin_oidc: 'LinkedIn', slack_oidc: 'Slack', twitter: 'X', workos: 'WorkOS',
+}
+
+export function providerLabel(provider: string): string {
+  return PROVIDER_LABELS[provider]
+    ?? provider.replace(/_oidc$/, '').split('_').map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ')
+}
+
+export function pendingAccountMessage(email: string, providerId: string, reviewUrl: string): Omit<MailMessage, 'to'> {
+  const provider = providerLabel(providerId)
   const safeEmail = escapeHtml(email)
   const safeProvider = escapeHtml(provider)
   const safeUrl = escapeHtml(reviewUrl)

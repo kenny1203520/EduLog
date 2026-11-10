@@ -8,12 +8,16 @@ const BUILT_IN_ROLE_CODES = new Set([
     'teacher', 'learning_coach', 'coach', 'trainee_teacher', 'trainee_tutor',
     'trainee_learning_coach', 'trainee_coach'
 ])
-const TEACHING_BUILT_IN_ROLE_CODES = new Set(['teaching_owner', 'teaching_manager', 'teacher', 'assistant', 'viewer', 'member'])
+/** Built-in roles of both domains; each has an `rbac.roles.<code>` entry. */
+export const RBAC_BUILT_IN_ROLE_CODES: ReadonlySet<string> = new Set([
+    'system_owner', 'system_admin', 'user_manager', 'auditor',
+    'teaching_owner', 'teaching_manager', 'teacher', 'assistant', 'viewer', 'member'
+])
 
 /** Returns a localized label for built-in roles and the stored name for custom roles. */
 export function roleDisplayName(role: RoleDisplayInput, translate: Translate): string {
-    if (role.is_system || (role.code && BUILT_IN_ROLE_CODES.has(role.code))) {
-        if (role.code && TEACHING_BUILT_IN_ROLE_CODES.has(role.code)) {
+    if (role.is_system || (role.code && (BUILT_IN_ROLE_CODES.has(role.code) || RBAC_BUILT_IN_ROLE_CODES.has(role.code)))) {
+        if (role.code && RBAC_BUILT_IN_ROLE_CODES.has(role.code)) {
             const key = `rbac.roles.${role.code}.name`
             const localizedName = translate(key)
             if (localizedName !== key) return localizedName
