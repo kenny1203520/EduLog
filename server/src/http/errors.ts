@@ -30,6 +30,9 @@ export function mapDatabaseError(error: { code?: string; message?: string } | nu
   if (error.code === 'P0001') {
     const message = error.message ?? ''
     const known: Array<[RegExp, number, string, string]> = [
+      [/GRANT_EXCEEDS_CALLER/, 403, 'GRANT_EXCEEDS_CALLER', 'You cannot grant access that you do not have yourself'],
+      [/OWNER_ROLE_REQUIRED/, 403, 'OWNER_ROLE_REQUIRED', 'Only an owner can assign or remove an owner role'],
+      [/PROTECTED_ROLE_PARENT/, 422, 'PROTECTED_ROLE_PARENT', 'A role cannot inherit from an owner role'],
       [/AUTHENTICATION_REQUIRED|Authentication required/i, 401, 'AUTH_REQUIRED', 'Authentication is required'],
       [/PERMISSION_DENIED|FORBIDDEN|_FORBIDDEN|RBAC_MANAGE_REQUIRED/i, 403, 'PERMISSION_DENIED', 'You do not have permission to perform this action'],
       [/NOT_FOUND|NOT_EXIST|NOT_IN_ENROLLMENT/i, 404, 'NOT_FOUND', 'Resource was not found'],

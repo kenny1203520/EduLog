@@ -32,6 +32,9 @@ describe('database error taxonomy', () => {
     expect(mapDatabaseError({ code: 'P0001', message: 'TEACHER_ARCHIVED' })).toMatchObject({ status: 409, code: 'TEACHER_ARCHIVED' })
     expect(mapDatabaseError({ code: 'P0001', message: 'ROLE_IN_USE' })).toMatchObject({ status: 409, code: 'RBAC_ROLE_IN_USE' })
     expect(mapDatabaseError({ code: 'P0001', message: 'PROTECTED_ROLE' })).toMatchObject({ status: 409, code: 'RBAC_PROTECTED_RESOURCE' })
+    expect(mapDatabaseError({ code: 'P0001', message: 'GRANT_EXCEEDS_CALLER' })).toMatchObject({ status: 403, code: 'GRANT_EXCEEDS_CALLER' })
+    expect(mapDatabaseError({ code: 'P0001', message: 'OWNER_ROLE_REQUIRED' })).toMatchObject({ status: 403, code: 'OWNER_ROLE_REQUIRED' })
+    expect(mapDatabaseError({ code: 'P0001', message: 'PROTECTED_ROLE_PARENT' })).toMatchObject({ status: 422, code: 'PROTECTED_ROLE_PARENT' })
     expect(mapDatabaseError({ code: 'P0001', message: 'internal SQL details' }).message).toBe('The request violates a business rule')
   })
 

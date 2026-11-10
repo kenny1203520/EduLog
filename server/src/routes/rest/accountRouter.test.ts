@@ -16,7 +16,7 @@ const roles = [
   { id: OWNER, code: 'teaching_owner', name: 'Owner', domain: 'teaching', is_protected: true },
 ]
 
-function app(granted: string[], defaults: string[] = [TEACHER]) {
+function app(granted: string[], defaults: string[] = [TEACHER], grantable: string[] = [TEACHER]) {
   const adminRpc = vi.fn(async (name: string, args?: Record<string, unknown>) => {
     if (name === 'approve_account') return { data: { id: args!.p_user_id, account_status: 'active' }, error: null }
     if (name === 'list_pending_accounts') return { data: [{ id: PENDING, email: 'new@example.test', provider: 'github' }], error: null }
@@ -37,7 +37,9 @@ function app(granted: string[], defaults: string[] = [TEACHER]) {
   instance.use(express.json())
   instance.use((req, _res, next) => {
     req.user = { id: 'admin' } as never
-    req.db = { rpc: async (_name: string, args: { p_permission_key: string }) => ({ data: granted.includes(args.p_permission_key), error: null }) } as never
+    req.db = { rpc: async (name: string, args: { p_permission_key: string; p_role_id: string }) => ({
+      data: name === 'rbac_can_grant_role' ? grantable.includes(args.p_role_id) : granted.includes(args.p_permission_key), error: null,
+    }) } as never
     req.adminDb = {
       rpc: adminRpc,
       from: (table: string) => table === 'roles' ? query(roles) : query(defaults.map((role_id) => ({ role_id }))),
@@ -64,14 +66,26 @@ describe('account review', () => {
     expect(reviewer.body.data).toEqual({ count: 1, can_review: true })
   })
 
-  it('approves with teaching roles only when teaching role assignment is allowed', async () => {
-    const harness = app(['system.users.manage', 'teaching.role_assignments.manage'])
+  it('approves only with roles the reviewer may assign themselves', async () => {
+    const harness = app(['system.users.manage'])
     const approved = await request(harness.instance).post(`/api/accounts/${PENDING}/approve`).send({ role_ids: [TEACHER] })
     expect(approved.status).toBe(200)
     expect(harness.adminRpc).toHaveBeenCalledWith('approve_account', { p_user_id: PENDING, p_role_ids: [TEACHER], p_actor: 'admin' })
 
     const systemRole = await request(harness.instance).post(`/api/accounts/${PENDING}/approve`).send({ role_ids: [USER_MANAGER] })
     expect(systemRole.status).toBe(403)
+    expect(systemRole.body.error.code).toBe('GRANT_EXCEEDS_CALLER')
+    expect(harness.adminRpc).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses default roles and invitations that exceed the reviewer', async () => {
+    const harness = app(['system.users.manage'], [USER_MANAGER])
+    const defaults = await request(harness.instance).put('/api/settings/account-default-roles').send({ role_ids: [USER_MANAGER] })
+    expect(defaults.body.error.code).toBe('GRANT_EXCEEDS_CALLER')
+    const invite = await request(harness.instance).post('/api/accounts/invite').send({ email: 'invitee@example.test' })
+    expect(invite.body.error.code).toBe('GRANT_EXCEEDS_CALLER')
+    expect(harness.inviteUserByEmail).not.toHaveBeenCalled()
+    expect(harness.adminRpc).not.toHaveBeenCalled()
   })
 
   it('never grants an owner role, as approval or as a default', async () => {
