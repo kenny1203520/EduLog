@@ -106,7 +106,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/tests/postgres_bootstrap.sql
           for migration in supabase/migrations/*.sql; do
             case "$migration" in
-            *1000156*|*1000157*) continue ;;
+            *1000156*|*1000157*|*1000164*|*1000165*|*1000166*) continue ;;
             esac
             psql -v ON_ERROR_STOP=1 -f "$migration"
           done
@@ -124,6 +124,12 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000161_page_access_permissions_and_member_role.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000162_split_student_sensitive_permissions.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000162_split_student_sensitive_permissions.sql
+          # 1000164 to 1000166 replace functions that 1000157 and the reruns
+          # above define, so they go last (twice).
+          for migration in supabase/migrations/1000164*.sql supabase/migrations/1000165*.sql supabase/migrations/1000166*.sql; do
+            psql -v ON_ERROR_STOP=1 -f "$migration"
+            psql -v ON_ERROR_STOP=1 -f "$migration"
+          done
           psql -v ON_ERROR_STOP=1 -f supabase/tests/student_create_permission_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/student_sensitive_permission_integration.sql
       - name: Upgrade an existing database and verify owner backfill
