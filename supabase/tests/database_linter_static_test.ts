@@ -21,3 +21,28 @@ Deno.test('shared rate limit store is fail-closed and service-role only', () => 
   assertStringIncludes(rateLimit, 'REVOKE ALL ON FUNCTION public.consume_api_rate_limit(text, integer, integer) FROM PUBLIC, anon, authenticated')
   assertStringIncludes(rateLimit, 'GRANT EXECUTE ON FUNCTION public.consume_api_rate_limit(text, integer, integer) TO service_role')
 })
+
+const lockdown = await readMigration('1000167_lockdown_public_privileges.sql')
+const migrationNumber = (name: string) => Number(/^(\d+)/.exec(name)?.[1] ?? 0)
+const withoutComments = (sql: string) => sql.replace(/--.*$/gm, '')
+
+Deno.test('1000167 locks anon out of public and stops default grants', () => {
+  assertStringIncludes(lockdown, 'REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon')
+  assertStringIncludes(lockdown, "REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon, authenticated")
+  assertStringIncludes(lockdown, 'ALTER DEFAULT PRIVILEGES FOR ROLE postgres REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC')
+  assertStringIncludes(lockdown, 'IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM anon, authenticated')
+  assertFalse(/GRANT\s+[^;]*\bTO\s+anon\b/i.test(withoutComments(lockdown)), '1000167 must not grant anything to anon')
+})
+
+Deno.test('migrations after 1000167 revoke function access from anon, not only PUBLIC', async () => {
+  for await (const entry of Deno.readDir(migrationDir)) {
+    if (!entry.isFile || !entry.name.endsWith('.sql') || migrationNumber(entry.name) <= 1000167) continue
+    const sql = withoutComments(await readMigration(entry.name))
+    for (const statement of sql.match(/REVOKE\s[^;]*?ON\s+FUNCTION\s[^;]*?FROM\s[^;]*;/gis) ?? []) {
+      if (/\bPUBLIC\b/i.test(statement.split(/\bFROM\b/i).pop() ?? '')) {
+        assert(/\banon\b/i.test(statement), `${entry.name}: "${statement.trim()}" must also revoke from anon`)
+      }
+    }
+    assertFalse(/GRANT\s[^;]*?ON\s+FUNCTION\s[^;]*?\bTO\s+[^;]*\banon\b/is.test(sql), `${entry.name} must not grant functions to anon`)
+  }
+})

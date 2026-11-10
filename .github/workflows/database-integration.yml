@@ -77,6 +77,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/tests/rbac_grant_ceiling_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/account_status_enforcement_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/rbac_review_fixes_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/privilege_lockdown_integration.sql
       - name: Reconciliation migrations are rerunnable
         shell: bash
         run: |
@@ -162,6 +163,7 @@ jobs:
           done
           psql -v ON_ERROR_STOP=1 -f supabase/tests/student_create_permission_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/student_sensitive_permission_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/privilege_lockdown_integration.sql
       - name: Upgrade an existing 1000061 database through 1000091
         shell: bash
         run: |

@@ -198,6 +198,8 @@ BEGIN
   END IF;
 END;
 $$;
+-- New functions are not executable by default (1000167).
+GRANT EXECUTE ON FUNCTION pg_temp.assert_sensitive(integer, boolean, boolean) TO authenticated;
 
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.role', 'authenticated', true);
@@ -336,6 +338,7 @@ BEGIN
   END;
 END;
 $$;
+GRANT EXECUTE ON FUNCTION pg_temp.assert_single_section(integer, text) TO authenticated;
 
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.role', 'authenticated', true);
