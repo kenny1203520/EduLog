@@ -8,6 +8,8 @@ import { testConfig } from '../test/testConfig.js'
 const supabaseMocks = vi.hoisted(() => ({
   createUserClient: vi.fn(),
   validateAccessToken: vi.fn(),
+  assertUserActive: vi.fn(),
+  onUserValidationCleared: vi.fn(),
 }))
 
 vi.mock('../infra/supabase.js', () => supabaseMocks)
@@ -53,7 +55,8 @@ describe('realtime proxy upgrade-to-join flow', () => {
   beforeEach(() => {
     upstreamConnections = 0
     upstreamJoinFrames = []
-    supabaseMocks.validateAccessToken.mockResolvedValue(undefined)
+    supabaseMocks.validateAccessToken.mockResolvedValue({ id: 'user-1' })
+    supabaseMocks.assertUserActive.mockResolvedValue('active')
     vi.spyOn(console, 'info').mockImplementation(() => {})
   })
 
@@ -201,6 +204,33 @@ describe('realtime proxy upgrade-to-join flow', () => {
     first.terminate()
     expect(await upgradeStatus(connectWithTicket(url, 'class_session', ticket))).toBe(401)
     expect(await upgradeStatus(connectWithTicket(url, 'class_session', 'tampered-ticket'))).toBe(401)
+  })
+
+  it('refuses the upgrade of a disabled account even though its token is still valid', async () => {
+    supabaseMocks.createUserClient.mockReturnValue({ rpc: vi.fn().mockResolvedValue(AUTHORIZED) })
+    supabaseMocks.assertUserActive.mockRejectedValue(new Error('AUTH_DISABLED'))
+    const url = await startProxy()
+    expect(await upgradeStatus(connect(url, 'room'))).toBe(401)
+    expect(supabaseMocks.assertUserActive).toHaveBeenCalledWith(expect.anything(), 'user-1')
+    expect(upstreamConnections).toBe(0)
+  })
+
+  it('closes the open sockets of an account when it is disabled, and leaves them when it stays active', async () => {
+    supabaseMocks.createUserClient.mockReturnValue({ rpc: vi.fn().mockResolvedValue(AUTHORIZED) })
+    const url = await startProxy()
+    const socket = connect(url, 'room')
+    await once(socket, 'open')
+    const statusChanged = supabaseMocks.onUserValidationCleared.mock.calls.at(-1)![0] as (userId: string) => void
+
+    statusChanged('someone-else')
+    statusChanged('user-1')
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(socket.readyState).toBe(WebSocket.OPEN)
+
+    supabaseMocks.assertUserActive.mockRejectedValue(new Error('AUTH_DISABLED'))
+    const closed = once(socket, 'close')
+    statusChanged('user-1')
+    expect((await closed)[0]).toBe(4403)
   })
 
   it('does not open an upstream connection when delayed authorization denies access', async () => {

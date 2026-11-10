@@ -8,6 +8,8 @@ INSERT INTO auth.users(id, email) VALUES
   ('91000000-0000-4000-8000-000000000001', 'lifecycle-owner@example.test'),
   ('91000000-0000-4000-8000-000000000002', 'lifecycle-other@example.test')
 ON CONFLICT (id) DO NOTHING;
+-- Accounts start pending (1000163) and hold no permission until active (1000165).
+UPDATE public.profiles SET account_status = 'active' WHERE account_status = 'pending';
 
 -- The fixture owner gets a platform teaching role; the unrelated account
 -- remains unassigned. Teaching membership is no longer stored per workspace.

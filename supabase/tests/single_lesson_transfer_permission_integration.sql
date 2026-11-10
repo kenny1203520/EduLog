@@ -28,6 +28,8 @@ BEGIN
     (rbac_user, 'permission-rbac@example.test'),
     (teacher_user, 'permission-teacher@example.test'),
     (plain_user, 'permission-plain@example.test');
+  -- Accounts start pending (1000163) and hold no permission until active (1000165).
+  UPDATE public.profiles SET account_status = 'active' WHERE account_status = 'pending';
   INSERT INTO public.classrooms(id, name, user_id, teaching_id) VALUES (v_classroom_id, 'Permission classroom', owner_id, v_teaching_id);
   INSERT INTO public.courses(id, subject, stage, user_id, teaching_id) VALUES (v_course_id, 'Permission course', 'primary', owner_id, v_teaching_id);
   INSERT INTO public.students(id, name, user_id) VALUES (v_student_id, 'Permission Student', NULL);

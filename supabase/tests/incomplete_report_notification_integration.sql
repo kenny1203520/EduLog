@@ -12,6 +12,8 @@ INSERT INTO auth.users(id, email) VALUES
   ('15200000-0000-4000-8000-000000000002', 'n-teacher@example.test'),
   ('15200000-0000-4000-8000-000000000003', 'n-session-only@example.test'),
   ('15200000-0000-4000-8000-000000000004', 'n-unassigned@example.test');
+-- Accounts start pending (1000163) and hold no permission until active (1000165).
+UPDATE public.profiles SET account_status = 'active' WHERE account_status = 'pending';
 
 -- Teacher A: platform teacher role + session assignment (the normal shape).
 INSERT INTO public.user_role_assignments(user_id, role_id, scope_type, scope_id, effective_from, status)

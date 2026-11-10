@@ -10,6 +10,8 @@ INSERT INTO auth.users(id, email) VALUES
   ('16100000-0000-4000-8000-000000000001', 'member-only@example.test'),
   ('16100000-0000-4000-8000-000000000002', 'member-classroom-teacher@example.test'),
   ('16100000-0000-4000-8000-000000000003', 'member-none@example.test');
+-- Accounts start pending (1000163) and hold no permission until active (1000165).
+UPDATE public.profiles SET account_status = 'active' WHERE account_status = 'pending';
 
 -- The member role holds exactly the six access grants at platform scope.
 DO $$
