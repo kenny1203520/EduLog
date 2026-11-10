@@ -1,7 +1,7 @@
 import express, { type Request, type Response, type NextFunction } from 'express'
 import request from 'supertest'
 import crypto from 'node:crypto'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createExtensionIntegrationRouter } from './extensionIntegrationRouter.js'
 import { testConfig } from '../../test/testConfig.js'
 import type { SupabaseClients } from '../../infra/supabase.js'
@@ -30,6 +30,10 @@ function setup(row: unknown = { id, user_id: user, extension_origin: origin, exp
   app.use((error: { status?: number; code?: string }, _req: Request, res: Response, _next: NextFunction) => res.status(error.status || 422).json({ code: error.code }))
   return { app, q, rpc, rpcResult }
 }
+const accountStatus = vi.hoisted(() => ({ assertUserActive: vi.fn() }))
+vi.mock('../../infra/supabase.js', async (original) => ({ ...(await original<typeof import('../../infra/supabase.js')>()), assertUserActive: accountStatus.assertUserActive }))
+beforeEach(() => { accountStatus.assertUserActive.mockResolvedValue('active') })
+
 describe('extension installations API', () => {
   it('accepts complete installation metadata and rejects partial identity', async () => {
     const { app, q } = setup()

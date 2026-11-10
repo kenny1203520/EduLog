@@ -3,7 +3,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ApiConfig } from '../../config/config.js'
-import type { SupabaseClients } from '../../infra/supabase.js'
+import { assertUserActive, type SupabaseClients } from '../../infra/supabase.js'
 import { requireAuth, csrfProtection } from '../../auth/auth.js'
 import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { createExtensionWorkspaceRouter } from './extensionWorkspaceRouter.js'
@@ -80,6 +80,10 @@ function requireExtensionToken(adminClient: SupabaseClient, config: ApiConfig) {
       if (!allowedExtensionOrigin(config, result.data.extension_origin) || (origin && result.data.extension_origin !== origin)) {
         throw new ApiError(403, 'EXTENSION_ORIGIN_FORBIDDEN', 'This extension origin is not enabled')
       }
+      // The token outlives a web session by months, so the account is checked on every request.
+      await assertUserActive(adminClient, result.data.user_id).catch(() => {
+        throw new ApiError(401, 'EXTENSION_AUTH_INVALID', 'Extension authorization is invalid or expired')
+      })
       req.extensionPrincipal = { tokenId: result.data.id, userId: result.data.user_id, extensionOrigin: result.data.extension_origin, connection: {
         installation_id: result.data.installation_id ?? null, device_name: result.data.device_name ?? null,
         browser_name: result.data.browser_name ?? null, platform_name: result.data.platform_name ?? null, extension_version: result.data.extension_version ?? null,

@@ -9,6 +9,8 @@ INSERT INTO auth.users(id, email)
 SELECT ('b9000000-0000-4000-8000-' || lpad(n::text, 12, '0'))::uuid,
        'student-sensitive-' || n || '@example.test'
 FROM generate_series(1, 16) AS n;
+-- Accounts start pending (1000163) and hold no permission until active (1000165).
+UPDATE public.profiles SET account_status = 'active' WHERE account_status = 'pending';
 INSERT INTO public.roles(id, name, domain) VALUES
   ('b9100000-0000-4000-8000-000000000001', 'Sensitive fixture basic reader', 'teaching'),
   ('b9100000-0000-4000-8000-000000000002', 'Sensitive fixture private reader', 'teaching'),

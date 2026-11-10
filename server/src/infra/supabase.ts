@@ -33,11 +33,24 @@ export function clearAccessTokenValidation(accessToken: string | undefined) {
   if (accessToken) validationCache.delete(tokenCacheKey(accessToken))
 }
 
+const userValidationListeners = new Set<(userId: string) => void>()
+
+/**
+ * Called after an account's cached validation is dropped (its status or roles
+ * changed), so long-lived connections can check the account again. Returns
+ * the function that removes the listener.
+ */
+export function onUserValidationCleared(listener: (userId: string) => void): () => void {
+  userValidationListeners.add(listener)
+  return () => { userValidationListeners.delete(listener) }
+}
+
 export function clearUserValidation(userId: string) {
   accountStatusCache.delete(userId)
   for (const [key, entry] of validationCache) {
     if (entry.user?.id === userId) validationCache.delete(key)
   }
+  for (const listener of userValidationListeners) listener(userId)
 }
 
 export type AccountStatus = 'active' | 'disabled' | 'pending'
@@ -55,7 +68,8 @@ export async function assertUserActive(adminClient: SupabaseClient, userId: stri
   else {
     const { data, error } = await adminClient.from('profiles').select('account_status').eq('auth_user_id', userId).maybeSingle()
     if (error || !data) throw new Error('AUTH_INVALID')
-    status = data.account_status === 'disabled' ? 'disabled' : data.account_status === 'pending' ? 'pending' : 'active'
+    // Anything that is not a known usable status counts as disabled.
+    status = data.account_status === 'active' ? 'active' : data.account_status === 'pending' ? 'pending' : 'disabled'
     accountStatusCache.set(userId, { status, expiresAt: now + VALIDATION_CACHE_TTL_MS })
   }
   if (status === 'disabled') throw new Error('AUTH_DISABLED')

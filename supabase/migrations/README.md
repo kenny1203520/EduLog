@@ -158,7 +158,12 @@ The former consolidated migration names are intentionally absent. `1000041a_has_
 | 1000155 | `1000155_enrollment_transfer_log.sql` | Append-only class transfer log, retroactive transfers that keep the report count, stricter blank-report check, closures skip report slots |
 | 1000157 | `1000157_drop_teaching_workspace_model.sql` | Drop the archived teaching-workspace tables, migration bookkeeping tables and workspace helpers; RLS and RPCs use scope-free permission helpers |
 | 1000160 | `1000160_presidio_languages.sql` | De-identification language checks accept the 24 languages the Presidio image ships |
+| 1000161 | `1000161_page_access_permissions_and_member_role.sql` | Page access permissions and the built-in `member` role |
+| 1000162 | `1000162_split_student_sensitive_permissions.sql` | Student sensitive data split into four permission groups; removes the old sensitive keys |
 | 1000163 | `1000163_account_approval_and_default_roles.sql` | New accounts wait for approval; default roles for invited and approved accounts |
+| 1000164 | `1000164_rbac_grant_ceiling.sql` | Nobody grants access they do not hold; owner roles are assigned and inherited by owners only |
+| 1000165 | `1000165_account_status_enforcement.sql` | An account that is not active holds no permission; its extension tokens are revoked |
+| 1000166 | `1000166_rbac_review_fixes.sql` | Approver notice recipients, last-owner guards, teacher account links, student profile enrollments |
 
 The missing versions `1000010`, `1000015`, and `1000016` are historical unused numbers, not missing files. Apply migrations in lexical order; `1000041a` sorts between `1000041` and `1000042`, and `1000057a` sorts between `1000057` and `1000058`.
 
@@ -295,3 +300,38 @@ CI's reconciliation step reruns 1000129, which restores the pre-split helper, so
 ## Account approval and default roles (1000163)
 
 `1000163_account_approval_and_default_roles.sql` adds `'pending'` to `profiles.account_status` and makes every account GoTrue creates from then on (OAuth, self sign-up, Studio) start pending, with no role. Existing accounts keep their status; an update of an `auth.users` row never changes it. `account_default_roles` lists the roles invited accounts receive when created and pending accounts receive when approved, always at platform scope; protected (owner) roles are refused. `approve_account(user, roles, actor)` moves a pending account to active, records `approved_at`/`approved_by` and a `user_status_events` row, and grants the roles it does not already hold. `list_pending_accounts`, `count_pending_accounts`, `mark_pending_account_notified` (true once, so administrators are mailed once) and `list_account_approver_emails` serve the review screen and the notice. All of them are service-role only; the API checks `system.users.manage` and, for each granted role, `<domain>.role_assignments.manage`. Rejecting uses the existing `set_system_user_status` (pending → disabled). `bootstrap_system_owner` also activates the account it makes owner. Run `supabase/tests/account_approval_integration.sql` after applying it.
+
+## Grant ceiling (1000164)
+
+`1000164_rbac_grant_ceiling.sql` stops a caller from handing out access they do not hold. Before it, a system administrator could create a role that inherits `system_owner`, a user manager could assign itself `system_admin`, and a teaching manager could assign itself `teaching_owner` or add the sensitive student groups to its own role.
+
+- A protected role (`system_owner`, `teaching_owner`) is never a parent. Only an owner of its domain assigns or removes it. Existing inheritance rows that point at a protected role are deleted, and each one is reported as a `WARNING` when the migration runs.
+- Assigning a role, or making it a parent, needs the caller to hold every permission the role allows (with its parents), at the scope where the assignment hands it out. A platform policy of a role assigned in a classroom is checked in that classroom. An owner of the domain is exempt.
+- Saving a role's permissions needs the caller to hold every permission that the save newly allows or stops denying.
+- Teaching roles are assigned with `teaching.role_assignments.manage` or `teaching.roles.manage`, as system roles already were. Defining roles still needs `roles.manage`.
+- A class job (`class_session_teachers.role_id`) follows the same ceiling, because it grants its role in that class.
+
+The API asks `rbac_can_grant_role(role, scope_type, scope_id)` through the caller's own client before it approves an account, saves default roles or sends an invitation; `approve_account` itself runs as the service role. Refusals are `GRANT_EXCEEDS_CALLER`, `OWNER_ROLE_REQUIRED` and `PROTECTED_ROLE_PARENT`.
+
+After upgrading, a user manager can only assign system roles whose permissions it holds itself (for example it can no longer assign `auditor` or `system_admin`). Run `supabase/tests/rbac_grant_ceiling_integration.sql` to check the rules.
+
+## Account status enforcement (1000165)
+
+`1000165_account_status_enforcement.sql` makes the database agree with the API about disabled and pending accounts. `resolve_scoped_permission`, `has_system_permission`, `rbac_is_system_owner`, `has_active_teaching_role` and `can_access_occurrence_report` answer "no" for an account whose `profiles.account_status` is not `active`; the other permission helpers resolve through these. An account with no profile counts as not active. The service role is not affected.
+
+Leaving the active status revokes the account's browser-extension tokens, and tokens of accounts that are not active when the migration runs are revoked then. Enabling the account again does not restore a token; the extension has to be paired again.
+
+Policies that grant access by ownership of a row, without asking a resolver, are not changed.
+
+Test fixtures have to activate the accounts they create (`UPDATE public.profiles SET account_status = 'active' ...`), because accounts start pending since 1000163. Run `supabase/tests/account_status_enforcement_integration.sql` to check the rules.
+
+## Authorization review fixes (1000166)
+
+`1000166_rbac_review_fixes.sql`:
+
+- `list_account_approver_emails` returns only accounts that hold `system.users.manage`. It used `has_system_permission`, which is always true for the service role, so the notice about a pending account went to every active account.
+- The last-owner guards count active owners: an active account with an active, current `system_owner` assignment. The last one cannot be disabled, removed or demoted. An owner's account status, and any protected system role, is changed by an owner only. `bootstrap_system_owner` runs again when no active owner is left.
+- Linking an account to a teacher (`teacher_records.profile_id`, `profiles.auth_user_id`) gives the account the roles of the teacher's class jobs, so the caller must be able to assign each of those roles in its class.
+- `get_student_profile_page` lists the student's enrollments only in classrooms or classes where the caller may read students.
+
+Run `supabase/tests/rbac_review_fixes_integration.sql` to check them.

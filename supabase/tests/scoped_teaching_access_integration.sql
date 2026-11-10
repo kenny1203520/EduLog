@@ -15,6 +15,8 @@ INSERT INTO auth.users(id, email) VALUES
   ('15800000-0000-4000-8000-000000000006', 'scope-other-teacher@example.test'),
   ('15800000-0000-4000-8000-000000000007', 'scope-platform-teacher@example.test'),
   ('15800000-0000-4000-8000-000000000008', 'scope-unassigned-teacher@example.test');
+-- Accounts start pending (1000163) and hold no permission until active (1000165).
+UPDATE public.profiles SET account_status = 'active' WHERE account_status = 'pending';
 
 -- Platform teacher role for user 7 only.
 INSERT INTO public.user_role_assignments(user_id, role_id, scope_type, scope_id, effective_from, status)

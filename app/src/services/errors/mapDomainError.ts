@@ -47,7 +47,10 @@ const DOMAIN_ERROR_KEYS: Record<string, string> = {
     ACCOUNT_NOT_PENDING: 'errors.domain.ACCOUNT_NOT_PENDING',
     AUTH_ADMIN_UNAVAILABLE: 'errors.domain.AUTH_ADMIN_UNAVAILABLE',
     SENSITIVE_PERMISSION_REQUIRED: 'errors.domain.SENSITIVE_PERMISSION_REQUIRED',
-    STUDENT_ACCESS_DENIED: 'errors.domain.STUDENT_ACCESS_DENIED'
+    STUDENT_ACCESS_DENIED: 'errors.domain.STUDENT_ACCESS_DENIED',
+    GRANT_EXCEEDS_CALLER: 'errors.domain.GRANT_EXCEEDS_CALLER',
+    OWNER_ROLE_REQUIRED: 'errors.domain.OWNER_ROLE_REQUIRED',
+    PROTECTED_ROLE_PARENT: 'errors.domain.PROTECTED_ROLE_PARENT'
 }
 
 /** Every sentinel code this table translates; the locale contract test checks each has a message. */

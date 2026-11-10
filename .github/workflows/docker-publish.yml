@@ -172,6 +172,7 @@ jobs:
         uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
         with:
           context: ./app
+          build-contexts: legal=.
           load: true
           tags: edulog-release-smoke:frontend
           cache-from: type=gha
@@ -181,6 +182,7 @@ jobs:
         uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
         with:
           context: ./server
+          build-contexts: legal=.
           load: true
           tags: edulog-release-smoke:api
           cache-from: type=gha
@@ -190,6 +192,7 @@ jobs:
         uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
         with:
           context: ./docker/presidio
+          build-contexts: legal=.
           load: true
           tags: edulog-release-smoke:presidio
           cache-from: type=gha
@@ -204,6 +207,7 @@ jobs:
         uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
         with:
           context: ./app
+          build-contexts: legal=.
           push: true
           tags: ${{ steps.meta-frontend.outputs.tags }}
           labels: ${{ steps.meta-frontend.outputs.labels }}
@@ -215,6 +219,7 @@ jobs:
         uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
         with:
           context: ./server
+          build-contexts: legal=.
           push: true
           tags: ${{ steps.meta-api.outputs.tags }}
           labels: ${{ steps.meta-api.outputs.labels }}
@@ -226,6 +231,7 @@ jobs:
         uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
         with:
           context: ./docker/presidio
+          build-contexts: legal=.
           push: true
           tags: ${{ steps.meta-presidio.outputs.tags }}
           labels: ${{ steps.meta-presidio.outputs.labels }}
