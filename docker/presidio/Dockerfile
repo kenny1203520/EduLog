@@ -13,6 +13,7 @@
 # The base image is pinned by tag and digest; bump both together.
 FROM mcr.microsoft.com/presidio-analyzer:2.2.362@sha256:286e3fa7f3a7426e775e8564fe1870f1ba8f999d3ab8bbb8cc46a44355d9d6e9
 USER root
+COPY --from=legal /LICENSE /NOTICE /usr/share/licenses/EduLog/
 COPY configure_languages.py start.sh /app/conf-edulog/
 RUN chmod 0755 /app/conf-edulog/start.sh \
     && python /app/conf-edulog/configure_languages.py install \

@@ -13,6 +13,10 @@ cleanup() {
 }
 trap cleanup EXIT
 docker network create "$network" >/dev/null
+for image in edulog-release-smoke:frontend edulog-release-smoke:api edulog-release-smoke:presidio; do
+  docker run --rm --entrypoint /bin/sh "$image" -ec \
+    'test -s /usr/share/licenses/EduLog/LICENSE && test -s /usr/share/licenses/EduLog/NOTICE'
+done
 docker run -d --name "$api" --network "$network" --network-alias api \
   -e SUPABASE_URL=http://127.0.0.1:54321 \
   -e SUPABASE_ANON_KEY=release-smoke-anon \

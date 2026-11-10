@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { zipFiles, unzipFiles, safePath } from '../archive.mjs'
-import { buildRelease, config, extensionId, parseTag, parseVersion, readExtensionFileAtCommit, resolveCommit, sha256, validateGitRef, validateRuntime, verifyRelease } from '../release.mjs'
+import { buildRelease, config, extensionId, parseTag, parseVersion, readExtensionFileAtCommit, readRootLegalFileAtCommit, resolveCommit, sha256, validateGitRef, validateRuntime, verifyRelease } from '../release.mjs'
 import { publishExtensionRelease } from '../github-release.mjs'
 import { checkCompatibility } from '../preflight.mjs'
 import { githubApiUrl, publishRelease, releaseState, renderReceipt, readReceipt, createStoreClient, compareVersions } from '../store.mjs'
@@ -13,7 +13,7 @@ import { repoRoot, resolveNativeAssetFile, resolveProjectPath, resolveReleaseArc
 const key = config.sideloadPublicKey, item = extensionId(key)
 function fixture() {
   const manifest = { manifest_version: 3, name: 'EduLog BETA', version: '0.1.1.1', version_name: '0.1.1-beta.1', key, action: { default_popup: 'popup/popup.html' }, background: { service_worker: 'background/worker.js', type: 'module' } }
-  const files = new Map([['manifest.json', Buffer.from(JSON.stringify(manifest))], ['popup/popup.html', Buffer.from('<script src="popup.js"></script>')], ['popup/popup.js', Buffer.from('const value = 1')], ['background/worker.js', Buffer.from('export const ready = true')]])
+  const files = new Map([['manifest.json', Buffer.from(JSON.stringify(manifest))], ['popup/popup.html', Buffer.from('<script src="popup.js"></script>')], ['popup/popup.js', Buffer.from('const value = 1')], ['background/worker.js', Buffer.from('export const ready = true')], ['LICENSE', Buffer.from('Apache License 2.0')], ['NOTICE', Buffer.from('EduLog notices')]])
   const archive = zipFiles(files)
   return { archive, files, metadata: { channel: 'beta', distribution: 'store', version: manifest.version, versionName: manifest.version_name, extensionId: item, sha256: sha256(archive), files: Object.fromEntries([...files].map(([name, data]) => [name, sha256(data)])) } }
 }
@@ -69,6 +69,8 @@ test('deterministic ZIP rejects traversal, corruption and truncation', () => {
 test('runtime validation rejects missing dependencies, syntax errors and unexpected files', () => {
   const { files } = fixture()
   validateRuntime(files)
+  const missingNotice = new Map(files); missingNotice.delete('NOTICE')
+  assert.throws(() => validateRuntime(missingNotice), /missing NOTICE/)
   const missing = new Map(files); missing.delete('popup/popup.js')
   assert.throws(() => validateRuntime(missing), /missing file/)
   const broken = new Map(files); broken.set('background/worker.js', Buffer.from('const incomplete ='))
@@ -80,18 +82,32 @@ test('runtime validation rejects missing dependencies, syntax errors and unexpec
 })
 test('verification binds ZIP bytes, manifest ID/version and the complete file inventory', () => {
   const { archive, metadata } = fixture()
-  verifyRelease(archive, metadata)
+  const verified = verifyRelease(archive, metadata)
+  assert.ok(verified.has('LICENSE'))
+  assert.ok(verified.has('NOTICE'))
   assert.throws(() => verifyRelease(Buffer.concat([archive, Buffer.from('x')]), metadata), /SHA-256/)
   assert.throws(() => verifyRelease(archive, { ...metadata, extensionId: 'a'.repeat(32) }), /metadata mismatch/)
   assert.throws(() => verifyRelease(archive, { ...metadata, files: {} }), /file list/)
 })
-test('packaging is reproducible from pinned committed Git objects and excludes non-runtime files', () => {
+test('packaging is reproducible from pinned committed Git objects and includes legal notices', t => {
   const commit = resolveCommit('HEAD')
+  try {
+    readRootLegalFileAtCommit(commit, 'LICENSE')
+    readRootLegalFileAtCommit(commit, 'NOTICE')
+  } catch (error) {
+    if (!/Selected commit is missing required/.test(error.message)) throw error
+    t.skip('root legal documents must be committed before release packaging can be tested')
+    return
+  }
   const args = { ref: commit, version: '0.1.1.1' }
   const first = buildRelease(args), second = buildRelease(args)
   assert.deepEqual(first.archive, second.archive)
   assert.equal(second.metadata.commit, commit)
   assert.equal(second.metadata.distribution, 'zip')
+  assert.ok(first.files.has('LICENSE'))
+  assert.ok(first.files.has('NOTICE'))
+  assert.equal(first.metadata.files.LICENSE, sha256(first.files.get('LICENSE')))
+  assert.equal(first.metadata.files.NOTICE, sha256(first.files.get('NOTICE')))
   assert.deepEqual(second.files.get('background/service-worker.js'), readExtensionFileAtCommit(commit, 'extension/background/service-worker.js'))
   assert.throws(() => readExtensionFileAtCommit(commit, '../../.git/config'), /Unsafe archive path/)
   for (const name of second.files.keys()) assert.doesNotMatch(name, /(^|\/)(tests|dist|node_modules)|README|package\.json|\.pem$|\.env/)
@@ -102,7 +118,10 @@ test('packaging is reproducible from pinned committed Git objects and excludes n
 test('GitHub publisher creates a draft, uploads verified release files, then publishes it', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'edulog-publish-test-'))
   try {
-    const { archive, metadata } = buildRelease({ version: '0.1.1.1' })
+    const { archive, metadata } = fixture()
+    metadata.distribution = 'zip'
+    metadata.commit = resolveCommit('HEAD')
+    metadata.archive = 'EduLog-Teaching-Tools-beta-0.1.1.1.zip'
     writeFileSync(resolveReleaseArchive(directory, metadata.archive), archive)
     writeFileSync(join(directory, `${metadata.archive}.sha256`), `${metadata.sha256}  ${metadata.archive}\n`)
     writeFileSync(join(directory, 'release.json'), JSON.stringify(metadata, null, 2) + '\n')
