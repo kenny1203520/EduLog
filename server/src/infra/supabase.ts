@@ -1,5 +1,5 @@
 import crypto from 'node:crypto'
-import { jwtVerify } from 'jose'
+import { createRemoteJWKSet, decodeProtectedHeader, jwtVerify } from 'jose'
 import { createClient, type Session, type SupabaseClient, type User } from '@supabase/supabase-js'
 import type { ApiConfig } from '../config/config.js'
 
@@ -96,15 +96,37 @@ export async function verifyCurrentPassword(config: ApiConfig, email: string, pa
   return data.session
 }
 
-async function verifyAccessTokenLocally(accessToken: string, config?: Pick<ApiConfig, 'SUPABASE_JWT_SECRET' | 'SUPABASE_JWT_ISSUER'>) {
-  if (!config?.SUPABASE_JWT_SECRET) return undefined
+type TokenVerificationConfig = Partial<Pick<ApiConfig, 'SUPABASE_URL' | 'SUPABASE_JWT_SECRET' | 'SUPABASE_JWT_ISSUER'>>
+
+// GoTrue signs with ES256/RS256 once asymmetric signing keys (JWT_KEYS) are
+// configured; their public keys are published at the Auth JWKS endpoint.
+const ASYMMETRIC_ALGORITHMS = ['ES256', 'RS256']
+const remoteJwkSets = new Map<string, ReturnType<typeof createRemoteJWKSet>>()
+
+function remoteJwkSet(supabaseUrl: string) {
+  const url = new URL('auth/v1/.well-known/jwks.json', supabaseUrl.endsWith('/') ? supabaseUrl : `${supabaseUrl}/`)
+  let jwks = remoteJwkSets.get(url.href)
+  if (!jwks) {
+    jwks = createRemoteJWKSet(url)
+    remoteJwkSets.set(url.href, jwks)
+  }
+  return jwks
+}
+
+async function verifyAccessTokenLocally(accessToken: string, config?: TokenVerificationConfig) {
+  if (!config) return undefined
+  let alg: string | undefined
+  try { alg = decodeProtectedHeader(accessToken).alg } catch { alg = undefined }
+  const asymmetric = alg != null && ASYMMETRIC_ALGORITHMS.includes(alg)
+  if (asymmetric ? !config.SUPABASE_URL : !config.SUPABASE_JWT_SECRET) return undefined
   try {
     const options = {
-      algorithms: ['HS256'],
       audience: 'authenticated',
       ...(config.SUPABASE_JWT_ISSUER ? { issuer: config.SUPABASE_JWT_ISSUER } : {}),
     }
-    const { payload } = await jwtVerify(accessToken, new TextEncoder().encode(config.SUPABASE_JWT_SECRET), options)
+    const { payload } = asymmetric
+      ? await jwtVerify(accessToken, remoteJwkSet(config.SUPABASE_URL as string), { ...options, algorithms: ASYMMETRIC_ALGORITHMS })
+      : await jwtVerify(accessToken, new TextEncoder().encode(config.SUPABASE_JWT_SECRET), { ...options, algorithms: ['HS256'] })
     if (typeof payload.sub !== 'string' || !payload.sub) throw new Error('AUTH_INVALID')
     return payload.sub
   } catch {
@@ -115,7 +137,7 @@ async function verifyAccessTokenLocally(accessToken: string, config?: Pick<ApiCo
 export async function validateAccessToken(
   adminClient: SupabaseClient,
   accessToken: string,
-  config?: Pick<ApiConfig, 'SUPABASE_JWT_SECRET' | 'SUPABASE_JWT_ISSUER'>,
+  config?: TokenVerificationConfig,
 ): Promise<User> {
   const verifiedSubject = await verifyAccessTokenLocally(accessToken, config)
   const key = tokenCacheKey(accessToken)

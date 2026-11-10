@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
-import { SignJWT } from 'jose'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { clearAccessTokenValidation, validateAccessToken } from './supabase.js'
 
 const futureToken = () => {
@@ -45,5 +45,44 @@ describe('access-token validation cache', () => {
     await validateAccessToken(client, token, { SUPABASE_JWT_SECRET: secret })
     expect(getUser).toHaveBeenCalledTimes(1)
     clearAccessTokenValidation(token)
+  })
+
+  describe('asymmetric (JWKS) tokens', () => {
+    const supabaseUrl = 'http://api-gw.test:8000'
+    const signEs256 = async (privateKey: CryptoKey, kid: string) => new SignJWT({ role: 'authenticated' })
+      .setProtectedHeader({ alg: 'ES256', typ: 'JWT', kid })
+      .setSubject('user-es256')
+      .setAudience('authenticated')
+      .setExpirationTime('1m')
+      .sign(privateKey)
+
+    afterEach(() => { vi.unstubAllGlobals() })
+
+    it('verifies ES256 tokens against the Auth JWKS endpoint even when an HS256 secret is configured', async () => {
+      const { publicKey, privateKey } = await generateKeyPair('ES256', { extractable: true })
+      const jwk = { ...(await exportJWK(publicKey)), kid: 'es-key-1', alg: 'ES256', use: 'sig' }
+      const fetchMock = vi.fn(async () => new Response(JSON.stringify({ keys: [jwk] }), { headers: { 'content-type': 'application/json' } }))
+      vi.stubGlobal('fetch', fetchMock)
+      const token = await signEs256(privateKey, 'es-key-1')
+      const getUser = vi.fn().mockResolvedValue({ data: { user: { id: 'user-es256' } }, error: null })
+
+      const user = await validateAccessToken({ auth: { getUser } } as any, token, { SUPABASE_URL: supabaseUrl, SUPABASE_JWT_SECRET: 's'.repeat(32) })
+
+      expect(user.id).toBe('user-es256')
+      expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toBe(`${supabaseUrl}/auth/v1/.well-known/jwks.json`)
+      clearAccessTokenValidation(token)
+    })
+
+    it('rejects ES256 tokens signed by a key outside the published JWKS', async () => {
+      const published = await generateKeyPair('ES256', { extractable: true })
+      const attacker = await generateKeyPair('ES256')
+      const jwk = { ...(await exportJWK(published.publicKey)), kid: 'es-key-2', alg: 'ES256', use: 'sig' }
+      vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ keys: [jwk] }), { headers: { 'content-type': 'application/json' } })))
+      const token = await signEs256(attacker.privateKey, 'es-key-2')
+      const getUser = vi.fn()
+
+      await expect(validateAccessToken({ auth: { getUser } } as any, token, { SUPABASE_URL: `${supabaseUrl}/other`, SUPABASE_JWT_SECRET: 's'.repeat(32) })).rejects.toThrow('AUTH_INVALID')
+      expect(getUser).not.toHaveBeenCalled()
+    })
   })
 })
