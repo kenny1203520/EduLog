@@ -49,6 +49,20 @@ function listExtensionTree(commit) {
   })
 }
 
+const legalFileNames = new Set(['LICENSE', 'NOTICE'])
+function listRootLegalFiles(commit) {
+  const safeCommit = validateCommit(commit)
+  return execFileSync(gitExecutable, ['ls-tree', '-z', safeCommit, '--', ...legalFileNames], gitOptions).toString().split('\0').filter(Boolean).map(entry => {
+    const separator = entry.indexOf('\t')
+    if (separator < 0) throw new Error('Invalid root legal-file tree entry')
+    const [mode, type, objectId] = entry.slice(0, separator).split(' ')
+    const path = entry.slice(separator + 1)
+    safePath(path)
+    if (!legalFileNames.has(path) || type !== 'blob' || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(objectId)) throw new Error('Invalid root legal-file tree entry')
+    return { mode, objectId, path }
+  })
+}
+
 function readGitBlob(objectId) {
   if (typeof objectId !== 'string' || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(objectId)) throw new Error('Invalid Git object ID')
   return execFileSync(gitExecutable, ['cat-file', 'blob', objectId], gitOptions)
@@ -61,6 +75,15 @@ export function readExtensionFileAtCommit(commit, path) {
   const entry = listExtensionTree(safeCommit).find(file => file.path === safeFilePath)
   if (!entry) throw new Error('Extension file does not exist at the selected commit')
   if (entry.mode !== '100644' && entry.mode !== '100755') throw new Error(`Unsupported runtime file mode: ${safeFilePath}`)
+  return readGitBlob(entry.objectId)
+}
+
+export function readRootLegalFileAtCommit(commit, path) {
+  const safeCommit = validateCommit(commit)
+  if (!legalFileNames.has(path)) throw new Error('File is not a required root legal document')
+  const entry = listRootLegalFiles(safeCommit).find(file => file.path === path)
+  if (!entry) throw new Error(`Selected commit is missing required ${path}`)
+  if (entry.mode !== '100644') throw new Error(`Unsupported legal file mode: ${path}`)
   return readGitBlob(entry.objectId)
 }
 
@@ -102,7 +125,8 @@ function reference(files, source, value) {
 }
 export function validateRuntime(files) {
   assertNoSecrets(files)
-  for (const name of files.keys()) if (!runtimePath(safePath(name))) throw new Error(`Unexpected runtime file: ${name}`)
+  for (const name of files.keys()) if (!runtimePath(safePath(name)) && !legalFileNames.has(name)) throw new Error(`Unexpected runtime file: ${name}`)
+  for (const name of legalFileNames) if (!files.has(name) || files.get(name).length === 0) throw new Error(`Release archive is missing ${name}`)
   const manifest = JSON.parse(files.get('manifest.json')?.toString() || 'null')
   if (manifest?.manifest_version !== 3 || !manifest.background?.service_worker || !manifest.action?.default_popup) throw new Error('Invalid MV3 runtime manifest')
   parseVersion(manifest.version, manifest.name.endsWith(' BETA') ? 'beta' : 'stable')
@@ -138,6 +162,11 @@ export function buildRelease({ ref = 'HEAD', channel = 'beta', version, distribu
     if (mode !== '100644' && mode !== '100755') throw new Error(`Unsupported runtime file mode: ${fullPath}`)
     files.set(name, readGitBlob(objectId))
   }
+  for (const { mode, objectId, path } of listRootLegalFiles(commit)) {
+    if (mode !== '100644') throw new Error(`Unsupported legal file mode: ${path}`)
+    files.set(path, readGitBlob(objectId))
+  }
+  for (const name of legalFileNames) if (!files.has(name)) throw new Error(`Selected commit is missing required ${name}`)
   if (!files.has('manifest.json')) throw new Error('Selected commit does not contain an extension manifest')
   const manifest = JSON.parse(files.get('manifest.json').toString())
   const key = distribution === 'zip' ? config.sideloadPublicKey : publicKey

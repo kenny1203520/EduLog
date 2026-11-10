@@ -114,3 +114,7 @@ EduLog 自定義 migration 位於 `supabase/migrations/`，依檔名順序全部
 - `extension/README.md`：瀏覽器擴充功能
 - `supabase/README.md`：Self-hosted Supabase 說明
 - `supabase/migrations/README.md`：資料庫 migration 指南
+
+## 授權
+
+EduLog 原創程式碼與文件依 Apache License 2.0 授權，詳見 [LICENSE](LICENSE) 與 [NOTICE](NOTICE)。明確標示為第三方或上游來源的內容不由此重新授權，請依其各自授權條款使用。

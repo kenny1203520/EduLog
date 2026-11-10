@@ -1,6 +1,26 @@
 {
     "entries": [
         {
+            "version": "2.0.0-alpha.6",
+            "date": "2026-11-10",
+            "changes": {
+                "added": [
+                    "系統角色、稽核動作與資源、帳號審核錯誤和 RBAC 領域錯誤，現在都有英文與繁體中文標籤。"
+                ],
+                "changed": [
+                    "角色指派與權限編輯會受操作者自身權限上限限制。非 active 帳號不再解析出任何權限；帳號離開 active 狀態時，會撤銷其擴充功能 token。"
+                ],
+                "fixed": [
+                    "待審核帳號通知、最後一位系統擁有者保護、教師帳號連結與學生檔案的 enrollment 清單，現在都會遵守對應的授權範圍。",
+                    "限制 anon 與 authenticated 對 public schema 的權限，預設權限也不會重新開放已撤銷的存取。"
+                ],
+                "deployment": [
+                    "前端、API 與 Presidio 映像檔使用相同版本 2.0.0-alpha.6；alpha 不會更新正式版映像標籤。",
+                    "先備份資料庫，再依檔名順序套用尚未執行的 migration，直到 1000168_web_extension_policy_initplan.sql。1000164 會移除指向受保護角色的 inheritance rows；1000165 會撤銷非 active 帳號的 extension tokens。若需復原，請還原資料庫備份。"
+                ]
+            }
+        },
+        {
             "version": "2.0.0-alpha.5",
             "date": "2026-11-09",
             "changes": {
