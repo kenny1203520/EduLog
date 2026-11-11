@@ -196,7 +196,7 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
   router.post('/login', async (req, res, next) => {
     try {
       const input = credentialsSchema.parse(req.body)
-      const result = await signIn(clients.publicClient, input.email, input.password)
+      const result = await signIn(config, input.email, input.password)
       const status = await assertUserActive(clients.adminClient, result.user.id, { allowPending: true })
       setSession(res, config, result.session)
       if (status === 'pending') void notifyPendingAccount(clients.adminClient, mailer, config.EDULOG_WEB_BASE_URL, result.user.id, req.log)
@@ -210,7 +210,7 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
     try {
       const token = req.cookies?.[refreshCookie]
       if (!token) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
-      const result = await refresh(clients.publicClient, token)
+      const result = await refresh(config, token)
       const status = await assertUserActive(clients.adminClient, result.user.id, { allowPending: true })
       setSession(res, config, result.session)
       res.json({ data: { ...await safeUserWithProfile(clients.adminClient, result.user), account_status: status }, meta: {}, request_id: req.requestId, trace_id: req.traceId })

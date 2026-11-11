@@ -4,7 +4,6 @@ import { createClient, type Session, type SupabaseClient, type User } from '@sup
 import type { ApiConfig } from '../config/config.js'
 
 export type SupabaseClients = {
-  publicClient: SupabaseClient
   adminClient: SupabaseClient
 }
 
@@ -80,9 +79,14 @@ export async function assertUserActive(adminClient: SupabaseClient, userId: stri
 export function createSupabaseClients(config: ApiConfig): SupabaseClients {
   const options = { auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false } }
   return {
-    publicClient: createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY, options),
     adminClient: createClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_KEY, options),
   }
+}
+
+function createPasswordAuthClient(config: Pick<ApiConfig, 'SUPABASE_URL' | 'SUPABASE_ANON_KEY'>): SupabaseClient {
+  return createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+  })
 }
 
 export function createUserClient(config: ApiConfig, accessToken: string): SupabaseClient {
@@ -182,14 +186,14 @@ export async function validateAccessToken(
   return validate
 }
 
-export async function signIn(publicClient: SupabaseClient, email: string, password: string): Promise<{ user: User; session: Session }> {
-  const { data, error } = await publicClient.auth.signInWithPassword({ email, password })
+export async function signIn(config: Pick<ApiConfig, 'SUPABASE_URL' | 'SUPABASE_ANON_KEY'>, email: string, password: string): Promise<{ user: User; session: Session }> {
+  const { data, error } = await createPasswordAuthClient(config).auth.signInWithPassword({ email, password })
   if (error || !data.user || !data.session) throw new Error('AUTH_INVALID')
   return { user: data.user, session: data.session }
 }
 
-export async function refresh(publicClient: SupabaseClient, refreshToken: string): Promise<{ user: User; session: Session }> {
-  const { data, error } = await publicClient.auth.refreshSession({ refresh_token: refreshToken })
+export async function refresh(config: Pick<ApiConfig, 'SUPABASE_URL' | 'SUPABASE_ANON_KEY'>, refreshToken: string): Promise<{ user: User; session: Session }> {
+  const { data, error } = await createPasswordAuthClient(config).auth.refreshSession({ refresh_token: refreshToken })
   if (error || !data.user || !data.session) throw new Error('AUTH_INVALID')
   return { user: data.user, session: data.session }
 }
