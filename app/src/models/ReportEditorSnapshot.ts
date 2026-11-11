@@ -1,4 +1,4 @@
-import type { OccurrenceReportDTO, ReportDraftSnapshot } from '@/models/OccurrenceReport'
+import type { OccurrenceReportDTO, ReportDraftSnapshot, ReportLessonEntryDTO } from '@/models/OccurrenceReport'
 import type { RichTextDocumentV1 } from '@/components/text-editor/types'
 import { createTextEditorContent } from '@/components/text-editor/content'
 import { normalizeAbsenceReasonCode } from '@/utils/absenceReason'
@@ -7,11 +7,68 @@ import { safeExternalHref } from '@/utils/safeExternalHref'
 export type AttendanceStatus = 'present' | 'absent' | 'pending'
 export type SystemManagedReason = 'holiday' | 'suspension'
 
+/** Creates a UUID for a lesson row that predates the multi-lesson API shape. */
+export function createLessonEntryId(): string {
+    if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID()
+    return `00000000-0000-4000-8000-${Math.floor(Math.random() * 0xffffffffffff).toString(16).padStart(12, '0')}`
+}
+
+function legacyLessonEntryId(enrollmentId: string | undefined, lessonId: string): string {
+    const seed = `${enrollmentId || 'legacy'}:${lessonId}`
+    const hash = (suffix: number) => {
+        let value = 2166136261 ^ suffix
+        for (let index = 0; index < seed.length; index += 1) {
+            value = Math.imul(value ^ seed.charCodeAt(index)!, 16777619)
+        }
+        return (value >>> 0).toString(16).padStart(8, '0')
+    }
+    const hex = [0, 1, 2, 3].map(hash).join('')
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`
+}
+
+function normalizeLessonEntries(
+    entries: ReportLessonEntryDTO[] | undefined,
+    enrollmentId: string | undefined,
+    lessonId: string | undefined,
+    isCompleted: boolean,
+    progressLetter: string | null | undefined,
+    primaryLessonEntryId: string | null | undefined
+): { entries: ReportLessonEntryDTO[]; primaryLessonEntryId: string | null } {
+    const source = Array.isArray(entries) ? entries : []
+    const compatibleSource = source.length || !lessonId
+        ? source
+        : [{ id: legacyLessonEntryId(enrollmentId, lessonId || ''), enrollment_id: enrollmentId || '', lesson_id: lessonId || null, is_completed: isCompleted, progress_letter: progressLetter || null }]
+    const normalized = compatibleSource.map(entry => ({
+        ...entry,
+        id: entry.id || createLessonEntryId(),
+        enrollment_id: entry.enrollment_id || enrollmentId || '',
+        lesson_id: entry.lesson_id || null,
+        is_completed: entry.is_completed ?? false,
+        progress_letter: entry.progress_letter || null,
+    }))
+    const primary = normalized.find(entry => entry.id === primaryLessonEntryId) || normalized[0]
+    return { entries: normalized, primaryLessonEntryId: primary?.id ?? null }
+}
+
+/** Compares saved lesson data while ignoring display-only course/lesson labels. */
+export function reportLessonEntriesEqual(left: ReportLessonEntryDTO[] | undefined, right: ReportLessonEntryDTO[] | undefined): boolean {
+    const project = (entries: ReportLessonEntryDTO[] | undefined) => (entries ?? []).map(entry => ({
+        id: entry.id,
+        enrollment_id: entry.enrollment_id,
+        lesson_id: entry.lesson_id ?? null,
+        is_completed: entry.is_completed ?? false,
+        progress_letter: entry.progress_letter ?? null,
+    }))
+    return JSON.stringify(project(left)) === JSON.stringify(project(right))
+}
+
 /** The fields a report save sends; only the ones that changed are set. */
 export type ReportSavePayload = {
     lessonId?: string
     isCompleted?: boolean
     progressLetter?: string | null
+    lessonEntries?: ReportLessonEntryDTO[]
+    primaryLessonEntryId?: string | null
     attendanceStatus?: AttendanceStatus
     absenceReason?: string | null
     classParticipation?: number | null
@@ -49,10 +106,13 @@ function normalizeAbsenceReason(status: AttendanceStatus, reason: string | null 
 
 /** The values a report's initial props describe, as the editor's saved baseline. */
 export interface ReportSnapshotSource {
+    enrollmentId?: string
     initialLessonId?: string
     initialIsCompleted?: boolean
     initialProgressStart?: string
     initialProgressEnd?: string
+    initialLessonEntries?: ReportLessonEntryDTO[]
+    initialPrimaryLessonEntryId?: string | null
     initialAttendanceStatus?: AttendanceStatus
     initialAbsenceReason?: string
     initialClassParticipation?: number | null
@@ -72,11 +132,23 @@ export function buildSnapshotFromProps(source: ReportSnapshotSource): ReportDraf
     const contact = createTextEditorContent(source.initialContactNotesDocument || source.initialContactNotes || '')
     const classNotesContent = createTextEditorContent(source.initialClassNotesDocument || source.initialClassNotes || '')
     const main = createTextEditorContent(source.initialContentDocument || source.initialContent || '')
+    const progressLetter = composeProgressLetter(source.initialProgressStart, source.initialProgressEnd)
+    const normalizedEntries = normalizeLessonEntries(
+        source.initialLessonEntries,
+        source.enrollmentId,
+        source.initialLessonId,
+        source.initialIsCompleted ?? false,
+        progressLetter,
+        source.initialPrimaryLessonEntryId
+    )
+    const primaryEntry = normalizedEntries.entries.find(entry => entry.id === normalizedEntries.primaryLessonEntryId)
 
     return {
-        lessonId: source.initialLessonId || '',
-        isCompleted: source.initialIsCompleted ?? false,
-        progressLetter: composeProgressLetter(source.initialProgressStart, source.initialProgressEnd),
+        lessonId: primaryEntry?.lesson_id || source.initialLessonId || '',
+        isCompleted: primaryEntry?.is_completed ?? source.initialIsCompleted ?? false,
+        progressLetter: primaryEntry?.progress_letter || progressLetter,
+        lessonEntries: normalizedEntries.entries,
+        primaryLessonEntryId: normalizedEntries.primaryLessonEntryId,
         attendanceStatus: initialStatus,
         absenceReason: initialStatus === 'absent'
             ? (managedReason || normalizeAbsenceReasonCode(normalizeAbsenceReason(initialStatus, source.initialAbsenceReason)))
@@ -97,10 +169,21 @@ export function buildSnapshotFromDto(report: OccurrenceReportDTO): ReportDraftSn
     const contact = createTextEditorContent(report.contact_notes_document || report.contact_notes || '')
     const classNotesContent = createTextEditorContent(report.class_notes_document || report.class_notes || '')
     const main = createTextEditorContent(report.content_document || report.content || '')
+    const normalizedEntries = normalizeLessonEntries(
+        report.lesson_entries,
+        report.enrollment_id,
+        report.lesson_id,
+        report.is_completed ?? false,
+        report.progress_letter,
+        report.primary_lesson_entry_id
+    )
+    const primaryEntry = normalizedEntries.entries.find(entry => entry.id === normalizedEntries.primaryLessonEntryId)
     return {
-        lessonId: report.lesson_id || '',
-        isCompleted: report.is_completed ?? false,
-        progressLetter: report.progress_letter || '',
+        lessonId: primaryEntry?.lesson_id || report.lesson_id || '',
+        isCompleted: primaryEntry?.is_completed ?? report.is_completed ?? false,
+        progressLetter: primaryEntry?.progress_letter || report.progress_letter || '',
+        lessonEntries: normalizedEntries.entries,
+        primaryLessonEntryId: normalizedEntries.primaryLessonEntryId,
         attendanceStatus: report.attendance_status || 'pending',
         absenceReason: normalizeSystemManagedReason(report.absence_reason)
             || normalizeAbsenceReasonCode(normalizeAbsenceReason(report.attendance_status || 'pending', report.absence_reason)),
@@ -134,7 +217,10 @@ export function buildDirtyReportPayload(
         key: K,
         assign: () => void
     ) => {
-        if (JSON.stringify(current[key] ?? null) !== JSON.stringify(previous[key] ?? null)) {
+        const unchanged = key === 'lessonEntries'
+            ? reportLessonEntriesEqual(current.lessonEntries, previous.lessonEntries)
+            : JSON.stringify(current[key] ?? null) === JSON.stringify(previous[key] ?? null)
+        if (!unchanged) {
             keys.push(key)
             assign()
         }
@@ -148,6 +234,12 @@ export function buildDirtyReportPayload(
     })
     addIfChanged('progressLetter', () => {
         payload.progressLetter = current.progressLetter || null
+    })
+    addIfChanged('lessonEntries', () => {
+        payload.lessonEntries = current.lessonEntries ?? []
+    })
+    addIfChanged('primaryLessonEntryId', () => {
+        payload.primaryLessonEntryId = current.primaryLessonEntryId ?? null
     })
     if (options.includeAttendance) {
         addIfChanged('attendanceStatus', () => {

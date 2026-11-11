@@ -1,6 +1,7 @@
 import {
     OccurrenceReport,
     type OccurrenceReportDTO,
+    type ReportLessonEntryDTO,
     type SaveReportResult
 } from '@/models/OccurrenceReport'
 import { ReportQueryService } from './ReportQueryService'
@@ -26,6 +27,8 @@ type ReportSaveData = {
     lessonId?: string
     isCompleted?: boolean
     progressLetter?: string | null
+    lessonEntries?: ReportLessonEntryDTO[]
+    primaryLessonEntryId?: string | null
     attendanceStatus?: 'present' | 'absent' | 'pending'
     absenceReason?: string | null
     classParticipation?: number | null
@@ -45,6 +48,14 @@ function toApiReportData(data?: ReportSaveData): Record<string, unknown> {
     if (data.lessonId !== undefined) result.lesson_id = data.lessonId
     if (data.isCompleted !== undefined) result.is_completed = data.isCompleted
     if (data.progressLetter !== undefined) result.progress_letter = data.progressLetter
+    if (data.lessonEntries !== undefined) result.lesson_entries = data.lessonEntries.map(entry => ({
+        id: entry.id,
+        enrollment_id: entry.enrollment_id,
+        lesson_id: entry.lesson_id,
+        is_completed: entry.is_completed,
+        progress_letter: entry.progress_letter,
+    }))
+    if (data.primaryLessonEntryId !== undefined) result.primary_lesson_entry_id = data.primaryLessonEntryId
     if (data.attendanceStatus !== undefined) result.attendance_status = data.attendanceStatus
     if (data.absenceReason !== undefined) result.absence_reason = data.absenceReason
     if (data.classParticipation !== undefined) result.class_participation = data.classParticipation
@@ -147,7 +158,7 @@ type AttendanceOnlyData = {
 
 /** Report fields the v1 API accepts in a patch (server `reportPatch`, which rejects any other key). */
 const REPORT_PATCH_FIELDS = [
-    'lesson_id', 'is_completed', 'progress_letter', 'attendance_status', 'absence_reason',
+    'lesson_id', 'is_completed', 'progress_letter', 'lesson_entries', 'primary_lesson_entry_id', 'attendance_status', 'absence_reason',
     'class_participation', 'classroom_behavior', 'contact_notes', 'contact_notes_document',
     'class_notes', 'class_notes_document', 'content', 'content_document', 'external_link'
 ] as const
@@ -157,7 +168,17 @@ export function toReportPatch(report: OccurrenceReportDTO): Record<string, unkno
     const patch: Record<string, unknown> = {}
     for (const field of REPORT_PATCH_FIELDS) {
         const value = (report as unknown as Record<string, unknown>)[field]
-        if (value !== undefined) patch[field] = value
+        if (value !== undefined) {
+            patch[field] = field === 'lesson_entries' && Array.isArray(value)
+                ? value.map((entry: ReportLessonEntryDTO) => ({
+                    id: entry.id,
+                    enrollment_id: entry.enrollment_id,
+                    lesson_id: entry.lesson_id,
+                    is_completed: entry.is_completed,
+                    progress_letter: entry.progress_letter,
+                }))
+                : value
+        }
     }
     return patch
 }

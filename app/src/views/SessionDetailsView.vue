@@ -297,6 +297,8 @@ const {
                                 :initial-student-name="selectedEditorEnrollment?.studentName"
                                 :initial-student-id="selectedEditorEnrollment?.studentId"
                                 :initial-lesson-id="selectedEditorReport?.lessonId"
+                                :initial-lesson-entries="selectedEditorReport?.lessonEntries"
+                                :initial-primary-lesson-entry-id="selectedEditorReport?.primaryLessonEntryId"
                                 :available-lessons="courseLessons"
                                 :initial-report-external-link="selectedEditorReport?.externalLink"
                                 :source-identity="selectedEditorReport"

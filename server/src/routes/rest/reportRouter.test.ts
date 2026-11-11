@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Request, Response } from 'express'
-import { readCollaboration, remove } from './reportRouter.js'
-import { assertClientManagedAttendanceReason, assertReportAttendanceUpdate, firstUncompletedSequence } from './reportRouter.js'
+import { readFileSync } from 'node:fs'
+import { readCollaboration, remove, reportLessonEntryOptions } from './reportRouter.js'
+import { assertClientManagedAttendanceReason, assertReportAttendanceUpdate, firstUncompletedSequence, legacySnapshotHasLessonState } from './reportRouter.js'
 
 describe('report lifecycle progress', () => {
   it('selects the first lesson not represented by a report', () => {
@@ -114,6 +115,101 @@ describe('report lifecycle progress', () => {
     await expect(remove(req, response)).rejects.toMatchObject({ status: 400, code: 'INVALID_ID' })
     expect(dbRpc).not.toHaveBeenCalled()
     expect(adminRpc).not.toHaveBeenCalled()
+  })
+})
+
+describe('multi-lesson report compatibility', () => {
+  it('only offers same-teaching lesson entries for an authorized report', async () => {
+    const teachingId = 'b1000000-0000-4000-8000-000000000001'
+    const studentId = '98000000-0000-4000-8000-000000000001'
+    const anchorEnrollmentId = '99000000-0000-4000-8000-000000000001'
+    const courseRows = [
+      { id: '94000000-0000-4000-8000-000000000001', teaching_id: teachingId, subject: 'A', stage: 'primary', display_name: null },
+      { id: '94000000-0000-4000-8000-000000000002', teaching_id: teachingId, subject: 'B', stage: 'primary', display_name: null },
+      { id: '94000000-0000-4000-8000-000000000003', teaching_id: 'b1000000-0000-4000-8000-000000000002', subject: 'Private', stage: 'primary', display_name: null },
+    ]
+    const enrollmentRows = [
+      { id: anchorEnrollmentId, student_id: studentId, course_id: courseRows[0].id, status: 'regular' },
+      { id: '99000000-0000-4000-8000-000000000004', student_id: studentId, course_id: courseRows[1].id, status: 'regular' },
+      { id: '99000000-0000-4000-8000-000000000005', student_id: studentId, course_id: courseRows[2].id, status: 'regular' },
+    ]
+    const lessonRows = courseRows.map((course, index) => ({ id: `95000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`, course_id: course.id, sequence: 1, title: `Lesson ${index + 1}` }))
+    const calls: Array<{ table: string; method: string; args: unknown[] }> = []
+    const tableCalls = new Map<string, number>()
+    const dataByTable: Record<string, Array<Record<string, any>>> = { courses: courseRows, enrollments: enrollmentRows, lessons: lessonRows }
+    const adminDb = {
+      from(table: string) {
+        const index = tableCalls.get(table) ?? 0
+        tableCalls.set(table, index + 1)
+        const filters: Array<{ method: string; args: unknown[] }> = []
+        const query: any = {}
+        for (const method of ['select', 'eq', 'is', 'in', 'neq', 'order']) {
+          query[method] = (...args: unknown[]) => {
+            calls.push({ table, method, args })
+            if (['eq', 'is', 'in', 'neq'].includes(method)) filters.push({ method, args })
+            return query
+          }
+        }
+        const result = () => {
+          const rows = table === 'enrollments' && index === 0
+            ? enrollmentRows.filter((row) => row.id === anchorEnrollmentId)
+            : (dataByTable[table] ?? []).filter((row) => filters.every(({ method, args }) => {
+              const [field, value] = args as [string, unknown]
+              if (method === 'eq' || method === 'is') return row[field] === value
+              if (method === 'in') return (value as unknown[]).includes(row[field])
+              if (method === 'neq') return row[field] !== value
+              return true
+            }))
+          return { data: rows, error: null }
+        }
+        query.maybeSingle = async () => {
+          const rows = result().data
+          return { data: rows[0] ?? null, error: null }
+        }
+        query.then = (resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown) => Promise.resolve(result()).then(resolve, reject)
+        return query
+      },
+    }
+    const db = {
+      rpc: vi.fn(() => ({ maybeSingle: vi.fn().mockResolvedValue({ data: { enrollment_id: anchorEnrollmentId, teaching_id: teachingId }, error: null }) })),
+    }
+    const response = { json: vi.fn() } as unknown as Response
+    const req = {
+      params: { reportId: '9b000000-0000-4000-8000-000000000001' },
+      requestId: 'request-options', traceId: 'trace-options',
+      user: { id: 'teacher-1' }, db, adminDb, auditContext: {},
+    } as unknown as Request
+
+    await reportLessonEntryOptions(req, response)
+
+    expect(calls).toContainEqual({ table: 'courses', method: 'eq', args: ['teaching_id', teachingId] })
+    expect(calls).toContainEqual({ table: 'enrollments', method: 'in', args: ['course_id', [courseRows[0].id, courseRows[1].id]] })
+    const body = (response.json as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]
+    expect(body.data.enrollments.map((row: { course_id: string }) => row.course_id)).toEqual([courseRows[0].id, courseRows[1].id])
+  })
+
+  it('leaves lesson progress untouched when restoring a content-only historical version', () => {
+    expect(legacySnapshotHasLessonState({ content: 'older report content' })).toBe(false)
+    expect(legacySnapshotHasLessonState({ lesson_id: null, is_completed: false, progress_letter: null })).toBe(true)
+  })
+
+  it('reconstructs a one-entry lesson state when restoring pre-migration snapshots', () => {
+    const source = readFileSync(new URL('./reportRouter.ts', import.meta.url), 'utf8')
+    const handler = source.slice(source.indexOf('async function restoreVersion'), source.indexOf('async function resolveConflict'))
+    expect(handler).toContain('snapshot.lesson_entries === undefined')
+    expect(handler).toContain("from('enrollments').select('id,course_id')")
+    expect(handler).toContain('randomUUID()')
+    expect(handler).toContain("patch.primary_lesson_entry_id = entryId")
+    expect(handler).toContain("patch.lesson_entries = lessonId ? [{")
+  })
+
+  it('uses legacy scalar lesson data only when a report has no lesson entries', () => {
+    const report = readFileSync(new URL('./reportRouter.ts', import.meta.url), 'utf8')
+    const enrollment = readFileSync(new URL('./enrollmentRouter.ts', import.meta.url), 'utf8')
+    const occurrence = readFileSync(new URL('./occurrenceRouter.ts', import.meta.url), 'utf8')
+    expect(report).toContain('entries.length === 0 && report.enrollment_id === enrollmentId && report.lesson_id')
+    expect(enrollment).toContain('entries.length === 0 && report.enrollment_id === enrollmentId && report.lesson_id')
+    expect(occurrence).toContain('entries.length === 0 && report.enrollment_id === enrollmentId')
   })
 })
 

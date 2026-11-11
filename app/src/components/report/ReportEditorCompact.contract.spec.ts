@@ -31,4 +31,10 @@ describe('ReportEditor compact mode (side panel)', () => {
     expect(source).not.toContain(':toolbar-visible="preferences.editorSettings.toolbarVisible"')
     expect(source).toContain('props.compact ? panelUi.toolbars[field] : preferences.editorSettings.toolbarVisible')
   })
+
+  it('does not request lesson-entry options in read-only mode or accept stale responses', () => {
+    expect(source).toContain('if (props.disabled || !reportId || props.loading) {')
+    expect(source).toContain('lessonEntryOptionsRequest += 1')
+    expect(source).toContain('() => props.disabled], () => { void loadLessonEntryOptions() }')
+  })
 })

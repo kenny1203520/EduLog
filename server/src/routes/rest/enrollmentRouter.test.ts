@@ -85,8 +85,35 @@ describe('enrollment report-progress context contract', () => {
     expect(source).toContain("router.get('/enrollments/:id/report-progress-context'")
     expectPriorAttendedReportScope(source)
     expect(source).toContain(".neq('id', query.report_id)")
+    expect(source).toContain('const pageSize = 500')
+    expect(source).toContain('range(offset, offset + pageSize - 1)')
+    expect(source).toContain("orderByRelation(builder, 'class_occurrences', 'occurrence_date', true).order('id', { ascending: true })")
     expect(source).toContain('latest_prior_report: latestPriorReport')
     expect(source).not.toContain("select('id,lesson_id,is_completed,progress_letter,attendance_status,class_occurrences!inner(occurrence_date),content")
+  })
+})
+
+describe('linked lesson report history contract', () => {
+  it('checks access on the target enrollment and returns only its linked progress plus shared comments', () => {
+    const source = readFileSync(new URL('./enrollmentRouter.ts', import.meta.url), 'utf8')
+    const handler = source.slice(source.indexOf('async function linkedLessonReportHistory'), source.indexOf('/** Course lessons in order'))
+    expect(source).toContain("router.get('/enrollments/:id/linked-lesson-report-history'")
+    expect(handler).toContain("permission(req, 'teaching.reports.list', targetEnrollment.class_session_id)")
+    expect(handler).toContain(".contains('lesson_entries', [{ enrollment_id: enrollmentId }])")
+    expect(handler).toContain(".neq('enrollment_id', enrollmentId)")
+    expect(handler).toContain(".eq('enrollments.student_id', targetEnrollment.student_id)")
+    expect(handler).toContain("entry.course_id !== targetEnrollment.course_id")
+    expect(handler).toContain('content_document: report.content_document ?? null')
+    expect(handler).not.toContain('contact_notes')
+    expect(handler).not.toContain('class_notes')
+  })
+
+  it('blocks changing or deleting enrollments that own or are referenced by shared lesson progress', () => {
+    const source = readFileSync(new URL('./enrollmentRouter.ts', import.meta.url), 'utf8')
+    expect(source).toContain('async function hasCrossEnrollmentReportReferences')
+    expect(source).toContain("'ENROLLMENT_HAS_LINKED_REPORT_PROGRESS'")
+    expect(source).toContain("contains('lesson_entries', [{ enrollment_id: enrollmentId }])")
+    expect(source).toContain(".eq('enrollment_id', enrollmentId).range(0, 9999)")
   })
 })
 

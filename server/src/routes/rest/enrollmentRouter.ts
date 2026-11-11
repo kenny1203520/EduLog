@@ -33,6 +33,21 @@ async function authorizeExisting(req: Request, action: 'update' | 'delete', enro
   })
 }
 
+/** Prevent an enrollment edit/removal from orphaning progress stored in another enrollment's report. */
+async function hasCrossEnrollmentReportReferences(req: Request, enrollmentId: string, preserveOwnProgress = false) {
+  if (!req.adminDb) throw new ApiError(503, 'RESOURCE_SERVICE_UNAVAILABLE', 'The report service is unavailable')
+  const [incoming, anchored] = await Promise.all([
+    req.adminDb.from('occurrence_reports').select('id').contains('lesson_entries', [{ enrollment_id: enrollmentId }]).neq('enrollment_id', enrollmentId).limit(1),
+    req.adminDb.from('occurrence_reports').select('id,lesson_entries').eq('enrollment_id', enrollmentId).range(0, 9999),
+  ])
+  if (incoming.error) throw mapDatabaseError(incoming.error)
+  if (anchored.error) throw mapDatabaseError(anchored.error)
+  if (incoming.data?.length) return true
+  return (anchored.data ?? []).some((report) => Array.isArray(report.lesson_entries)
+    && (report.lesson_entries.length > 0 && preserveOwnProgress
+      || report.lesson_entries.some((entry: Record<string, unknown>) => typeof entry.enrollment_id === 'string' && entry.enrollment_id !== enrollmentId)))
+}
+
 async function authorizeScope(req: Request, action: 'create' | 'update', input: Record<string, unknown>, existing?: Record<string, unknown>) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const studentId = (input.student_id ?? existing?.student_id) as string | null | undefined
@@ -181,6 +196,11 @@ async function update(req: Request, res: Response) {
   const id = typeof req.params.id === 'string' ? req.params.id : undefined; if (!id) throw new ApiError(400, 'INVALID_ID', 'Enrollment id is required')
   const input = enrollmentBodySchema.parse(req.body); const previous = await req.db.from('enrollments').select('id,status,start_date,student_id,course_id,classroom_id,class_session_id').eq('id', id).maybeSingle(); if (previous.error) throw mapDatabaseError(previous.error); if (!previous.data) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found')
   await authorizeExisting(req, 'update', id); const aligned = await align(req, pick(input), previous.data); await authorizeScope(req, 'update', aligned, previous.data); const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
+  const identityChanged = (input.student_id !== undefined && input.student_id !== previous.data.student_id)
+    || (input.course_id !== undefined && input.course_id !== previous.data.course_id)
+  if (identityChanged && await hasCrossEnrollmentReportReferences(req, id, true)) {
+    throw new ApiError(409, 'ENROLLMENT_HAS_LINKED_REPORT_PROGRESS', 'This enrollment has recorded lesson progress and cannot change student or course')
+  }
   const result = await req.db.from('enrollments').update(aligned).eq('id', id).select(fields).maybeSingle(); if (result.error) throw mapDatabaseError(result.error); if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found')
   let reports: ReportSyncResult | null = null
   if (input.status === 'regular' && previous.data.status !== 'regular' && input.target_total_reports) reports = await syncEnrollmentReports(req, result.data, { targetCount: input.target_total_reports })
@@ -208,6 +228,9 @@ async function remove(req: Request, res: Response) {
   const id = typeof req.params.id === 'string' ? req.params.id : undefined; if (!id) throw new ApiError(400, 'INVALID_ID', 'Enrollment id is required')
   const existing = await req.db.from('enrollments').select('id,student_id,course_id,classroom_id,class_session_id').eq('id', id).maybeSingle(); if (existing.error) throw mapDatabaseError(existing.error); if (!existing.data) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found')
   await authorizeExisting(req, 'delete', id); const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
+  if (await hasCrossEnrollmentReportReferences(req, id)) {
+    throw new ApiError(409, 'ENROLLMENT_HAS_LINKED_REPORT_PROGRESS', 'This enrollment is referenced by a shared lesson report and cannot be deleted')
+  }
   const reports = await req.db.from('occurrence_reports').delete().eq('enrollment_id', id); if (reports.error) throw mapDatabaseError(reports.error)
   const suspensions = await req.db.from('student_suspensions').delete().eq('enrollment_id', id); if (suspensions.error && suspensions.error.code !== '42P01') throw mapDatabaseError(suspensions.error)
   const result = await req.db.from('enrollments').delete().eq('id', id).select(fields).maybeSingle(); if (result.error) throw mapDatabaseError(result.error); if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found')
@@ -237,46 +260,178 @@ async function enrollmentReportProgressContext(req: Request, res: Response) {
   const lessons = await req.db!.from('lessons').select('id,sequence,title').eq('course_id', enrollment.data.course_id).order('sequence', { ascending: true })
   if (lessons.error) throw mapDatabaseError(lessons.error)
 
-  const reports: Array<Record<string, any>> = []
+  const reportFields = 'id,enrollment_id,lesson_id,is_completed,progress_letter,lesson_entries,primary_lesson_entry_id,attendance_status,content,content_document,class_occurrences!inner(occurrence_date,actual_start_time,original_start_time)'
   const pageSize = 500
+  const anchoredReports: Array<Record<string, any>> = []
   for (let offset = 0; ; offset += pageSize) {
-    let builder = req.db!.from('occurrence_reports')
-      .select('id,lesson_id,is_completed,progress_letter,attendance_status,class_occurrences!inner(occurrence_date,actual_start_time,original_start_time)')
+    let builder = req.db!.from('occurrence_reports').select(reportFields)
       .eq('enrollment_id', enrollmentId)
+      .neq('id', query.report_id)
       .eq('attendance_status', 'present')
-      .not('lesson_id', 'is', null)
       .lt('class_occurrences.occurrence_date', occurrence.data.occurrence_date)
-    builder = orderByRelation(builder.neq('id', query.report_id), 'class_occurrences', 'occurrence_date', true).order('id', { ascending: true })
+    builder = orderByRelation(builder, 'class_occurrences', 'occurrence_date', true).order('id', { ascending: true })
     const result = await builder.range(offset, offset + pageSize - 1)
     if (result.error) throw mapDatabaseError(result.error)
     const page = (result.data ?? []) as Array<Record<string, any>>
-    reports.push(...page)
+    anchoredReports.push(...page)
     if (page.length < pageSize) break
   }
-
+  const linkedReports: Array<Record<string, any>> = []
+  for (let offset = 0; ; offset += pageSize) {
+    let builder = req.db!.from('occurrence_reports').select(reportFields)
+      .contains('lesson_entries', [{ enrollment_id: enrollmentId }])
+      .neq('id', query.report_id)
+      .eq('attendance_status', 'present')
+      .lt('class_occurrences.occurrence_date', occurrence.data.occurrence_date)
+    builder = orderByRelation(builder, 'class_occurrences', 'occurrence_date', true).order('id', { ascending: true })
+    const result = await builder.range(offset, offset + pageSize - 1)
+    if (result.error) throw mapDatabaseError(result.error)
+    const page = (result.data ?? []) as Array<Record<string, any>>
+    linkedReports.push(...page)
+    if (page.length < pageSize) break
+  }
+  const reportsById = new Map<string, Record<string, any>>()
+  for (const report of [...anchoredReports, ...linkedReports]) {
+    if (report.id !== query.report_id) reportsById.set(report.id, report)
+  }
   const lessonById = new Map((lessons.data ?? []).map((lesson) => [lesson.id, lesson]))
-  const summaries = reports
-    .filter((report) => lessonById.has(report.lesson_id))
-    .map((report) => ({
-      id: report.id,
-      lesson_id: report.lesson_id,
-      is_completed: report.is_completed,
-      progress_letter: report.progress_letter,
-      attendance_status: report.attendance_status,
-      occurrence_date: Array.isArray(report.class_occurrences) ? report.class_occurrences[0]?.occurrence_date : report.class_occurrences?.occurrence_date,
-    }))
+  const summaries = [...reportsById.values()].flatMap((report) => {
+    const occurrenceRelation = Array.isArray(report.class_occurrences) ? report.class_occurrences[0] : report.class_occurrences
+    const entries = Array.isArray(report.lesson_entries) ? report.lesson_entries as Array<Record<string, any>> : []
+    const matching = entries.filter((entry) => entry.enrollment_id === enrollmentId)
+    const progressRows = matching.length
+      ? matching
+      : entries.length === 0 && report.enrollment_id === enrollmentId && report.lesson_id
+        ? [{ id: `${report.id}:legacy`, enrollment_id: enrollmentId, lesson_id: report.lesson_id, is_completed: report.is_completed, progress_letter: report.progress_letter }]
+        : []
+    return progressRows
+      .filter((entry) => lessonById.has(entry.lesson_id))
+      .map((entry) => {
+        const lesson = lessonById.get(entry.lesson_id)!
+        return {
+          id: report.id,
+          lesson_entry_id: entry.id,
+          parent_enrollment_id: report.enrollment_id,
+          can_open_report: report.enrollment_id === enrollmentId,
+          enrollment_id: enrollmentId,
+          lesson_id: entry.lesson_id,
+          lesson_sequence: lesson.sequence,
+          lesson_title: lesson.title,
+          is_completed: entry.is_completed,
+          progress_letter: entry.progress_letter,
+          attendance_status: report.attendance_status,
+          occurrence_date: occurrenceRelation?.occurrence_date,
+          shared_content: report.content ?? '',
+          shared_content_document: report.content_document ?? null,
+        }
+      })
+  }).sort((left, right) => String(left.occurrence_date).localeCompare(String(right.occurrence_date)) || left.id.localeCompare(right.id))
   const latestPriorReport = summaries.at(-1) ?? null
   return res.json(envelope(req, { enrollment_id: enrollmentId, occurrence_date: occurrence.data.occurrence_date, lessons: lessons.data ?? [], reports: summaries, latest_prior_report: latestPriorReport }))
 }
 
+/** Read only the target enrollment's lesson progress and the report's shared comment. */
+async function linkedLessonReportHistory(req: Request, res: Response) {
+  if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
+  if (!req.adminDb) throw new ApiError(503, 'RESOURCE_SERVICE_UNAVAILABLE', 'The report service is unavailable')
+  const enrollmentId = uuid.parse(req.params.id)
+  const query = z.object({
+    limit: z.coerce.number().int().min(1).max(100).default(50),
+    offset: z.coerce.number().int().min(0).max(1000000).default(0),
+    search: z.string().trim().max(200).optional(),
+    course_id: uuid.optional(),
+    sort: z.enum(['occurrence_date', '-occurrence_date']).default('-occurrence_date'),
+  }).strict().parse(req.query)
+  const enrollmentResult = await req.db.from('enrollments').select('id,student_id,course_id,class_session_id').eq('id', enrollmentId).maybeSingle()
+  if (enrollmentResult.error) throw mapDatabaseError(enrollmentResult.error)
+  if (!enrollmentResult.data) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found')
+  const targetEnrollment = enrollmentResult.data
+  await permission(req, 'teaching.reports.list', targetEnrollment.class_session_id)
+
+  const [reports, course, lessons] = await Promise.all([
+    req.adminDb.from('occurrence_reports')
+      .select('id,enrollment_id,class_occurrence_id,lesson_entries,attendance_status,content,content_document,class_occurrences!inner(occurrence_date),enrollments!inner(student_id)')
+      .contains('lesson_entries', [{ enrollment_id: enrollmentId }])
+      .neq('enrollment_id', enrollmentId)
+      .eq('enrollments.student_id', targetEnrollment.student_id)
+      .range(0, 9999),
+    req.adminDb.from('courses').select('id,display_name,subject').eq('id', targetEnrollment.course_id).maybeSingle(),
+    req.adminDb.from('lessons').select('id,sequence,title').eq('course_id', targetEnrollment.course_id).order('sequence', { ascending: true }),
+  ])
+  if (reports.error) throw mapDatabaseError(reports.error)
+  if (course.error) throw mapDatabaseError(course.error)
+  if (lessons.error) throw mapDatabaseError(lessons.error)
+  const courseName = course.data?.display_name || course.data?.subject || ''
+  const lessonById = new Map((lessons.data ?? []).map((lesson) => [lesson.id, lesson]))
+  const search = query.search?.toLocaleLowerCase() ?? ''
+  const rows = (reports.data ?? []).flatMap((report: Record<string, any>) => {
+    const occurrenceRelation = Array.isArray(report.class_occurrences) ? report.class_occurrences[0] : report.class_occurrences
+    if (!occurrenceRelation?.occurrence_date) return []
+    const entries = Array.isArray(report.lesson_entries) ? report.lesson_entries as Array<Record<string, any>> : []
+    return entries.flatMap((entry) => {
+      if (entry.enrollment_id !== enrollmentId || entry.course_id !== targetEnrollment.course_id || typeof entry.lesson_id !== 'string') return []
+      const lesson = lessonById.get(entry.lesson_id)
+      if (!lesson) return []
+      const searchable = [courseName, course.data?.subject, lesson.title, entry.progress_letter, report.content].filter((value) => typeof value === 'string').join(' ').toLocaleLowerCase()
+      if (search && !searchable.includes(search)) return []
+      return [{
+        id: report.id,
+        lesson_entry_id: entry.id,
+        enrollment_id: enrollmentId,
+        class_occurrence_id: report.class_occurrence_id,
+        lesson_id: entry.lesson_id,
+        course_id: targetEnrollment.course_id,
+        course_name: courseName,
+        lesson_sequence: lesson.sequence,
+        lesson_title: lesson.title,
+        progress_letter: entry.progress_letter ?? null,
+        is_completed: entry.is_completed === true,
+        attendance_status: report.attendance_status,
+        content: report.content ?? '',
+        content_document: report.content_document ?? null,
+        occurrence_date: occurrenceRelation.occurrence_date,
+        lessons: { sequence: lesson.sequence, title: lesson.title },
+        class_occurrences: { occurrence_date: occurrenceRelation.occurrence_date },
+        enrollments: { courses: { id: course.data?.id ?? targetEnrollment.course_id, display_name: course.data?.display_name ?? null, subject: course.data?.subject ?? null } },
+      }]
+    })
+  })
+  const descending = query.sort.startsWith('-')
+  rows.sort((left, right) => {
+    const byDate = String(left.occurrence_date).localeCompare(String(right.occurrence_date))
+    const byEntry = String(left.lesson_sequence).localeCompare(String(right.lesson_sequence), undefined, { numeric: true }) || left.id.localeCompare(right.id) || String(left.lesson_entry_id).localeCompare(String(right.lesson_entry_id))
+    return (byDate || byEntry) * (descending ? -1 : 1)
+  })
+  const filtered = query.course_id && query.course_id !== targetEnrollment.course_id ? [] : rows
+  const data = filtered.slice(query.offset, query.offset + query.limit)
+  return res.json(envelope(req, data, { limit: query.limit, offset: query.offset, total: filtered.length, sort: query.sort }))
+}
+
 /** Course lessons in order and the ids of lessons the enrollment has completed. */
 async function lessonCompletion(req: Request, enrollmentId: string, courseId: string) {
+  if (!req.adminDb) throw new ApiError(503, 'RESOURCE_SERVICE_UNAVAILABLE', 'The report service is unavailable')
   const [lessons, reports] = await Promise.all([
     req.db!.from('lessons').select('id,sequence,title').eq('course_id', courseId).order('sequence', { ascending: true }),
-    req.db!.from('occurrence_reports').select('lesson_id,is_completed').eq('enrollment_id', enrollmentId).not('lesson_id', 'is', null),
+    Promise.all([
+      req.adminDb.from('occurrence_reports').select('id,enrollment_id,lesson_id,is_completed,lesson_entries').eq('enrollment_id', enrollmentId).range(0, 9999),
+      req.adminDb.from('occurrence_reports').select('id,enrollment_id,lesson_id,is_completed,lesson_entries').contains('lesson_entries', [{ enrollment_id: enrollmentId }]).range(0, 9999),
+    ]),
   ])
-  if (lessons.error) throw mapDatabaseError(lessons.error); if (reports.error) throw mapDatabaseError(reports.error)
-  return { lessons: lessons.data ?? [], completed: new Set((reports.data ?? []).filter((row) => row.is_completed).map((row) => row.lesson_id)) }
+  if (lessons.error) throw mapDatabaseError(lessons.error)
+  const completed = new Set<string>()
+  const reportsById = new Map<string, Record<string, any>>()
+  for (const result of reports) {
+    if (result.error) throw mapDatabaseError(result.error)
+    for (const report of result.data ?? []) reportsById.set(report.id, report)
+  }
+  for (const report of reportsById.values()) {
+    const entries = Array.isArray(report.lesson_entries) ? report.lesson_entries as Array<Record<string, unknown>> : []
+    const matching = entries.filter((entry) => entry.enrollment_id === enrollmentId && entry.course_id === courseId && entry.is_completed === true)
+    if (matching.length) {
+      for (const entry of matching) if (typeof entry.lesson_id === 'string') completed.add(entry.lesson_id)
+    } else if (entries.length === 0 && report.enrollment_id === enrollmentId && report.is_completed && report.lesson_id) completed.add(report.lesson_id)
+  }
+  return { lessons: lessons.data ?? [], completed }
 }
 
 async function enrollmentProgress(req: Request, res: Response) {
@@ -403,6 +558,7 @@ export function createEnrollmentRouter() {
   router.get('/enrollments/:id/start-date-impact', wrap(startDateImpact))
   router.delete('/enrollments/:id', wrap(remove))
   router.post('/enrollment-history/:operation', wrap(enrollmentHistory))
+  router.get('/enrollments/:id/linked-lesson-report-history', wrap(linkedLessonReportHistory))
   router.get('/enrollments/:id/report-progress-context', wrap(enrollmentReportProgressContext))
   router.get('/enrollments/:id/progress', wrap(enrollmentProgress))
   router.post('/enrollments/:id/progress/recalculate', wrap(recalculateProgress))
