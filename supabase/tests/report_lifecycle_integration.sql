@@ -109,9 +109,14 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.enrollments(id, student_id, course_id, class_session_id, status, user_id, start_date, lesson_number)
 VALUES ('99000000-0000-4000-8000-000000000004', '98000000-0000-4000-8000-000000000001', '94000000-0000-4000-8000-000000000002', '96000000-0000-4000-8000-000000000003', 'regular', '91000000-0000-4000-8000-000000000001', DATE '2026-01-01', 1)
 ON CONFLICT (id) DO NOTHING;
+-- 1000157 normalizes production rows to one global teaching scope. Disable
+-- that trigger only for this fixture to model a foreign legacy scope and
+-- verify that the report lifecycle rejects it defensively.
+ALTER TABLE public.courses DISABLE TRIGGER normalize_global_teaching_scope;
 INSERT INTO public.courses(id, subject, stage, user_id, teaching_id)
 VALUES ('94000000-0000-4000-8000-000000000003', 'Lifecycle Foreign Course', 'primary', '91000000-0000-4000-8000-000000000001', '92000000-0000-4000-8000-000000000002')
 ON CONFLICT (id) DO NOTHING;
+ALTER TABLE public.courses ENABLE TRIGGER normalize_global_teaching_scope;
 INSERT INTO public.lessons(id, course_id, title, sequence, user_id)
 VALUES ('95000000-0000-4000-8000-000000000004', '94000000-0000-4000-8000-000000000003', 'Foreign Lesson', 1, '91000000-0000-4000-8000-000000000001')
 ON CONFLICT (id) DO NOTHING;
