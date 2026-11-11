@@ -78,7 +78,7 @@ describe('Express API boundary', () => {
     expect(rpc).toHaveBeenCalledWith('consume_api_rate_limit', expect.objectContaining({ p_limit: 120, p_window_seconds: 60 }))
   })
 
-  it('applies one shared rate-limit check to the OAuth provider start route', async () => {
+  it('keeps one persistent API limit on OAuth starts alongside the route limiter', async () => {
     const rpc = vi.fn(async () => ({ data: { allowed: true, remaining: 119, reset_at: new Date(Date.now() + 60_000).toISOString() }, error: null }))
     const client = { rpc }
     vi.stubGlobal('fetch', vi.fn(async (input: string | URL) => {

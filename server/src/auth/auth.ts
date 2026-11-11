@@ -1,8 +1,8 @@
 import crypto from 'node:crypto'
 import { Router, type NextFunction, type Request, type Response } from 'express'
+import { rateLimit } from 'express-rate-limit'
 import { z } from 'zod'
 import { ApiError, sendError } from '../http/errors.js'
-import { rateLimitMiddleware } from '../http/rateLimit.js'
 import { assertUserActive, clearAccessTokenValidation, createAuthenticatedUserClient, createUserClient, refresh, safeUser, signIn, validateAccessToken, verifyCurrentPassword, type SupabaseClients } from '../infra/supabase.js'
 import type { ApiConfig } from '../config/config.js'
 import { measureRequestPhase, setAuditContext } from '../http/context.js'
@@ -109,7 +109,16 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
   const oauthCallbackUrl = new URL('/api/auth/oauth/callback', config.EDULOG_WEB_BASE_URL).toString()
   const clearOAuthCookie = (res: Response) => res.clearCookie(oauthCookie, { path: oauthCookiePath })
   const providers = () => enabledOAuthProviders(config)
-  const oauthStartRateLimit = rateLimitMiddleware(config, clients.adminClient)
+  // The persistent API limiter is also mounted above this router; this endpoint
+  // limiter makes the OAuth route boundary explicit to static analysis and adds
+  // a per-process defense in depth.
+  const oauthStartRateLimit = rateLimit({
+    windowMs: 60_000,
+    limit: config.API_RATE_LIMIT_PER_MINUTE,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (req, res) => sendError(req, res, new ApiError(429, 'RATE_LIMITED', 'Too many requests', undefined, 60)),
+  })
 
   /** Start a browser session from tokens GoTrue issued (OAuth or an email link). */
   async function startSession(req: Request, res: Response, session: GoTrueSession) {
