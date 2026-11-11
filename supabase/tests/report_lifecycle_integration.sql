@@ -351,13 +351,13 @@ BEGIN
   IF NOT public.can_access_report('9b000000-0000-4000-8000-000000000001', 'teaching.reports.read') THEN
     RAISE EXCEPTION 'teaching owner cannot read collaboration snapshot';
   END IF;
-  IF NOT public.save_report_collab_snapshot('9b000000-0000-4000-8000-000000000001', 'c25qc25hcA==', 4) THEN
+  IF NOT public.save_report_collab_snapshot('9b000000-0000-4000-8000-000000000001', 'c25qc25hcA==', 9) THEN
     RAISE EXCEPTION 'authorized collaboration snapshot was not saved';
   END IF;
   IF (SELECT snapshot_base64 FROM public.report_collab_docs WHERE occurrence_report_id = '9b000000-0000-4000-8000-000000000001') IS DISTINCT FROM 'c25qc25hcA==' THEN
     RAISE EXCEPTION 'authorized collaboration snapshot is not visible';
   END IF;
-  IF public.save_report_collab_snapshot('9b000000-0000-4000-8000-000000000001', 'c25qc25hcA==', 3) THEN
+  IF public.save_report_collab_snapshot('9b000000-0000-4000-8000-000000000001', 'c25qc25hcA==', 8) THEN
     RAISE EXCEPTION 'stale collaboration snapshot was saved';
   END IF;
 
@@ -410,7 +410,7 @@ BEGIN
   IF (SELECT count(*) FROM public.report_collab_docs WHERE occurrence_report_id = '9b000000-0000-4000-8000-000000000001') <> 0 THEN
     RAISE EXCEPTION 'RLS exposed collaboration snapshot to unassigned account';
   END IF;
-  IF public.save_report_collab_snapshot('9b000000-0000-4000-8000-000000000001', 'c25qc25hcA==', 4) THEN
+  IF public.save_report_collab_snapshot('9b000000-0000-4000-8000-000000000001', 'c25qc25hcA==', 9) THEN
     RAISE EXCEPTION 'unassigned account saved collaboration snapshot';
   END IF;
   IF public.can_mutate_occurrence_report('9b000000-0000-4000-8000-000000000001', 'teaching.reports.update') THEN
