@@ -47,7 +47,7 @@ describe('ReportCommandService.resolveConflict', () => {
             primary_lesson_entry_id: 'entry-a',
         } as OccurrenceReportDTO)
         expect(patch).toEqual({
-            lesson_entries: [{ id: 'entry-a', enrollment_id: 'enrollment-a', lesson_id: 'lesson-a', is_completed: true, progress_letter: 'B' }],
+            lesson_entries: [{ id: 'entry-a', enrollment_id: 'enrollment-a', course_id: 'course-a', lesson_id: 'lesson-a', is_completed: true, progress_letter: 'B' }],
             primary_lesson_entry_id: 'entry-a',
         })
     })

@@ -238,27 +238,34 @@ async function remove(req: Request, res: Response) {
 }
 // Enrollment progress, class transfer and roster read models.
 async function enrollmentReportProgressContext(req: Request, res: Response) {
+  if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
+  if (!req.adminDb) throw new ApiError(503, 'RESOURCE_SERVICE_UNAVAILABLE', 'The report service is unavailable')
   const enrollmentId = uuid.parse(req.params.id)
   const query = z.object({
     occurrence_id: uuid,
     report_id: uuid,
   }).strict().parse(req.query)
-  const enrollment = await req.db!.from('enrollments').select('id,course_id').eq('id', enrollmentId).maybeSingle()
+  const enrollment = await req.db.from('enrollments').select('id,student_id,course_id').eq('id', enrollmentId).maybeSingle()
   if (enrollment.error) throw mapDatabaseError(enrollment.error)
   if (!enrollment.data) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found')
-  const occurrence = await req.db!.from('class_occurrences').select('id,class_session_id,occurrence_date').eq('id', query.occurrence_id).maybeSingle()
+  const targetEnrollment = enrollment.data
+  const occurrence = await req.db.from('class_occurrences').select('id,class_session_id,occurrence_date').eq('id', query.occurrence_id).maybeSingle()
   if (occurrence.error) throw mapDatabaseError(occurrence.error)
   if (!occurrence.data) throw new ApiError(404, 'NOT_FOUND', 'Occurrence was not found')
   await permission(req, 'teaching.reports.list', occurrence.data.class_session_id)
 
-  const currentReport = await req.db!.from('occurrence_reports').select('id,enrollment_id,class_occurrence_id').eq('id', query.report_id).maybeSingle()
+  const currentReport = await req.db.from('occurrence_reports').select('id,enrollment_id,class_occurrence_id').eq('id', query.report_id).maybeSingle()
   if (currentReport.error) throw mapDatabaseError(currentReport.error)
   if (currentReport.data?.enrollment_id !== enrollmentId || currentReport.data.class_occurrence_id !== occurrence.data.id) {
     throw new ApiError(404, 'NOT_FOUND', 'Report was not found')
   }
 
-  const lessons = await req.db!.from('lessons').select('id,sequence,title').eq('course_id', enrollment.data.course_id).order('sequence', { ascending: true })
+  const [lessons, course] = await Promise.all([
+    req.db.from('lessons').select('id,sequence,title').eq('course_id', targetEnrollment.course_id).order('sequence', { ascending: true }),
+    req.adminDb.from('courses').select('teaching_id').eq('id', targetEnrollment.course_id).maybeSingle(),
+  ])
   if (lessons.error) throw mapDatabaseError(lessons.error)
+  if (course.error) throw mapDatabaseError(course.error)
 
   const reportFields = 'id,enrollment_id,lesson_id,is_completed,progress_letter,lesson_entries,primary_lesson_entry_id,attendance_status,content,content_document,class_occurrences!inner(occurrence_date,actual_start_time,original_start_time)'
   const pageSize = 500
@@ -277,18 +284,25 @@ async function enrollmentReportProgressContext(req: Request, res: Response) {
     if (page.length < pageSize) break
   }
   const linkedReports: Array<Record<string, any>> = []
-  for (let offset = 0; ; offset += pageSize) {
-    let builder = req.db!.from('occurrence_reports').select(reportFields)
-      .contains('lesson_entries', [{ enrollment_id: enrollmentId }])
-      .neq('id', query.report_id)
-      .eq('attendance_status', 'present')
-      .lt('class_occurrences.occurrence_date', occurrence.data.occurrence_date)
-    builder = orderByRelation(builder, 'class_occurrences', 'occurrence_date', true).order('id', { ascending: true })
-    const result = await builder.range(offset, offset + pageSize - 1)
-    if (result.error) throw mapDatabaseError(result.error)
-    const page = (result.data ?? []) as Array<Record<string, any>>
-    linkedReports.push(...page)
-    if (page.length < pageSize) break
+  const teachingId = typeof course.data?.teaching_id === 'string' ? course.data.teaching_id : null
+  if (teachingId && targetEnrollment.student_id) {
+    const linkedReportFields = 'id,enrollment_id,lesson_entries,attendance_status,content,content_document,class_occurrences!inner(occurrence_date,class_sessions!inner(teaching_id)),enrollments!inner(student_id)'
+    for (let offset = 0; ; offset += pageSize) {
+      let builder = req.adminDb.from('occurrence_reports').select(linkedReportFields)
+        .contains('lesson_entries', [{ enrollment_id: enrollmentId, course_id: targetEnrollment.course_id }])
+        .neq('enrollment_id', enrollmentId)
+        .neq('id', query.report_id)
+        .eq('enrollments.student_id', targetEnrollment.student_id)
+        .eq('class_occurrences.class_sessions.teaching_id', teachingId)
+        .eq('attendance_status', 'present')
+        .lt('class_occurrences.occurrence_date', occurrence.data.occurrence_date)
+      builder = orderByRelation(builder, 'class_occurrences', 'occurrence_date', true).order('id', { ascending: true })
+      const result = await builder.range(offset, offset + pageSize - 1)
+      if (result.error) throw mapDatabaseError(result.error)
+      const page = (result.data ?? []) as Array<Record<string, any>>
+      linkedReports.push(...page)
+      if (page.length < pageSize) break
+    }
   }
   const reportsById = new Map<string, Record<string, any>>()
   for (const report of [...anchoredReports, ...linkedReports]) {
@@ -298,7 +312,7 @@ async function enrollmentReportProgressContext(req: Request, res: Response) {
   const summaries = [...reportsById.values()].flatMap((report) => {
     const occurrenceRelation = Array.isArray(report.class_occurrences) ? report.class_occurrences[0] : report.class_occurrences
     const entries = Array.isArray(report.lesson_entries) ? report.lesson_entries as Array<Record<string, any>> : []
-    const matching = entries.filter((entry) => entry.enrollment_id === enrollmentId)
+    const matching = entries.filter((entry) => entry.enrollment_id === enrollmentId && entry.course_id === targetEnrollment.course_id)
     const progressRows = matching.length
       ? matching
       : entries.length === 0 && report.enrollment_id === enrollmentId && report.lesson_id
