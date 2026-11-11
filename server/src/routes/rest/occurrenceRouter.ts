@@ -125,7 +125,7 @@ const occurrenceQuery = z.object({
   end: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   class_session_id: uuid.optional(),
-  session_ids: z.string().optional(),
+  session_ids: z.string().max(4000).optional(),
   ids: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
   offset: z.coerce.number().int().min(0).max(1000000).default(0),
@@ -145,14 +145,28 @@ async function getOccurrence(req: Request, id: string) {
 async function listOccurrences(req: Request, res: Response) {
   const query = occurrenceQuery.parse(req.query)
   if (query.start && query.end && query.start > query.end) throw new ApiError(422, 'INVALID_DATE_RANGE', 'end must not be before start')
-  await permission(req, 'teaching.occurrences.list', query.class_session_id)
-  let builder = req.db!.from('class_occurrences').select(occurrenceFields, { count: 'exact' })
-  const sessionIds = query.session_ids?.split(',').filter(Boolean) ?? []
+  const sessionIds = query.session_ids?.split(',') ?? []
+  if (query.session_ids !== undefined && (
+    sessionIds.length === 0
+    || sessionIds.some((sessionId) => !uuid.safeParse(sessionId).success)
+  )) {
+    throw new ApiError(400, 'INVALID_QUERY', 'session_ids contains an invalid id')
+  }
+  const uniqueSessionIds = [...new Set(sessionIds)]
+  if (uniqueSessionIds.length > 100) {
+    throw new ApiError(400, 'INVALID_QUERY', 'session_ids contains too many class sessions')
+  }
   const ids = query.ids?.split(',').filter(Boolean) ?? []
-  if (sessionIds.length) {
-    if (sessionIds.some((value) => !uuid.safeParse(value).success)) throw new ApiError(400, 'INVALID_QUERY', 'session_ids contains an invalid id')
-    builder = builder.in('class_session_id', sessionIds)
-  } else if (query.class_session_id) builder = builder.eq('class_session_id', query.class_session_id)
+  if (uniqueSessionIds.length) {
+    for (const sessionId of uniqueSessionIds) {
+      await permission(req, 'teaching.occurrences.list', sessionId)
+    }
+  } else {
+    await permission(req, 'teaching.occurrences.list', query.class_session_id)
+  }
+  let builder = req.db!.from('class_occurrences').select(occurrenceFields, { count: 'exact' })
+  if (uniqueSessionIds.length) builder = builder.in('class_session_id', uniqueSessionIds)
+  else if (query.class_session_id) builder = builder.eq('class_session_id', query.class_session_id)
   if (ids.length) {
     if (ids.some((value) => !uuid.safeParse(value).success)) throw new ApiError(400, 'INVALID_QUERY', 'ids contains an invalid id')
     builder = builder.in('id', ids)
