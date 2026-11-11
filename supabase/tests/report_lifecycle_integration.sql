@@ -254,9 +254,9 @@ BEGIN
   END IF;
   BEGIN
     UPDATE public.enrollments
-    SET course_id = '94000000-0000-4000-8000-000000000001'
+    SET student_id = '98000000-0000-4000-8000-000000000002'
     WHERE id = '99000000-0000-4000-8000-000000000004';
-    RAISE EXCEPTION 'changing a referenced enrollment course unexpectedly succeeded';
+    RAISE EXCEPTION 'changing a referenced enrollment student unexpectedly succeeded';
   EXCEPTION WHEN raise_exception THEN
     IF SQLERRM <> 'ENROLLMENT_HAS_LINKED_REPORT_PROGRESS' THEN RAISE; END IF;
   END;
