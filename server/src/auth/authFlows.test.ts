@@ -147,12 +147,24 @@ describe('OAuth sign-in', () => {
   it('forwards provider cancellation and keeps GoTrue error redirects on the app callback', async () => {
     const state = '123e4567-e89b-42d3-a456-426614174000'
     const fetchMock = stubGoTrue({
-      '/callback': () => new Response(null, { status: 302, headers: { location: 'http://localhost:4173/api/auth/oauth/callback?error=access_denied&error_description=User+cancelled' } }),
+      '/callback': () => new Response(null, { status: 302, headers: { location: 'http://localhost:4173/api/auth/oauth/callback?error=access_denied&error_description=User+cancelled#error=access_denied&error_description=User+cancelled&sb=' } }),
     })
     const response = await request(app({}).instance).get(`/api/auth/bridge/callback?state=${state}&error=access_denied`)
     expect(response.status).toBe(303)
-    expect(new URL(response.headers.location).searchParams.get('error')).toBe('access_denied')
+    const target = new URL(response.headers.location)
+    expect(target.searchParams.get('error')).toBe('access_denied')
+    expect(target.hash).toBe('')
     expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects unexpected OAuth error fragments even on the fixed callback', async () => {
+    const state = '123e4567-e89b-42d3-a456-426614174000'
+    stubGoTrue({
+      '/callback': () => new Response(null, { status: 302, headers: { location: 'http://localhost:4173/api/auth/oauth/callback?error=access_denied#redirect=https://evil.example' } }),
+    })
+    const response = await request(app({}).instance).get(`/api/auth/bridge/callback?state=${state}&error=access_denied`)
+    expect(response.status).toBe(502)
+    expect(response.headers.location).toBeUndefined()
   })
 
   it('preserves OAuth 1 callback fields used by Twitter', async () => {

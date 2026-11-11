@@ -8,6 +8,7 @@ const CALLBACK_KEY = /^[A-Za-z0-9_.-]{1,80}$/
 const MAX_CALLBACK_BYTES = 16 * 1024
 const MAX_CALLBACK_PARAMETERS = 32
 const FINAL_QUERY_KEYS = new Set(['code', 'error', 'error_code', 'error_description', 'error_uri'])
+const FINAL_ERROR_FRAGMENT_KEYS = new Set(['error', 'error_description', 'error_code', 'sb'])
 
 function invalidCallback(): ApiError {
   return new ApiError(400, 'OAUTH_CALLBACK_INVALID', 'OAuth callback is invalid')
@@ -59,7 +60,20 @@ function finalCallbackLocation(config: ApiConfig, location: string): string | nu
     if (Buffer.byteLength(location) > MAX_CALLBACK_BYTES) return null
     const expected = new URL('/api/auth/oauth/callback', config.EDULOG_WEB_BASE_URL)
     const target = new URL(location, expected)
-    if (target.origin !== expected.origin || target.pathname !== expected.pathname || target.username || target.password || target.hash) return null
+    if (target.origin !== expected.origin || target.pathname !== expected.pathname || target.username || target.password) return null
+    if (target.hash) {
+      const fragment = new URLSearchParams(target.hash.slice(1))
+      const seen = new Set<string>()
+      for (const [key] of fragment) {
+        if (!FINAL_ERROR_FRAGMENT_KEYS.has(key) || seen.has(key)) return null
+        seen.add(key)
+      }
+      if (fragment.get('error') !== target.searchParams.get('error') || !fragment.has('sb') || fragment.get('sb') !== '') return null
+      for (const key of ['error_description', 'error_code']) {
+        if (fragment.has(key) !== target.searchParams.has(key) || fragment.get(key) !== target.searchParams.get(key)) return null
+      }
+      target.hash = ''
+    }
     if ([...target.searchParams.keys()].length > 5) return null
     const seen = new Set<string>()
     for (const [key, value] of target.searchParams) {
