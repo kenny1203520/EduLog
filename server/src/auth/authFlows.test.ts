@@ -5,13 +5,14 @@ import pino from 'pino'
 import request from 'supertest'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createAuthRouter, csrfProtection, setupLinkToken, validSetupLink } from './auth.js'
+import { createOAuthBridgeRouter } from './oauthBridge.js'
 import { resetProviderCache } from './gotrue.js'
 import { requestContext } from '../http/context.js'
 import { errorHandler } from '../http/errors.js'
 import type { Mailer } from '../mail/mailer.js'
 import { testConfig } from '../test/testConfig.js'
 
-const config = testConfig({ SUPABASE_PUBLIC_URL: 'https://db.example.test' })
+const config = testConfig({ GOTRUE_INTERNAL_URL: 'http://auth:9999' })
 
 /** A fake service-role client: account statuses per user id and recorded RPC calls. */
 function fakeClients(statuses: Record<string, string>) {
@@ -47,6 +48,7 @@ function app(statuses: Record<string, string>, mailer: Mailer = { enabled: true,
   instance.use(cookieParser())
   instance.use(express.json())
   instance.use(requestContext(pino({ level: 'silent' })))
+  instance.use('/api/auth/bridge/callback', createOAuthBridgeRouter(config))
   instance.use('/api/auth', csrfProtection, createAuthRouter(fake.clients, config, mailer))
   instance.use(errorHandler)
   return { instance, ...fake, mailer }
@@ -88,17 +90,113 @@ describe('OAuth sign-in', () => {
     expect(response.body.data.providers).toEqual([])
   })
 
-  it('redirects to GoTrue authorize with a PKCE challenge kept in an httpOnly cookie', async () => {
-    stubGoTrue({ '/auth/v1/settings': () => json({ external: { github: true } }) })
+  it('starts OAuth through private GoTrue with a PKCE challenge in an httpOnly cookie', async () => {
+    const fetchMock = stubGoTrue({
+      '/auth/v1/settings': () => json({ external: { github: true } }),
+      '/authorize': () => new Response(null, { status: 302, headers: { location: 'https://github.com/login/oauth/authorize?client_id=test' } }),
+    })
     const response = await request(app({}).instance).get('/api/auth/oauth/github')
     expect(response.status).toBe(303)
     const target = new URL(response.headers.location)
-    expect(target.origin + target.pathname).toBe('https://db.example.test/auth/v1/authorize')
-    expect(target.searchParams.get('provider')).toBe('github')
-    expect(target.searchParams.get('redirect_to')).toBe('http://localhost:4173/api/auth/oauth/callback')
+    expect(target.origin + target.pathname).toBe('https://github.com/login/oauth/authorize')
+    const authorizeCall = fetchMock.mock.calls.find(([url]) => new URL(String(url)).pathname === '/authorize')
+    expect(authorizeCall).toBeTruthy()
+    const authorizeUrl = new URL(String(authorizeCall![0]))
+    expect(authorizeUrl.origin + authorizeUrl.pathname).toBe('http://auth:9999/authorize')
+    expect(authorizeUrl.searchParams.get('provider')).toBe('github')
+    expect(authorizeUrl.searchParams.get('redirect_to')).toBe('http://localhost:4173/api/auth/oauth/callback')
     const cookie = String(response.headers['set-cookie']).match(/edulog_oauth=([^;]+)/)![1]
     expect(String(response.headers['set-cookie'])).toMatch(/HttpOnly/)
-    expect(target.searchParams.get('code_challenge')).toBe(crypto.createHash('sha256').update(decodeURIComponent(cookie)).digest('base64url'))
+    expect(authorizeUrl.searchParams.get('code_challenge')).toBe(crypto.createHash('sha256').update(decodeURIComponent(cookie)).digest('base64url'))
+    expect(response.headers['cache-control']).toBe('no-store')
+    expect(response.headers['referrer-policy']).toBe('no-referrer')
+  })
+
+  it('forwards provider GET callbacks to GoTrue and restricts its final redirect', async () => {
+    const state = '123e4567-e89b-42d3-a456-426614174000'
+    const fetchMock = stubGoTrue({
+      '/callback': () => new Response(null, { status: 302, headers: { location: 'http://localhost:4173/api/auth/oauth/callback?code=pkce-code' } }),
+    })
+    const response = await request(app({}).instance).get(`/api/auth/bridge/callback?state=${state}&code=provider-code`)
+    expect(response.status).toBe(303)
+    expect(response.headers.location).toBe('http://localhost:4173/api/auth/oauth/callback?code=pkce-code')
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(new URL(String(url)).origin + new URL(String(url)).pathname).toBe('http://auth:9999/callback')
+    expect(init?.method).toBe('GET')
+    expect(new URL(String(url)).searchParams.get('state')).toBe(state)
+    expect(response.headers['referrer-policy']).toBe('no-referrer')
+  })
+
+  it('accepts Apple form_post without a session CSRF token and forwards its form fields', async () => {
+    const state = '123e4567-e89b-42d3-a456-426614174000'
+    const user = JSON.stringify({ name: { firstName: 'Edu', lastName: 'Log' }, email: 'user@example.test' })
+    const fetchMock = stubGoTrue({
+      '/callback': () => new Response(null, { status: 302, headers: { location: 'http://localhost:4173/api/auth/oauth/callback?code=apple-pkce-code' } }),
+    })
+    const response = await request(app({}).instance).post('/api/auth/bridge/callback').type('form').send({ code: 'apple-provider-code', state, user })
+    expect(response.status).toBe(303)
+    expect(response.headers.location).toBe('http://localhost:4173/api/auth/oauth/callback?code=apple-pkce-code')
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(new URL(String(url)).pathname).toBe('/callback')
+    expect(init?.method).toBe('POST')
+    expect(new Headers(init?.headers).get('content-type')).toContain('application/x-www-form-urlencoded')
+    expect(new URLSearchParams(String(init?.body)).get('user')).toBe(user)
+    expect(new URLSearchParams(String(init?.body)).get('state')).toBe(state)
+  })
+
+  it('forwards provider cancellation and keeps GoTrue error redirects on the app callback', async () => {
+    const state = '123e4567-e89b-42d3-a456-426614174000'
+    const fetchMock = stubGoTrue({
+      '/callback': () => new Response(null, { status: 302, headers: { location: 'http://localhost:4173/api/auth/oauth/callback?error=access_denied&error_description=User+cancelled' } }),
+    })
+    const response = await request(app({}).instance).get(`/api/auth/bridge/callback?state=${state}&error=access_denied`)
+    expect(response.status).toBe(303)
+    expect(new URL(response.headers.location).searchParams.get('error')).toBe('access_denied')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('preserves OAuth 1 callback fields used by Twitter', async () => {
+    const state = '123e4567-e89b-42d3-a456-426614174000'
+    const fetchMock = stubGoTrue({
+      '/callback': () => new Response(null, { status: 302, headers: { location: 'http://localhost:4173/api/auth/oauth/callback?code=twitter-pkce-code' } }),
+    })
+    const response = await request(app({}).instance).get(`/api/auth/bridge/callback?state=${state}&oauth_token=request-token&oauth_verifier=verified`)
+    expect(response.status).toBe(303)
+    const [url] = fetchMock.mock.calls[0]
+    expect(new URL(String(url)).searchParams.get('oauth_token')).toBe('request-token')
+    expect(new URL(String(url)).searchParams.get('oauth_verifier')).toBe('verified')
+  })
+
+  it('forwards OAuth 1 cancellation callbacks to GoTrue for its normal error redirect', async () => {
+    const state = '123e4567-e89b-42d3-a456-426614174000'
+    const fetchMock = stubGoTrue({
+      '/callback': () => new Response(null, { status: 302, headers: { location: 'http://localhost:4173/api/auth/oauth/callback?error=access_denied' } }),
+    })
+    const response = await request(app({}).instance).get(`/api/auth/bridge/callback?state=${state}&denied=request-token`)
+    expect(response.status).toBe(303)
+    expect(new URL(String(fetchMock.mock.calls[0][0])).searchParams.get('denied')).toBe('request-token')
+  })
+
+  it('rejects malformed state before contacting GoTrue', async () => {
+    const fetchMock = stubGoTrue({ '/callback': () => new Response(null, { status: 302, headers: { location: 'http://localhost:4173/api/auth/oauth/callback?code=x' } }) })
+    const response = await request(app({}).instance).get('/api/auth/bridge/callback?state=bad&code=provider-code')
+    expect(response.status).toBe(400)
+    expect(response.body.error.code).toBe('OAUTH_CALLBACK_INVALID')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects oversized form callbacks at the bounded parser', async () => {
+    const fetchMock = stubGoTrue({ '/callback': () => new Response(null, { status: 302, headers: { location: 'http://localhost:4173/api/auth/oauth/callback?code=x' } }) })
+    const response = await request(app({}).instance).post('/api/auth/bridge/callback').type('form').send({ state: '123e4567-e89b-42d3-a456-426614174000', code: 'provider-code', user: 'x'.repeat(17 * 1024) })
+    expect(response.status).toBe(413)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects GoTrue redirects outside the fixed EduLog PKCE callback', async () => {
+    stubGoTrue({ '/callback': () => new Response(null, { status: 302, headers: { location: 'https://evil.example/steal?code=x' } }) })
+    const response = await request(app({}).instance).get('/api/auth/bridge/callback?state=123e4567-e89b-42d3-a456-426614174000&code=provider-code')
+    expect(response.status).toBe(502)
+    expect(response.headers.location).toBeUndefined()
   })
 
   it('refuses a provider GoTrue has not enabled', async () => {

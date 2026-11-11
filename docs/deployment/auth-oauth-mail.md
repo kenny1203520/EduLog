@@ -11,10 +11,10 @@ EduLog signs people in through the API (cookie sessions); the browser never hold
 
 ## OAuth providers
 
-1. At the provider, register the callback URL `${API_EXTERNAL_URL}/callback` (for example `https://db.example.com/auth/v1/callback`).
+1. At each provider, register `${EDULOG_WEB_BASE_URL}/api/auth/bridge/callback` as the callback URL. Provider callbacks reach EduLog; the API forwards only the fixed callback route to GoTrue.
 2. In `.env`, set `<PROVIDER>_ENABLED=true`, `<PROVIDER>_CLIENT_ID` and `<PROVIDER>_SECRET` (Azure, GitLab, Keycloak and WorkOS also take `<PROVIDER>_URL`). Every provider GoTrue supports is already wired in `docker-compose.yml`.
-3. Set `SUPABASE_PUBLIC_URL` (the gateway address the browser reaches) and add `${EDULOG_WEB_BASE_URL}/api/auth/oauth/callback` to `ADDITIONAL_REDIRECT_URLS`.
-4. Restart `auth` and `api`. The login page lists every provider GoTrue reports as enabled (`/auth/v1/settings`); nothing else needs configuring.
+3. Keep `${EDULOG_WEB_BASE_URL}/api/auth/oauth/callback` in `ADDITIONAL_REDIRECT_URLS`; GoTrue returns its PKCE code there after the bridge processes the provider callback. The API uses `EDULOG_GOTRUE_INTERNAL_URL` (default `http://auth:9999`) for direct, server-only `/authorize` and `/callback` requests. `SUPABASE_PUBLIC_URL` is not needed for OAuth, and `API_EXTERNAL_URL` / `GOTRUE_JWT_ISSUER` must remain unchanged.
+4. Restart `auth` and `api`. The login page lists every provider GoTrue reports as enabled (`/auth/v1/settings`). EduLog's bundled nginx proxies disable access logging on the callback path; if a separate public ingress sits in front, redact query strings on `/api/auth/bridge/callback` because providers may include authorization codes there.
 
 Accounts with the same verified email are linked by GoTrue.
 

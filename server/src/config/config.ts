@@ -52,6 +52,13 @@ const ConfigSchema = z.object({
     }
   }),
   SUPABASE_URL: z.url(),
+  // Optional root URL for direct server-to-GoTrue OAuth requests; never sent to the browser.
+  GOTRUE_INTERNAL_URL: optional(z.url().superRefine((value, ctx) => {
+    const url = new URL(value)
+    if (url.username || url.password || (url.pathname !== '' && url.pathname !== '/') || url.search || url.hash) {
+      ctx.addIssue({ code: 'custom', message: 'GOTRUE_INTERNAL_URL must be a root URL without credentials, a path, a query, or a fragment' })
+    }
+  })),
   SUPABASE_ANON_KEY: z.string().min(1),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   // Optional for external Supabase projects.  Self-hosted Compose supplies
@@ -82,10 +89,6 @@ const ConfigSchema = z.object({
   // hidden until OPENAI_SIWC_CLIENT_ID is set.
   OPENAI_SIWC_CLIENT_ID: optional(z.string().min(1).max(200)),
   OPENAI_SIWC_CLIENT_SECRET: optional(z.string().min(1).max(500)),
-  // Browser-facing Supabase URL (the gateway the user's browser reaches).
-  // OAuth sign-in sends the browser to its /auth/v1/authorize; without it the
-  // login page offers no OAuth providers.
-  SUPABASE_PUBLIC_URL: optional(z.url()),
   // SMTP for the API's own mail (administrator notices about accounts
   // waiting for approval). The same server GoTrue uses; unset = no mail.
   SMTP_HOST: optional(z.string().min(1).max(255)),

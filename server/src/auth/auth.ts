@@ -5,7 +5,7 @@ import { ApiError, sendError } from '../http/errors.js'
 import { assertUserActive, clearAccessTokenValidation, createAuthenticatedUserClient, createUserClient, refresh, safeUser, signIn, validateAccessToken, verifyCurrentPassword, type SupabaseClients } from '../infra/supabase.js'
 import type { ApiConfig } from '../config/config.js'
 import { measureRequestPhase, setAuditContext } from '../http/context.js'
-import { createPkcePair, enabledOAuthProviders, exchangeAuthCode, isValidProviderName, oauthAuthorizeUrl, requestPasswordRecovery, verifyEmailLink, type EmailLinkType, type GoTrueSession } from './gotrue.js'
+import { createPkcePair, enabledOAuthProviders, exchangeAuthCode, isValidProviderName, requestPasswordRecovery, startOAuthAuthorization, verifyEmailLink, type EmailLinkType, type GoTrueSession } from './gotrue.js'
 import { createMailer, notifyPendingAccount, type Mailer } from '../mail/mailer.js'
 
 const accessCookie = 'edulog_access'
@@ -107,7 +107,7 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
   const router = Router()
   const oauthCallbackUrl = new URL('/api/auth/oauth/callback', config.EDULOG_WEB_BASE_URL).toString()
   const clearOAuthCookie = (res: Response) => res.clearCookie(oauthCookie, { path: oauthCookiePath })
-  const providers = () => config.SUPABASE_PUBLIC_URL ? enabledOAuthProviders(config) : Promise.resolve([] as string[])
+  const providers = () => enabledOAuthProviders(config)
 
   /** Start a browser session from tokens GoTrue issued (OAuth or an email link). */
   async function startSession(req: Request, res: Response, session: GoTrueSession) {
@@ -128,6 +128,8 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
     res.json({ data: { providers: await providers() }, meta: {}, request_id: req.requestId, trace_id: req.traceId })
   })
   router.get('/oauth/callback', async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store')
+    res.setHeader('Referrer-Policy', 'no-referrer')
     const verifier = req.cookies?.[oauthCookie]
     clearOAuthCookie(res)
     const code = typeof req.query.code === 'string' ? req.query.code : ''
@@ -141,11 +143,20 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
     }
   })
   router.get('/oauth/:provider', async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store')
+    res.setHeader('Referrer-Policy', 'no-referrer')
     const provider = req.params.provider
-    if (!config.SUPABASE_PUBLIC_URL || !isValidProviderName(provider) || !(await providers()).includes(provider)) return res.redirect(303, '/login?error=oauth')
+    if (!isValidProviderName(provider) || !(await providers()).includes(provider)) return res.redirect(303, '/login?error=oauth')
     const { verifier, challenge } = createPkcePair()
     res.cookie(oauthCookie, verifier, { httpOnly: true, secure: config.COOKIE_SECURE, sameSite: 'lax', path: oauthCookiePath, maxAge: 10 * 60 * 1000 })
-    return res.redirect(303, oauthAuthorizeUrl(config.SUPABASE_PUBLIC_URL, provider, oauthCallbackUrl, challenge))
+    try {
+      const authorizeLocation = await startOAuthAuthorization(config, provider, oauthCallbackUrl, challenge)
+      return res.redirect(303, authorizeLocation)
+    } catch {
+      clearOAuthCookie(res)
+      req.log.warn({ event: 'oauth_authorize_failed' }, 'oauth_authorize_failed')
+      return res.redirect(303, '/login?error=oauth')
+    }
   })
   /** Links in GoTrue emails land here (see mail/emailTemplates.ts). */
   router.get('/confirm', async (req, res) => {

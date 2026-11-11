@@ -127,6 +127,11 @@ server {
     proxy_ssl_server_name on;
     proxy_ssl_verify off;
 
+    location = /api/auth/bridge/callback {
+        access_log off;
+        proxy_pass ${EDULOG_PROXY_UPSTREAM_URL};
+    }
+
     location / {
         proxy_pass ${EDULOG_PROXY_UPSTREAM_URL};
     }

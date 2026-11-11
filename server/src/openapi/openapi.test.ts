@@ -201,7 +201,7 @@ describe('generated API contract', () => {
 
   it('documents cookie authentication for protected operations', () => {
     const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined> }
-    const publicOperations = new Set(['POST /api/auth/login', 'POST /api/auth/refresh', 'POST /api/auth/logout', 'GET /api/auth/csrf', 'GET /api/auth/providers', 'GET /api/auth/oauth/{provider}', 'GET /api/auth/oauth/callback', 'GET /api/auth/confirm', 'POST /api/auth/recover', 'GET /api/healthz', 'GET /api/openapi.json', 'POST /api/extension/pair-requests', 'GET /api/extension/pair-requests/{id}', 'POST /api/extension/pair-requests/{id}/claim'])
+    const publicOperations = new Set(['POST /api/auth/login', 'POST /api/auth/refresh', 'POST /api/auth/logout', 'GET /api/auth/csrf', 'GET /api/auth/providers', 'GET /api/auth/oauth/{provider}', 'GET /api/auth/bridge/callback', 'POST /api/auth/bridge/callback', 'GET /api/auth/oauth/callback', 'GET /api/auth/confirm', 'POST /api/auth/recover', 'GET /api/healthz', 'GET /api/openapi.json', 'POST /api/extension/pair-requests', 'GET /api/extension/pair-requests/{id}', 'POST /api/extension/pair-requests/{id}/claim'])
     for (const [path, pathItem] of Object.entries(spec.paths)) {
       for (const [method, operation] of Object.entries(pathItem ?? {})) {
         if (!operation || !operation.operationId || operation['x-websocket']) continue
