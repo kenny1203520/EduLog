@@ -4,6 +4,7 @@ import {
     buildSnapshotFromDto,
     buildSnapshotFromProps,
     composeProgressLetter,
+    createLessonEntryId,
     isAttendanceOnlyChange,
     normalizeReportRating,
     normalizeSystemManagedReason,
@@ -11,6 +12,11 @@ import {
 import type { OccurrenceReportDTO } from './OccurrenceReport'
 
 describe('report editor snapshot rules', () => {
+    it('creates secure version-4 lesson entry ids', () => {
+        const id = createLessonEntryId()
+        expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+    })
+
     it('recognizes only holiday and suspension as system-managed', () => {
         expect(normalizeSystemManagedReason(' Holiday ')).toBe('holiday')
         expect(normalizeSystemManagedReason('suspension')).toBe('suspension')
