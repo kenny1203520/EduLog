@@ -10,7 +10,10 @@ cleanup() {
   local status=$?
   if [[ -n "$save_pid" ]]; then kill "$save_pid" 2>/dev/null || true; wait "$save_pid" 2>/dev/null || true; fi
   if [[ -n "$identity_pid" ]]; then kill "$identity_pid" 2>/dev/null || true; wait "$identity_pid" 2>/dev/null || true; fi
-  psql -v ON_ERROR_STOP=1 -f "$script_dir/report_lifecycle_concurrency_cleanup.sql" >/dev/null 2>&1 || true
+  if ! psql -v ON_ERROR_STOP=1 -f "$script_dir/report_lifecycle_concurrency_cleanup.sql" >/dev/null; then
+    echo 'Failed to clean report lifecycle concurrency fixture' >&2
+    status=1
+  fi
   rm -rf "$tmp_dir"
   exit "$status"
 }

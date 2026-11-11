@@ -5,6 +5,8 @@ DROP TRIGGER IF EXISTS zz_test_pause_enrollment_identity_change ON public.enroll
 DROP FUNCTION IF EXISTS public.test_pause_report_lifecycle_save();
 DROP FUNCTION IF EXISTS public.test_pause_enrollment_identity_change();
 
+DELETE FROM public.report_versions
+WHERE occurrence_report_id IN ('a1b00000-0000-4000-8000-000000000001', 'a1b00000-0000-4000-8000-000000000002');
 DELETE FROM public.occurrence_reports
 WHERE id IN ('a1b00000-0000-4000-8000-000000000001', 'a1b00000-0000-4000-8000-000000000002');
 DELETE FROM public.class_occurrences
