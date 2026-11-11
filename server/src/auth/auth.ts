@@ -2,6 +2,7 @@ import crypto from 'node:crypto'
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod'
 import { ApiError, sendError } from '../http/errors.js'
+import { rateLimitMiddleware } from '../http/rateLimit.js'
 import { assertUserActive, clearAccessTokenValidation, createAuthenticatedUserClient, createUserClient, refresh, safeUser, signIn, validateAccessToken, verifyCurrentPassword, type SupabaseClients } from '../infra/supabase.js'
 import type { ApiConfig } from '../config/config.js'
 import { measureRequestPhase, setAuditContext } from '../http/context.js'
@@ -108,6 +109,7 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
   const oauthCallbackUrl = new URL('/api/auth/oauth/callback', config.EDULOG_WEB_BASE_URL).toString()
   const clearOAuthCookie = (res: Response) => res.clearCookie(oauthCookie, { path: oauthCookiePath })
   const providers = () => enabledOAuthProviders(config)
+  const oauthStartRateLimit = rateLimitMiddleware(config, clients.adminClient)
 
   /** Start a browser session from tokens GoTrue issued (OAuth or an email link). */
   async function startSession(req: Request, res: Response, session: GoTrueSession) {
@@ -142,10 +144,10 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
       return res.redirect(303, failureTarget(error, '/login?error=oauth'))
     }
   })
-  router.get('/oauth/:provider', async (req, res) => {
+  router.get('/oauth/:provider', oauthStartRateLimit, async (req, res) => {
     res.setHeader('Cache-Control', 'no-store')
     res.setHeader('Referrer-Policy', 'no-referrer')
-    const provider = req.params.provider
+    const provider = typeof req.params.provider === 'string' ? req.params.provider : ''
     if (!isValidProviderName(provider) || !(await providers()).includes(provider)) return res.redirect(303, '/login?error=oauth')
     const { verifier, challenge } = createPkcePair()
     res.cookie(oauthCookie, verifier, { httpOnly: true, secure: config.COOKIE_SECURE, sameSite: 'lax', path: oauthCookiePath, maxAge: 10 * 60 * 1000 })

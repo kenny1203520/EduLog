@@ -77,4 +77,24 @@ describe('Express API boundary', () => {
     expect(response.headers['access-control-allow-origin']).toBeUndefined()
     expect(rpc).toHaveBeenCalledWith('consume_api_rate_limit', expect.objectContaining({ p_limit: 120, p_window_seconds: 60 }))
   })
+
+  it('applies one shared rate-limit check to the OAuth provider start route', async () => {
+    const rpc = vi.fn(async () => ({ data: { allowed: true, remaining: 119, reset_at: new Date(Date.now() + 60_000).toISOString() }, error: null }))
+    const client = { rpc }
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL) => {
+      const url = new URL(String(input))
+      if (url.pathname.endsWith('/auth/v1/settings')) return new Response(JSON.stringify({ external: { github: true } }), { headers: { 'content-type': 'application/json' } })
+      return new Response(null, { status: 302, headers: { location: 'https://github.com/login/oauth/authorize?client_id=test' } })
+    }))
+    const app = createApp(testConfig({
+      GOTRUE_INTERNAL_URL: 'http://auth:9999',
+      RATE_LIMIT_STORE: 'supabase',
+    }), { adminClient: client, publicClient: client } as never)
+
+    const response = await request(app).get('/api/auth/oauth/github')
+
+    expect(response.status).toBe(303)
+    expect(rpc).toHaveBeenCalledTimes(1)
+    expect(rpc).toHaveBeenCalledWith('consume_api_rate_limit', expect.objectContaining({ p_limit: 120, p_window_seconds: 60 }))
+  })
 })

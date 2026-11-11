@@ -42,14 +42,14 @@ function fakeClients(statuses: Record<string, string>) {
   return { clients: { adminClient } as never, rpc, updateUserById }
 }
 
-function app(statuses: Record<string, string>, mailer: Mailer = { enabled: true, send: vi.fn(async () => {}) }) {
+function app(statuses: Record<string, string>, mailer: Mailer = { enabled: true, send: vi.fn(async () => {}) }, appConfig = config) {
   const fake = fakeClients(statuses)
   const instance = express()
   instance.use(cookieParser())
   instance.use(express.json())
   instance.use(requestContext(pino({ level: 'silent' })))
-  instance.use('/api/auth/bridge/callback', createOAuthBridgeRouter(config))
-  instance.use('/api/auth', csrfProtection, createAuthRouter(fake.clients, config, mailer))
+  instance.use('/api/auth/bridge/callback', createOAuthBridgeRouter(appConfig))
+  instance.use('/api/auth', csrfProtection, createAuthRouter(fake.clients, appConfig, mailer))
   instance.use(errorHandler)
   return { instance, ...fake, mailer }
 }
@@ -110,6 +110,25 @@ describe('OAuth sign-in', () => {
     expect(authorizeUrl.searchParams.get('code_challenge')).toBe(crypto.createHash('sha256').update(decodeURIComponent(cookie)).digest('base64url'))
     expect(response.headers['cache-control']).toBe('no-store')
     expect(response.headers['referrer-policy']).toBe('no-referrer')
+  })
+
+  it('rate limits OAuth provider starts before querying GoTrue', async () => {
+    const fetchMock = stubGoTrue({
+      '/auth/v1/settings': () => json({ external: { github: true } }),
+      '/authorize': () => new Response(null, { status: 302, headers: { location: 'https://github.com/login/oauth/authorize?client_id=test' } }),
+    })
+    const limitedApp = app({}, undefined, testConfig({
+      GOTRUE_INTERNAL_URL: 'http://auth:9999',
+      API_RATE_LIMIT_PER_MINUTE: '1',
+    }))
+
+    const first = await request(limitedApp.instance).get('/api/auth/oauth/github')
+    const second = await request(limitedApp.instance).get('/api/auth/oauth/github')
+
+    expect(first.status).toBe(303)
+    expect(second.status).toBe(429)
+    expect(second.body.error.code).toBe('RATE_LIMITED')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
   it('forwards provider GET callbacks to GoTrue and restricts its final redirect', async () => {
