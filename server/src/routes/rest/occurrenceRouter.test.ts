@@ -142,7 +142,8 @@ async function listOccurrenceRequest(
     traceId: 'trace-1',
   }
   const route = createOccurrenceRouter().stack.find((layer: any) => layer.route?.path === '/occurrences')
-  const handler = route.route.stack[0].handle
+  const handler = route?.route?.stack[0]?.handle
+  if (!handler) throw new Error('Occurrence list route was not registered')
 
   const response = await new Promise<{ status: number; error?: unknown }>((resolve) => {
     const res: any = {
