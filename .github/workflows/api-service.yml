@@ -19,6 +19,7 @@ on:
       - '.github/workflows/api-service.yml'
       - '.github/workflows/docker-publish.yml'
       - 'scripts/release/**'
+      - 'scripts/release-image-smoke.sh'
       - 'scripts/lib/**'
       - '.github/releases/**'
       - 'CHANGELOG.md'
@@ -39,6 +40,7 @@ on:
       - '.github/workflows/api-service.yml'
       - '.github/workflows/docker-publish.yml'
       - 'scripts/release/**'
+      - 'scripts/release-image-smoke.sh'
       - 'scripts/lib/**'
       - '.github/releases/**'
       - 'CHANGELOG.md'
@@ -132,3 +134,34 @@ jobs:
           grep -q 'proxy_pass http://\$api_upstream' app/nginx/docker-entrypoint.d/05-edulog-runtime.envsh
           grep -q 'try_files \\$uri \\$uri/ /index.html' app/nginx/docker-entrypoint.d/05-edulog-runtime.envsh
           ! grep -R --binary-files=without-match -E 'SUPABASE_SERVICE_ROLE_KEY|SERVICE_ROLE_KEY|service_role|VITE_SUPABASE_URL|VITE_SUPABASE_ANON_KEY|VITE_SUPABASE_FUNCTIONS_BASE_URL|functions/v1' app/dist
+
+  docker-smoke:
+    name: Build and smoke test Docker images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226 # v3.0.0
+      - name: Build frontend image for smoke testing
+        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
+        with:
+          context: ./app
+          build-contexts: legal=.
+          load: true
+          tags: edulog-release-smoke:frontend
+      - name: Build API image for smoke testing
+        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
+        with:
+          context: ./server
+          build-contexts: legal=.
+          load: true
+          tags: edulog-release-smoke:api
+      - name: Build Presidio analyzer image for smoke testing
+        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
+        with:
+          context: ./docker/presidio
+          build-contexts: legal=.
+          load: true
+          tags: edulog-release-smoke:presidio
+      - name: Verify images before publication
+        run: bash scripts/release-image-smoke.sh
