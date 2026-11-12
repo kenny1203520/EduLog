@@ -152,7 +152,8 @@ describe('email links and passwords', () => {
         if (refreshRequests === 2) releaseRefreshRequests()
         await bothRefreshRequests
         const userId = body.refresh_token?.replace('refresh-', '') ?? 'unknown'
-        return json(session(userId))
+        const refreshedSession = session(userId)
+        return json({ ...refreshedSession, access_token: `token-${userId}-rotated`, refresh_token: `refresh-${userId}-rotated` })
       }
 
       return json({ message: 'not found' }, 404)
@@ -179,10 +180,14 @@ describe('email links and passwords', () => {
 
     expect(firstRefresh.status).toBe(200)
     expect(secondRefresh.status).toBe(200)
-    expect(String(firstRefresh.headers['set-cookie'])).toContain('edulog_access=token-first-user')
-    expect(String(firstRefresh.headers['set-cookie'])).toContain('edulog_refresh=refresh-first-user')
-    expect(String(secondRefresh.headers['set-cookie'])).toContain('edulog_access=token-second-user')
-    expect(String(secondRefresh.headers['set-cookie'])).toContain('edulog_refresh=refresh-second-user')
+    const firstRefreshCookies = String(firstRefresh.headers['set-cookie'])
+    const secondRefreshCookies = String(secondRefresh.headers['set-cookie'])
+    expect(firstRefreshCookies).toContain('edulog_access=token-first-user-rotated;')
+    expect(firstRefreshCookies).toContain('edulog_refresh=refresh-first-user-rotated;')
+    expect(firstRefreshCookies).not.toContain("second-user")
+    expect(secondRefreshCookies).toContain('edulog_access=token-second-user-rotated;')
+    expect(secondRefreshCookies).toContain('edulog_refresh=refresh-second-user-rotated;')
+    expect(secondRefreshCookies).not.toContain("first-user")
     expect(refreshRequests).toBe(2)
   })
 
