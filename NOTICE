@@ -1,0 +1,62 @@
+EduLog
+Copyright 2026 kenny1203520
+
+Original EduLog source code and documentation are licensed under the
+Apache License, Version 2.0. This notice is informational and does not
+modify that license.
+
+This file records known third-party material copied into the repository.
+Dependencies and base images retain their own license terms.
+
+Third-party materials retain their own copyright and license terms:
+
+* Self-hosted Supabase materials under supabase/ include upstream work from
+  https://github.com/supabase/supabase. The upstream Supabase repository is
+  licensed under Apache-2.0; individual components may carry separate terms.
+* Portions of supabase/utils/generate-keys.sh are derived from Inder Singh's
+  setup.sh (Copyright 2025, Apache-2.0):
+  https://github.com/singh-inder/supabase-automated-self-host/blob/main/setup.sh
+* Portions of supabase/utils/db-passwd.sh are derived from Inder Singh's
+  update-db-pass.sh (Copyright 2025, Apache-2.0):
+  https://github.com/singh-inder/supabase-automated-self-host/blob/main/docker/update-db-pass.sh
+  Their source notices are retained in those files.
+* Lucide icon path data is used in the extension and docs/design/prototype.
+  Lucide is ISC-licensed; icons derived from Feather retain their separate
+  MIT license and attribution.
+  See https://github.com/lucide-icons/lucide/blob/main/LICENSE.
+
+Lucide ISC License
+Copyright (c) 2026 Lucide Icons and Contributors
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+Feather-derived Lucide icons: MIT License
+Copyright (c) 2013-present Cole Bemis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

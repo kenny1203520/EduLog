@@ -10,10 +10,12 @@ import BaseDropdown from '@/components/ui/BaseDropdown.vue'
 import { isKodingPlatform, KODING_PLATFORM } from '@/utils/koding'
 import { StudentCommandService } from '@/services/student/StudentCommandService'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
     studentId: string
     credentials: any[]
-}>()
+    /** Section update permission; hides add, edit and delete controls when false. */
+    canUpdate?: boolean
+}>(), { canUpdate: true })
 
 const { t } = useI18n()
 const toast = useToast()
@@ -201,7 +203,7 @@ function credentialUrl(url: string): string {
                                 :title="c.notes">{{ c.notes }}</span>
                         </div>
                         <div class="flex space-x-1">
-                            <button @click="startEditCredential(c)"
+                            <button v-if="canUpdate" @click="startEditCredential(c)"
                                 class="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
                                 :title="$t('common.edit')">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
@@ -210,7 +212,7 @@ function credentialUrl(url: string): string {
                                         d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
                                 </svg>
                             </button>
-                            <button @click="confirmDeleteCredential(c.id!)"
+                            <button v-if="canUpdate" @click="confirmDeleteCredential(c.id!)"
                                 class="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
                                 :title="$t('common.delete')">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
@@ -351,7 +353,7 @@ function credentialUrl(url: string): string {
         </ul>
 
         <div class="border-t border-gray-100 pt-6">
-            <button type="button" data-testid="student-credential-add-toggle" @click="isAddFormOpen = !isAddFormOpen"
+            <button v-if="canUpdate" type="button" data-testid="student-credential-add-toggle" @click="isAddFormOpen = !isAddFormOpen"
                 class="mb-3 flex w-full items-center justify-between rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-left text-xs font-black uppercase tracking-widest text-gray-500 transition-colors hover:border-emerald-200 hover:bg-emerald-50/50 hover:text-emerald-700">
                 <span class="flex items-center gap-2">
                     <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>

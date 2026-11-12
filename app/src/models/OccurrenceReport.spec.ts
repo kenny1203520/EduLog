@@ -64,3 +64,16 @@ describe('OccurrenceReport source identity', () => {
         expect(report.sourceReportId).toBeNull()
     })
 })
+
+describe('OccurrenceReport lesson entries', () => {
+    it('keeps lesson entries and primary selection through a DTO round trip', () => {
+        const entries = [{ id: 'entry-a', enrollment_id: 'enrollment-a', lesson_id: 'lesson-a', is_completed: true, progress_letter: 'B' }]
+        const report = new OccurrenceReport({
+            enrollment_id: 'enrollment-a', class_occurrence_id: 'occurrence-a', content: '', version: 2,
+            lesson_entries: entries, primary_lesson_entry_id: 'entry-a',
+        })
+        expect(report.lessonEntries).toEqual(entries)
+        expect(report.primaryLessonEntryId).toBe('entry-a')
+        expect(report.toDTO()).toMatchObject({ lesson_entries: entries, primary_lesson_entry_id: 'entry-a' })
+    })
+})

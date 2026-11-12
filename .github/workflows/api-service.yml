@@ -8,16 +8,18 @@ on:
       - 'app/**'
       - 'docker-compose.yml'
       - 'docker-compose.prod.yml'
+      - 'docker-compose.build.yml'
+      - 'docker/presidio/**'
       - '.env.example'
       - 'supabase/.env.example'
       - 'scripts/check-env-example.mjs'
-      - 'supabase/docker-compose.caddy.yml'
-      - 'supabase/docker-compose.envoy.yml'
+      - 'supabase/docker-compose.*.yml'
       - 'supabase/volumes/proxy/caddy/**'
       - 'supabase/volumes/api/envoy/**'
       - '.github/workflows/api-service.yml'
       - '.github/workflows/docker-publish.yml'
       - 'scripts/release/**'
+      - 'scripts/release-image-smoke.sh'
       - 'scripts/lib/**'
       - '.github/releases/**'
       - 'CHANGELOG.md'
@@ -27,16 +29,18 @@ on:
       - 'app/**'
       - 'docker-compose.yml'
       - 'docker-compose.prod.yml'
+      - 'docker-compose.build.yml'
+      - 'docker/presidio/**'
       - '.env.example'
       - 'supabase/.env.example'
       - 'scripts/check-env-example.mjs'
-      - 'supabase/docker-compose.caddy.yml'
-      - 'supabase/docker-compose.envoy.yml'
+      - 'supabase/docker-compose.*.yml'
       - 'supabase/volumes/proxy/caddy/**'
       - 'supabase/volumes/api/envoy/**'
       - '.github/workflows/api-service.yml'
       - '.github/workflows/docker-publish.yml'
       - 'scripts/release/**'
+      - 'scripts/release-image-smoke.sh'
       - 'scripts/lib/**'
       - '.github/releases/**'
       - 'CHANGELOG.md'
@@ -80,7 +84,9 @@ jobs:
           ANON_KEY: test-anon-key
           SERVICE_ROLE_KEY: test-service-role-key
           DOCKER_SOCKET_LOCATION: /var/run/docker.sock
-        run: docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.build.yml config --quiet
       - name: Validate Caddy and Envoy compose overlays
         env:
           EDULOG_COOKIE_SECRET: 0123456789abcdef0123456789abcdef
@@ -88,15 +94,20 @@ jobs:
           EDULOG_PROXY_DOMAIN: proxy.example.com
         run: |
           docker compose --env-file supabase/.env.example -f docker-compose.yml -f supabase/docker-compose.caddy.yml config --quiet
+          docker compose --env-file supabase/.env.example -f docker-compose.yml -f supabase/docker-compose.nginx.yml config --quiet
+          docker compose --env-file supabase/.env.example -f docker-compose.yml -f supabase/docker-compose.kong.yml -f supabase/docker-compose.caddy.yml config --quiet
+          docker compose --env-file supabase/.env.example -f docker-compose.yml -f supabase/docker-compose.logs.yml config --quiet
+          docker compose --env-file supabase/.env.example -f docker-compose.yml -f supabase/docker-compose.pg17.yml config --quiet
+          # The deprecated no-op Envoy override must keep working.
           docker compose --env-file supabase/.env.example -f docker-compose.yml -f supabase/docker-compose.envoy.yml -f supabase/docker-compose.caddy.yml config --quiet
-          docker compose --env-file supabase/.env.example -f docker-compose.yml -f supabase/docker-compose.caddy.yml -f supabase/docker-compose.envoy.yml config --quiet
-          docker compose --env-file supabase/.env.example -f docker-compose.yml -f supabase/docker-compose.envoy.yml -f supabase/docker-compose.caddy.yml config --format json > "$RUNNER_TEMP/caddy-envoy-compose.json"
+          docker compose --env-file supabase/.env.example -f docker-compose.yml -f supabase/docker-compose.caddy.yml config --format json > "$RUNNER_TEMP/caddy-envoy-compose.json"
           jq -e --arg root "$GITHUB_WORKSPACE" '
             (.services.caddy.networks | has("net") and has("frontend")) and
             any(.services.caddy.volumes[]; .target == "/etc/caddy" and .source == ($root + "/supabase/volumes/proxy/caddy")) and
             any(.services["api-gw"].volumes[]; .target == "/etc/envoy/envoy.yaml" and .source == ($root + "/supabase/volumes/api/envoy/envoy.yaml")) and
-            any(.services["api-gw"].ports[]; .target == 8000 and .host_ip == "127.0.0.1") and
-            (.services.caddy.depends_on.kong.required == false) and
+            ((.services["api-gw"].ports // []) | length == 0) and
+            (.services.caddy.depends_on["api-gw"].condition == "service_healthy") and
+            (.services.api.depends_on["api-gw"].condition == "service_healthy") and
             (.services["api-gw"].networks.net.aliases | index("kong")) and
             (.services["api-gw"].networks.net.aliases | index("envoy"))
           ' "$RUNNER_TEMP/caddy-envoy-compose.json" >/dev/null
@@ -123,3 +134,34 @@ jobs:
           grep -q 'proxy_pass http://\$api_upstream' app/nginx/docker-entrypoint.d/05-edulog-runtime.envsh
           grep -q 'try_files \\$uri \\$uri/ /index.html' app/nginx/docker-entrypoint.d/05-edulog-runtime.envsh
           ! grep -R --binary-files=without-match -E 'SUPABASE_SERVICE_ROLE_KEY|SERVICE_ROLE_KEY|service_role|VITE_SUPABASE_URL|VITE_SUPABASE_ANON_KEY|VITE_SUPABASE_FUNCTIONS_BASE_URL|functions/v1' app/dist
+
+  docker-smoke:
+    name: Build and smoke test Docker images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226 # v3.0.0
+      - name: Build frontend image for smoke testing
+        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
+        with:
+          context: ./app
+          build-contexts: legal=.
+          load: true
+          tags: edulog-release-smoke:frontend
+      - name: Build API image for smoke testing
+        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
+        with:
+          context: ./server
+          build-contexts: legal=.
+          load: true
+          tags: edulog-release-smoke:api
+      - name: Build Presidio analyzer image for smoke testing
+        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
+        with:
+          context: ./docker/presidio
+          build-contexts: legal=.
+          load: true
+          tags: edulog-release-smoke:presidio
+      - name: Verify images before publication
+        run: bash scripts/release-image-smoke.sh

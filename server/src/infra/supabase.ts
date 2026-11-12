@@ -1,16 +1,15 @@
 import crypto from 'node:crypto'
-import { jwtVerify } from 'jose'
+import { createRemoteJWKSet, decodeProtectedHeader, jwtVerify } from 'jose'
 import { createClient, type Session, type SupabaseClient, type User } from '@supabase/supabase-js'
 import type { ApiConfig } from '../config/config.js'
 
 export type SupabaseClients = {
-  publicClient: SupabaseClient
   adminClient: SupabaseClient
 }
 
 type ValidationCacheEntry = { user: User; expiresAt: number; pending?: Promise<User> }
 const validationCache = new Map<string, ValidationCacheEntry>()
-const accountStatusCache = new Map<string, { active: boolean; expiresAt: number }>()
+const accountStatusCache = new Map<string, { status: 'active' | 'disabled' | 'pending'; expiresAt: number }>()
 const VALIDATION_CACHE_TTL_MS = 30_000
 const VALIDATION_CACHE_MAX_ENTRIES = 512
 
@@ -33,33 +32,61 @@ export function clearAccessTokenValidation(accessToken: string | undefined) {
   if (accessToken) validationCache.delete(tokenCacheKey(accessToken))
 }
 
+const userValidationListeners = new Set<(userId: string) => void>()
+
+/**
+ * Called after an account's cached validation is dropped (its status or roles
+ * changed), so long-lived connections can check the account again. Returns
+ * the function that removes the listener.
+ */
+export function onUserValidationCleared(listener: (userId: string) => void): () => void {
+  userValidationListeners.add(listener)
+  return () => { userValidationListeners.delete(listener) }
+}
+
 export function clearUserValidation(userId: string) {
   accountStatusCache.delete(userId)
   for (const [key, entry] of validationCache) {
     if (entry.user?.id === userId) validationCache.delete(key)
   }
+  for (const listener of userValidationListeners) listener(userId)
 }
 
-export async function assertUserActive(adminClient: SupabaseClient, userId: string) {
+export type AccountStatus = 'active' | 'disabled' | 'pending'
+
+/**
+ * The account's status, cached briefly. Disabled accounts always fail with
+ * AUTH_DISABLED; pending ones (waiting for administrator approval) fail with
+ * AUTH_PENDING unless `allowPending`, which lets them see who they are.
+ */
+export async function assertUserActive(adminClient: SupabaseClient, userId: string, options: { allowPending?: boolean } = {}): Promise<'active' | 'pending'> {
   const now = Date.now()
+  let status: AccountStatus
   const cached = accountStatusCache.get(userId)
-  if (cached && cached.expiresAt > now) {
-    if (!cached.active) throw new Error('AUTH_DISABLED')
-    return
+  if (cached && cached.expiresAt > now) status = cached.status
+  else {
+    const { data, error } = await adminClient.from('profiles').select('account_status').eq('auth_user_id', userId).maybeSingle()
+    if (error || !data) throw new Error('AUTH_INVALID')
+    // Anything that is not a known usable status counts as disabled.
+    status = data.account_status === 'active' ? 'active' : data.account_status === 'pending' ? 'pending' : 'disabled'
+    accountStatusCache.set(userId, { status, expiresAt: now + VALIDATION_CACHE_TTL_MS })
   }
-  const { data, error } = await adminClient.from('profiles').select('account_status').eq('auth_user_id', userId).maybeSingle()
-  if (error || !data) throw new Error('AUTH_INVALID')
-  const active = data.account_status !== 'disabled'
-  accountStatusCache.set(userId, { active, expiresAt: now + VALIDATION_CACHE_TTL_MS })
-  if (!active) throw new Error('AUTH_DISABLED')
+  if (status === 'disabled') throw new Error('AUTH_DISABLED')
+  if (status === 'pending' && !options.allowPending) throw new Error('AUTH_PENDING')
+  return status
 }
 
 export function createSupabaseClients(config: ApiConfig): SupabaseClients {
   const options = { auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false } }
   return {
-    publicClient: createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY, options),
     adminClient: createClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_KEY, options),
   }
+}
+
+function createPasswordAuthClient(config: Pick<ApiConfig, 'SUPABASE_URL' | 'SUPABASE_ANON_KEY'>): SupabaseClient {
+  return createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+  })
 }
 
 export function createUserClient(config: ApiConfig, accessToken: string): SupabaseClient {
@@ -87,15 +114,37 @@ export async function verifyCurrentPassword(config: ApiConfig, email: string, pa
   return data.session
 }
 
-async function verifyAccessTokenLocally(accessToken: string, config?: Pick<ApiConfig, 'SUPABASE_JWT_SECRET' | 'SUPABASE_JWT_ISSUER'>) {
-  if (!config?.SUPABASE_JWT_SECRET) return undefined
+type TokenVerificationConfig = Partial<Pick<ApiConfig, 'SUPABASE_URL' | 'SUPABASE_JWT_SECRET' | 'SUPABASE_JWT_ISSUER'>>
+
+// GoTrue signs with ES256/RS256 once asymmetric signing keys (JWT_KEYS) are
+// configured; their public keys are published at the Auth JWKS endpoint.
+const ASYMMETRIC_ALGORITHMS = ['ES256', 'RS256']
+const remoteJwkSets = new Map<string, ReturnType<typeof createRemoteJWKSet>>()
+
+function remoteJwkSet(supabaseUrl: string) {
+  const url = new URL('auth/v1/.well-known/jwks.json', supabaseUrl.endsWith('/') ? supabaseUrl : `${supabaseUrl}/`)
+  let jwks = remoteJwkSets.get(url.href)
+  if (!jwks) {
+    jwks = createRemoteJWKSet(url)
+    remoteJwkSets.set(url.href, jwks)
+  }
+  return jwks
+}
+
+async function verifyAccessTokenLocally(accessToken: string, config?: TokenVerificationConfig) {
+  if (!config) return undefined
+  let alg: string | undefined
+  try { alg = decodeProtectedHeader(accessToken).alg } catch { alg = undefined }
+  const asymmetric = alg != null && ASYMMETRIC_ALGORITHMS.includes(alg)
+  if (asymmetric ? !config.SUPABASE_URL : !config.SUPABASE_JWT_SECRET) return undefined
   try {
     const options = {
-      algorithms: ['HS256'],
       audience: 'authenticated',
       ...(config.SUPABASE_JWT_ISSUER ? { issuer: config.SUPABASE_JWT_ISSUER } : {}),
     }
-    const { payload } = await jwtVerify(accessToken, new TextEncoder().encode(config.SUPABASE_JWT_SECRET), options)
+    const { payload } = asymmetric
+      ? await jwtVerify(accessToken, remoteJwkSet(config.SUPABASE_URL as string), { ...options, algorithms: ASYMMETRIC_ALGORITHMS })
+      : await jwtVerify(accessToken, new TextEncoder().encode(config.SUPABASE_JWT_SECRET), { ...options, algorithms: ['HS256'] })
     if (typeof payload.sub !== 'string' || !payload.sub) throw new Error('AUTH_INVALID')
     return payload.sub
   } catch {
@@ -106,7 +155,7 @@ async function verifyAccessTokenLocally(accessToken: string, config?: Pick<ApiCo
 export async function validateAccessToken(
   adminClient: SupabaseClient,
   accessToken: string,
-  config?: Pick<ApiConfig, 'SUPABASE_JWT_SECRET' | 'SUPABASE_JWT_ISSUER'>,
+  config?: TokenVerificationConfig,
 ): Promise<User> {
   const verifiedSubject = await verifyAccessTokenLocally(accessToken, config)
   const key = tokenCacheKey(accessToken)
@@ -137,14 +186,14 @@ export async function validateAccessToken(
   return validate
 }
 
-export async function signIn(publicClient: SupabaseClient, email: string, password: string): Promise<{ user: User; session: Session }> {
-  const { data, error } = await publicClient.auth.signInWithPassword({ email, password })
+export async function signIn(config: Pick<ApiConfig, 'SUPABASE_URL' | 'SUPABASE_ANON_KEY'>, email: string, password: string): Promise<{ user: User; session: Session }> {
+  const { data, error } = await createPasswordAuthClient(config).auth.signInWithPassword({ email, password })
   if (error || !data.user || !data.session) throw new Error('AUTH_INVALID')
   return { user: data.user, session: data.session }
 }
 
-export async function refresh(publicClient: SupabaseClient, refreshToken: string): Promise<{ user: User; session: Session }> {
-  const { data, error } = await publicClient.auth.refreshSession({ refresh_token: refreshToken })
+export async function refresh(config: Pick<ApiConfig, 'SUPABASE_URL' | 'SUPABASE_ANON_KEY'>, refreshToken: string): Promise<{ user: User; session: Session }> {
+  const { data, error } = await createPasswordAuthClient(config).auth.refreshSession({ refresh_token: refreshToken })
   if (error || !data.user || !data.session) throw new Error('AUTH_INVALID')
   return { user: data.user, session: data.session }
 }

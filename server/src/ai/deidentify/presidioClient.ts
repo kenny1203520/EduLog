@@ -23,7 +23,8 @@ export interface TextAnalyzer {
 }
 
 /** Languages the analyzer image can be built with (see docker/presidio). */
-export const PRESIDIO_LANGUAGES = ['zh', 'en', 'ja', 'ko'] as const
+/** Languages the bundled Presidio image (docker/presidio) ships; keep in sync with the DB checks (1000160). */
+export const PRESIDIO_LANGUAGES = ['zh', 'en', 'ja', 'ko', 'ca', 'da', 'de', 'el', 'es', 'fi', 'fr', 'hr', 'it', 'lt', 'mk', 'nb', 'nl', 'pl', 'pt', 'ro', 'ru', 'sl', 'sv', 'uk'] as const
 export type PresidioLanguage = typeof PRESIDIO_LANGUAGES[number]
 
 /** Presidio could not be reached or answered with an error; generation must not continue. */

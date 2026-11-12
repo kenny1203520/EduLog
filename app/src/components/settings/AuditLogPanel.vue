@@ -65,8 +65,19 @@ function eventDate(value?: string | null) {
 
 function localizedAction(action?: string | null) {
     if (!action) return t('rbac.audit_value_missing')
+    const auditKey = `rbac.audit_actions.${action}`
+    if (te(auditKey)) return t(auditKey)
     const key = `rbac.actions.${action}.name`
     return te(key) ? t(key) : action
+}
+
+/** The resource's translated name; the stored key stays available for filtering. */
+function localizedResource(resource?: string | null) {
+    if (!resource) return t('rbac.audit_value_missing')
+    const key = `rbac.resources.${resource}.name`
+    if (te(key)) return t(key)
+    const auditKey = `rbac.audit_resources.${resource}`
+    return te(auditKey) ? t(auditKey) : resource
 }
 
 function domainLabel(domain?: string | null) {
@@ -246,9 +257,9 @@ onMounted(() => {
                             </td>
                             <td class="px-3 py-3"><span class="inline-flex rounded-full px-2.5 py-1 text-xs font-bold" :class="event.outcome === 'success' ? 'bg-emerald-50 text-emerald-800' : event.outcome === 'denied' ? 'bg-amber-50 text-amber-800' : 'bg-rose-50 text-rose-800'">{{ outcomeLabel(event.outcome) }}</span></td>
                             <td class="max-w-52 px-3 py-3"><p class="truncate font-medium text-gray-800">{{ actorName(event.actor_user_id) }}</p><p v-if="actorEmail(event.actor_user_id)" class="truncate text-xs text-gray-500">{{ actorEmail(event.actor_user_id) }}</p></td>
-                            <td class="px-3 py-3"><p class="font-medium text-gray-800">{{ valueOrDash(event.resource) }}</p><p class="mt-0.5 max-w-44 truncate text-xs text-gray-500">{{ valueOrDash(event.resource_id) }}</p></td>
+                            <td class="px-3 py-3"><p class="font-medium text-gray-800" :title="event.resource || undefined">{{ localizedResource(event.resource) }}</p><p class="mt-0.5 max-w-44 truncate text-xs text-gray-500">{{ valueOrDash(event.resource_id) }}</p></td>
                             <td class="whitespace-nowrap px-3 py-3 text-xs text-gray-600">{{ eventDate(event.created_at) }}</td>
-                            <td class="px-3 py-3"><button type="button" class="min-h-9 rounded-lg border border-emerald-200 px-3 text-xs font-bold text-emerald-800 hover:bg-emerald-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600" :aria-label="t('rbac.audit_view_details_for', { action: localizedAction(event.action), resource: valueOrDash(event.resource) })" @click="openDetails(event)">{{ t('rbac.audit_view_details') }}</button></td>
+                            <td class="px-3 py-3"><button type="button" class="min-h-9 rounded-lg border border-emerald-200 px-3 text-xs font-bold text-emerald-800 hover:bg-emerald-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600" :aria-label="t('rbac.audit_view_details_for', { action: localizedAction(event.action), resource: localizedResource(event.resource) })" @click="openDetails(event)">{{ t('rbac.audit_view_details') }}</button></td>
                         </tr>
                         <tr v-if="events.length === 0"><td colspan="6" class="px-4 py-10 text-center text-sm text-gray-500">{{ t('rbac.audit_empty') }}</td></tr>
                     </tbody>
@@ -262,7 +273,7 @@ onMounted(() => {
                 <header class="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-gray-100 bg-white px-5 py-4 sm:px-6">
                     <div class="min-w-0">
                         <p class="text-xs font-bold uppercase tracking-wide text-emerald-700">{{ t('rbac.audit_detail') }}</p>
-                        <h3 id="audit-detail-title" class="mt-1 break-words text-lg font-black text-gray-900">{{ localizedAction(selectedEvent.action) }} · {{ valueOrDash(selectedEvent.resource) }}</h3>
+                        <h3 id="audit-detail-title" class="mt-1 break-words text-lg font-black text-gray-900">{{ localizedAction(selectedEvent.action) }} · {{ localizedResource(selectedEvent.resource) }}</h3>
                         <p class="mt-1 text-sm text-gray-500">{{ eventDate(selectedEvent.created_at) }}</p>
                     </div>
                     <button type="button" class="min-h-10 shrink-0 rounded-lg border border-gray-200 px-3 text-sm font-bold text-gray-700 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600" @click="closeDetails">{{ t('common.close') }}</button>

@@ -1,5 +1,5 @@
-upstream kong_upstream {
-    server kong:8000;
+upstream api_gw_upstream {
+    server api-gw:8000;
     keepalive 2;
 }
 
@@ -43,19 +43,19 @@ server {
     }
 
     location /auth {
-        proxy_pass http://kong_upstream;
+        proxy_pass http://api_gw_upstream;
     }
 
     location /rest {
-        proxy_pass http://kong_upstream;
+        proxy_pass http://api_gw_upstream;
     }
 
     location /graphql {
-        proxy_pass http://kong_upstream;
+        proxy_pass http://api_gw_upstream;
     }
 
     location /realtime/v1/ {
-        proxy_pass http://kong_upstream;
+        proxy_pass http://api_gw_upstream;
 
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -71,7 +71,7 @@ server {
     }
 
     location /storage/v1/ {
-        proxy_pass http://kong_upstream;
+        proxy_pass http://api_gw_upstream;
 
         proxy_buffering off;
         proxy_request_buffering off;
@@ -82,11 +82,15 @@ server {
     }
 
     location /mcp {
-        proxy_pass http://kong_upstream;
+        proxy_pass http://api_gw_upstream;
     }
 
     location /sso {
-        proxy_pass http://kong_upstream;
+        proxy_pass http://api_gw_upstream;
+    }
+
+    location = /.well-known/oauth-authorization-server/auth/v1 {
+        proxy_pass http://api_gw_upstream;
     }
 }
 
@@ -122,6 +126,18 @@ server {
     proxy_hide_header Content-Security-Policy;
     proxy_ssl_server_name on;
     proxy_ssl_verify off;
+
+    location = /api/auth/bridge/callback {
+        access_log off;
+        proxy_pass ${EDULOG_PROXY_UPSTREAM_URL};
+    }
+
+    location = /api/auth/confirm {
+        # Email confirmation and recovery URLs carry a single-use token_hash query.
+        access_log off;
+        error_log /dev/null emerg;
+        proxy_pass ${EDULOG_PROXY_UPSTREAM_URL};
+    }
 
     location / {
         proxy_pass ${EDULOG_PROXY_UPSTREAM_URL};

@@ -157,6 +157,15 @@ The former consolidated migration names are intentionally absent. `1000041a_has_
 | 1000154 | `1000154_ai_generation_details.sql` | AI generation error details and system prompt text; model structured-output support |
 | 1000155 | `1000155_enrollment_transfer_log.sql` | Append-only class transfer log, retroactive transfers that keep the report count, stricter blank-report check, closures skip report slots |
 | 1000157 | `1000157_drop_teaching_workspace_model.sql` | Drop the archived teaching-workspace tables, migration bookkeeping tables and workspace helpers; RLS and RPCs use scope-free permission helpers |
+| 1000160 | `1000160_presidio_languages.sql` | De-identification language checks accept the 24 languages the Presidio image ships |
+| 1000161 | `1000161_page_access_permissions_and_member_role.sql` | Page access permissions and the built-in `member` role |
+| 1000162 | `1000162_split_student_sensitive_permissions.sql` | Student sensitive data split into four permission groups; removes the old sensitive keys |
+| 1000163 | `1000163_account_approval_and_default_roles.sql` | New accounts wait for approval; default roles for invited and approved accounts |
+| 1000164 | `1000164_rbac_grant_ceiling.sql` | Nobody grants access they do not hold; owner roles are assigned and inherited by owners only |
+| 1000165 | `1000165_account_status_enforcement.sql` | An account that is not active holds no permission; its extension tokens are revoked |
+| 1000166 | `1000166_rbac_review_fixes.sql` | Approver notice recipients, last-owner guards, teacher account links, student profile enrollments |
+| 1000167 | `1000167_lockdown_public_privileges.sql` | anon loses all public privileges; authenticated may execute only the reviewed function list; default privileges no longer grant new functions; pg_graphql dropped |
+| 1000168 | `1000168_web_extension_policy_initplan.sql` | Web-extension owner policies evaluate `auth.uid()` once per statement |
 
 The missing versions `1000010`, `1000015`, and `1000016` are historical unused numbers, not missing files. Apply migrations in lexical order; `1000041a` sorts between `1000041` and `1000042`, and `1000057a` sorts between `1000057` and `1000058`.
 
@@ -261,3 +270,114 @@ The backfill opens one segment per enrollment for its current class. A previous 
 Kept: the `teaching_id` columns on `classrooms`, `courses`, `class_sessions`, `report_templates`, `roles` and `api_idempotency_keys` (their foreign keys to `teachings` are dropped). Many RPCs and the API still compare them, so `normalize_global_teaching_row` keeps stamping the former global teaching id, frozen into the function when 1000157 runs. `clear_legacy_owner` also stays: it clears the legacy `user_id` owner column that RPCs still write. Removing either needs its own migration that drops those columns.
 
 Older reconciliation migrations (1000100–1000129 reruns) read `teachings`, so rerun them before 1000157; the CI reconciliation step applies 1000157 twice after its rerun loop. `supabase/tests/migration_chain_integration.sql` asserts the objects are gone.
+
+## Scoped teaching access (1000158)
+
+`1000158_scoped_teaching_access.sql` makes page entry and the overview RPCs scope-aware. `private.teaching_grant_targets` lists the classrooms and class sessions where a user holds an active teaching role; `has_teaching_permission_any_scope` answers "does the user hold this permission anywhere?" and gates page entry; `accessible_class_session_ids` / `accessible_classroom_ids` return the rows a permission reaches (all rows for a platform grant). `has_active_teaching_role` counts classroom and class-session grants, and `can_create_occurrence_report` is permission based. The dashboard, classroom, course, teacher, incomplete-report and holiday overviews and the RLS on classrooms, class sessions, courses, lessons, templates and reports filter by scope; courses, lessons, templates and platform-wide holidays are platform data readable from any scope, writable only with the platform permission. `get_my_teaching_capabilities` returns `{any, platform}` per teaching key for navigation. Run `supabase/tests/scoped_teaching_access_integration.sql`.
+
+## Teacher archive (1000159)
+
+`1000159_teacher_archive.sql` adds `teacher_records.archived_at`. An archived teacher keeps their history but is hidden from the default teacher list and cannot be assigned to a class again; archiving requires no current or future class assignment. `set_teacher_archived(teacher, archived)` archives or restores, and `get_teachers_overview` gains a status filter. Run `supabase/tests/teacher_archive_integration.sql`.
+
+## Presidio languages (1000160)
+
+`1000160_presidio_languages.sql` widens the language checks on `ai_deid_rules` and `ai_settings` (added by 1000151) to the 24 languages the Presidio image ships. The API's `PRESIDIO_LANGUAGES` list must match. Run `supabase/tests/presidio_languages_integration.sql`.
+
+## Page access permissions and member role (1000161)
+
+`1000161_page_access_permissions_and_member_role.sql` separates page entry from data access. It adds `teaching.{dashboard,students,courses,classrooms,holidays,reports}.access`; the API gates those pages with them, while the page RPCs keep filtering rows by list/read scope. Teacher management and system settings have no access key and keep their existing gates.
+
+The new built-in teaching role `member` (基本成員) holds only the six access grants at platform scope, so a member-only user opens the pages and sees empty lists; what they see comes from their other roles. New accounts are not assigned `member` and existing users are not backfilled. Every teaching role (built-in or custom) with an allow for a `.list` key gets `.access` on the same scope, so nobody loses a page; the dashboard follows `teaching.reports.list`, which gated it before. `get_my_teaching_capabilities` reports the access keys.
+
+The overview RPCs (`get_students_overview`, `get_classrooms_overview`, `get_courses_overview`, `get_holidays_overview`, `get_incomplete_reports_page`, `get_dashboard_counts`) already return empty results for a caller without scope and only raise for authentication or argument errors, so none is rewritten. Run `supabase/tests/member_role_integration.sql`.
+
+## Student sensitive permission split (1000162)
+
+`1000162_split_student_sensitive_permissions.sql` replaces `teaching.students.read_sensitive` / `update_sensitive` with four read/update pairs: `teaching.student_schools.*` (`student_schools`), `teaching.student_personal.*` (gov_id, email, phone, residence and mailing address, birthday on `students`), `teaching.student_contacts.*` (`student_contacts`) and `teaching.student_credentials.*` (`student_credentials`). Each policy row with the old read key gains the four `.read` keys on the same role, scope and effect (update likewise), then the old keys and their policies are deleted. `teaching.teachers.*_sensitive` is unchanged.
+
+`can_access_sensitive_student` accepts only the eight section keys, and the RLS on each child table checks its own section. `get_student_sensitive_details` needs `student_personal.read` and returns `{student}` only; contacts, schools and credentials are read through their own tables. `update_student_sensitive` needs `student_personal.update`. The current-school summary in `get_students_overview` and `get_student_profile_page` (via `private.student_current_school_summary`) is `{grade}` without school read access, and the profile's `capabilities` becomes `{schools, personal, contacts, credentials}: {read, update}`.
+
+CI's reconciliation step reruns 1000129, which restores the pre-split helper, so it re-applies 1000161 and 1000162 (twice) afterwards. Run `supabase/tests/student_sensitive_permission_integration.sql`.
+
+## Account approval and default roles (1000163)
+
+`1000163_account_approval_and_default_roles.sql` adds `'pending'` to `profiles.account_status` and makes every account GoTrue creates from then on (OAuth, self sign-up, Studio) start pending, with no role. Existing accounts keep their status; an update of an `auth.users` row never changes it. `account_default_roles` lists the roles invited accounts receive when created and pending accounts receive when approved, always at platform scope; protected (owner) roles are refused. `approve_account(user, roles, actor)` moves a pending account to active, records `approved_at`/`approved_by` and a `user_status_events` row, and grants the roles it does not already hold. `list_pending_accounts`, `count_pending_accounts`, `mark_pending_account_notified` (true once, so administrators are mailed once) and `list_account_approver_emails` serve the review screen and the notice. All of them are service-role only; the API checks `system.users.manage` and, for each granted role, `<domain>.role_assignments.manage`. Rejecting uses the existing `set_system_user_status` (pending → disabled). `bootstrap_system_owner` also activates the account it makes owner. Run `supabase/tests/account_approval_integration.sql` after applying it.
+
+## Grant ceiling (1000164)
+
+`1000164_rbac_grant_ceiling.sql` stops a caller from handing out access they do not hold. Before it, a system administrator could create a role that inherits `system_owner`, a user manager could assign itself `system_admin`, and a teaching manager could assign itself `teaching_owner` or add the sensitive student groups to its own role.
+
+- A protected role (`system_owner`, `teaching_owner`) is never a parent. Only an owner of its domain assigns or removes it. Existing inheritance rows that point at a protected role are deleted, and each one is reported as a `WARNING` when the migration runs.
+- Assigning a role, or making it a parent, needs the caller to hold every permission the role allows (with its parents), at the scope where the assignment hands it out. A platform policy of a role assigned in a classroom is checked in that classroom. An owner of the domain is exempt.
+- Saving a role's permissions needs the caller to hold every permission that the save newly allows or stops denying.
+- Teaching roles are assigned with `teaching.role_assignments.manage` or `teaching.roles.manage`, as system roles already were. Defining roles still needs `roles.manage`.
+- A class job (`class_session_teachers.role_id`) follows the same ceiling, because it grants its role in that class.
+
+The API asks `rbac_can_grant_role(role, scope_type, scope_id)` through the caller's own client before it approves an account, saves default roles or sends an invitation; `approve_account` itself runs as the service role. Refusals are `GRANT_EXCEEDS_CALLER`, `OWNER_ROLE_REQUIRED` and `PROTECTED_ROLE_PARENT`.
+
+After upgrading, a user manager can only assign system roles whose permissions it holds itself (for example it can no longer assign `auditor` or `system_admin`). Run `supabase/tests/rbac_grant_ceiling_integration.sql` to check the rules.
+
+## Account status enforcement (1000165)
+
+`1000165_account_status_enforcement.sql` makes the database agree with the API about disabled and pending accounts. `resolve_scoped_permission`, `has_system_permission`, `rbac_is_system_owner`, `has_active_teaching_role` and `can_access_occurrence_report` answer "no" for an account whose `profiles.account_status` is not `active`; the other permission helpers resolve through these. An account with no profile counts as not active. The service role is not affected.
+
+Leaving the active status revokes the account's browser-extension tokens, and tokens of accounts that are not active when the migration runs are revoked then. Enabling the account again does not restore a token; the extension has to be paired again.
+
+Policies that grant access by ownership of a row, without asking a resolver, are not changed.
+
+Test fixtures have to activate the accounts they create (`UPDATE public.profiles SET account_status = 'active' ...`), because accounts start pending since 1000163. Run `supabase/tests/account_status_enforcement_integration.sql` to check the rules.
+
+## Authorization review fixes (1000166)
+
+`1000166_rbac_review_fixes.sql`:
+
+- `list_account_approver_emails` returns only accounts that hold `system.users.manage`. It used `has_system_permission`, which is always true for the service role, so the notice about a pending account went to every active account.
+- The last-owner guards count active owners: an active account with an active, current `system_owner` assignment. The last one cannot be disabled, removed or demoted. An owner's account status, and any protected system role, is changed by an owner only. `bootstrap_system_owner` runs again when no active owner is left.
+- Linking an account to a teacher (`teacher_records.profile_id`, `profiles.auth_user_id`) gives the account the roles of the teacher's class jobs, so the caller must be able to assign each of those roles in its class.
+- `get_student_profile_page` lists the student's enrollments only in classrooms or classes where the caller may read students.
+
+Run `supabase/tests/rbac_review_fixes_integration.sql` to check them.
+
+## Privilege lockdown (1000167, 1000168)
+
+The Supabase database linter flagged SECURITY DEFINER functions that `anon` and `authenticated` could call through `/rest/v1/rpc`, and tables visible to `anon` through GraphQL. Supabase's default privileges grant new public functions and tables to `anon`, `authenticated` and `service_role` by name, so the `REVOKE ... FROM PUBLIC` in earlier migrations did not remove them.
+
+`1000167` revokes every table, sequence and function privilege in `public` from `anon`. It revokes EXECUTE on every non-extension function from `PUBLIC`, `anon` and `authenticated`, then grants `authenticated` back only the reviewed list: RPCs the API calls through the user client, helpers RLS policies call, and the invoker helpers those use. Trigger functions and service_role-only functions stay revoked. `service_role` and `authenticated` table grants are unchanged. Default privileges for `postgres` (and `supabase_admin` when the migration role may act as it) no longer grant new public functions to `anon`/`authenticated` or tables to `anon`; for `postgres` new functions no longer get `PUBLIC` EXECUTE. Add every new authenticated RPC to the list in `supabase/tests/privilege_lockdown_integration.sql`.
+
+`1000167` also drops `pg_graphql` (EduLog does not use GraphQL). If the migration role does not own the extension, it prints a warning instead. Then run, as `supabase_admin`:
+
+```sql
+DROP EXTENSION pg_graphql;
+```
+
+and remove `graphql_public` from `PGRST_DB_SCHEMAS` in the deployment's `.env` (the examples already omit it), then restart `rest`. The `/graphql/v1` gateway routes stay as in upstream; with the extension gone they return an error.
+
+Before applying, compare the target database with this chain (for example `pg_dump --schema-only` against a fresh database built from these migrations). The linter output that prompted this change still showed the `role_permission_policies` "manage" policy that `1000106` removed, and a `rls_auto_enable()` function this chain never created. `1000167` keeps `rls_auto_enable()` and only removes API access to it.
+
+`1000168` rewrites the four web-extension owner policies to `(SELECT auth.uid())`. Both migrations are rerunnable.
+
+## Multi-lesson report progress (1000169)
+
+`1000169_multi_lesson_report_entries.sql` adds `occurrence_reports.lesson_entries`, a JSON array with one progress entry per enrollment/course/lesson, plus `primary_lesson_entry_id`. Existing scalar lesson fields remain the projection for the primary entry so older clients can continue reading and writing a single lesson. The migration backfills existing scalar reports without changing their report IDs, versions, or `updated_at` values; version snapshots now include the complete entry array.
+
+Restoring a snapshot created before `1000169` reconstructs one entry from the saved scalar lesson and the report enrollment. If that enrollment or lesson is no longer compatible, restoration is rejected rather than reusing progress from the current version. Changing an enrollment's student or course is blocked while it has lesson progress; deleting it is blocked while another report refers to it or while its report contains another enrollment's progress. These references must be migrated explicitly before changing or removing an enrollment.
+
+Run `supabase/tests/report_lifecycle_integration.sql` after applying the migration. It covers multi-course saves, per-enrollment progress recalculation, old-client scalar writes and clears, version snapshots for secondary-entry edits, and enrollment-reference protection.
+
+## Report occurrence correction (1000170)
+
+`1000170_report_occurrence_correction.sql` adds the authenticated `correct_occurrence_report` RPC used by `POST /api/reports/:reportId/correct-occurrence`. Apply the migration before deploying the server route. It does not rewrite existing rows.
+
+The RPC requires report-edit permission for both the source and target occurrences, the same teaching, and an effective target-roster enrollment for the same student. Supply `target_enrollment_id` when the target occurrence has multiple eligible enrollments and the current enrollment is not one of them. The operation moves the existing report row in one transaction, keeps its ID, version-snapshots the old state, preserves attendance, comments, all lesson entries and source-sync identity, then recalculates progress for the affected enrollments.
+
+An existing target report can be replaced only when it is still the untouched provisioned placeholder: version 1, not edited, empty of content/documents, lesson progress, ratings, comments, links or sync identity, pending attendance, and without a saved version or collaboration draft. Otherwise the RPC returns a conflict and rolls back without changing either report. Ordinary occurrence rescheduling continues to edit the occurrence date in place and leaves taught reports attached to that occurrence.
+
+Run `supabase/tests/report_occurrence_correction_integration.sql` after applying the migration. It covers same-class and cross-class correction, effective-roster selection, both edit grants, report identity and shared data preservation, target-placeholder rejection, enrollment history/progress, source-sync version drift, and ordinary rescheduling.
+
+## Company history primary-lesson sync (1000171)
+
+`1000171_extension_primary_lesson_sync.sql` extends extension history routing to read only reports already linked to the mapped enrollment, including reports moved by occurrence correction. Ordinary routing can resolve an existing same-student, same-teaching multi-lesson report and marks ambiguous report choices read-only. The report preview includes labels for lesson entries the caller may read.
+
+The atomic history reconciliation now accepts an exact report ID, an explicit correction reconfirmation flag, and the target enrollment/course/lesson entry identity. It updates shared attendance/comments at report level while applying lesson progress only to that entry. Existing entry IDs and all other entries are preserved; stale target entry identities and attempts to change a linked source report are rejected. The primary entry remains unchanged unless the report has no primary entry yet.
+
+Apply this migration before deploying the extension and API changes. Run the extension history planner/workbench tests, `server/src/routes/extension/extensionWorkspaceRouter.test.ts`, `supabase/tests/migration_chain_static_test.ts`, and the source-report identity database integration suite after applying the migration.

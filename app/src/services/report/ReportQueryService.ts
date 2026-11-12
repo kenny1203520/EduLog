@@ -3,8 +3,35 @@ import { apiV1Client } from '@/services/api/ApiV1Client'
 import { apiResourceClient } from '@/services/api/ApiResourceClient'
 import { PageApiService } from '@/services/api/PageApiService'
 import { type OrderedLesson } from '@/utils/courseProgressGaps'
+import type { RichTextDocumentV1 } from '@/components/text-editor/types'
 
-export const REPORT_EDITOR_COLUMNS = 'id, enrollment_id, class_occurrence_id, lesson_id, is_completed, progress_letter, attendance_status, absence_reason, class_participation, classroom_behavior, contact_notes, contact_notes_document, class_notes, class_notes_document, content, content_document, external_link, version, last_edited_by, last_edited_at, created_at, updated_at'
+export interface LessonEntryOption {
+    id: string
+    course_id: string
+    course_name: string
+    lessons: Array<{ id: string; sequence: number; title: string }>
+}
+
+export interface LinkedLessonReportHistoryRow {
+    id: string
+    class_occurrence_id: string
+    lesson_id: string | null
+    course_id: string
+    course_name?: string
+    lesson_sequence?: number
+    lesson_title?: string
+    progress_letter?: string | null
+    is_completed?: boolean
+    attendance_status?: string
+    content?: string | null
+    content_document?: unknown
+    occurrence_date?: string
+    lessons?: { sequence?: number; title?: string } | Array<{ sequence?: number; title?: string }> | null
+    class_occurrences?: { occurrence_date?: string } | Array<{ occurrence_date?: string }> | null
+    enrollments?: { courses?: { display_name?: string; subject?: string } } | Array<{ courses?: { display_name?: string; subject?: string } }> | null
+}
+
+export const REPORT_EDITOR_COLUMNS = 'id, enrollment_id, class_occurrence_id, lesson_id, is_completed, progress_letter, lesson_entries, primary_lesson_entry_id, attendance_status, absence_reason, class_participation, classroom_behavior, contact_notes, contact_notes_document, class_notes, class_notes_document, content, content_document, external_link, version, last_edited_by, last_edited_at, created_at, updated_at'
 
 function relationObject<T>(value: T | T[] | null | undefined): T | null {
     if (Array.isArray(value)) return value[0] ?? null
@@ -30,6 +57,28 @@ export function normalizeEnrollmentReportRelations(report: any): any {
 }
 
 export class ReportQueryService {
+    /** Lists the same student's enrollments and course lessons permitted for this report editor. */
+    static async getLessonEntryOptions(reportId: string): Promise<{ enrollments: LessonEntryOption[] }> {
+        const response = await apiV1Client.get<{ enrollments: LessonEntryOption[] }>(
+            `/reports/${encodeURIComponent(reportId)}/lesson-entry-options`
+        )
+        return response.data
+    }
+
+    /** Loads the safe, target-enrollment projection of lesson entries stored in other reports. */
+    static async getLinkedLessonReportHistory(
+        enrollmentId: string,
+        query: { limit: number; offset: number; search?: string; courseId?: string; sort: 'occurrence_date' | '-occurrence_date' }
+    ): Promise<{ data: LinkedLessonReportHistoryRow[]; count: number }> {
+        const params = new URLSearchParams({ limit: String(query.limit), offset: String(query.offset), sort: query.sort })
+        if (query.search) params.set('search', query.search)
+        if (query.courseId) params.set('course_id', query.courseId)
+        const response = await apiV1Client.get<LinkedLessonReportHistoryRow[]>(
+            `/enrollments/${encodeURIComponent(enrollmentId)}/linked-lesson-report-history?${params.toString()}`
+        )
+        return { data: response.data || [], count: Number(response.meta?.total || 0) }
+    }
+
     static async getProgressGapsByEnrollments(
         occurrenceId: string,
         enrollmentIds: string[]
@@ -53,8 +102,8 @@ export class ReportQueryService {
         enrollment_id: string
         occurrence_date: string
         lessons: Array<{ id: string; sequence: number; title: string }>
-        reports: Array<{ id: string; lesson_id: string; is_completed: boolean; progress_letter: string | null; attendance_status: string; occurrence_date: string }>
-        latest_prior_report: { id: string; lesson_id: string; is_completed: boolean; progress_letter: string | null; attendance_status: string; occurrence_date: string } | null
+        reports: Array<{ id: string; lesson_entry_id?: string; parent_enrollment_id?: string; can_open_report?: boolean; lesson_id: string; is_completed: boolean; progress_letter: string | null; attendance_status: string; occurrence_date: string; shared_content?: string; shared_content_document?: RichTextDocumentV1 | null }>
+        latest_prior_report: { id: string; lesson_entry_id?: string; parent_enrollment_id?: string; can_open_report?: boolean; lesson_id: string; is_completed: boolean; progress_letter: string | null; attendance_status: string; occurrence_date: string; shared_content?: string; shared_content_document?: RichTextDocumentV1 | null } | null
     }> {
         const params = new URLSearchParams({ occurrence_id: occurrenceId })
         params.set('report_id', reportId)

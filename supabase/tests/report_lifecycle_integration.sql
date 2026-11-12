@@ -8,6 +8,8 @@ INSERT INTO auth.users(id, email) VALUES
   ('91000000-0000-4000-8000-000000000001', 'lifecycle-owner@example.test'),
   ('91000000-0000-4000-8000-000000000002', 'lifecycle-other@example.test')
 ON CONFLICT (id) DO NOTHING;
+-- Accounts start pending (1000163) and hold no permission until active (1000165).
+UPDATE public.profiles SET account_status = 'active' WHERE account_status = 'pending';
 
 -- The fixture owner gets a platform teaching role; the unrelated account
 -- remains unassigned. Teaching membership is no longer stored per workspace.
@@ -17,10 +19,10 @@ FROM public.roles WHERE code = 'teaching_owner' AND domain = 'teaching'
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public.classrooms(id, name, user_id, teaching_id)
-SELECT '93000000-0000-4000-8000-000000000001', 'Lifecycle Classroom', '91000000-0000-4000-8000-000000000001', NULL
+SELECT '93000000-0000-4000-8000-000000000001', 'Lifecycle Classroom', '91000000-0000-4000-8000-000000000001', '92000000-0000-4000-8000-000000000001'
 ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.courses(id, subject, stage, user_id, teaching_id)
-SELECT '94000000-0000-4000-8000-000000000001', 'Lifecycle Course', 'primary', '91000000-0000-4000-8000-000000000001', NULL
+SELECT '94000000-0000-4000-8000-000000000001', 'Lifecycle Course', 'primary', '91000000-0000-4000-8000-000000000001', '92000000-0000-4000-8000-000000000001'
 ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.lessons(id, course_id, title, sequence, user_id)
 VALUES
@@ -28,7 +30,7 @@ VALUES
   ('95000000-0000-4000-8000-000000000002', '94000000-0000-4000-8000-000000000001', 'Lesson 2', 2, '91000000-0000-4000-8000-000000000001')
 ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.class_sessions(id, name, classroom_id, course_ids, start_time, end_time, user_id, start_date, end_date, teaching_id)
-SELECT '96000000-0000-4000-8000-000000000001', 'Lifecycle Session', '93000000-0000-4000-8000-000000000001', ARRAY['94000000-0000-4000-8000-000000000001']::uuid[], '09:00', '10:00', '91000000-0000-4000-8000-000000000001', DATE '2026-01-01', DATE '2026-03-31', NULL
+SELECT '96000000-0000-4000-8000-000000000001', 'Lifecycle Session', '93000000-0000-4000-8000-000000000001', ARRAY['94000000-0000-4000-8000-000000000001']::uuid[], '09:00', '10:00', '91000000-0000-4000-8000-000000000001', DATE '2026-01-01', DATE '2026-03-31', '92000000-0000-4000-8000-000000000001'
 ON CONFLICT (id) DO NOTHING;
 -- Legacy session ownership is cleared by the global-data migration. Model the
 -- report actor through the supported teacher-account link and assignment.
@@ -64,7 +66,7 @@ ON CONFLICT (id) DO NOTHING;
 -- A closed-at-first-occurrence session proves that lifecycle provisioning
 -- respects class_sessions.end_date instead of creating an out-of-range row.
 INSERT INTO public.class_sessions(id, name, classroom_id, course_ids, start_time, end_time, user_id, start_date, end_date, teaching_id)
-SELECT '96000000-0000-4000-8000-000000000002', 'Lifecycle Closed Session', '93000000-0000-4000-8000-000000000001', ARRAY['94000000-0000-4000-8000-000000000001']::uuid[], '11:00', '12:00', '91000000-0000-4000-8000-000000000001', DATE '2026-01-05', DATE '2026-01-05', NULL
+SELECT '96000000-0000-4000-8000-000000000002', 'Lifecycle Closed Session', '93000000-0000-4000-8000-000000000001', ARRAY['94000000-0000-4000-8000-000000000001']::uuid[], '11:00', '12:00', '91000000-0000-4000-8000-000000000001', DATE '2026-01-05', DATE '2026-01-05', '92000000-0000-4000-8000-000000000001'
 ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.class_session_schedule_rules(id, class_session_id, schedule_kind, day_of_week, start_time, end_time)
 VALUES ('97000000-0000-4000-8000-000000000002', '96000000-0000-4000-8000-000000000002', 'weekly', 1, '11:00', '12:00')
@@ -94,6 +96,32 @@ VALUES ('99000000-0000-4000-8000-000000000003', '98000000-0000-4000-8000-0000000
 ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.class_occurrences(id, class_session_id, occurrence_date, status, is_conducted)
 VALUES ('9a000000-0000-4000-8000-000000000003', '96000000-0000-4000-8000-000000000001', DATE '2026-01-12', 'scheduled', false)
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.courses(id, subject, stage, user_id, teaching_id)
+SELECT '94000000-0000-4000-8000-000000000002', 'Lifecycle Second Course', 'primary', '91000000-0000-4000-8000-000000000001', '92000000-0000-4000-8000-000000000001'
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.lessons(id, course_id, title, sequence, user_id)
+VALUES ('95000000-0000-4000-8000-000000000003', '94000000-0000-4000-8000-000000000002', 'Second Course Lesson 1', 1, '91000000-0000-4000-8000-000000000001')
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.class_sessions(id, name, classroom_id, course_ids, start_time, end_time, user_id, start_date, end_date, teaching_id)
+SELECT '96000000-0000-4000-8000-000000000003', 'Lifecycle Second Session', '93000000-0000-4000-8000-000000000001', ARRAY['94000000-0000-4000-8000-000000000002']::uuid[], '13:00', '14:00', '91000000-0000-4000-8000-000000000001', DATE '2026-01-01', DATE '2026-03-31', '92000000-0000-4000-8000-000000000001'
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.enrollments(id, student_id, course_id, class_session_id, status, user_id, start_date, lesson_number)
+VALUES ('99000000-0000-4000-8000-000000000004', '98000000-0000-4000-8000-000000000001', '94000000-0000-4000-8000-000000000002', '96000000-0000-4000-8000-000000000003', 'regular', '91000000-0000-4000-8000-000000000001', DATE '2026-01-01', 1)
+ON CONFLICT (id) DO NOTHING;
+-- 1000157 normalizes production rows to one global teaching scope. Disable
+-- that trigger only for this fixture to model a foreign legacy scope and
+-- verify that the report lifecycle rejects it defensively.
+ALTER TABLE public.courses DISABLE TRIGGER normalize_global_teaching_scope;
+INSERT INTO public.courses(id, subject, stage, user_id, teaching_id)
+VALUES ('94000000-0000-4000-8000-000000000003', 'Lifecycle Foreign Course', 'primary', '91000000-0000-4000-8000-000000000001', '92000000-0000-4000-8000-000000000002')
+ON CONFLICT (id) DO NOTHING;
+ALTER TABLE public.courses ENABLE TRIGGER normalize_global_teaching_scope;
+INSERT INTO public.lessons(id, course_id, title, sequence, user_id)
+VALUES ('95000000-0000-4000-8000-000000000004', '94000000-0000-4000-8000-000000000003', 'Foreign Lesson', 1, '91000000-0000-4000-8000-000000000001')
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.enrollments(id, student_id, course_id, status, user_id, start_date, lesson_number)
+VALUES ('99000000-0000-4000-8000-000000000005', '98000000-0000-4000-8000-000000000001', '94000000-0000-4000-8000-000000000003', 'regular', '91000000-0000-4000-8000-000000000001', DATE '2026-01-01', 1)
 ON CONFLICT (id) DO NOTHING;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.occurrence_reports, public.enrollments, public.class_occurrences TO authenticated;
@@ -184,16 +212,152 @@ BEGIN
     RAISE EXCEPTION 'rejected lifecycle patch mutated report';
   END IF;
 
+  SELECT * INTO v_report FROM public.apply_occurrence_report_lifecycle(
+    '9b000000-0000-4000-8000-000000000001', 4,
+    jsonb_build_object(
+      'content', 'One shared comment across two courses',
+      'lesson_entries', jsonb_build_array(
+        jsonb_build_object('id', 'a2000000-0000-4000-8000-000000000001', 'enrollment_id', '99000000-0000-4000-8000-000000000001', 'course_id', '94000000-0000-4000-8000-000000000001', 'lesson_id', '95000000-0000-4000-8000-000000000001', 'is_completed', true, 'progress_letter', 'B'),
+        jsonb_build_object('id', 'a2000000-0000-4000-8000-000000000002', 'enrollment_id', '99000000-0000-4000-8000-000000000004', 'course_id', '94000000-0000-4000-8000-000000000002', 'lesson_id', '95000000-0000-4000-8000-000000000003', 'is_completed', false, 'progress_letter', 'A')
+      ),
+      'primary_lesson_entry_id', 'a2000000-0000-4000-8000-000000000001'
+    )
+  );
+  IF v_report.version <> 5 OR jsonb_array_length(v_report.lesson_entries) <> 2
+     OR v_report.primary_lesson_entry_id <> 'a2000000-0000-4000-8000-000000000001'
+     OR v_report.content <> 'One shared comment across two courses' THEN
+    RAISE EXCEPTION 'multi-lesson report did not save atomically with the shared comment';
+  END IF;
+  -- Course B is a different class in the same teaching and was accepted above.
+  -- A same-student enrollment in another teaching must be rejected at the DB boundary.
+  BEGIN
+    PERFORM public.apply_occurrence_report_lifecycle(
+      '9b000000-0000-4000-8000-000000000001', 5,
+      jsonb_build_object(
+        'lesson_entries', jsonb_build_array(
+          jsonb_build_object('id', 'a2000000-0000-4000-8000-000000000003', 'enrollment_id', '99000000-0000-4000-8000-000000000005', 'course_id', '94000000-0000-4000-8000-000000000003', 'lesson_id', '95000000-0000-4000-8000-000000000004', 'is_completed', false, 'progress_letter', NULL)
+        ),
+        'primary_lesson_entry_id', 'a2000000-0000-4000-8000-000000000003'
+      )
+    );
+    RAISE EXCEPTION 'cross-teaching lesson entry unexpectedly succeeded';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'REPORT_LESSON_ENROLLMENT_MISMATCH' THEN RAISE; END IF;
+  END;
+  IF (SELECT version FROM public.occurrence_reports WHERE id = '9b000000-0000-4000-8000-000000000001') <> 5
+     OR (SELECT jsonb_array_length(lesson_entries) FROM public.occurrence_reports WHERE id = '9b000000-0000-4000-8000-000000000001') <> 2 THEN
+    RAISE EXCEPTION 'rejected cross-teaching entry mutated the report';
+  END IF;
+  IF (SELECT lesson_number FROM public.enrollments WHERE id = '99000000-0000-4000-8000-000000000001') <> 2
+     OR (SELECT lesson_number FROM public.enrollments WHERE id = '99000000-0000-4000-8000-000000000004') <> 1 THEN
+    RAISE EXCEPTION 'multi-course lesson completion did not recalculate each enrollment independently';
+  END IF;
+  BEGIN
+    UPDATE public.enrollments
+    SET student_id = '98000000-0000-4000-8000-000000000002'
+    WHERE id = '99000000-0000-4000-8000-000000000004';
+    RAISE EXCEPTION 'changing a referenced enrollment student unexpectedly succeeded';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'ENROLLMENT_HAS_LINKED_REPORT_PROGRESS' THEN RAISE; END IF;
+  END;
+  BEGIN
+    DELETE FROM public.enrollments WHERE id = '99000000-0000-4000-8000-000000000004';
+    RAISE EXCEPTION 'deleting a linked enrollment unexpectedly succeeded';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'ENROLLMENT_HAS_LINKED_REPORT_PROGRESS' THEN RAISE; END IF;
+  END;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.report_versions version
+    WHERE version.occurrence_report_id = v_report.id
+      AND version.version = 4
+      AND version.snapshot->'lesson_entries' = '[]'::jsonb
+  ) THEN
+    RAISE EXCEPTION 'multi-lesson save did not preserve the pre-save version snapshot';
+  END IF;
+
+  SELECT * INTO v_report FROM public.apply_occurrence_report_lifecycle(
+    '9b000000-0000-4000-8000-000000000001', 5, '{"content":"Versioned multi-course report"}'::jsonb
+  );
+  IF v_report.version <> 6 OR jsonb_array_length(v_report.lesson_entries) <> 2 THEN
+    RAISE EXCEPTION 'later save lost multi-course progress entries';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.report_versions version
+    WHERE version.occurrence_report_id = v_report.id
+      AND version.version = 5
+      AND jsonb_array_length(version.snapshot->'lesson_entries') = 2
+  ) THEN
+    RAISE EXCEPTION 'version snapshot omitted multi-course lesson entries';
+  END IF;
+
+  SELECT * INTO v_report FROM public.apply_occurrence_report_lifecycle(
+    '9b000000-0000-4000-8000-000000000001', 6, '{"progress_letter":"C"}'::jsonb
+  );
+  IF v_report.version <> 7 OR jsonb_array_length(v_report.lesson_entries) <> 2
+     OR (SELECT value->>'progress_letter' FROM jsonb_array_elements(v_report.lesson_entries) entry(value) WHERE value->>'id' = v_report.primary_lesson_entry_id::text) <> 'C' THEN
+    RAISE EXCEPTION 'legacy scalar write failed to retain and update the primary multi-lesson entry';
+  END IF;
+
+  SELECT * INTO v_report FROM public.apply_occurrence_report_lifecycle(
+    '9b000000-0000-4000-8000-000000000001', 7,
+    jsonb_build_object(
+      'lesson_entries', jsonb_build_array(
+        jsonb_build_object('id', 'a2000000-0000-4000-8000-000000000001', 'enrollment_id', '99000000-0000-4000-8000-000000000001', 'course_id', '94000000-0000-4000-8000-000000000001', 'lesson_id', '95000000-0000-4000-8000-000000000001', 'is_completed', true, 'progress_letter', 'C'),
+        jsonb_build_object('id', 'a2000000-0000-4000-8000-000000000002', 'enrollment_id', '99000000-0000-4000-8000-000000000004', 'course_id', '94000000-0000-4000-8000-000000000002', 'lesson_id', '95000000-0000-4000-8000-000000000003', 'is_completed', false, 'progress_letter', 'B')
+      ),
+      'primary_lesson_entry_id', 'a2000000-0000-4000-8000-000000000001'
+    )
+  );
+  IF v_report.version <> 8 OR v_report.lesson_id <> '95000000-0000-4000-8000-000000000001'
+     OR v_report.progress_letter <> 'C'
+     OR (SELECT value->>'progress_letter' FROM jsonb_array_elements(v_report.lesson_entries) entry(value) WHERE value->>'id' = 'a2000000-0000-4000-8000-000000000002') <> 'B' THEN
+    RAISE EXCEPTION 'secondary lesson edit changed the primary scalar projection';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.report_versions version
+    WHERE version.occurrence_report_id = v_report.id
+      AND version.version = 7
+      AND (SELECT value->>'progress_letter' FROM jsonb_array_elements(version.snapshot->'lesson_entries') entry(value) WHERE value->>'id' = 'a2000000-0000-4000-8000-000000000002') = 'A'
+  ) THEN
+    RAISE EXCEPTION 'secondary lesson edit did not snapshot the previous entries';
+  END IF;
+
+  SELECT * INTO v_report FROM public.apply_occurrence_report_lifecycle(
+    '9b000000-0000-4000-8000-000000000001', 8, '{"lesson_id":null,"is_completed":false}'::jsonb
+  );
+  IF v_report.version <> 9 OR jsonb_array_length(v_report.lesson_entries) <> 1
+     OR v_report.primary_lesson_entry_id <> 'a2000000-0000-4000-8000-000000000002'
+     OR v_report.lesson_id <> '95000000-0000-4000-8000-000000000003'
+     OR v_report.progress_letter <> 'B' THEN
+    RAISE EXCEPTION 'legacy lesson clear did not promote the remaining lesson entry';
+  END IF;
+
+  BEGIN
+    PERFORM public.apply_occurrence_report_lifecycle(
+      '9b000000-0000-4000-8000-000000000001', 9,
+      jsonb_build_object(
+        'lesson_entries', jsonb_build_array(jsonb_build_object('id', 'a2000000-0000-4000-8000-000000000003', 'enrollment_id', '99000000-0000-4000-8000-000000000004', 'course_id', '94000000-0000-4000-8000-000000000002', 'lesson_id', '95000000-0000-4000-8000-000000000001', 'is_completed', true, 'progress_letter', NULL)),
+        'primary_lesson_entry_id', 'a2000000-0000-4000-8000-000000000003'
+      )
+    );
+    RAISE EXCEPTION 'cross-course lesson mismatch unexpectedly succeeded';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'REPORT_LESSON_COURSE_MISMATCH' THEN RAISE; END IF;
+  END;
+  IF (SELECT version FROM public.occurrence_reports WHERE id = '9b000000-0000-4000-8000-000000000001') <> 9 THEN
+    RAISE EXCEPTION 'invalid multi-course entry mutated the report';
+  END IF;
+
   IF NOT public.can_access_report('9b000000-0000-4000-8000-000000000001', 'teaching.reports.read') THEN
     RAISE EXCEPTION 'teaching owner cannot read collaboration snapshot';
   END IF;
-  IF NOT public.save_report_collab_snapshot('9b000000-0000-4000-8000-000000000001', 'c25qc25hcA==', 4) THEN
+  IF NOT public.save_report_collab_snapshot('9b000000-0000-4000-8000-000000000001', 'c25qc25hcA==', 9) THEN
     RAISE EXCEPTION 'authorized collaboration snapshot was not saved';
   END IF;
   IF (SELECT snapshot_base64 FROM public.report_collab_docs WHERE occurrence_report_id = '9b000000-0000-4000-8000-000000000001') IS DISTINCT FROM 'c25qc25hcA==' THEN
     RAISE EXCEPTION 'authorized collaboration snapshot is not visible';
   END IF;
-  IF public.save_report_collab_snapshot('9b000000-0000-4000-8000-000000000001', 'c25qc25hcA==', 3) THEN
+  IF public.save_report_collab_snapshot('9b000000-0000-4000-8000-000000000001', 'c25qc25hcA==', 8) THEN
     RAISE EXCEPTION 'stale collaboration snapshot was saved';
   END IF;
 
@@ -246,7 +410,7 @@ BEGIN
   IF (SELECT count(*) FROM public.report_collab_docs WHERE occurrence_report_id = '9b000000-0000-4000-8000-000000000001') <> 0 THEN
     RAISE EXCEPTION 'RLS exposed collaboration snapshot to unassigned account';
   END IF;
-  IF public.save_report_collab_snapshot('9b000000-0000-4000-8000-000000000001', 'c25qc25hcA==', 4) THEN
+  IF public.save_report_collab_snapshot('9b000000-0000-4000-8000-000000000001', 'c25qc25hcA==', 9) THEN
     RAISE EXCEPTION 'unassigned account saved collaboration snapshot';
   END IF;
   IF public.can_mutate_occurrence_report('9b000000-0000-4000-8000-000000000001', 'teaching.reports.update') THEN

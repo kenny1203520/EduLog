@@ -14,6 +14,8 @@ export const useAuthStore = defineStore('auth', () => {
   let initializePromise: Promise<void> | null = null
 
   const isAuthenticated = computed(() => !!user.value)
+  /** Signed in, but waiting for an administrator to approve the account. */
+  const accountPending = computed(() => user.value?.account_status === 'pending')
 
   function acceptRefreshedUser(nextUser: BffUser) {
     session.value = { user: nextUser }
@@ -98,6 +100,7 @@ export const useAuthStore = defineStore('auth', () => {
     acceptRefreshedUser,
     clearSession,
     markAccountDisabled,
-    accountDisabled
+    accountDisabled,
+    accountPending
   }
 })

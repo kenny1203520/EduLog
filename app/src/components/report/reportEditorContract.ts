@@ -1,5 +1,5 @@
 import type { Lesson } from '@/models/Course'
-import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
+import type { OccurrenceReportDTO, ReportLessonEntryDTO } from '@/models/OccurrenceReport'
 import type { RichTextDocumentV1, TextEditorMetrics } from '@/components/text-editor/types'
 import type { EditorNotification } from '@/components/text-editor/notifier'
 import type { SourceReportIdentity } from '@/utils/sourceReportLink'
@@ -41,6 +41,8 @@ export interface ReportEditorProps {
     initialClassNotesDocument?: RichTextDocumentV1 | null
     initialContent?: string // 學習報告
     initialContentDocument?: RichTextDocumentV1 | null
+    initialLessonEntries?: ReportLessonEntryDTO[]
+    initialPrimaryLessonEntryId?: string | null
     autoSaveEnabled?: boolean
     collaborationEnabled?: boolean
     notificationsEnabled?: boolean
@@ -55,7 +57,7 @@ type DefaultedProp =
     | 'initialVersion' | 'loading' | 'placeholder' | 'disabled' | 'showManualSave' | 'debounceMs'
     | 'courseName' | 'courseStage' | 'courseDisplayName' | 'initialClassroomName' | 'initialSessionName'
     | 'initialSessionTime' | 'initialStudentName' | 'initialStudentId' | 'initialLessonId' | 'availableLessons'
-    | 'initialReportExternalLink' | 'initialIsCompleted' | 'initialAttendanceStatus'
+    | 'initialLessonEntries' | 'initialPrimaryLessonEntryId' | 'initialReportExternalLink' | 'initialIsCompleted' | 'initialAttendanceStatus'
     | 'initialClassParticipation' | 'initialClassroomBehavior' | 'initialContactNotes' | 'initialContactNotesDocument'
     | 'initialClassNotes' | 'initialClassNotesDocument' | 'initialContent' | 'initialContentDocument'
     | 'initialEnrollmentExternalLink' | 'sourceIdentity' | 'initialCreatedAt' | 'compact'

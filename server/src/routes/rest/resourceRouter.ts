@@ -300,7 +300,7 @@ export async function item(req: Request, res: Response, def: ResourceDefinition)
   const sensitivePatch = Object.fromEntries(Object.entries(patch).filter(([key]) => sensitiveFields.has(key)))
   const safePatch = Object.fromEntries(Object.entries(patch).filter(([key]) => !sensitiveFields.has(key)))
   if (Object.keys(sensitivePatch).length) {
-    const sensitivePermission = def.route === 'students' ? 'teaching.students.update_sensitive' : 'teaching.teachers.update_sensitive'
+    const sensitivePermission = def.route === 'students' ? 'teaching.student_personal.update' : 'teaching.teachers.update_sensitive'
     await authorizeResource(req, def, sensitivePermission, id, existing.data as unknown as Record<string, unknown>)
     const functionName = def.route === 'students' ? 'update_student_sensitive' : 'update_teacher_sensitive'
     const parameterName = def.route === 'students' ? 'p_student_id' : 'p_teacher_id'
@@ -340,13 +340,23 @@ export async function collection(req: Request, res: Response, def: ResourceDefin
   await authorizeCollection(req, def, permissionForResource(def, action), {}, body)
   const replay = await idempotency(req, req.method === 'POST' ? 201 : 200, null)
   if (replay) return res.status(replay.status).json(replay.body)
+  // Creating a student with personal data writes the same fields that
+  // PATCH guards with the personal-data permission.
+  if (def.table === 'students' && sensitivePatchFields.students!.some((key: string) => body[key] !== undefined && body[key] !== null && body[key] !== '')) {
+    await authorizeCollection(req, def, 'teaching.student_personal.update', {}, body)
+  }
   if (def.route === 'teachers') {
     const privateKeys = ['email', 'phone', 'address', 'mailing_address', 'birthday', 'gov_id']
-    if (privateKeys.some((key) => body[key] !== undefined && body[key] !== null && body[key] !== '')) {
+    if (privateKeys.some((key: string) => body[key] !== undefined && body[key] !== null && body[key] !== '')) {
       await authorizeCollection(req, def, 'teaching.teachers.update_sensitive', {}, body)
     }
     if (!req.adminDb) throw new ApiError(503, 'PROFILE_SERVICE_UNAVAILABLE', 'The teacher profile service is unavailable')
     const { user_id, ...profilePatch } = parsedBody
+    // Linking an account while creating needs what the account-link endpoint needs.
+    if (typeof user_id === 'string') {
+      await authorizeCollection(req, def, 'teaching.teachers.update_sensitive', {}, body)
+      await authorizeCollection(req, resources.users, 'system.users.read', { user_id })
+    }
     const created = await req.adminDb.rpc('create_teacher_with_profile', {
       p_account_user_id: typeof user_id === 'string' ? user_id : null,
       p_patch: profilePatch,

@@ -38,3 +38,5 @@ jobs:
           supabase/tests/frontend_runtime_config_static_test.ts
           supabase/tests/rate_limit_static_test.ts
           supabase/tests/database_linter_static_test.ts
+      - name: Verify Caddy runtime authentication query redaction
+        run: bash supabase/tests/caddy_runtime_log_redaction_test.sh

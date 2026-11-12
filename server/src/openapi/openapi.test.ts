@@ -4,6 +4,21 @@ import { buildOpenApi } from './openapi.js'
 import { genericOperationsOf, resources } from '../routes/rest/resources.js'
 
 describe('generated API contract', () => {
+  it('documents occurrence correction as a versioned, scoped report mutation', () => {
+    const spec = buildOpenApi() as { paths: Record<string, Record<string, any>> }
+    const operation = spec.paths['/api/reports/{reportId}/correct-occurrence'].post
+    expect(operation.operationId).toBe('report_correct_occurrence')
+    expect(operation.security).toEqual([{ cookieAuth: [] }])
+    expect(operation['x-permission']).toBe('teaching.reports.update')
+    expect(operation.parameters).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'reportId', in: 'path' }),
+      expect.objectContaining({ $ref: '#/components/parameters/IdempotencyKey' }),
+    ]))
+    expect(operation.requestBody.content['application/json'].schema.required).toEqual(['target_class_occurrence_id', 'expected_version'])
+    expect(operation.requestBody.content['application/json'].schema.properties.target_enrollment_id.format).toBe('uuid')
+    expect(operation.responses['409']).toBeDefined()
+  })
+
   it('documents blank email clearing for student and contact mutations', () => {
     const spec = buildOpenApi() as { paths: Record<string, Record<string, any>> }
     for (const resource of ['students', 'student-contacts']) {
@@ -201,7 +216,7 @@ describe('generated API contract', () => {
 
   it('documents cookie authentication for protected operations', () => {
     const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined> }
-    const publicOperations = new Set(['POST /api/auth/login', 'POST /api/auth/refresh', 'POST /api/auth/logout', 'GET /api/auth/csrf', 'GET /api/healthz', 'GET /api/openapi.json', 'POST /api/extension/pair-requests', 'GET /api/extension/pair-requests/{id}', 'POST /api/extension/pair-requests/{id}/claim'])
+    const publicOperations = new Set(['POST /api/auth/login', 'POST /api/auth/refresh', 'POST /api/auth/logout', 'GET /api/auth/csrf', 'GET /api/auth/providers', 'GET /api/auth/oauth/{provider}', 'GET /api/auth/bridge/callback', 'POST /api/auth/bridge/callback', 'GET /api/auth/oauth/callback', 'GET /api/auth/confirm', 'POST /api/auth/recover', 'GET /api/healthz', 'GET /api/openapi.json', 'POST /api/extension/pair-requests', 'GET /api/extension/pair-requests/{id}', 'POST /api/extension/pair-requests/{id}/claim'])
     for (const [path, pathItem] of Object.entries(spec.paths)) {
       for (const [method, operation] of Object.entries(pathItem ?? {})) {
         if (!operation || !operation.operationId || operation['x-websocket']) continue
@@ -267,7 +282,7 @@ describe('generated API contract', () => {
       expect(operation?.security, path).toEqual([{ cookieAuth: [] }])
     }
     expect(spec.paths['/api/pages/dashboard']?.get?.operationId).toBe('page_dashboard')
-    expect(spec.paths['/api/pages/dashboard']?.get?.['x-permission']).toBe('teaching.reports.list')
+    expect(spec.paths['/api/pages/dashboard']?.get?.['x-permission']).toBe('teaching.dashboard.access')
     expect(spec.paths['/api/aggregates/dashboard']).toBeUndefined()
     expect(spec.paths['/api/dashboard']).toBeUndefined()
   })
@@ -275,9 +290,9 @@ describe('generated API contract', () => {
   it('documents the expanded page API operations, permissions, and data schemas', () => {
     const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined>; components: { schemas: Record<string, any> } }
     const operations: Record<string, { permission: string; schema: string }> = {
-      '/api/pages/courses/overview': { permission: 'teaching.courses.list', schema: 'PageCoursesOverviewData' },
-      '/api/pages/classrooms/overview': { permission: 'teaching.classrooms.list', schema: 'PageClassroomsOverviewData' },
-      '/api/pages/students/overview': { permission: 'teaching.students.list', schema: 'PageStudentsOverviewData' },
+      '/api/pages/courses/overview': { permission: 'teaching.courses.access', schema: 'PageCoursesOverviewData' },
+      '/api/pages/classrooms/overview': { permission: 'teaching.classrooms.access', schema: 'PageClassroomsOverviewData' },
+      '/api/pages/students/overview': { permission: 'teaching.students.access', schema: 'PageStudentsOverviewData' },
       '/api/pages/students/{studentId}/profile': { permission: 'teaching.students.read', schema: 'PageStudentProfileData' },
       '/api/pages/students/{studentId}/reports': { permission: 'teaching.students.read', schema: 'PageStudentReportsData' },
       '/api/pages/teachers/overview': { permission: 'teaching.teachers.list', schema: 'PageTeachersOverviewData' },
@@ -304,7 +319,7 @@ describe('generated API contract', () => {
     expect(spec.components.schemas.PageStudentsOverviewData.items.properties.current_school.anyOf[0].$ref).toBe('#/components/schemas/StudentSchoolSummary')
     expect(spec.components.schemas.PageStudentProfileData.properties.current_school.anyOf[0].$ref).toBe('#/components/schemas/StudentSchoolSummary')
     expect(spec.components.schemas.StudentSchoolSensitiveData.properties.school_student_id).toBeDefined()
-    expect(spec.paths['/api/students/{id}/credentials']?.get?.['x-permission']).toBe('teaching.students.read_sensitive')
+    expect(spec.paths['/api/students/{id}/credentials']?.get?.['x-permission']).toBe('teaching.student_credentials.read')
     expect(spec.paths['/api/students/{id}/credentials']?.get?.['x-sensitive-data']).toBe(true)
     expect(spec.paths['/api/students/{id}/credentials']?.get?.responses?.['200']?.content?.['application/json']?.schema?.allOf?.[1]?.properties?.data?.$ref).toBe('#/components/schemas/StudentCredentialSensitiveData')
   })
@@ -313,7 +328,7 @@ describe('generated API contract', () => {
     const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined>; components: { schemas: Record<string, any> } }
     const operation = spec.paths['/api/pages/reports/incomplete']?.get
     expect(operation?.operationId).toBe('page_incomplete_reports')
-    expect(operation?.['x-permission']).toBe('teaching.reports.list')
+    expect(operation?.['x-permission']).toBe('teaching.reports.access')
     expect(operation?.responses?.['200']?.content?.['application/json']?.schema?.properties?.data?.$ref).toBe('#/components/schemas/IncompleteReportsPageData')
     expect(operation?.parameters?.find((parameter: any) => parameter.name === 'search')).toBeDefined()
     expect(operation?.parameters?.find((parameter: any) => parameter.name === 'sort')?.schema).toEqual({

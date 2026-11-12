@@ -230,7 +230,7 @@ async function saveLesson(courseId: string) {
         }
 
         await fetchCourses()
-        toast.success(t('course.lesson_save_success') || 'Lesson saved successfully')
+        toast.success(t('course.lesson_save_success'))
     } catch (e) {
         console.error(e)
         reportError(e)
@@ -261,7 +261,7 @@ async function deleteLesson(id: string) {
         try {
             await CourseCatalogService.deleteLesson(id)
             await fetchCourses()
-            toast.success(t('course.lesson_delete_success') || 'Lesson deleted successfully')
+            toast.success(t('course.lesson_delete_success'))
         } catch (e) {
             reportError(e)
         }

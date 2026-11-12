@@ -29,6 +29,9 @@
     "select_course_sub": "從左側目錄中選擇一個課程，以管理其教學單元與內容。",
     "save_success": "儲存成功",
     "delete_success": "刪除成功",
+    "lesson_save_success": "單元已儲存",
+    "lesson_delete_success": "單元已刪除",
+    "lesson_confirm_delete": "確定要刪除此單元嗎？",
     "confirm_delete": "確定要刪除此課程嗎？",
     "no_courses": "目前沒有課程"
 }

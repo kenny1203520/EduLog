@@ -1,15 +1,22 @@
-# Postgres 17 override for self-hosted Supabase.
+# Postgres 17 override for EduLog's self-hosted Supabase.
 #
-# Usage (new install or after upgrade):
-#   docker compose -f docker-compose.yml -f docker-compose.pg17.yml up -d
+# EduLog keeps Postgres 15 in docker-compose.yml so existing deployments never
+# start Postgres 17 on a Postgres 15 data directory. Use this override for a
+# new install, or after upgrading an existing database:
 #
-# For upgrading an existing Postgres 15 database, run utils/upgrade-pg17.sh first.
+#   docker compose -f docker-compose.yml -f supabase/docker-compose.pg17.yml up -d
+#
+# To upgrade an existing Postgres 15 database, run this from the repo root first:
+#
+#   sudo bash supabase/utils/upgrade-pg17.sh
+#
+# Keep this tag in sync with PG17_TARGET_IMAGE in supabase/utils/upgrade-pg17.sh.
 #
 # Note: PG 15 and PG 17 use different postgres UIDs. If starting fresh with a
 # leftover db-config volume from PG 15, you may see
 # "FATAL: invalid secret key". Either remove the old volume or fix ownership.
-# See: docs/guides/self-hosting/postgres-upgrade-17
+# See: https://supabase.com/docs/guides/self-hosting/postgres-upgrade-17
 
 services:
   db:
-    image: supabase/postgres:17.6.1.084
+    image: supabase/postgres:17.6.1.136

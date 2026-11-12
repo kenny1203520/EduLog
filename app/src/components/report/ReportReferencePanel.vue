@@ -143,7 +143,7 @@
                             $t('report.reference_panel.no_results') }}</p>
                     </div>
 
-                    <div v-else v-for="report in reports" :key="report.id"
+                    <div v-else v-for="report in reports" :key="reportCardKey(report)"
                         class="group bg-white rounded-[1.5rem] sm:rounded-[2rem] border border-gray-100 shadow-sm hover:shadow-2xl hover:shadow-indigo-500/10 hover:border-indigo-100 transition-all duration-500 overflow-hidden">
                         <!-- Card Header Section -->
                         <div
@@ -193,7 +193,7 @@
                         </div>
 
                         <!-- Notes Sections (Conditional) -->
-                        <div
+                        <div v-if="!report.is_linked_lesson_entry"
                             class="px-5 py-3 sm:px-7 sm:py-5 bg-gray-50/40 border-b border-gray-100/60 space-y-3 sm:space-y-4">
                             <!-- Contact Notes -->
                             <div v-if="report.contact_notes"
@@ -414,6 +414,7 @@ const props = defineProps<{
     show: boolean
     lessonId?: string
     studentId?: string
+    enrollmentId?: string
     currentReportId?: string
     focusedReportId?: string
     focusedLessonSequence?: number
@@ -432,6 +433,8 @@ const loadError = ref<string | null>(null)
 // Data State
 const reports = ref<any[]>([])
 const totalCount = ref(0)
+const regularReportCount = ref(0)
+const linkedReportCount = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(10)
 
@@ -468,7 +471,11 @@ const classrooms = ref<any[]>([])
 const allSessions = ref<any[]>([])
 const courses = ref<any[]>([])
 
-const totalPages = computed(() => Math.ceil(totalCount.value / pageSize.value) || 1)
+const totalPages = computed(() => Math.max(
+    Math.ceil(regularReportCount.value / pageSize.value),
+    Math.ceil(linkedReportCount.value / pageSize.value),
+    1
+))
 
 const filteredSessions = computed(() => {
     if (!filterClassroom.value) return allSessions.value
@@ -543,6 +550,8 @@ async function refreshData() {
     loadError.value = null
     reports.value = []
     totalCount.value = 0
+    regularReportCount.value = 0
+    linkedReportCount.value = 0
     try {
         if (activeTab.value === 'history' && props.focusedReportId) {
             const report = await ReportQueryService.getReportById(props.focusedReportId)
@@ -555,6 +564,7 @@ async function refreshData() {
                 lessons: { sequence: props.focusedLessonSequence, title: props.focusedLessonTitle },
                 enrollments: { courses: { display_name: props.focusedCourseName }, students: { name: props.focusedStudentName } }
             }]
+            regularReportCount.value = 1
             totalCount.value = 1
             return
         }
@@ -567,6 +577,9 @@ async function refreshData() {
         }
 
         let res
+        let regularCount = 0
+        let linkedCount = 0
+        let linkedRows: any[] = []
         if (activeTab.value === 'peer') {
             if (!props.lessonId) {
                 reports.value = []
@@ -579,6 +592,7 @@ async function refreshData() {
                 classroomId: filterClassroom.value,
                 sessionId: filterSession.value
             })
+            regularCount = res.count
         } else {
             if (!props.studentId) {
                 reports.value = []
@@ -586,20 +600,52 @@ async function refreshData() {
                 loading.value = false
                 return
             }
-            res = await ReportQueryService.getReportsByStudent(props.studentId, {
-                ...commonParams,
-                courseId: filterCourse.value
-            })
+            const [studentHistory, linkedHistory] = await Promise.all([
+                ReportQueryService.getReportsByStudent(props.studentId, {
+                    ...commonParams,
+                    courseId: filterCourse.value
+                }),
+                props.enrollmentId
+                    ? ReportQueryService.getLinkedLessonReportHistory(props.enrollmentId, {
+                        limit: pageSize.value,
+                        offset: (currentPage.value - 1) * pageSize.value,
+                        search: commonParams.search,
+                        courseId: filterCourse.value || undefined,
+                        sort: sortBy.value === 'asc' ? 'occurrence_date' : '-occurrence_date',
+                    })
+                    : Promise.resolve({ data: [], count: 0 }),
+            ])
+            res = studentHistory
+            regularCount = studentHistory.count
+            linkedCount = linkedHistory.count
+            linkedRows = linkedHistory.data.map(row => ({
+                ...row,
+                enrollment_id: props.enrollmentId,
+                is_linked_lesson_entry: true,
+                lessons: row.lessons || { sequence: row.lesson_sequence, title: row.lesson_title },
+                class_occurrences: row.class_occurrences || { occurrence_date: row.occurrence_date },
+                enrollments: row.enrollments || { courses: { display_name: row.course_name } },
+            }))
         }
         if (requestId === refreshRequestId) {
-            reports.value = res.data
-            totalCount.value = res.count
+            regularReportCount.value = regularCount
+            linkedReportCount.value = linkedCount
+            if (linkedRows.length) {
+                const linkedParentIds = new Set(linkedRows.map(row => row.id))
+                reports.value = [
+                    ...res.data.filter((report: any) => !linkedParentIds.has(report.id)),
+                    ...linkedRows,
+                ]
+            } else reports.value = res.data
+            totalCount.value = regularCount + linkedCount
         }
     } catch (e) {
         if (requestId !== refreshRequestId) return
         console.error('Failed to load reports:', e)
         reports.value = []
         totalCount.value = 0
+        regularReportCount.value = 0
+        linkedReportCount.value = 0
         loadError.value = t('report.reference_panel.load_error')
         reportError(e)
     } finally {
@@ -636,7 +682,8 @@ function formatDate(report: any) {
     // occurrence_date is a calendar day; new Date('YYYY-MM-DD') would parse it as UTC midnight.
     const date = occurrence?.occurrence_date
         ? DateUtils.parseLocalDate(occurrence.occurrence_date)
-        : report.updated_at ? new Date(report.updated_at) : undefined
+        : report.occurrence_date ? DateUtils.parseLocalDate(report.occurrence_date)
+            : report.updated_at ? new Date(report.updated_at) : undefined
     return date ? date.toLocaleDateString(locale.value) : '-'
 }
 
@@ -658,12 +705,22 @@ function formatHeader(report: any) {
 
         let courseName = t('common.unknown_course')
         if (course) {
-            courseName = course.display_name || course.subject || courseName
+            courseName = course.display_name || course.subject || report.course_name || courseName
+        } else if (report.course_name) {
+            courseName = report.course_name
         }
 
-        const lessonInfo = lesson ? `#${lesson.sequence} ${lesson.title}` : ''
+        const lessonInfo = lesson
+            ? `#${lesson.sequence} ${lesson.title}`
+            : report.lesson_title ? `#${report.lesson_sequence} ${report.lesson_title}` : ''
         return `${courseName} ${lessonInfo}`.trim()
     }
+}
+
+function reportCardKey(report: any) {
+    return report.is_linked_lesson_entry
+        ? `${report.id}:${report.enrollment_id}:${report.lesson_id}`
+        : report.id
 }
 
 function copyContent(content: string) {

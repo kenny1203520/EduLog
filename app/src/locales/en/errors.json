@@ -37,7 +37,17 @@
         "SOURCE_REPORT_HAS_CONTENT": "The original date already has a report with content for this student, so the transfer can't be cancelled. Resolve that report first.",
         "TRANSFER_CHAIN_HAS_MERGED_REPORT": "A later transfer of this lesson merged reports. Cancel the latest transfer first.",
         "REPORT_ALREADY_EXISTS": "A report already exists for this lesson.",
-        "TRANSFER_NOTE_TOO_LONG": "The transfer note must be 200 characters or fewer."
+        "TRANSFER_NOTE_TOO_LONG": "The transfer note must be 200 characters or fewer.",
+        "ACCOUNT_EXISTS": "An account with this email already exists.",
+        "ROLE_NOT_FOUND": "A selected role no longer exists. Reload and choose again.",
+        "PROTECTED_ROLE_NOT_ALLOWED": "Owner roles cannot be granted here.",
+        "ACCOUNT_NOT_PENDING": "This account is no longer waiting for approval. Reload the list.",
+        "AUTH_ADMIN_UNAVAILABLE": "The account service is temporarily unavailable. Nothing was changed.",
+        "SENSITIVE_PERMISSION_REQUIRED": "You don't have permission to view or edit this sensitive student data.",
+        "STUDENT_ACCESS_DENIED": "You don't have access to this student.",
+        "GRANT_EXCEEDS_CALLER": "You can't grant access that you don't have yourself. Ask someone who holds this access to do it.",
+        "OWNER_ROLE_REQUIRED": "Only an owner can assign or remove an owner role.",
+        "PROTECTED_ROLE_PARENT": "A role can't inherit from an owner role."
     },
     "rate_limited": "Too many requests. Please wait a moment and try again.",
     "service_unavailable": "The service is temporarily unavailable.",

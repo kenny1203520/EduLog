@@ -33,17 +33,36 @@ export type StudentSchoolUpdate = Partial<Pick<StudentSchoolDTO,
 
 export type StudentSchoolCreate = StudentSchoolUpdate & { student_id: string; name: string }
 
-/** Safe current-school projection returned by the student Page APIs. */
+/**
+ * Safe current-school projection returned by the student Page APIs. Without
+ * school read access only `grade` is present.
+ */
 export interface StudentSchoolSummaryDTO {
-  name: string
-  status: 'enrolled'
+  name?: string
+  status?: 'enrolled'
   grade?: string | null
   class?: string | null
 }
 
-export interface StudentCapabilitiesDTO {
-  read_sensitive: boolean
-  update_sensitive: boolean
+export type StudentSensitiveSection = 'schools' | 'personal' | 'contacts' | 'credentials'
+
+export interface StudentSectionCapabilityDTO {
+  read: boolean
+  update: boolean
+}
+
+/** Per-section sensitive-data capabilities for one student. */
+export type StudentCapabilitiesDTO = Record<StudentSensitiveSection, StudentSectionCapabilityDTO>
+
+export const STUDENT_SENSITIVE_SECTIONS: readonly StudentSensitiveSection[] = ['schools', 'personal', 'contacts', 'credentials']
+
+export function emptyStudentCapabilities(): StudentCapabilitiesDTO {
+  return {
+    schools: { read: false, update: false },
+    personal: { read: false, update: false },
+    contacts: { read: false, update: false },
+    credentials: { read: false, update: false },
+  }
 }
 
 export interface StudentCredentialDTO {
@@ -137,7 +156,7 @@ export class Student {
     this.contactCount = dto.contact_count ?? this.contacts.length
     this.credentialCount = dto.credential_count ?? this.credentials.length
     this.currentSchoolSummary = dto.current_school ?? undefined
-    this.capabilities = dto.capabilities ?? { read_sensitive: false, update_sensitive: false }
+    this.capabilities = { ...emptyStudentCapabilities(), ...(dto.capabilities ?? {}) }
   }
 
   /**
@@ -171,6 +190,11 @@ export class Student {
 
   get displaySchoolName(): string {
     return this.currentSchool?.name || this.currentSchoolSummary?.name || ''
+  }
+
+  /** True when the school record exists but its details are hidden by permissions. */
+  get hasRestrictedSchool(): boolean {
+    return !this.displaySchoolName && Boolean(this.currentSchoolSummary)
   }
 
   get displaySchoolId(): string {

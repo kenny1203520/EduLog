@@ -26,6 +26,24 @@ const router = createRouter({
       meta: { title: 'auth.account_disabled_title', description: 'nav.subtitle' }
     },
     {
+      path: '/account-pending',
+      name: 'account-pending',
+      component: () => import('@/views/AccountPendingView.vue'),
+      meta: { requiresAuth: true, title: 'auth.account_pending_title', description: 'nav.subtitle' }
+    },
+    {
+      path: '/forgot-password',
+      name: 'forgot-password',
+      component: () => import('@/views/ForgotPasswordView.vue'),
+      meta: { title: 'auth.forgot_title', description: 'nav.subtitle' }
+    },
+    {
+      path: '/auth/set-password',
+      name: 'set-password',
+      component: () => import('@/views/SetPasswordView.vue'),
+      meta: { requiresAuth: true, title: 'auth.set_password_title', description: 'nav.subtitle' }
+    },
+    {
       path: '/dashboard',
       component: () => import('@/layouts/MainLayout.vue'),
       meta: { requiresAuth: true },
@@ -34,7 +52,7 @@ const router = createRouter({
           path: '',
           name: 'dashboard',
           component: () => import('@/views/HomeView.vue'),
-          meta: { title: 'nav.dashboard', description: 'nav.description.dashboard' }
+          meta: { capability: 'teaching.dashboard.access', title: 'nav.dashboard', description: 'nav.description.dashboard' }
         },
         {
           path: 'student/:id',
@@ -46,19 +64,19 @@ const router = createRouter({
           path: 'courses',
           name: 'courses',
           component: () => import('@/views/CourseManagementView.vue'),
-          meta: { capability: 'teaching.courses.list', title: 'nav.courses', description: 'nav.description.courses' }
+          meta: { capability: 'teaching.courses.access', title: 'nav.courses', description: 'nav.description.courses' }
         },
         {
           path: 'students',
           name: 'students',
           component: () => import('@/views/StudentManagementView.vue'),
-          meta: { capability: 'teaching.students.list', title: 'nav.students', description: 'nav.description.students' }
+          meta: { capability: 'teaching.students.access', title: 'nav.students', description: 'nav.description.students' }
         },
         {
           path: 'classrooms',
           name: 'classrooms',
           component: () => import('@/views/ClassroomManagementView.vue'),
-          meta: { capability: 'teaching.classrooms.list', title: 'nav.classrooms', description: 'nav.description.classrooms' }
+          meta: { capability: 'teaching.classrooms.access', title: 'nav.classrooms', description: 'nav.description.classrooms' }
         },
         {
           path: 'classrooms/session/:id',
@@ -82,13 +100,13 @@ const router = createRouter({
           path: 'reports/incomplete',
           name: 'incomplete-reports',
           component: () => import('@/views/GlobalIncompleteReportsView.vue'),
-          meta: { capability: 'teaching.reports.list', title: 'nav.incomplete_reports', description: 'nav.description.incomplete' }
+          meta: { capability: 'teaching.reports.access', title: 'nav.incomplete_reports', description: 'nav.description.incomplete' }
         },
         {
           path: 'holidays',
           name: 'holidays',
           component: () => import('@/views/HolidayManagementView.vue'),
-          meta: { capability: 'teaching.holidays.list', title: 'nav.holidays', description: 'nav.description.holidays' }
+          meta: { capability: 'teaching.holidays.access', title: 'nav.holidays', description: 'nav.description.holidays' }
         },
         {
           path: 'teachers',
@@ -123,6 +141,8 @@ const router = createRouter({
   ]
 })
 
+const PENDING_ALLOWED = new Set(['account-pending', 'set-password', 'landing'])
+
 // Navigation Guard
 router.beforeEach(async (to: RouteLocationNormalized) => {
   const authStore = useAuthStore()
@@ -140,17 +160,28 @@ router.beforeEach(async (to: RouteLocationNormalized) => {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
   
+  // An account waiting for approval sees only its waiting page (and may set a
+  // password from an email link, or sign out from the waiting page).
+  if (authStore.accountPending) {
+    return PENDING_ALLOWED.has(String(to.name)) ? true : { name: 'account-pending' }
+  }
+  if (to.name === 'account-pending' && authStore.isAuthenticated) return { name: 'dashboard' }
+
   if (to.path === '/login' && authStore.isAuthenticated) {
     return getSafePostLoginTarget(to.query.redirect, router)
   }
 
-  // Pages the user holds no permission for in any scope go back to the
-  // dashboard instead of rendering a page full of permission errors.
+  // Pages the user cannot open in any scope go back to the dashboard instead
+  // of rendering a page full of permission errors. Without dashboard access
+  // the personal settings page (which needs no teaching role) is the fallback.
   const capability = to.meta.capability
   if (typeof capability === 'string' && authStore.isAuthenticated) {
     const capabilities = useCapabilityStore()
     await capabilities.ensureLoaded()
-    if (!capabilities.can(capability)) return { name: 'dashboard' }
+    if (!capabilities.can(capability)) {
+      if (to.name !== 'dashboard' && capabilities.can('teaching.dashboard.access')) return { name: 'dashboard' }
+      return { name: 'settings' }
+    }
   }
 
   return true

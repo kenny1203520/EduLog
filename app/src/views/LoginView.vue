@@ -7,12 +7,16 @@ import { getSafePostLoginTarget } from '@/router/authRedirect'
 import { useI18n } from 'vue-i18n'
 import LanguageSwitcher from '@/components/ui/LanguageSwitcher.vue'
 import PasswordInput from '@/components/ui/PasswordInput.vue'
+import { authService } from '@/services/auth/AuthService'
+import { providerLabel } from '@/utils/oauthProviders'
 
 const { t } = useI18n()
 
 const email = ref('')
 const password = ref('')
 const errorMsg = ref('')
+/** OAuth providers GoTrue has enabled; each is a full-page link to the API. */
+const providers = ref<string[]>([])
 const loading = ref(false)
 const isOnline = ref(typeof navigator === 'undefined' ? true : navigator.onLine)
 function onOnline() { isOnline.value = true }
@@ -25,6 +29,10 @@ const route = useRoute()
 onMounted(() => {
     window.addEventListener('online', onOnline)
     window.addEventListener('offline', onOffline)
+    // A failed OAuth sign-in or an expired email link comes back here.
+    if (route.query.error === 'oauth') errorMsg.value = t('auth.error_oauth')
+    else if (route.query.error === 'link') errorMsg.value = t('auth.error_link')
+    void authService.oauthProviders().then((list) => { providers.value = list })
 })
 onUnmounted(() => {
     window.removeEventListener('online', onOnline)
@@ -119,6 +127,10 @@ async function handleLogin() {
                     {{ $t('auth.error_login', { msg: errorMsg }) }}
                 </div>
 
+                <div class="-mt-2 flex justify-end">
+                    <router-link to="/forgot-password" class="inline-flex min-h-11 items-center text-sm font-bold text-emerald-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600">{{ $t('auth.forgot_link') }}</router-link>
+                </div>
+
                 <button type="submit" :disabled="loading || !isOnline"
                     class="w-full bg-emerald-600 text-white font-black py-4.5 rounded-2xl hover:bg-emerald-700 hover:shadow-2xl hover:shadow-emerald-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed group flex items-center justify-center gap-3 active:scale-95 overflow-hidden relative">
                     <div
@@ -135,6 +147,20 @@ async function handleLogin() {
                     <span class="relative z-10">{{ loading ? $t('auth.loading') : $t('auth.submit') }}</span>
                 </button>
             </form>
+
+            <div v-if="providers.length" class="mt-8 w-full" data-testid="oauth-providers">
+                <div class="mb-4 flex items-center gap-3 text-xs font-bold text-gray-400" aria-hidden="true">
+                    <span class="h-px flex-1 bg-gray-200"></span>{{ $t('auth.or_continue_with') }}<span class="h-px flex-1 bg-gray-200"></span>
+                </div>
+                <div class="grid gap-3">
+                    <a v-for="provider in providers" :key="provider" :href="`/api/auth/oauth/${encodeURIComponent(provider)}`"
+                        class="flex min-h-12 w-full items-center justify-center gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-800 transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
+                        :aria-disabled="!isOnline || undefined" :class="{ 'pointer-events-none opacity-50': !isOnline }">
+                        <span class="flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-xs font-black text-gray-700" aria-hidden="true">{{ providerLabel(provider).charAt(0) }}</span>
+                        {{ $t('auth.continue_with', { provider: providerLabel(provider) }) }}
+                    </a>
+                </div>
+            </div>
         </div>
     </div>
 </template>

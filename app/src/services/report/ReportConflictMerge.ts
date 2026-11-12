@@ -1,4 +1,5 @@
 import type { OccurrenceReportDTO, ReportDraftSnapshot } from '@/models/OccurrenceReport'
+import { buildSnapshotFromDto, reportLessonEntriesEqual } from '@/models/ReportEditorSnapshot'
 
 export interface ReportConflictMergeResult {
     payload: Record<string, unknown>
@@ -80,6 +81,25 @@ export function mergeReportConflict(
             changed = true
         } else {
             conflictFields.push(field.name)
+        }
+    }
+
+    const baseEntries = base.lessonEntries ?? []
+    const localEntries = local.lessonEntries ?? []
+    const serverSnapshot = buildSnapshotFromDto(server)
+    const serverEntries = serverSnapshot.lessonEntries ?? []
+    const basePrimary = base.primaryLessonEntryId ?? null
+    const localPrimary = local.primaryLessonEntryId ?? null
+    const serverPrimary = serverSnapshot.primaryLessonEntryId ?? null
+    if (!reportLessonEntriesEqual(localEntries, serverEntries) || !equal(localPrimary, serverPrimary)) {
+        if (!reportLessonEntriesEqual(localEntries, baseEntries) || !equal(localPrimary, basePrimary)) {
+            if (reportLessonEntriesEqual(serverEntries, baseEntries) && equal(serverPrimary, basePrimary)) {
+                payload.lessonEntries = localEntries
+                payload.primaryLessonEntryId = localPrimary
+                changed = true
+            } else {
+                conflictFields.push('lessonEntries')
+            }
         }
     }
 

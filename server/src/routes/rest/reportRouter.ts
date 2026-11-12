@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express'
+import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { complete, idempotency } from './resourceRouter.js'
@@ -8,17 +9,26 @@ import { requireAuthorizationDecision } from '../../auth/authorization.js'
 import { measureReportAdoptions } from '../../ai/adoption/adoptionTracker.js'
 import { envelope, permission, uuid, wrap } from './domainAccess.js'
 
-const fields = 'id,enrollment_id,class_occurrence_id,lesson_id,is_completed,progress_letter,attendance_status,absence_reason,class_participation,classroom_behavior,contact_notes,contact_notes_document,class_notes,class_notes_document,content,content_document,external_link,source_origin,source_admission_id,source_report_id,version,last_edited_by,last_edited_at,created_at,updated_at'
-const writable = ['lesson_id', 'is_completed', 'progress_letter', 'attendance_status', 'absence_reason', 'class_participation', 'classroom_behavior', 'contact_notes', 'contact_notes_document', 'class_notes', 'class_notes_document', 'content', 'content_document', 'external_link'] as const
+const fields = 'id,enrollment_id,class_occurrence_id,lesson_id,is_completed,progress_letter,lesson_entries,primary_lesson_entry_id,attendance_status,absence_reason,class_participation,classroom_behavior,contact_notes,contact_notes_document,class_notes,class_notes_document,content,content_document,external_link,source_origin,source_admission_id,source_report_id,version,last_edited_by,last_edited_at,created_at,updated_at'
+const writable = ['lesson_id', 'is_completed', 'progress_letter', 'lesson_entries', 'primary_lesson_entry_id', 'attendance_status', 'absence_reason', 'class_participation', 'classroom_behavior', 'contact_notes', 'contact_notes_document', 'class_notes', 'class_notes_document', 'content', 'content_document', 'external_link'] as const
+const reportLessonEntrySchema = z.object({
+  id: uuid,
+  enrollment_id: uuid,
+  course_id: uuid,
+  lesson_id: uuid,
+  is_completed: z.boolean(),
+  progress_letter: z.string().regex(/^[A-Z](-[A-Z])?$/).max(32).nullable(),
+}).strict()
 export const reportBodySchema = z.object({
   enrollment_id: z.string().uuid().optional(), class_occurrence_id: z.string().uuid().optional(), lesson_id: z.string().uuid().nullable().optional(),
   is_completed: z.boolean().optional(), progress_letter: z.string().regex(/^[A-Z](-[A-Z])?$/).max(32).nullable().optional(), attendance_status: z.enum(['present', 'absent', 'pending']).optional(), absence_reason: z.string().max(64).nullable().optional(),
+  lesson_entries: z.array(reportLessonEntrySchema).max(25).optional(), primary_lesson_entry_id: uuid.nullable().optional(),
   class_participation: z.number().min(0).max(5).nullable().optional(), classroom_behavior: z.number().min(0).max(5).nullable().optional(),
   contact_notes: z.string().max(10000).nullable().optional(), contact_notes_document: z.record(z.string(), z.unknown()).nullable().optional(), class_notes: z.string().max(10000).nullable().optional(), class_notes_document: z.record(z.string(), z.unknown()).nullable().optional(),
   content: z.string().max(10000).nullable().optional(), content_document: z.record(z.string(), z.unknown()).nullable().optional(), external_link: z.string().max(2048).nullable().optional(),
   expected_version: z.number().int().min(1).optional(),
 }).strict()
-export const reportCreateSchema = reportBodySchema.omit({ expected_version: true }).required({ enrollment_id: true, class_occurrence_id: true })
+export const reportCreateSchema = reportBodySchema.omit({ expected_version: true, lesson_entries: true, primary_lesson_entry_id: true }).required({ enrollment_id: true, class_occurrence_id: true })
 export const reportUpdateSchema = reportBodySchema.omit({ enrollment_id: true, class_occurrence_id: true }).required({ expected_version: true })
 export const reportCollaborationSchema = z.object({ snapshot_base64: z.string().max(1400000), base_report_version: z.number().int().min(1) }).strict()
 type Body = z.infer<typeof reportBodySchema>
@@ -49,7 +59,9 @@ export function firstUncompletedSequence(lessons: Array<{ id: string; sequence: 
   return lessons.find((lesson) => !representedLessonIds.has(lesson.id))?.sequence ?? currentLessonNumber
 }
 function reportId(req: Request) {
-  const id = typeof req.params.id === 'string' ? req.params.id : undefined
+  const id = typeof req.params.id === 'string'
+    ? req.params.id
+    : typeof req.params.reportId === 'string' ? req.params.reportId : undefined
   if (!id || !z.string().uuid().safeParse(id).success) throw new ApiError(400, 'INVALID_ID', 'Report id is invalid')
   return id
 }
@@ -177,6 +189,145 @@ async function update(req: Request, res: Response) {
   if (input.content !== undefined && req.adminDb) void measureReportAdoptions(req.adminDb, id, 'save').catch((error) => req.log?.warn({ err: error, report_id: id }, 'ai_adoption_measure_failed'))
   const envelope = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, envelope); return res.json(envelope)
 }
+
+/** Move the report, including its shared attendance/comment and lesson entries, to the occurrence that actually happened. */
+export async function correctOccurrence(req: Request, res: Response) {
+  if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
+  const id = reportId(req)
+  const input = z.object({
+    target_class_occurrence_id: uuid,
+    target_enrollment_id: uuid.optional(),
+    expected_version: z.number().int().min(1),
+  }).strict().parse(req.body)
+
+  setAuditContext(req, {
+    domain: 'teaching',
+    resource: 'reports',
+    resourceId: id,
+    action: 'correct_occurrence',
+    permission: 'teaching.reports.update',
+    scopeType: 'occurrence_report',
+    metadata: {
+      actor_user_id: req.user.id,
+      target_class_occurrence_id: input.target_class_occurrence_id,
+      target_enrollment_id: input.target_enrollment_id ?? null,
+    },
+  })
+  const contextResult = await req.db.rpc('get_occurrence_report_mutation_context', {
+    p_report_id: id,
+    p_permission_key: 'teaching.reports.update',
+  }).maybeSingle()
+  if (contextResult.error) throw mapDatabaseError(contextResult.error)
+  const context = contextResult.data as MutationContext | null
+  requireAuthorizationDecision(req, { data: Boolean(context), error: null }, {
+    permission: 'teaching.reports.update',
+    stage: 'report_scope_permission',
+    message: 'You do not have permission to correct this report',
+    scopeId: id,
+    scopeType: 'occurrence_report',
+    teachingId: context?.teaching_id ?? null,
+  })
+  if (!context) return
+
+  const replay = await idempotency(req, 200, null)
+  if (replay) return res.status(replay.status).json(replay.body)
+
+  const result = await req.db.rpc('correct_occurrence_report', {
+    p_report_id: id,
+    p_target_class_occurrence_id: input.target_class_occurrence_id,
+    p_expected_version: input.expected_version,
+    p_target_enrollment_id: input.target_enrollment_id ?? null,
+  })
+  if (result.error) throw mapDatabaseError(result.error)
+  const correction = result.data as {
+    report?: unknown
+    source_enrollment_id?: string
+    target_enrollment_id?: string
+    source_class_occurrence_id?: string
+    target_class_occurrence_id?: string
+    source_class_session_id?: string
+    target_class_session_id?: string
+    source_teaching_id?: string | null
+    target_teaching_id?: string | null
+    replaced_report_id?: string | null
+  } | null
+  if (!correction?.report) throw new ApiError(500, 'INTERNAL_ERROR', 'The report correction could not be completed')
+
+  setAuditContext(req, {
+    teachingId: correction.target_teaching_id ?? null,
+    scopeId: correction.target_class_occurrence_id ?? null,
+    scopeType: 'class_occurrence',
+    metadata: {
+      ...(req.auditContext?.metadata ?? {}),
+      actor_user_id: req.user.id,
+      source_enrollment_id: correction.source_enrollment_id ?? null,
+      target_enrollment_id: correction.target_enrollment_id ?? null,
+      source_class_occurrence_id: correction.source_class_occurrence_id ?? context.class_occurrence_id,
+      target_class_occurrence_id: correction.target_class_occurrence_id ?? input.target_class_occurrence_id,
+      source_class_session_id: correction.source_class_session_id ?? context.class_session_id,
+      target_class_session_id: correction.target_class_session_id ?? null,
+      source_teaching_id: correction.source_teaching_id ?? context.teaching_id,
+      target_teaching_id: correction.target_teaching_id ?? null,
+      replaced_report_id: correction.replaced_report_id ?? null,
+    },
+  })
+  const body = envelope(req, correction.report)
+  await complete(req, 200, body)
+  return res.json(body)
+}
+
+/** Course and lesson choices for the same student inside the report's teaching. */
+export async function reportLessonEntryOptions(req: Request, res: Response) {
+  if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
+  if (!req.adminDb) throw new ApiError(503, 'RESOURCE_SERVICE_UNAVAILABLE', 'The report service is unavailable')
+  const id = uuid.parse(req.params.reportId)
+  const contextResult = await req.db.rpc('get_occurrence_report_mutation_context', { p_report_id: id, p_permission_key: 'teaching.reports.update' }).maybeSingle()
+  if (contextResult.error) throw mapDatabaseError(contextResult.error)
+  const context = contextResult.data as Pick<MutationContext, 'enrollment_id' | 'teaching_id'> | null
+  requireAuthorizationDecision(req, { data: Boolean(context), error: null }, { permission: 'teaching.reports.update', stage: 'report_scope_permission', message: 'You do not have permission to access this report', scopeId: id, scopeType: 'occurrence_report', teachingId: context?.teaching_id ?? null })
+  if (!context) {
+    return
+  }
+  const anchor = await req.adminDb.from('enrollments').select('student_id,course_id').eq('id', context.enrollment_id).maybeSingle()
+  if (anchor.error) throw mapDatabaseError(anchor.error)
+  if (!anchor.data?.student_id) throw new ApiError(404, 'NOT_FOUND', 'Report student was not found')
+  let courseQuery = req.adminDb.from('courses').select('id,subject,stage,display_name')
+  // A null teaching scope is legacy/unscoped data. Fail closed to the anchor
+  // course instead of exposing every unscoped course for this student.
+  courseQuery = context.teaching_id
+    ? courseQuery.eq('teaching_id', context.teaching_id)
+    : courseQuery.eq('id', anchor.data.course_id)
+  const courses = await courseQuery
+  if (courses.error) throw mapDatabaseError(courses.error)
+  const courseRows = (courses.data ?? []) as Array<{ id: string; subject: string | null; stage: string | null; display_name: string | null }>
+  const courseIds = [...new Set(courseRows.map((course) => course.id))]
+  if (!courseIds.length) return res.json(envelope(req, { enrollments: [] }))
+  const [enrollments, lessons] = await Promise.all([
+    req.adminDb.from('enrollments').select('id,course_id,status').eq('student_id', anchor.data.student_id).in('course_id', courseIds).neq('status', 'dropped'),
+    req.adminDb.from('lessons').select('id,course_id,sequence,title').in('course_id', courseIds).order('sequence', { ascending: true }),
+  ])
+  if (enrollments.error) throw mapDatabaseError(enrollments.error)
+  if (lessons.error) throw mapDatabaseError(lessons.error)
+  const rows = (enrollments.data ?? []) as Array<{ id: string; course_id: string; status: string | null }>
+  const courseById = new Map(courseRows.map((course) => [course.id, course]))
+  const lessonsByCourse = new Map<string, Array<{ id: string; sequence: number; title: string }>>()
+  for (const lesson of lessons.data ?? []) {
+    const list = lessonsByCourse.get(lesson.course_id) ?? []
+    list.push({ id: lesson.id, sequence: lesson.sequence, title: lesson.title })
+    lessonsByCourse.set(lesson.course_id, list)
+  }
+  return res.json(envelope(req, {
+    enrollments: rows.map((row) => {
+      const course = courseById.get(row.course_id)
+      return {
+        id: row.id,
+        course_id: row.course_id,
+        course_name: course?.display_name || [course?.subject, course?.stage].filter(Boolean).join(' '),
+        lessons: lessonsByCourse.get(row.course_id) ?? [],
+      }
+    }),
+  }))
+}
 export async function remove(req: Request, res: Response) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const id = reportId(req)
@@ -237,6 +388,10 @@ async function reportMutation(req: Request, reportId: string, patch: Record<stri
   return res.json(body)
 }
 
+export function legacySnapshotHasLessonState(snapshot: Record<string, unknown>) {
+  return ['lesson_id', 'is_completed', 'progress_letter'].some((field) => Object.prototype.hasOwnProperty.call(snapshot, field))
+}
+
 async function restoreVersion(req: Request, res: Response) {
   const reportId = uuid.parse(req.params.reportId); const versionId = uuid.parse(req.params.versionId)
   const input = z.object({ expected_version: z.number().int().min(1) }).strict().parse(req.body)
@@ -245,6 +400,25 @@ async function restoreVersion(req: Request, res: Response) {
   if (!version.data) throw new ApiError(404, 'NOT_FOUND', 'Report version was not found')
   const snapshot: Record<string, unknown> = version.data.snapshot && typeof version.data.snapshot === 'object' ? version.data.snapshot as Record<string, unknown> : { content: version.data.content }
   const patch = Object.fromEntries(writable.filter((field) => field in snapshot).map((field) => [field, snapshot[field]]))
+  if (snapshot.lesson_entries === undefined && legacySnapshotHasLessonState(snapshot)) {
+    const current = await req.db!.from('occurrence_reports').select('enrollment_id').eq('id', reportId).maybeSingle()
+    if (current.error) throw mapDatabaseError(current.error)
+    if (!current.data) throw new ApiError(404, 'NOT_FOUND', 'Report was not found')
+    const enrollment = await req.db!.from('enrollments').select('id,course_id').eq('id', current.data.enrollment_id).maybeSingle()
+    if (enrollment.error) throw mapDatabaseError(enrollment.error)
+    if (!enrollment.data) throw new ApiError(409, 'REPORT_VERSION_RESTORE_UNAVAILABLE', 'The report enrollment is no longer available')
+    const lessonId = typeof snapshot.lesson_id === 'string' ? snapshot.lesson_id : null
+    const entryId = lessonId ? randomUUID() : null
+    patch.lesson_entries = lessonId ? [{
+      id: entryId,
+      enrollment_id: enrollment.data.id,
+      course_id: enrollment.data.course_id,
+      lesson_id: lessonId,
+      is_completed: snapshot.is_completed === true,
+      progress_letter: typeof snapshot.progress_letter === 'string' ? snapshot.progress_letter : null,
+    }] : []
+    patch.primary_lesson_entry_id = entryId
+  }
   return reportMutation(req, reportId, reportPatch.parse(patch), input.expected_version, res)
 }
 
@@ -255,6 +429,8 @@ async function resolveConflict(req: Request, res: Response) {
 }
 
 async function progressSummaryReports(req: Request, res: Response) {
+  if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
+  if (!req.adminDb) throw new ApiError(503, 'RESOURCE_SERVICE_UNAVAILABLE', 'The report service is unavailable')
   const query = z.object({
     enrollment_ids: z.string().min(1).max(10000),
     limit: z.coerce.number().int().min(1).max(1000).default(1000),
@@ -262,22 +438,62 @@ async function progressSummaryReports(req: Request, res: Response) {
   }).strict().parse(req.query)
   const enrollmentIds = [...new Set(query.enrollment_ids.split(',').filter(Boolean))]
   if (enrollmentIds.length > 100 || enrollmentIds.some((id) => !uuid.safeParse(id).success)) throw new ApiError(400, 'INVALID_QUERY', 'enrollment_ids contains an invalid id')
+  const enrollmentById = new Map<string, { id: string; class_session_id: string | null; course_id: string }>()
   for (const enrollmentId of enrollmentIds) {
-    const enrollment = await req.db!.from('enrollments').select('id,class_session_id').eq('id', enrollmentId).maybeSingle()
+    const enrollment = await req.db!.from('enrollments').select('id,class_session_id,course_id').eq('id', enrollmentId).maybeSingle()
     if (enrollment.error) throw mapDatabaseError(enrollment.error)
     if (!enrollment.data) continue
+    enrollmentById.set(enrollmentId, enrollment.data)
     await permission(req, 'teaching.reports.list', enrollment.data.class_session_id)
   }
   const descending = query.sort.startsWith('-')
   const field = descending ? query.sort.slice(1) : query.sort
-  const result = await req.db!.from('occurrence_reports').select('id,enrollment_id,lesson_id,is_completed,progress_letter,attendance_status,created_at,updated_at,class_occurrences(occurrence_date)').in('enrollment_id', enrollmentIds).order(field, { ascending: !descending }).limit(query.limit)
-  if (result.error) throw mapDatabaseError(result.error)
-  return res.json(envelope(req, result.data ?? [], { limit: query.limit, offset: 0, total: result.data?.length ?? 0, sort: query.sort }))
+  const reportRows = new Map<string, Record<string, any>>()
+  for (const enrollmentId of enrollmentIds) {
+    if (!enrollmentById.has(enrollmentId)) continue
+    const [anchored, linked] = await Promise.all([
+      req.adminDb.from('occurrence_reports').select('id,enrollment_id,class_occurrence_id,lesson_id,is_completed,progress_letter,lesson_entries,attendance_status,created_at,updated_at,class_occurrences(occurrence_date)').eq('enrollment_id', enrollmentId).order(field, { ascending: !descending }).limit(query.limit),
+      req.adminDb.from('occurrence_reports').select('id,enrollment_id,class_occurrence_id,lesson_id,is_completed,progress_letter,lesson_entries,attendance_status,created_at,updated_at,class_occurrences(occurrence_date)').contains('lesson_entries', [{ enrollment_id: enrollmentId }]).order(field, { ascending: !descending }).limit(query.limit),
+    ])
+    if (anchored.error) throw mapDatabaseError(anchored.error)
+    if (linked.error) throw mapDatabaseError(linked.error)
+    for (const row of [...(anchored.data ?? []), ...(linked.data ?? [])] as Array<Record<string, any>>) reportRows.set(`${enrollmentId}:${row.id}`, row)
+  }
+  const flattened = [...reportRows.entries()].flatMap(([key, report]) => {
+    const enrollmentId = key.slice(0, key.indexOf(':'))
+    const entries = Array.isArray(report.lesson_entries) ? report.lesson_entries as Array<Record<string, any>> : []
+    const matching = entries.filter((entry) => entry.enrollment_id === enrollmentId && entry.course_id === enrollmentById.get(enrollmentId)?.course_id)
+    const progressRows = matching.length
+      ? matching
+      : entries.length === 0 && report.enrollment_id === enrollmentId && report.lesson_id
+        ? [{ id: `${report.id}:legacy`, lesson_id: report.lesson_id, is_completed: report.is_completed, progress_letter: report.progress_letter }]
+        : []
+    return progressRows.map((entry) => ({
+      id: report.id,
+      lesson_entry_id: entry.id,
+      enrollment_id: enrollmentId,
+      class_occurrence_id: report.class_occurrence_id,
+      lesson_id: entry.lesson_id,
+      is_completed: entry.is_completed,
+      progress_letter: entry.progress_letter,
+      attendance_status: report.attendance_status,
+      created_at: report.created_at,
+      updated_at: report.updated_at,
+      class_occurrences: report.class_occurrences,
+    }))
+  }).sort((left, right) => {
+    const a = String(field === 'updated_at' ? left.updated_at : left.created_at)
+    const b = String(field === 'updated_at' ? right.updated_at : right.created_at)
+    return (a.localeCompare(b) || left.id.localeCompare(right.id)) * (descending ? -1 : 1)
+  }).slice(0, query.limit)
+  return res.json(envelope(req, flattened, { limit: query.limit, offset: 0, total: flattened.length, sort: query.sort }))
 }
 
 export function createReportRouter() {
   const router = Router()
   router.post('/reports', wrap(create))
+  router.post('/reports/:reportId/correct-occurrence', wrap(correctOccurrence))
+  router.get('/reports/:reportId/lesson-entry-options', wrap(reportLessonEntryOptions))
   router.patch('/reports/:id', wrap(update))
   router.delete('/reports/:id', wrap(remove))
   router.get('/reports/:id/collaboration', wrap(readCollaboration))

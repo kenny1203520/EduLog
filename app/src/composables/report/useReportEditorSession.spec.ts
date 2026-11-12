@@ -42,6 +42,8 @@ function makeProps(overrides: Partial<ResolvedReportEditorProps> = {}) {
         debounceMs: 2000, enrollmentId: 'enrollment', classOccurrenceId: 'occurrence', courseName: '', courseStage: '',
         courseDisplayName: '', initialClassroomName: '', initialSessionName: '', initialSessionTime: '',
         initialStudentName: '', initialStudentId: '', initialLessonId: 'lesson', availableLessons: [],
+        initialLessonEntries: [{ id: 'lesson-entry', enrollment_id: 'enrollment', course_id: 'course', lesson_id: 'lesson', is_completed: false, progress_letter: null }],
+        initialPrimaryLessonEntryId: 'lesson-entry',
         initialReportExternalLink: '', initialIsCompleted: false, initialAttendanceStatus: 'pending',
         initialClassParticipation: null, initialClassroomBehavior: null, initialContactNotes: '',
         initialContactNotesDocument: null, initialClassNotes: '', initialClassNotesDocument: null,
@@ -51,10 +53,20 @@ function makeProps(overrides: Partial<ResolvedReportEditorProps> = {}) {
     }) as ResolvedReportEditorProps
 }
 
-const saved = (overrides: Partial<OccurrenceReportDTO> = {}) => ({
-    success: true,
-    updatedReport: { id: 'report', version: 5, lesson_id: 'lesson', attendance_status: 'pending', content: 'Saved text', ...overrides },
-})
+const saved = (overrides: Partial<OccurrenceReportDTO> = {}) => {
+    const lessonId = overrides.lesson_id ?? 'lesson'
+    return {
+        success: true,
+        updatedReport: {
+            id: 'report', version: 5, lesson_id: lessonId, attendance_status: 'pending', content: 'Saved text', ...overrides,
+            lesson_entries: overrides.lesson_entries ?? [{
+                id: 'lesson-entry', enrollment_id: 'enrollment', course_id: 'course', lesson_id: lessonId,
+                is_completed: overrides.is_completed ?? false, progress_letter: overrides.progress_letter ?? null,
+            }],
+            primary_lesson_entry_id: overrides.primary_lesson_entry_id ?? 'lesson-entry',
+        },
+    }
+}
 
 describe('report editor session', () => {
     let scope: ReturnType<typeof effectScope>
@@ -91,9 +103,28 @@ describe('report editor session', () => {
         expect(draft.schedule).toHaveBeenCalled()
 
         await expect(session.saveNow()).resolves.toBe(true)
-        expect(reports.saveReport).toHaveBeenCalledWith('report', 4, 'teacher', { isCompleted: true })
+        expect(reports.saveReport).toHaveBeenCalledWith('report', 4, 'teacher', expect.objectContaining({
+            isCompleted: true,
+            lessonEntries: expect.arrayContaining([expect.objectContaining({ enrollment_id: 'enrollment', lesson_id: 'lesson', is_completed: true })]),
+        }))
         expect(session.version.value).toBe(5)
         expect(emit).toHaveBeenCalledWith('save-success', expect.objectContaining({ version: 5 }))
+    })
+
+    it('blocks saving an incomplete lesson entry until its course and lesson are selected', async () => {
+        const session = await setup({ initialLessonId: undefined, initialLessonEntries: [], initialPrimaryLessonEntryId: null })
+        session.lessonEntries.value.push({
+            id: 'new-entry', enrollment_id: 'enrollment', lesson_id: null, is_completed: false, progress_letter: null,
+        })
+        await nextTick()
+
+        expect(session.canSave.value).toBe(false)
+        await expect(session.saveNow()).resolves.toBe(false)
+        expect(reports.saveReport).not.toHaveBeenCalled()
+
+        session.lessonEntries.value[0] = { ...session.lessonEntries.value[0]!, course_id: 'course', lesson_id: 'lesson' }
+        await nextTick()
+        expect(session.canSave.value).toBe(true)
     })
 
     it('saves an attendance-only change through the attendance endpoint', async () => {
@@ -117,7 +148,10 @@ describe('report editor session', () => {
         session.isCompleted.value = true
         await nextTick()
         await session.saveNow()
-        expect(reports.saveReport).toHaveBeenCalledWith('report', 4, 'teacher', { isCompleted: true })
+        expect(reports.saveReport).toHaveBeenCalledWith('report', 4, 'teacher', expect.objectContaining({
+            isCompleted: true,
+            lessonEntries: expect.arrayContaining([expect.objectContaining({ enrollment_id: 'enrollment', lesson_id: 'lesson', is_completed: true })]),
+        }))
         expect(session.buildCurrentSnapshot().absenceReason).toBe('holiday')
     })
 

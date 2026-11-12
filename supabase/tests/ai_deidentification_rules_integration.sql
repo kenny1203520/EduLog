@@ -29,6 +29,8 @@ BEGIN
   INSERT INTO auth.users(id, email) VALUES
     (teacher, 'deid-teacher@example.test'),
     (admin_user, 'deid-admin@example.test');
+  -- Accounts start pending (1000163) and hold no permission until active (1000165).
+  UPDATE public.profiles SET account_status = 'active' WHERE account_status = 'pending';
   INSERT INTO public.user_role_assignments(user_id, role_id, scope_type, scope_id, effective_from, status)
   SELECT admin_user, role.id, 'system', NULL, DATE '2026-01-01', 'active'
   FROM public.roles role WHERE role.code = 'system_admin' AND role.domain = 'system' AND role.is_builtin;
@@ -54,7 +56,7 @@ BEGIN
   EXCEPTION WHEN check_violation THEN NULL;
   END;
   BEGIN
-    INSERT INTO public.ai_deid_rules(name, kind, pattern, placeholder_kind, languages) VALUES ('Lang', 'regex', 'x+', 'person', ARRAY['fr']);
+    INSERT INTO public.ai_deid_rules(name, kind, pattern, placeholder_kind, languages) VALUES ('Lang', 'regex', 'x+', 'person', ARRAY['zz']);
     RAISE EXCEPTION 'rule languages must be known';
   EXCEPTION WHEN check_violation THEN NULL;
   END;

@@ -10,6 +10,8 @@ INSERT INTO auth.users(id, email) VALUES
   ('15900000-0000-4000-8000-000000000002', 'archive-assigned@example.test'),
   ('15900000-0000-4000-8000-000000000003', 'archive-free@example.test'),
   ('15900000-0000-4000-8000-000000000004', 'archive-session-teacher@example.test');
+-- Accounts start pending (1000163) and hold no permission until active (1000165).
+UPDATE public.profiles SET account_status = 'active' WHERE account_status = 'pending';
 
 -- Earlier fixtures in the same CI database may grant the built-in teacher
 -- role teaching.roles.manage; this test relies on the shipped defaults.

@@ -2,8 +2,9 @@ import { apiV1Client } from '@/services/api/ApiV1Client'
 
 /** Client for de-identification administration (/ai/admin/deid). */
 
-export type DeidLanguage = 'zh' | 'en' | 'ja' | 'ko'
-export const DEID_LANGUAGES: DeidLanguage[] = ['zh', 'en', 'ja', 'ko']
+/** Languages the bundled Presidio image ships; matches the API's PRESIDIO_LANGUAGES. */
+export const DEID_LANGUAGES = ['zh', 'en', 'ja', 'ko', 'ca', 'da', 'de', 'el', 'es', 'fi', 'fr', 'hr', 'it', 'lt', 'mk', 'nb', 'nl', 'pl', 'pt', 'ro', 'ru', 'sl', 'sv', 'uk'] as const
+export type DeidLanguage = typeof DEID_LANGUAGES[number]
 export type DeidRuleKind = 'deny_list' | 'regex'
 export type DeidPlaceholderKind = 'person' | 'location' | 'organization' | 'phone' | 'email' | 'nationalId' | 'sensitive'
 export const DEID_PLACEHOLDER_KINDS: DeidPlaceholderKind[] = ['person', 'location', 'organization', 'phone', 'email', 'nationalId', 'sensitive']

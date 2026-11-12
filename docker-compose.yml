@@ -4,6 +4,12 @@
 #   Stop:               docker compose down
 #   Destroy:            docker compose -f docker-compose.yml -f ./supabase/dev/docker-compose.dev.yml down -v --remove-orphans
 #   Reset everything:   ./supabase/reset.sh
+#   Optional overlays:  supabase/docker-compose.kong.yml (Kong instead of Envoy),
+#                       supabase/docker-compose.logs.yml (Logflare + Vector),
+#                       supabase/docker-compose.pg17.yml (Postgres 17; see supabase/utils/upgrade-pg17.sh)
+#
+# Supabase services follow the self-hosted v0.8.4 release (2026-11-05), except
+# Postgres, which stays on 15 here. See docs/deployment/supabase-upgrade.md.
 
 name: edulog
 
@@ -12,25 +18,21 @@ services:
     networks:
       - net
     container_name: edulog-studio
-    image: supabase/studio:2026.04.28-sha-89d08a2
+    image: supabase/studio:2026.11.02-sha-a05e7ec
     restart: unless-stopped
     healthcheck:
       test:
         [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://studio:3000/api/platform/profile').then((r) => {if (r.status !== 200) throw new Error(r.status)})",
+          "CMD-SHELL",
+          "node -e \"fetch('http://localhost:3000/api/platform/profile').then((r) => {if (r.status !== 200) throw new Error(r.status)})\""
         ]
       timeout: 10s
       interval: 5s
       retries: 3
-    depends_on:
-      analytics:
-        condition: service_healthy
+      start_period: 20s
     environment:
-      # Binds nestjs listener to both IPv4 and IPv6 network interfaces
-      HOSTNAME: "::"
+      # Binds the listener to all IPv4 interfaces
+      HOSTNAME: "0.0.0.0"
 
       STUDIO_PG_META_URL: http://meta:8080
       POSTGRES_PORT: ${POSTGRES_PORT}
@@ -50,79 +52,64 @@ services:
       DEFAULT_PROJECT_NAME: ${STUDIO_DEFAULT_PROJECT}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
 
-      SUPABASE_URL: http://kong:8000
+      SUPABASE_URL: http://api-gw:8000
       SUPABASE_PUBLIC_URL: ${SUPABASE_PUBLIC_URL}
       SUPABASE_ANON_KEY: ${ANON_KEY}
       SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY}
       AUTH_JWT_SECRET: ${JWT_SECRET}
+      SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:-}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
 
-      # LOGFLARE_API_KEY is deprecated
-      LOGFLARE_API_KEY: ${LOGFLARE_PUBLIC_ACCESS_TOKEN}
-      LOGFLARE_PUBLIC_ACCESS_TOKEN: ${LOGFLARE_PUBLIC_ACCESS_TOKEN}
-      LOGFLARE_PRIVATE_ACCESS_TOKEN: ${LOGFLARE_PRIVATE_ACCESS_TOKEN}
-
-      LOGFLARE_URL: http://analytics:4000
-      NEXT_PUBLIC_ENABLE_LOGS: "true"
-      # Comment to use Big Query backend for analytics
-      NEXT_ANALYTICS_BACKEND_PROVIDER: postgres
-      # Uncomment to use Big Query backend for analytics
-      # NEXT_ANALYTICS_BACKEND_PROVIDER: bigquery
+      # Logs are optional; supabase/docker-compose.logs.yml enables them.
+      ENABLED_FEATURES_LOGS_ALL: "false"
       SNIPPETS_MANAGEMENT_FOLDER: /app/snippets
     volumes:
       - ./supabase/volumes/snippets:/app/snippets:Z
 
-  kong:
+  # API gateway: Envoy by default. For Kong, add -f supabase/docker-compose.kong.yml.
+  # The kong/envoy aliases keep http://kong:8000 working for the EduLog API.
+  # The direct port is host-only; the Caddy and nginx overlays put TLS and the
+  # dashboard login in front of it.
+  api-gw:
     networks:
-      - net
-    container_name: edulog-kong
-    image: kong/kong:3.9.1
+      net:
+        aliases:
+          - kong
+          - envoy
+    container_name: edulog-envoy
+    image: envoyproxy/envoy:v1.39.6
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "kong", "health"]
-      interval: 5s
+      # TCP check: this image has neither curl nor wget.
+      test: ["CMD-SHELL", "timeout 1 bash -c '</dev/tcp/127.0.0.1/8000'"]
+      interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 3
     depends_on:
       studio:
         condition: service_healthy
-      # analytics:
-      #   condition: service_healthy
     ports:
-      - ${KONG_HTTP_PORT}:8000/tcp
-      - ${KONG_HTTPS_PORT}:8443/tcp
+      - 127.0.0.1:${API_GW_HTTP_PORT:-${KONG_HTTP_PORT:-8000}}:8000/tcp
     volumes:
-      # https://github.com/supabase/supabase/issues/12661
-      - ./supabase/volumes/api/kong.yml:/home/kong/temp.yml:ro,z
-      - ./supabase/volumes/api/kong-entrypoint.sh:/home/kong/kong-entrypoint.sh:ro,z
-      #- ./supabase/volumes/api/server.crt:/home/kong/server.crt:ro
-      #- ./supabase/volumes/api/server.key:/home/kong/server.key:ro
+      - ./supabase/volumes/api/envoy/envoy.yaml:/etc/envoy/envoy.yaml:ro
+      - ./supabase/volumes/api/envoy/cds.yaml:/etc/envoy/cds.yaml:ro
+      - ./supabase/volumes/api/envoy/lds.template.yaml:/etc/envoy/lds.template.yaml:ro
+      - ./supabase/volumes/api/envoy/docker-entrypoint.sh:/docker-entrypoint.sh:ro
     environment:
-      KONG_DATABASE: "off"
-      KONG_DECLARATIVE_CONFIG: /usr/local/kong/kong.yml
-      # https://github.com/supabase/cli/issues/14
-      KONG_DNS_ORDER: LAST,A,CNAME
-      KONG_DNS_NOT_FOUND_TTL: 1
-      KONG_PLUGINS: request-transformer,cors,key-auth,acl,basic-auth,request-termination,ip-restriction,post-function
-      KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
-      KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
-      KONG_PROXY_ACCESS_LOG: /dev/stdout combined
-      #KONG_SSL_CERT: /home/kong/server.crt
-      #KONG_SSL_CERT_KEY: /home/kong/server.key
-      SUPABASE_ANON_KEY: ${ANON_KEY}
-      SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY}
+      ANON_KEY: ${ANON_KEY}
+      SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
       SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:-}
       SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
       ANON_KEY_ASYMMETRIC: ${ANON_KEY_ASYMMETRIC:-}
       SERVICE_ROLE_KEY_ASYMMETRIC: ${SERVICE_ROLE_KEY_ASYMMETRIC:-}
-      DASHBOARD_USERNAME: ${DASHBOARD_USERNAME}
-      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD}
-    entrypoint: /home/kong/kong-entrypoint.sh
+      SUPABASE_PUBLIC_URL: ${SUPABASE_PUBLIC_URL}
+    entrypoint: ["/bin/sh", "/docker-entrypoint.sh"]
 
   auth:
     networks:
       - net
     container_name: edulog-auth
-    image: supabase/gotrue:v2.189.0
+    image: supabase/gotrue:v2.197.0
     restart: unless-stopped
     healthcheck:
       test:
@@ -141,8 +128,6 @@ services:
       db:
         # Disable this if you are using an external Postgres database
         condition: service_healthy
-      # analytics:
-      #   condition: service_healthy
     environment:
       GOTRUE_API_HOST: 0.0.0.0
       GOTRUE_API_PORT: 9999
@@ -162,6 +147,8 @@ services:
 
       # Legacy symmetric HS256 key
       GOTRUE_JWT_SECRET: ${JWT_SECRET}
+      # API_EXTERNAL_URL ends in /auth/v1, matching the platform's token issuer
+      GOTRUE_JWT_ISSUER: ${API_EXTERNAL_URL}
 
       # JSON array of signing JWKs (EC private + legacy symmetric)
       # For Podman, use: GOTRUE_JWT_KEYS: ${JWT_KEYS}
@@ -181,30 +168,113 @@ services:
       GOTRUE_SMTP_PORT: ${SMTP_PORT}
       GOTRUE_SMTP_USER: ${SMTP_USER}
       GOTRUE_SMTP_PASS: ${SMTP_PASS}
-      GOTRUE_SMTP_SENDER_NAME: ${SMTP_SENDER_NAME}
+      GOTRUE_SMTP_SENDER_NAME: ${SMTP_SENDER_NAME:-EduLog}
       GOTRUE_MAILER_URLPATHS_INVITE: ${MAILER_URLPATHS_INVITE}
       GOTRUE_MAILER_URLPATHS_CONFIRMATION: ${MAILER_URLPATHS_CONFIRMATION}
       GOTRUE_MAILER_URLPATHS_RECOVERY: ${MAILER_URLPATHS_RECOVERY}
       GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: ${MAILER_URLPATHS_EMAIL_CHANGE}
+      # Bilingual EduLog templates served by the API on the internal network.
+      # Their links go to /api/auth/confirm, so sessions stay in httpOnly cookies.
+      GOTRUE_MAILER_TEMPLATES_INVITE: ${EDULOG_MAIL_TEMPLATE_BASE_URL:-http://api:3000/email-templates}/invite.html
+      GOTRUE_MAILER_TEMPLATES_RECOVERY: ${EDULOG_MAIL_TEMPLATE_BASE_URL:-http://api:3000/email-templates}/recovery.html
+      GOTRUE_MAILER_TEMPLATES_EMAIL_CHANGE: ${EDULOG_MAIL_TEMPLATE_BASE_URL:-http://api:3000/email-templates}/email_change.html
+      GOTRUE_MAILER_TEMPLATES_CONFIRMATION: ${EDULOG_MAIL_TEMPLATE_BASE_URL:-http://api:3000/email-templates}/confirmation.html
+      GOTRUE_MAILER_SUBJECTS_INVITE: "EduLog 帳號邀請 / Your EduLog account invitation"
+      GOTRUE_MAILER_SUBJECTS_RECOVERY: "重設 EduLog 密碼 / Reset your EduLog password"
+      GOTRUE_MAILER_SUBJECTS_EMAIL_CHANGE: "確認 EduLog Email 變更 / Confirm your EduLog email change"
+      GOTRUE_MAILER_SUBJECTS_CONFIRMATION: "確認 EduLog Email / Confirm your EduLog email"
 
       GOTRUE_EXTERNAL_PHONE_ENABLED: ${ENABLE_PHONE_SIGNUP}
       GOTRUE_SMS_AUTOCONFIRM: ${ENABLE_PHONE_AUTOCONFIRM}
 
-      # Uncomment to enable OAuth / social login providers.
-      # GOTRUE_EXTERNAL_GOOGLE_ENABLED: ${GOOGLE_ENABLED}
-      # GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
-      # GOTRUE_EXTERNAL_GOOGLE_SECRET: ${GOOGLE_SECRET}
-      # GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI: ${API_EXTERNAL_URL}/auth/v1/callback
-
-      # GOTRUE_EXTERNAL_GITHUB_ENABLED: ${GITHUB_ENABLED}
-      # GOTRUE_EXTERNAL_GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
-      # GOTRUE_EXTERNAL_GITHUB_SECRET: ${GITHUB_SECRET}
-      # GOTRUE_EXTERNAL_GITHUB_REDIRECT_URI: ${API_EXTERNAL_URL}/auth/v1/callback
-
-      # GOTRUE_EXTERNAL_AZURE_ENABLED: ${AZURE_ENABLED}
-      # GOTRUE_EXTERNAL_AZURE_CLIENT_ID: ${AZURE_CLIENT_ID}
-      # GOTRUE_EXTERNAL_AZURE_SECRET: ${AZURE_SECRET}
-      # GOTRUE_EXTERNAL_AZURE_REDIRECT_URI: ${API_EXTERNAL_URL}/auth/v1/callback
+      # OAuth / social sign-in. Set <NAME>_ENABLED=true plus the client id and
+      # secret in .env; the EduLog login page shows every provider GoTrue
+      # reports as enabled. Each provider's callback URL is
+      # ${EDULOG_WEB_BASE_URL}/api/auth/bridge/callback. New OAuth accounts wait for approval.
+      GOTRUE_EXTERNAL_APPLE_ENABLED: ${APPLE_ENABLED:-false}
+      GOTRUE_EXTERNAL_APPLE_CLIENT_ID: ${APPLE_CLIENT_ID:-}
+      GOTRUE_EXTERNAL_APPLE_SECRET: ${APPLE_SECRET:-}
+      GOTRUE_EXTERNAL_APPLE_REDIRECT_URI: ${EDULOG_WEB_BASE_URL}/api/auth/bridge/callback
+      GOTRUE_EXTERNAL_AZURE_ENABLED: ${AZURE_ENABLED:-false}
+      GOTRUE_EXTERNAL_AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
+      GOTRUE_EXTERNAL_AZURE_SECRET: ${AZURE_SECRET:-}
+      GOTRUE_EXTERNAL_AZURE_URL: ${AZURE_URL:-}
+      GOTRUE_EXTERNAL_AZURE_REDIRECT_URI: ${EDULOG_WEB_BASE_URL}/api/auth/bridge/callback
+      GOTRUE_EXTERNAL_BITBUCKET_ENABLED: ${BITBUCKET_ENABLED:-false}
+      GOTRUE_EXTERNAL_BITBUCKET_CLIENT_ID: ${BITBUCKET_CLIENT_ID:-}
+      GOTRUE_EXTERNAL_BITBUCKET_SECRET: ${BITBUCKET_SECRET:-}
+      GOTRUE_EXTERNAL_BITBUCKET_REDIRECT_URI: ${EDULOG_WEB_BASE_URL}/api/auth/bridge/callback
+      GOTRUE_EXTERNAL_DISCORD_ENABLED: ${DISCORD_ENABLED:-false}
+      GOTRUE_EXTERNAL_DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
+      GOTRUE_EXTERNAL_DISCORD_SECRET: ${DISCORD_SECRET:-}
+      GOTRUE_EXTERNAL_DISCORD_REDIRECT_URI: ${EDULOG_WEB_BASE_URL}/api/auth/bridge/callback
+      GOTRUE_EXTERNAL_FACEBOOK_ENABLED: ${FACEBOOK_ENABLED:-false}
+      GOTRUE_EXTERNAL_FACEBOOK_CLIENT_ID: ${FACEBOOK_CLIENT_ID:-}
+      GOTRUE_EXTERNAL_FACEBOOK_SECRET: ${FACEBOOK_SECRET:-}
+      GOTRUE_EXTERNAL_FACEBOOK_REDIRECT_URI: ${EDULOG_WEB_BASE_URL}/api/auth/bridge/callback
+      GOTRUE_EXTERNAL_FIGMA_ENABLED: ${FIGMA_ENABLED:-false}
+      GOTRUE_EXTERNAL_FIGMA_CLIENT_ID: ${FIGMA_CLIENT_ID:-}
+      GOTRUE_EXTERNAL_FIGMA_SECRET: ${FIGMA_SECRET:-}
+      GOTRUE_EXTERNAL_FIGMA_REDIRECT_URI: ${EDULOG_WEB_BASE_URL}/api/auth/bridge/callback
+      GOTRUE_EXTERNAL_FLY_ENABLED: ${FLY_ENABLED:-false}
+      GOTRUE_EXTERNAL_FLY_CLIENT_ID: ${FLY_CLIENT_ID:-}
+      GOTRUE_EXTERNAL_FLY_SECRET: ${FLY_SECRET:-}
+      GOTRUE_EXTERNAL_FLY_REDIRECT_URI: ${EDULOG_WEB_BASE_URL}/api/auth/bridge/callback
+      GOTRUE_EXTERNAL_GITHUB_ENABLED: ${GITHUB_ENABLED:-false}
+      GOTRUE_EXTERNAL_GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GOTRUE_EXTERNAL_GITHUB_SECRET: ${GITHUB_SECRET:-}
+      GOTRUE_EXTERNAL_GITHUB_REDIRECT_URI: ${EDULOG_WEB_BASE_URL}/api/auth/bridge/callback
+      GOTRUE_EXTERNAL_GITLAB_ENABLED: ${GITLAB_ENABLED:-false}
+      GOTRUE_EXTERNAL_GITLAB_CLIENT_ID: ${GITLAB_CLIENT_ID:-}
+      GOTRUE_EXTERNAL_GITLAB_SECRET: ${GITLAB_SECRET:-}
+      GOTRUE_EXTERNAL_GITLAB_URL: ${GITLAB_URL:-}
+      GOTRUE_EXTERNAL_GITLAB_REDIRECT_URI: ${EDULOG_WEB_BASE_URL}/api/auth/bridge/callback
+      GOTRUE_EXTERNAL_GOOGLE_ENABLED: ${GOOGLE_ENABLED:-false}
+      GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOTRUE_EXTERNAL_GOOGLE_SECRET: ${GOOGLE_SECRET:-}
+      GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI: ${EDULOG_WEB_BASE_URL}/api/auth/bridge/callback
+      GOTRUE_EXTERNAL_KAKAO_ENABLED: ${KAKAO_ENABLED:-false}
+      GOTRUE_EXTERNAL_KAKAO_CLIENT_ID: ${KAKAO_CLIENT_ID:-}
+      GOTRUE_EXTERNAL_KAKAO_SECRET: ${KAKAO_SECRET:-}
+      GOTRUE_EXTERNAL_KAKAO_REDIRECT_URI: ${EDULOG_WEB_BASE_URL}/api/auth/bridge/callback
+      GOTRUE_EXTERNAL_KEYCLOAK_ENABLED: ${KEYCLOAK_ENABLED:-false}
+      GOTRUE_EXTERNAL_KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-}
+      GOTRUE_EXTERNAL_KEYCLOAK_SECRET: ${KEYCLOAK_SECRET:-}
+      GOTRUE_EXTERNAL_KEYCLOAK_URL: ${KEYCLOAK_URL:-}
+      GOTRUE_EXTERNAL_KEYCLOAK_REDIRECT_URI: ${EDULOG_WEB_BASE_URL}/api/auth/bridge/callback
+      GOTRUE_EXTERNAL_LINKEDIN_OIDC_ENABLED: ${LINKEDIN_OIDC_ENABLED:-false}
+      GOTRUE_EXTERNAL_LINKEDIN_OIDC_CLIENT_ID: ${LINKEDIN_OIDC_CLIENT_ID:-}
+      GOTRUE_EXTERNAL_LINKEDIN_OIDC_SECRET: ${LINKEDIN_OIDC_SECRET:-}
+      GOTRUE_EXTERNAL_LINKEDIN_OIDC_REDIRECT_URI: ${EDULOG_WEB_BASE_URL}/api/auth/bridge/callback
+      GOTRUE_EXTERNAL_NOTION_ENABLED: ${NOTION_ENABLED:-false}
+      GOTRUE_EXTERNAL_NOTION_CLIENT_ID: ${NOTION_CLIENT_ID:-}
+      GOTRUE_EXTERNAL_NOTION_SECRET: ${NOTION_SECRET:-}
+      GOTRUE_EXTERNAL_NOTION_REDIRECT_URI: ${EDULOG_WEB_BASE_URL}/api/auth/bridge/callback
+      GOTRUE_EXTERNAL_SLACK_OIDC_ENABLED: ${SLACK_OIDC_ENABLED:-false}
+      GOTRUE_EXTERNAL_SLACK_OIDC_CLIENT_ID: ${SLACK_OIDC_CLIENT_ID:-}
+      GOTRUE_EXTERNAL_SLACK_OIDC_SECRET: ${SLACK_OIDC_SECRET:-}
+      GOTRUE_EXTERNAL_SLACK_OIDC_REDIRECT_URI: ${EDULOG_WEB_BASE_URL}/api/auth/bridge/callback
+      GOTRUE_EXTERNAL_SPOTIFY_ENABLED: ${SPOTIFY_ENABLED:-false}
+      GOTRUE_EXTERNAL_SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:-}
+      GOTRUE_EXTERNAL_SPOTIFY_SECRET: ${SPOTIFY_SECRET:-}
+      GOTRUE_EXTERNAL_SPOTIFY_REDIRECT_URI: ${EDULOG_WEB_BASE_URL}/api/auth/bridge/callback
+      GOTRUE_EXTERNAL_TWITCH_ENABLED: ${TWITCH_ENABLED:-false}
+      GOTRUE_EXTERNAL_TWITCH_CLIENT_ID: ${TWITCH_CLIENT_ID:-}
+      GOTRUE_EXTERNAL_TWITCH_SECRET: ${TWITCH_SECRET:-}
+      GOTRUE_EXTERNAL_TWITCH_REDIRECT_URI: ${EDULOG_WEB_BASE_URL}/api/auth/bridge/callback
+      GOTRUE_EXTERNAL_TWITTER_ENABLED: ${TWITTER_ENABLED:-false}
+      GOTRUE_EXTERNAL_TWITTER_CLIENT_ID: ${TWITTER_CLIENT_ID:-}
+      GOTRUE_EXTERNAL_TWITTER_SECRET: ${TWITTER_SECRET:-}
+      GOTRUE_EXTERNAL_TWITTER_REDIRECT_URI: ${EDULOG_WEB_BASE_URL}/api/auth/bridge/callback
+      GOTRUE_EXTERNAL_WORKOS_ENABLED: ${WORKOS_ENABLED:-false}
+      GOTRUE_EXTERNAL_WORKOS_CLIENT_ID: ${WORKOS_CLIENT_ID:-}
+      GOTRUE_EXTERNAL_WORKOS_SECRET: ${WORKOS_SECRET:-}
+      GOTRUE_EXTERNAL_WORKOS_URL: ${WORKOS_URL:-}
+      GOTRUE_EXTERNAL_WORKOS_REDIRECT_URI: ${EDULOG_WEB_BASE_URL}/api/auth/bridge/callback
+      GOTRUE_EXTERNAL_ZOOM_ENABLED: ${ZOOM_ENABLED:-false}
+      GOTRUE_EXTERNAL_ZOOM_CLIENT_ID: ${ZOOM_CLIENT_ID:-}
+      GOTRUE_EXTERNAL_ZOOM_SECRET: ${ZOOM_SECRET:-}
+      GOTRUE_EXTERNAL_ZOOM_REDIRECT_URI: ${EDULOG_WEB_BASE_URL}/api/auth/bridge/callback
 
       # Uncomment to configure SMS delivery (phone auth and phone MFA).
       # GOTRUE_SMS_PROVIDER: ${SMS_PROVIDER}
@@ -262,20 +332,26 @@ services:
     networks:
       - net
     container_name: edulog-rest
-    image: postgrest/postgrest:v14.8
+    image: postgrest/postgrest:v14.18
     restart: unless-stopped
     depends_on:
       db:
         # Disable this if you are using an external Postgres database
         condition: service_healthy
-      analytics:
-        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "postgrest", "--ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
     environment:
       PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
       PGRST_DB_SCHEMAS: ${PGRST_DB_SCHEMAS}
       PGRST_DB_MAX_ROWS: ${PGRST_DB_MAX_ROWS:-1000}
       PGRST_DB_EXTRA_SEARCH_PATH: ${PGRST_DB_EXTRA_SEARCH_PATH:-public}
       PGRST_DB_ANON_ROLE: anon
+      # Admin server for the --ready healthcheck (container-local only)
+      PGRST_ADMIN_SERVER_PORT: 3001
+      PGRST_ADMIN_SERVER_HOST: localhost
 
       # PostgREST accepts a plain-text symmetric secret, a single JWK, or a JWKS.
       # For Podman, use either PGRST_JWT_SECRET: ${JWT_SECRET} or
@@ -283,7 +359,6 @@ services:
       PGRST_JWT_SECRET: ${JWT_JWKS:-${JWT_SECRET}}
 
       PGRST_DB_USE_LEGACY_GUCS: "false"
-      PGRST_APP_SETTINGS_JWT_SECRET: ${JWT_SECRET}
       PGRST_APP_SETTINGS_JWT_EXP: ${JWT_EXPIRY}
     command: ["postgrest"]
 
@@ -292,14 +367,12 @@ services:
       - net
     # This container name looks inconsistent but is correct because realtime constructs tenant id by parsing the subdomain
     container_name: realtime-dev.supabase-realtime
-    image: supabase/realtime:v2.89.0
+    image: supabase/realtime:v2.148.3
     restart: unless-stopped
     depends_on:
       db:
         # Disable this if you are using an external Postgres database
         condition: service_healthy
-      # analytics:
-      #   condition: service_healthy
     healthcheck:
       test:
         [
@@ -318,7 +391,8 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD}
       DB_NAME: ${POSTGRES_DB}
       DB_AFTER_CONNECT_QUERY: 'SET search_path TO _realtime'
-      DB_ENC_KEY: supabaserealtime
+      # Must stay "supabaserealtime" on existing installs (exactly 16 characters)
+      DB_ENC_KEY: ${REALTIME_DB_ENC_KEY:-supabaserealtime}
 
       # Legacy symmetric HS256 key
       API_JWT_SECRET: ${JWT_SECRET}
@@ -342,7 +416,7 @@ services:
     networks:
       - net
     container_name: edulog-storage
-    image: supabase/storage-api:v1.58.4
+    image: supabase/storage-api:v1.89.12
     restart: unless-stopped
     depends_on:
       db:
@@ -409,7 +483,7 @@ services:
     networks:
       - net
     container_name: edulog-imgproxy
-    image: darthsim/imgproxy:v3.30.1
+    image: darthsim/imgproxy:v4.0.21
     restart: unless-stopped
     volumes:
       - ./supabase/volumes/storage:/var/lib/storage:z
@@ -429,14 +503,12 @@ services:
     networks:
       - net
     container_name: edulog-meta
-    image: supabase/postgres-meta:v0.96.5
+    image: supabase/postgres-meta:v0.100.0
     restart: unless-stopped
     depends_on:
       db:
         # Disable this if you are using an external Postgres database
         condition: service_healthy
-      # analytics:
-      #   condition: service_healthy
     environment:
       PG_META_PORT: 8080
       PG_META_DB_HOST: ${POSTGRES_HOST}
@@ -445,55 +517,6 @@ services:
       PG_META_DB_USER: supabase_admin
       PG_META_DB_PASSWORD: ${POSTGRES_PASSWORD}
       CRYPTO_KEY: ${PG_META_CRYPTO_KEY}
-
-  analytics:
-    networks:
-      - net
-    container_name: edulog-analytics
-    image: supabase/logflare:1.39.3
-    restart: unless-stopped
-    ports:
-      - 4000:4000
-    # Uncomment to use Big Query backend for analytics
-    # volumes:
-    #   - type: bind
-    #     source: ${PWD}/gcloud.json
-    #     target: /opt/app/rel/logflare/bin/gcloud.json
-    #     read_only: true
-    healthcheck:
-      test: 
-        [
-          "CMD", 
-          "curl", 
-          "http://localhost:4000/health"
-        ]
-      timeout: 5s
-      interval: 5s
-      retries: 10
-    depends_on:
-      db:
-        # Disable this if you are using an external Postgres database
-        condition: service_healthy
-    environment:
-      LOGFLARE_NODE_HOST: 127.0.0.1
-      DB_USERNAME: supabase_admin
-      DB_DATABASE: _supabase
-      DB_HOSTNAME: ${POSTGRES_HOST}
-      DB_PORT: ${POSTGRES_PORT}
-      DB_PASSWORD: ${POSTGRES_PASSWORD}
-      DB_SCHEMA: _analytics
-      LOGFLARE_PUBLIC_ACCESS_TOKEN: ${LOGFLARE_PUBLIC_ACCESS_TOKEN}
-      LOGFLARE_PRIVATE_ACCESS_TOKEN: ${LOGFLARE_PRIVATE_ACCESS_TOKEN}
-      LOGFLARE_SINGLE_TENANT: "true"
-      LOGFLARE_SUPABASE_MODE: "true"
-
-      # Comment variables to use Big Query backend for analytics
-      POSTGRES_BACKEND_URL: postgresql://supabase_admin:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/_supabase
-      POSTGRES_BACKEND_SCHEMA: _analytics
-      LOGFLARE_FEATURE_FLAG_OVERRIDE: multibackend=true
-      # Uncomment to use Big Query backend for analytics
-      # GOOGLE_PROJECT_ID: ${GOOGLE_PROJECT_ID}
-      # GOOGLE_PROJECT_NUMBER: ${GOOGLE_PROJECT_NUMBER}
 
   # Comment out everything below this point if you are using an external Postgres database
   db:
@@ -508,7 +531,7 @@ services:
       - ./supabase/volumes/db/webhooks.sql:/docker-entrypoint-initdb.d/init-scripts/98-webhooks.sql:Z
       # Must be superuser to alter reserved role
       - ./supabase/volumes/db/roles.sql:/docker-entrypoint-initdb.d/init-scripts/99-roles.sql:Z
-      # Initialize the database settings with JWT_SECRET and JWT_EXP
+      # Initialize the database settings with JWT_EXP
       - ./supabase/volumes/db/jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql:Z
       # PGDATA directory is persisted between restarts
       - ./supabase/volumes/db/data:/var/lib/postgresql/data:Z
@@ -533,9 +556,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-    # depends_on:
-    #   vector:
-    #     condition: service_healthy
     environment:
       POSTGRES_HOST: /var/run/postgresql
       PGPORT: ${POSTGRES_PORT}
@@ -544,7 +564,6 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       PGDATABASE: ${POSTGRES_DB}
       POSTGRES_DB: ${POSTGRES_DB}
-      JWT_SECRET: ${JWT_SECRET}
       JWT_EXP: ${JWT_EXPIRY}
     command: 
       [
@@ -555,44 +574,12 @@ services:
         "log_min_messages=fatal" # prevents Realtime polling queries from appearing in logs
       ]
 
-  vector:
-    networks:
-      - net
-    container_name: edulog-vector
-    image: timberio/vector:0.53.0-alpine
-    restart: unless-stopped
-    volumes:
-      - ./supabase/volumes/logs/vector.yml:/etc/vector/vector.yml:ro,z
-      - ${DOCKER_SOCKET_LOCATION}:/var/run/docker.sock:ro,z
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "wget",
-          "--no-verbose",
-          "--tries=1",
-          "--spider",
-          "http://vector:9001/health"
-        ]
-      timeout: 5s
-      interval: 5s
-      retries: 3
-    environment:
-      LOGFLARE_PUBLIC_ACCESS_TOKEN: ${LOGFLARE_PUBLIC_ACCESS_TOKEN}
-    command: 
-      [
-        "--config", 
-        "/etc/vector/vector.yml"
-      ]
-    security_opt:
-      - "label=disable"
-
   # Update the DATABASE_URL if you are using an external Postgres database
   supavisor:
     networks:
       - net
     container_name: edulog-pooler
-    image: supabase/supavisor:2.7.4
+    image: supabase/supavisor:2.9.13
     restart: unless-stopped
     ports:
       - ${POSTGRES_PORT}:5432
@@ -617,11 +604,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      # analytics:
-      #   condition: service_healthy
     environment:
       PORT: 4000
       POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_HOST: ${POSTGRES_HOST}
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       DATABASE_URL: ecto://supabase_admin:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/_supabase
@@ -645,18 +631,21 @@ services:
       ]
 
   api:
-    build:
-      context: ./server
+    # Build from source instead with -f docker-compose.build.yml.
+    image: ghcr.io/kenny1203520/edulog-api:${EDULOG_IMAGE_TAG:-alpha}
     container_name: edulog-api
     restart: unless-stopped
     depends_on:
-      kong:
+      auth:
+        condition: service_healthy
+      api-gw:
         condition: service_healthy
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       API_PORT: 3000
       EDULOG_WEB_BASE_URL: ${EDULOG_WEB_BASE_URL}
       SUPABASE_URL: ${EDULOG_SUPABASE_INTERNAL_URL:-http://kong:8000}
+      GOTRUE_INTERNAL_URL: ${EDULOG_GOTRUE_INTERNAL_URL:-http://auth:9999}
       SUPABASE_ANON_KEY: ${ANON_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
       # Server-only token verification material. Never pass this to the Vue
@@ -675,6 +664,14 @@ services:
       PRESIDIO_ANALYZER_URL: ${EDULOG_PRESIDIO_ANALYZER_URL:-}
       OPENAI_SIWC_CLIENT_ID: ${EDULOG_OPENAI_SIWC_CLIENT_ID:-}
       OPENAI_SIWC_CLIENT_SECRET: ${EDULOG_OPENAI_SIWC_CLIENT_SECRET:-}
+      # Same SMTP server as GoTrue; used to tell administrators about accounts
+      # waiting for approval. Leave SMTP_HOST empty to send no mail.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_ADMIN_EMAIL: ${SMTP_ADMIN_EMAIL:-}
+      SMTP_SENDER_NAME: ${SMTP_SENDER_NAME:-EduLog}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r => { if (!r.ok) process.exit(1) })"]
       interval: 10s
@@ -683,15 +680,16 @@ services:
       start_period: 20s
     networks:
       - frontend
+      - net
       - ai
   presidio-analyzer:
-    build:
-      context: ./docker/presidio
-      args:
-        # Installed languages (zh, en, ja, ko); rebuild after changing.
-        PRESIDIO_LANGUAGES: ${EDULOG_PRESIDIO_LANGUAGES:-zh,en}
+    # The image ships every supported language; PRESIDIO_LANGUAGES picks the
+    # ones loaded at start, so changing it needs only a restart.
+    image: ghcr.io/kenny1203520/edulog-presidio:${EDULOG_IMAGE_TAG:-alpha}
     container_name: edulog-presidio-analyzer
     restart: unless-stopped
+    environment:
+      PRESIDIO_LANGUAGES: ${EDULOG_PRESIDIO_LANGUAGES:-zh,en}
     # Point the API at it with EDULOG_PRESIDIO_ANALYZER_URL=http://presidio-analyzer:3000.
     # No published ports: only the API may reach it. Text sent here is raw
     # report content, so it must stay on the internal network.
@@ -699,7 +697,7 @@ services:
       - ai
   edulog:
     container_name: edulog-frontend
-    image: ghcr.io/kenny1203520/edulog:${EDULOG_IMAGE_TAG:-latest}
+    image: ghcr.io/kenny1203520/edulog:${EDULOG_IMAGE_TAG:-alpha}
     depends_on:
       api:
         condition: service_healthy

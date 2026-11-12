@@ -50,7 +50,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 所有環境變數、預設值與 Compose 改名對照請見 [docs/deployment/environment.md](docs/deployment/environment.md)。
 
-正式流量只由 Nginx frontend container 對外提供；`/api/*` 由 Nginx 轉送到 Express，Express 再使用 user JWT client 或受限的 server-side service-role client 存取 Supabase。Production Compose 不公開 Kong、Auth、Realtime、Storage 或 Postgres port。
+正式流量只由 Nginx frontend container 對外提供；`/api/*` 由 Nginx 轉送到 Express，Express 再使用 user JWT client 或受限的 server-side service-role client 存取 Supabase。Production Compose 不公開 API gateway（Envoy/Kong）、Auth、Realtime、Storage 或 Postgres port。
 
 本機若需要直接操作 Supabase Studio/資料庫，請使用 development profile 或另行建立 local-only override，不要把這些 port 暴露在 production 部署。
 
@@ -114,3 +114,7 @@ EduLog 自定義 migration 位於 `supabase/migrations/`，依檔名順序全部
 - `extension/README.md`：瀏覽器擴充功能
 - `supabase/README.md`：Self-hosted Supabase 說明
 - `supabase/migrations/README.md`：資料庫 migration 指南
+
+## 授權
+
+EduLog 原創程式碼與文件依 Apache License 2.0 授權，詳見 [LICENSE](LICENSE) 與 [NOTICE](NOTICE)。明確標示為第三方或上游來源的內容不由此重新授權，請依其各自授權條款使用。

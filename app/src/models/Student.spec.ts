@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Student } from './Student'
+import { emptyStudentCapabilities, Student } from './Student'
 
 describe('Student school summary and sensitive capabilities', () => {
   const base = {
@@ -17,13 +17,24 @@ describe('Student school summary and sensitive capabilities', () => {
         grade: 'Grade 6',
         class: 'Class A',
       },
-      capabilities: { read_sensitive: false, update_sensitive: false },
+      capabilities: { ...emptyStudentCapabilities(), schools: { read: true, update: false } },
     })
 
     expect(student.displaySchoolName).toBe('Example School')
     expect(student.displayGrade).toBe('Grade 6 - Class A')
     expect(student.displaySchoolId).toBe('')
-    expect(student.capabilities).toEqual({ read_sensitive: false, update_sensitive: false })
+    expect(student.hasRestrictedSchool).toBe(false)
+    expect(student.capabilities.schools).toEqual({ read: true, update: false })
+    expect(student.capabilities.personal).toEqual({ read: false, update: false })
+  })
+
+  it('shows only the grade when school read access is missing', () => {
+    const student = new Student({ ...base, current_school: { grade: 'Grade 4' } })
+
+    expect(student.displaySchoolName).toBe('')
+    expect(student.displayGrade).toBe('Grade 4')
+    expect(student.hasRestrictedSchool).toBe(true)
+    expect(student.capabilities).toEqual(emptyStudentCapabilities())
   })
 
   it('prefers the authorized full school record without deriving a school id from the summary', () => {
@@ -38,12 +49,12 @@ describe('Student school summary and sensitive capabilities', () => {
         class: 'Class B',
         school_student_id: 'PRIVATE-001',
       }],
-      capabilities: { read_sensitive: true, update_sensitive: false },
+      capabilities: { ...emptyStudentCapabilities(), schools: { read: true, update: false } },
     })
 
     expect(student.displaySchoolName).toBe('Full School')
     expect(student.displayGrade).toBe('Grade 6 - Class B')
     expect(student.displaySchoolId).toBe('PRIVATE-001')
-    expect(student.capabilities.update_sensitive).toBe(false)
+    expect(student.capabilities.schools.update).toBe(false)
   })
 })

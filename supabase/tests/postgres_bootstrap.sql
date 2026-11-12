@@ -40,3 +40,10 @@ CREATE OR REPLACE FUNCTION realtime.send(payload jsonb, event text, topic text, 
 RETURNS void LANGUAGE sql AS $$ SELECT; $$;
 
 GRANT USAGE ON SCHEMA public, auth, realtime TO anon, authenticated, service_role;
+
+-- Supabase grants new public objects created by postgres to the API roles by
+-- name. Mirror that here, otherwise a migration that only revokes from PUBLIC
+-- looks safe in CI while anon can still call it in production.
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO anon, authenticated, service_role;

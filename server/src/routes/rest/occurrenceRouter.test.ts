@@ -1,9 +1,27 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { provisionReports } from './occurrenceRouter.js'
+import { createOccurrenceRouter, provisionReports } from './occurrenceRouter.js'
 import { expectPriorAttendedReportScope, routeSource } from '../../test/routeSource.js'
 
 const testOccurrenceId = '10000000-0000-4000-8000-000000000001'
+const testSessionId = '10000000-0000-4000-8000-000000000002'
+const otherSessionId = '10000000-0000-4000-8000-000000000003'
+
+const globalMemberClassTeacher = {
+  userId: 'global-member-plus-class-teacher',
+  platformListPermission: false,
+  classSessionListPermissionIds: [testSessionId],
+}
+const globalMemberOnly = {
+  userId: 'global-member-only',
+  platformListPermission: false,
+  classSessionListPermissionIds: [],
+}
+const platformOccurrenceLister = {
+  userId: 'platform-occurrence-lister',
+  platformListPermission: true,
+  classSessionListPermissionIds: [],
+}
 
 describe('occurrence API contract', () => {
   it('enforces scoped permission, holiday and teacher-leave guards', () => {
@@ -14,6 +32,176 @@ describe('occurrence API contract', () => {
     expect(source).toContain('idempotency(req')
   })
 })
+
+describe('occurrence list scope authorization', () => {
+  it('allows a global member who has occurrence-list permission only as teacher of the requested session', async () => {
+    const result = await listOccurrenceRequest({ session_ids: testSessionId }, globalMemberClassTeacher)
+
+    expect(result.status).toBe(200)
+    expect(result.permissionScopes).toEqual([testSessionId])
+    expect(result.permissionScopes).not.toContain(null)
+    expect(result.permissionCalls).toEqual([{
+      permissionKey: 'teaching.occurrences.list',
+      scope: testSessionId,
+    }])
+    expect(result.sessionFilter).toEqual([testSessionId])
+  })
+
+  it('deduplicates class session IDs before checking access and querying rows', async () => {
+    const repeatedSessionIds = Array(101).fill(testSessionId).join(',')
+    const result = await listOccurrenceRequest({ session_ids: repeatedSessionIds }, globalMemberClassTeacher)
+
+    expect(result.status).toBe(200)
+    expect(result.permissionScopes).toEqual([testSessionId])
+    expect(result.sessionFilter).toEqual([testSessionId])
+  })
+
+  it('caps distinct-session permission checks at 100 before querying', async () => {
+    const sessionIds = Array.from({ length: 101 }, (_, index) => (
+      `10000000-0000-4000-8000-${String(index).padStart(12, '0')}`
+    )).join(',')
+    const result = await listOccurrenceRequest({ session_ids: sessionIds }, globalMemberOnly)
+
+    expect(result.status).toBe(400)
+    expect(result.error).toMatchObject({ code: 'INVALID_QUERY' })
+    expect(result.permissionCalls).toEqual([])
+    expect(result.queryStarted).toBe(false)
+  })
+
+  it('denies a global member without class-teacher occurrence-list permission', async () => {
+    const result = await listOccurrenceRequest({ session_ids: testSessionId }, globalMemberOnly)
+
+    expect(result.status).toBe(403)
+    expect(result.error).toMatchObject({ code: 'PERMISSION_DENIED' })
+    expect(result.permissionScopes).toEqual([testSessionId])
+    expect(result.queryStarted).toBe(false)
+  })
+
+  it('rejects the whole request when any requested class is unauthorized', async () => {
+    const result = await listOccurrenceRequest({ session_ids: `${testSessionId},${otherSessionId}` }, globalMemberClassTeacher)
+
+    expect(result.status).toBe(403)
+    expect(result.permissionScopes).toEqual([testSessionId, otherSessionId])
+    expect(result.queryStarted).toBe(false)
+  })
+
+  it('rejects repeated IDs when the raw session_ids value exceeds 4000 characters', async () => {
+    // This bounds URL input size even when de-duplication would leave one permission check.
+    const repeatedSessionIds = Array(111).fill(testSessionId).join(',')
+    const result = await listOccurrenceRequest({ session_ids: repeatedSessionIds }, globalMemberClassTeacher)
+
+    expect(result.error).toMatchObject({ name: 'ZodError' })
+    expect(result.permissionCalls).toEqual([])
+    expect(result.queryStarted).toBe(false)
+  })
+
+  it.each([
+    '',
+    `${testSessionId},`,
+    `${testSessionId},not-a-uuid`,
+  ])('rejects malformed session_ids %s before querying', async (sessionIds) => {
+    const result = await listOccurrenceRequest({ session_ids: sessionIds }, globalMemberClassTeacher)
+
+    expect(result.status).toBe(400)
+    expect(result.error).toMatchObject({ code: 'INVALID_QUERY' })
+    expect(result.permissionScopes).toEqual([])
+    expect(result.queryStarted).toBe(false)
+  })
+
+  it('keeps the single class_session_id authorization path scoped', async () => {
+    const result = await listOccurrenceRequest({ class_session_id: testSessionId }, globalMemberClassTeacher)
+
+    expect(result.status).toBe(200)
+    expect(result.permissionScopes).toEqual([testSessionId])
+    expect(result.singleSessionFilter).toBe(testSessionId)
+  })
+
+  it('keeps an unfiltered list restricted to platform permission', async () => {
+    const result = await listOccurrenceRequest({}, platformOccurrenceLister)
+
+    expect(result.status).toBe(200)
+    expect(result.permissionScopes).toEqual([null])
+    expect(result.sessionFilter).toBeUndefined()
+  })
+})
+
+async function listOccurrenceRequest(
+  query: Record<string, string>,
+  grants: {
+    userId: string
+    platformListPermission: boolean
+    classSessionListPermissionIds: string[]
+  } = globalMemberOnly,
+) {
+  const permissionCalls: Array<{ permissionKey: string; scope: string | null }> = []
+  let sessionFilter: string[] | undefined
+  let singleSessionFilter: string | undefined
+  let queryStarted = false
+  const database = {
+    rpc: async (name: string, args: Record<string, unknown>) => {
+      if (name !== 'has_api_permission') throw new Error(`Unexpected RPC ${name}`)
+      const scope = args.p_class_session_id as string | null
+      const permissionKey = args.p_permission_key as string
+      permissionCalls.push({ permissionKey, scope })
+      return {
+        data: permissionKey === 'teaching.occurrences.list' && (
+          scope === null
+            ? grants.platformListPermission
+            : grants.classSessionListPermissionIds.includes(scope)
+        ),
+        error: null,
+      }
+    },
+    from: (table: string) => {
+      if (table !== 'class_occurrences') throw new Error(`Unexpected table ${table}`)
+      queryStarted = true
+      const builder: any = {
+        select: () => builder,
+        in: (column: string, values: string[]) => {
+          if (column === 'class_session_id') sessionFilter = values
+          return builder
+        },
+        eq: (column: string, value: string) => {
+          if (column === 'class_session_id') singleSessionFilter = value
+          return builder
+        },
+        gte: () => builder,
+        lte: () => builder,
+        order: () => builder,
+        range: async () => ({ data: [], count: 0, error: null }),
+      }
+      return builder
+    },
+  }
+  const request: any = {
+    query,
+    db: database,
+    user: { id: grants.userId },
+    requestId: 'request-1',
+    traceId: 'trace-1',
+  }
+  const route = createOccurrenceRouter().stack.find((layer: any) => layer.route?.path === '/occurrences')
+  const handler = route?.route?.stack[0]?.handle
+  if (!handler) throw new Error('Occurrence list route was not registered')
+
+  const response = await new Promise<{ status: number; error?: unknown }>((resolve) => {
+    const res: any = {
+      statusCode: 200,
+      status(status: number) { this.statusCode = status; return this },
+      json() { resolve({ status: this.statusCode }) },
+    }
+    handler(request, res, (error: any) => resolve({ status: error?.status ?? 500, error }))
+  })
+
+  return {
+    ...response,
+    permissionCalls,
+    permissionScopes: permissionCalls.map((call) => call.scope),
+    sessionFilter,
+    singleSessionFilter,
+    queryStarted,
+  }
+}
 
 describe('class report completion summary', () => {
   it('counts total and completed reports per lesson', async () => {

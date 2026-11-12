@@ -7,6 +7,83 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0-alpha.7] - 2026-11-13
+
+### Added
+- A single report can record completed makeup progress and new lesson progress across multiple courses. Attendance and comments remain shared.
+
+### Changed
+- OAuth now uses the EduLog API bridge so Supabase Gateway can remain private. Password and refresh-token exchanges use per-request GoTrue clients.
+- Company history synchronization targets a confirmed lesson entry and preserves other progress.
+
+### Fixed
+- Class occurrence authorization applies the requested session scope, fixing calendar 403 responses for classroom-scoped teachers.
+- Reports can be atomically corrected to the occurrence where teaching happened while preserving report identity and history.
+- The About page links to EduLog GitHub Packages and image instructions.
+- Transactional email subjects and templates have been refreshed, with sender display-name configuration.
+
+### Security
+- Upgrade the API IP address parser and cover additional reserved IPv6 ranges.
+- Patch API HTTP client security advisories.
+
+### Tests
+- Add regression coverage for scoped occurrence authorization, isolated authentication sessions, private Supabase OAuth callback handling, multi-course reports, occurrence correction, and extension history synchronization.
+- Run Docker image health and boundary smoke checks in CI.
+
+### Deployment Notes
+- Publish matching frontend, API, and Presidio images tagged 2.0.0-alpha.7. Alpha images do not update stable aliases.
+- Back up the database, then apply all unapplied migrations in filename order through 1000171_extension_primary_lesson_sync.sql.
+- Migration 1000169 backfills legacy single-lesson reports into lesson entries. Keep a database backup; code that predates multi-lesson reports may not display secondary lesson progress.
+- This release does not deploy or migrate the existing production environment.
+- No pre-production environment was available. Verify OAuth provider round-trips, live refresh-token behavior, and configured email delivery before production deployment. Sender-domain SPF, DKIM and DMARC alignment and SMTP reputation affect delivery.
+
+### Release Notes
+- See .github/releases/v2.0.0-alpha.7.md for highlights, migration details, and verification evidence.
+
+## [2.0.0-alpha.6] - 2026-11-10
+
+### Added
+- A commented-out Keycloak sign-in option for the Auth service (`KEYCLOAK_*` in `.env.example`).
+- The Presidio analyzer is published as `ghcr.io/kenny1203520/edulog-presidio`, with the spaCy pipelines of 24 languages built in. `EDULOG_PRESIDIO_LANGUAGES` now picks the languages loaded at start, so changing them needs only a restart, not a rebuild; an unknown code stops the container.
+- Prerelease images also get a channel tag (`alpha`, `beta`, `rc`) that follows the newest release of that channel. `latest` still moves only with stable releases.
+- `docker-compose.build.yml` builds the frontend, API and Presidio images from source.
+- De-identification supports all 24 languages the Presidio image ships: ca, da, de, el, en, es, fi, fr, hr, it, ja, ko, lt, mk, nb, nl, pl, pt, ro, ru, sl, sv, uk and zh. Migration `1000160_presidio_languages.sql` widens the database checks. Settings show languages that are not loaded and the command that restarts Presidio with them, instead of a rebuild command.
+- System role names, audit actions and resources, and account/RBAC domain errors have English and Traditional Chinese labels. The account approval screen also labels role groups by domain and moves focus to the rejection reason.
+- EduLog source code and documentation now include Apache-2.0 licensing and third-party notices. Release extension archives and runtime images carry `LICENSE` and `NOTICE`.
+
+### Changed
+- `EDULOG_IMAGE_TAG` sets the tag of all three EduLog images and defaults to `alpha` until the first stable release. `EDULOG_API_IMAGE` is removed: deployments that set it should set `EDULOG_IMAGE_TAG` instead. The base Compose file now pulls the API image instead of building `./server`.
+- The Presidio image is built on a pinned `presidio-analyzer` 2.2.362 base (tag and digest) instead of `latest`.
+- Self-hosted Supabase services follow the upstream `self-hosted/v0.8.4` release (2026-11-05): Studio, Auth, PostgREST, Realtime, Storage, imgproxy v4, postgres-meta and Supavisor. Postgres stays on 15; `supabase/docker-compose.pg17.yml` and the EduLog-adapted `supabase/utils/upgrade-pg17.sh` move a database to 17. See `docs/deployment/supabase-upgrade.md`.
+- Envoy replaces Kong as the default API gateway. The service is now `api-gw`, and the `kong` network alias keeps `http://kong:8000` working. Kong remains available through `supabase/docker-compose.kong.yml`.
+- Logflare and Vector are no longer part of the default stack; `supabase/docker-compose.logs.yml` adds them back.
+- `API_EXTERNAL_URL` now ends in `/auth/v1` and is also the token issuer. Deployments that set `SUPABASE_JWT_ISSUER` must update it to match.
+- `PGRST_DB_SCHEMAS` defaults to `public,graphql_public`, so the `storage` schema is no longer exposed over REST.
+- The base Compose file puts the API container on the `net` network, so it can reach the gateway without the production override.
+- Teaching role grants, role inheritance and permission edits now obey the caller's own permission ceiling. Protected owner roles can only be assigned or removed by an owner.
+- Pending accounts receive no permissions; accounts leaving the active state lose their extension tokens. Approver notices, last-owner guards, teacher account links and student profile enrollments now follow their intended authorization scope.
+- Public-schema privileges are restricted for `anon` and `authenticated`; newly created public functions and tables do not regain the revoked grants by default. Extension release archives and all three runtime images include the license documents.
+
+### Fixed
+- The commented-out Google, GitHub and Azure sign-in examples in `docker-compose.yml` now use `${API_EXTERNAL_URL}/callback`. Since `API_EXTERNAL_URL` ends in `/auth/v1`, the old `/auth/v1/callback` suffix produced `/auth/v1/auth/v1/callback`.
+- The nginx TLS overlay is attached to the `net` and `frontend` networks, so it can reach the gateway and the frontend.
+
+### Security
+- The API gateway blocks Realtime's `/api/tenants` and `/api/openapi` routes.
+- The upstream Realtime and Storage releases include fixes for forged broadcast messages, a tenant ID issue, and signed upload URLs that bypassed row-level security.
+- Eight confirmed authorization findings were addressed across the API and database, including privilege escalation through role grants, access by inactive accounts, and exposure of cross-scope student data.
+
+### Deployment Notes
+- Publish matching frontend and API images tagged `2.0.0-alpha.6`; alpha images do not update stable aliases.
+- Back up the database, then apply every unapplied migration in filename order through `1000168_web_extension_policy_initplan.sql` (alpha.5 ended at `1000159_teacher_archive.sql`).
+- Migrations `1000164`–`1000168` include authorization and database privilege changes. `1000164` removes inheritance rows that point to protected roles, and `1000165` revokes extension tokens for accounts that are not active; these changes cannot be reversed by rolling back the application image. Restore a backup to undo them.
+- If migration `1000167` cannot drop `pg_graphql` because of privileges or dependent objects, run `DROP EXTENSION pg_graphql;` as `supabase_admin` as directed by the migration warning.
+- `EDULOG_IMAGE_TAG` now defaults to `alpha` until the first stable release. Deployments that previously set `EDULOG_API_IMAGE` should set `EDULOG_IMAGE_TAG` instead.
+- This release does not deploy or migrate the existing production environment.
+
+### Release Notes
+- See `.github/releases/v2.0.0-alpha.6.md` for highlights, security changes, migration details and verification evidence.
+
 ## [2.0.0-alpha.5] - 2026-11-09
 
 ### Added

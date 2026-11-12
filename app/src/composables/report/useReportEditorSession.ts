@@ -14,11 +14,12 @@ import type { TextEditorChange, TextEditorContent, TextEditorHandle, TextEditorM
 import { calculateTextEditorMetrics, createTextEditorContent } from '@/components/text-editor/content'
 import { createEditorNotifier } from '@/components/text-editor/notifier'
 import { DEFAULT_EDITOR_USER_SETTINGS, normalizeEditorUserSettings, type EditorUserSettings } from '@/components/text-editor/settings'
-import type { OccurrenceReportDTO, ReportDraftSnapshot, SaveReportResult } from '@/models/OccurrenceReport'
+import type { OccurrenceReportDTO, ReportDraftSnapshot, ReportLessonEntryDTO, SaveReportResult } from '@/models/OccurrenceReport'
 import {
     buildDirtyReportPayload,
     buildSnapshotFromDto,
     buildSnapshotFromProps,
+    createLessonEntryId,
     normalizeReportRating,
     normalizeSystemManagedReason,
     type AttendanceStatus
@@ -540,10 +541,45 @@ export function useReportEditorSession(
 
 
 
-    const selectedLessonId = ref(props.initialLessonId || '')
-    const isCompleted = ref(props.initialIsCompleted)
-    const progressStart = ref(props.initialProgressStart || '')
-    const progressEnd = ref(props.initialProgressEnd || '')
+    const initialSnapshot = buildSnapshotFromProps(props)
+    const lessonEntries = ref<ReportLessonEntryDTO[]>(initialSnapshot.lessonEntries ?? [])
+    const primaryLessonEntryId = ref<string | null>(initialSnapshot.primaryLessonEntryId ?? null)
+    const primaryLessonEntry = computed(() => lessonEntries.value.find(entry => entry.id === primaryLessonEntryId.value) ?? null)
+    function updatePrimaryLessonEntry(patch: Partial<ReportLessonEntryDTO>) {
+        let current = primaryLessonEntry.value
+        if (!current) {
+            if (!props.enrollmentId) return
+            current = {
+                id: createLessonEntryId(), enrollment_id: props.enrollmentId, lesson_id: null,
+                is_completed: false, progress_letter: null,
+            }
+            lessonEntries.value = [...lessonEntries.value, current]
+            primaryLessonEntryId.value = current.id
+        }
+        lessonEntries.value = lessonEntries.value.map(entry => entry.id === current!.id ? { ...entry, ...patch } : entry)
+    }
+    const selectedLessonId = computed({
+        get: () => primaryLessonEntry.value?.lesson_id || '',
+        set: (lessonId: string) => updatePrimaryLessonEntry({ lesson_id: lessonId || null }),
+    })
+    const isCompleted = computed({
+        get: () => primaryLessonEntry.value?.is_completed ?? false,
+        set: (completed: boolean) => updatePrimaryLessonEntry({ is_completed: completed }),
+    })
+    const progressStart = computed({
+        get: () => primaryLessonEntry.value?.progress_letter?.split('-')[0] || '',
+        set: (start: string) => {
+            const end = primaryLessonEntry.value?.progress_letter?.split('-')[1] || ''
+            updatePrimaryLessonEntry({ progress_letter: start && end ? `${start}-${end}` : start || end || null })
+        },
+    })
+    const progressEnd = computed({
+        get: () => primaryLessonEntry.value?.progress_letter?.split('-')[1] || '',
+        set: (end: string) => {
+            const start = primaryLessonEntry.value?.progress_letter?.split('-')[0] || ''
+            updatePrimaryLessonEntry({ progress_letter: start && end ? `${start}-${end}` : start || end || null })
+        },
+    })
     const attendanceStatus = ref<'present' | 'absent' | 'pending'>(props.initialAttendanceStatus)
     const absenceReason = ref(normalizeAbsenceReasonCode(props.initialAbsenceReason))
     // These refs are populated only from canonical API/props data. Collaboration
@@ -592,6 +628,8 @@ export function useReportEditorSession(
             lessonId: selectedLessonId.value || '',
             isCompleted: isCompleted.value,
             progressLetter: progressLetter.value || '',
+            lessonEntries: lessonEntries.value,
+            primaryLessonEntryId: primaryLessonEntryId.value,
             attendanceStatus: snapshotAttendanceStatus,
             absenceReason: normalizedReason,
             classParticipation: classParticipation.value,
@@ -614,7 +652,7 @@ export function useReportEditorSession(
         return buildDirtyReportPayload(current, savedReportSnapshot.value, { includeAttendance: !isSystemManagedAbsence.value })
     }
 
-    const savedReportSnapshot = ref<ReportDraftSnapshot>(buildSnapshotFromProps(props))
+    const savedReportSnapshot = ref<ReportDraftSnapshot>(initialSnapshot)
 
 
     // Computed progress letter for backend (combining start-end range)
@@ -650,8 +688,9 @@ export function useReportEditorSession(
     })
 
     const canSave = computed(() => {
-        // Auto-set handles missing reason, so we allow saving
-        return true
+        // A lesson entry must identify the enrollment, course, and lesson before
+        // it can be sent to the lifecycle API.
+        return lessonEntries.value.every(entry => Boolean(entry.enrollment_id && entry.course_id && entry.lesson_id))
     })
     function snapshotToLocalReport(snapshot: ReportDraftSnapshot, reportVersion = version.value): OccurrenceReportDTO {
         return {
@@ -663,6 +702,8 @@ export function useReportEditorSession(
             content_document: snapshot.contentDocument,
             is_completed: snapshot.isCompleted,
             progress_letter: snapshot.progressLetter,
+            lesson_entries: snapshot.lessonEntries ?? [],
+            primary_lesson_entry_id: snapshot.primaryLessonEntryId ?? null,
             attendance_status: snapshot.attendanceStatus,
             absence_reason: snapshot.absenceReason || '',
             class_participation: snapshot.classParticipation,
@@ -893,6 +934,13 @@ export function useReportEditorSession(
         if (!hasUnsavedChanges.value) selectedLessonId.value = newVal || ''
     })
 
+    watch(() => [props.initialLessonEntries, props.initialPrimaryLessonEntryId] as const, () => {
+        if (hasUnsavedChanges.value) return
+        const snapshot = buildSnapshotFromProps(props)
+        lessonEntries.value = snapshot.lessonEntries ?? []
+        primaryLessonEntryId.value = snapshot.primaryLessonEntryId ?? null
+    }, { deep: true })
+
     watch(() => props.initialIsCompleted, (newVal) => {
         if (!hasUnsavedChanges.value) isCompleted.value = newVal ?? false
     })
@@ -1108,6 +1156,8 @@ export function useReportEditorSession(
 
     function applyDraftSnapshot(snapshot: ReportDraftSnapshot) {
         const [start = '', end = ''] = (snapshot.progressLetter || '').split('-')
+        lessonEntries.value = snapshot.lessonEntries ?? []
+        primaryLessonEntryId.value = snapshot.primaryLessonEntryId ?? lessonEntries.value[0]?.id ?? null
         selectedLessonId.value = snapshot.lessonId || ''
         isCompleted.value = snapshot.isCompleted
         progressStart.value = start
@@ -1190,6 +1240,10 @@ export function useReportEditorSession(
         }
     }
 
+    watch([lessonEntries, primaryLessonEntryId], () => {
+        if (buildDirtyPayload(buildCurrentSnapshot()).keys.length > 0) handleInput()
+    }, { deep: true })
+
     function handleTextEditorChange(
         field: 'content' | 'contactNotes' | 'classNotes',
         change: TextEditorChange
@@ -1243,9 +1297,10 @@ export function useReportEditorSession(
     }
 
     function saveNow(_options?: { reason?: 'manual' | 'switch' }): Promise<boolean> {
-        if (!props.reportId || !canSave.value) {
+        if (!props.reportId) {
             return Promise.resolve(true)
         }
+        if (!canSave.value) return Promise.resolve(false)
 
         if (!hasUnsavedChanges.value) {
             return Promise.resolve(true)
@@ -1258,6 +1313,9 @@ export function useReportEditorSession(
     function replaceWithCanonicalReport(report: OccurrenceReportDTO, notifyParent = false) {
         version.value = report.version
         remoteVersionDrift.value = false
+        const canonicalSnapshot = buildSnapshotFromDto(report)
+        lessonEntries.value = canonicalSnapshot.lessonEntries ?? []
+        primaryLessonEntryId.value = canonicalSnapshot.primaryLessonEntryId ?? null
         const main = createTextEditorContent(report.content_document || report.content || '')
         const contact = createTextEditorContent(report.contact_notes_document || report.contact_notes || '')
         const classNotesContent = createTextEditorContent(report.class_notes_document || report.class_notes || '')
@@ -1458,6 +1516,8 @@ export function useReportEditorSession(
         contentEditorValue,
         contactNotesEditorValue,
         classNotesEditorValue,
+        lessonEntries,
+        primaryLessonEntryId,
         selectedLessonId,
         isCompleted,
         progressStart,

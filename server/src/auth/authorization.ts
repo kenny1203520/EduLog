@@ -181,9 +181,12 @@ async function globalTeachingPermission(req: Request, permission: string) {
   return teachingPermission(req, permission, null)
 }
 
-/** True for read-only actions, which may be granted in any classroom or class session. */
+/**
+ * True for read-only actions, which may be granted in any classroom or class session.
+ * Student sensitive sections stay platform-only for unscoped collections.
+ */
 function isReadAction(permission: string) {
-  return /\.(list|read)$/.test(permission)
+  return /\.(list|read)$/.test(permission) && !studentSensitivePermissions.has(permission)
 }
 
 /**
@@ -227,6 +230,14 @@ async function holidayPermission(req: Request, permission: string, row?: Record<
   for (const sessionId of sessionIds) await apiPermission(req, permission, null, sessionId)
 }
 
+/** Student sensitive-section keys; these resolve through can_access_sensitive_student. */
+export const studentSensitivePermissions: ReadonlySet<string> = new Set([
+  'teaching.student_schools.read', 'teaching.student_schools.update',
+  'teaching.student_personal.read', 'teaching.student_personal.update',
+  'teaching.student_contacts.read', 'teaching.student_contacts.update',
+  'teaching.student_credentials.read', 'teaching.student_credentials.update',
+])
+
 async function entityPermission(req: Request, kind: 'student' | 'enrollment' | 'report', permission: string, id: string) {
   setAuditContext(req, {
     domain: 'teaching',
@@ -238,7 +249,7 @@ async function entityPermission(req: Request, kind: 'student' | 'enrollment' | '
   })
   if (!req.db) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const functionName = kind === 'student'
-    ? (permission.endsWith('_sensitive') ? 'can_access_sensitive_student' : 'can_access_student')
+    ? (studentSensitivePermissions.has(permission) ? 'can_access_sensitive_student' : 'can_access_student')
     : kind === 'enrollment' ? 'can_access_enrollment' : 'can_access_report'
   const { data, error } = await req.db.rpc(functionName, { [`p_${kind}_id`]: id, p_permission_key: permission })
   requireAuthorizationDecision(req, { data, error }, {

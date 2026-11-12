@@ -86,6 +86,7 @@ export function useReportProgressContext(source: ReportProgressContextSource) {
     /** Focuses the previous report; returns false when there is none. */
     function focusPreviousProgressReport(): boolean {
         if (!previousProgressReport.value) return false
+        if (previousProgressReport.value.report.can_open_report === false) return false
         focusedProgressReport.value = { id: previousProgressReport.value.report.id, lesson: previousProgressReport.value.lesson }
         return true
     }

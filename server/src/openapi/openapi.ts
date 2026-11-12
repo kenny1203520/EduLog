@@ -83,6 +83,16 @@ export function buildOpenApi() {
     '/api/auth/me': { get: { operationId: 'me', security: [{ cookieAuth: [] }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } },
     '/api/auth/me/email': { post: { operationId: 'changeAccountEmail', security: [{ cookieAuth: [] }], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/EmailChangeRequest' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } },
     '/api/auth/me/password': { post: { operationId: 'changeAccountPassword', security: [{ cookieAuth: [] }], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/PasswordChangeRequest' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } },
+    '/api/auth/providers': { get: { operationId: 'oauthProviders', summary: 'OAuth providers enabled in GoTrue', responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } },
+    '/api/auth/oauth/{provider}': { get: { operationId: 'oauthStart', summary: 'Redirect to the provider (PKCE); unknown or disabled providers return to /login?error=oauth', parameters: [{ name: 'provider', in: 'path', required: true, schema: { type: 'string', pattern: '^[a-z][a-z0-9_]{1,40}$' } }], responses: { '303': { description: 'Redirect to GoTrue authorize' } } } },
+    '/api/auth/bridge/callback': {
+      get: { operationId: 'oauthBridgeCallbackGet', summary: 'Validate and forward a provider GET callback to GoTrue', security: [], parameters: [{ name: 'state', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } }, { name: 'code', in: 'query', required: false, schema: { type: 'string' } }, { name: 'error', in: 'query', required: false, schema: { type: 'string' } }, { name: 'oauth_token', in: 'query', required: false, schema: { type: 'string' } }, { name: 'oauth_verifier', in: 'query', required: false, schema: { type: 'string' } }, { name: 'denied', in: 'query', required: false, schema: { type: 'string' } }], responses: { '303': { description: 'Redirect to the EduLog PKCE callback' }, ...errorResponses } },
+      post: { operationId: 'oauthBridgeCallbackPost', summary: 'Validate and forward a provider form_post callback to GoTrue', security: [], requestBody: { required: true, content: { 'application/x-www-form-urlencoded': { schema: { type: 'object', additionalProperties: { type: 'string' } } } } }, responses: { '303': { description: 'Redirect to the EduLog PKCE callback' }, ...errorResponses } },
+    },
+    '/api/auth/oauth/callback': { get: { operationId: 'oauthCallback', summary: 'Exchange the PKCE code, set the session cookies and redirect into the app', parameters: [{ name: 'code', in: 'query', required: false, schema: { type: 'string' } }], responses: { '303': { description: 'Redirect to /dashboard, /account-pending or /login?error=oauth' } } } },
+    '/api/auth/confirm': { get: { operationId: 'confirmEmailLink', summary: 'Consume an invite, recovery, email-change or sign-up link from an email', parameters: [{ name: 'token_hash', in: 'query', required: true, schema: { type: 'string' } }, { name: 'type', in: 'query', required: true, schema: { type: 'string', enum: ['invite', 'recovery', 'email_change', 'signup', 'email'] } }], responses: { '303': { description: 'Redirect into the app' } } } },
+    '/api/auth/recover': { post: { operationId: 'requestPasswordRecovery', summary: 'Mail a password-reset link; always 204', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', additionalProperties: false, required: ['email'], properties: { email: { type: 'string', format: 'email' } } } } } }, responses: { '204': { description: 'Accepted' }, ...errorResponses } } },
+    '/api/auth/set-password': { post: { operationId: 'setAccountPassword', summary: 'Set a password after an invite or reset link (needs the short-lived setup cookie)', security: [{ cookieAuth: [] }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', additionalProperties: false, required: ['new_password', 'confirm_password'], properties: { new_password: { type: 'string', minLength: 8 }, confirm_password: { type: 'string', minLength: 8 } } } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } },
     '/api/users/search': { get: { operationId: 'users_search', security: [{ cookieAuth: [] }], 'x-permission': 'system.users.list', parameters: [{ name: 'query', in: 'query', required: true, schema: { type: 'string', minLength: 1, maxLength: 200 } }, { name: 'only_unlinked', in: 'query', required: false, schema: { type: 'boolean' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } },
   }
   const extensionId = { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }
@@ -142,7 +152,7 @@ export function buildOpenApi() {
       operationId: 'students_get_sensitive_credentials',
       summary: 'Read student credentials through the separately authorized sensitive-data route',
       security: [{ cookieAuth: [] }],
-      'x-permission': 'teaching.students.read_sensitive',
+      'x-permission': 'teaching.student_credentials.read',
       'x-sensitive-data': true,
       parameters: [{ $ref: '#/components/parameters/ResourceId' }],
       responses: {
@@ -205,8 +215,11 @@ export function buildOpenApi() {
   paths['/api/occurrences/{id}/report-progress-gaps'] = { get: { operationId: 'occurrence_report_progress_gaps', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.reports.list', parameters: [pathParam('id'), { name: 'enrollment_ids', in: 'query', required: true, schema: { type: 'string', description: 'Comma-separated effective occurrence enrollment UUIDs, maximum 100' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } }
   paths['/api/reports/progress-summary'] = { get: { operationId: 'reports_progress_summary', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.reports.list', parameters: [{ name: 'enrollment_ids', in: 'query', required: true, schema: { type: 'string', description: 'Comma-separated enrollment UUIDs, maximum 100' } }, { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 1000, default: 1000 } }, { name: 'sort', in: 'query', schema: { type: 'string', enum: ['created_at', '-created_at', 'updated_at', '-updated_at'], default: '-created_at' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } }
   paths['/api/enrollments/{id}/report-progress-context'] = { get: { operationId: 'enrollment_report_progress_context', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.reports.list', parameters: [pathParam('id'), { name: 'occurrence_id', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } }, { name: 'report_id', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } }
+  paths['/api/enrollments/{id}/linked-lesson-report-history'] = { get: { operationId: 'enrollment_linked_lesson_report_history', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.reports.list', description: 'Returns only the target enrollment lesson progress and shared report comment for reports anchored in another enrollment. Contact and class notes are excluded.', parameters: [pathParam('id'), { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 50 } }, { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 1000000, default: 0 } }, { name: 'search', in: 'query', schema: { type: 'string', maxLength: 200 } }, { name: 'course_id', in: 'query', schema: { type: 'string', format: 'uuid' } }, { name: 'sort', in: 'query', schema: { type: 'string', enum: ['occurrence_date', '-occurrence_date'], default: '-occurrence_date' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } }
   paths['/api/reports/{reportId}/versions/{versionId}/restore'] = { post: { operationId: 'report_version_restore', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.reports.update', parameters: [pathParam('reportId'), pathParam('versionId'), mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['expected_version'], additionalProperties: false, properties: { expected_version: { type: 'integer', minimum: 1 } } } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } }
+  paths['/api/reports/{reportId}/correct-occurrence'] = { post: { operationId: 'report_correct_occurrence', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.reports.update', description: 'Moves the existing report and its shared attendance, comments and lesson entries to an occurrence the same student attended. The current report version is required. An untouched system-empty target placeholder may be replaced; an edited or externally synchronized target returns 409.', parameters: [pathParam('reportId'), mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['target_class_occurrence_id', 'expected_version'], additionalProperties: false, properties: { target_class_occurrence_id: { type: 'string', format: 'uuid' }, target_enrollment_id: { type: 'string', format: 'uuid', description: 'Required only when the student has multiple eligible enrollments on the target occurrence and the source enrollment is not among them.' }, expected_version: { type: 'integer', minimum: 1 } } } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } }
   paths['/api/reports/{reportId}/conflicts/resolve'] = { post: { operationId: 'report_conflict_resolve', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.reports.update', parameters: [pathParam('reportId'), mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['expected_version', 'report'], additionalProperties: false, properties: { expected_version: { type: 'integer', minimum: 1 }, report: { $ref: '#/components/schemas/ReportUpdateMutation' } } } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } }
+  paths['/api/reports/{reportId}/lesson-entry-options'] = { get: { operationId: 'report_lesson_entry_options', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.reports.update', parameters: [pathParam('reportId')], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } }
   paths['/api/enrollments/{id}/progress'] = { get: { operationId: 'enrollment_progress_get', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.enrollments.read', parameters: [pathParam('id')], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } }
   paths['/api/enrollments/{id}/progress/recalculate'] = { post: { operationId: 'enrollment_progress_recalculate', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.enrollments.update', parameters: [pathParam('id'), mutationParam], requestBody: { required: false, content: { 'application/json': { schema: { type: 'object', additionalProperties: false } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } }
   paths['/api/enrollments/{id}/transfers/class'] = { post: { operationId: 'enrollment_transfer_class', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.enrollments.update', parameters: [pathParam('id'), mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['target_class_session_id', 'transfer_date'], additionalProperties: false, properties: { target_class_session_id: { type: 'string', format: 'uuid' }, transfer_date: { type: 'string', format: 'date' }, note: { type: 'string', maxLength: 200, nullable: true } } } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } }
@@ -327,7 +340,7 @@ export function buildOpenApi() {
       ...pageBase,
       operationId: 'page_classrooms_overview',
       summary: 'Read the classroom management page read model',
-      'x-permission': 'teaching.classrooms.list',
+      'x-permission': 'teaching.classrooms.access',
       parameters: [
         { $ref: '#/components/parameters/Limit' },
         { $ref: '#/components/parameters/Offset' },
@@ -342,7 +355,7 @@ export function buildOpenApi() {
       ...pageBase,
       operationId: 'page_holidays_overview',
       summary: 'Read the holiday management page read model',
-      'x-permission': 'teaching.holidays.list',
+      'x-permission': 'teaching.holidays.access',
       parameters: [
         { name: 'expand', in: 'query', schema: { type: 'boolean', default: true } },
         { $ref: '#/components/parameters/Limit' },
@@ -357,7 +370,7 @@ export function buildOpenApi() {
       ...pageBase,
       operationId: 'page_incomplete_reports',
       summary: 'Read incomplete reports for the report workflow page',
-      'x-permission': 'teaching.reports.list',
+      'x-permission': 'teaching.reports.access',
       parameters: [
         { name: 'days_back', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 3650, default: 90 } },
         { name: 'scope', in: 'query', schema: { type: 'string', enum: ['all', 'my_present', 'my_notifications'], default: 'all' } },
@@ -374,7 +387,7 @@ export function buildOpenApi() {
       ...pageBase,
       operationId: 'page_dashboard',
       summary: 'Read the dashboard page read model',
-      'x-permission': 'teaching.reports.list',
+      'x-permission': 'teaching.dashboard.access',
       parameters: [
         { name: 'start', in: 'query', required: false, schema: { type: 'string', format: 'date' } },
         { name: 'end', in: 'query', required: false, schema: { type: 'string', format: 'date' } },
@@ -389,12 +402,12 @@ export function buildOpenApi() {
   ]
   paths['/api/pages/courses/overview'] = { get: {
     ...pageBase, operationId: 'page_courses_overview', summary: 'Read the course management page read model',
-    'x-permission': 'teaching.courses.list', parameters: pageListParameters,
+    'x-permission': 'teaching.courses.access', parameters: pageListParameters,
     responses: { '200': pageResponse('PageCoursesOverviewData'), ...errorResponses },
   } }
   paths['/api/pages/students/overview'] = { get: {
     ...pageBase, operationId: 'page_students_overview', summary: 'Read the student management page read model without contact or credential values',
-    'x-permission': 'teaching.students.list', parameters: [
+    'x-permission': 'teaching.students.access', parameters: [
       ...pageListParameters.slice(0, 3),
       { name: 'sort', in: 'query', schema: { type: 'string', enum: ['name', '-name', 'created_at', '-created_at', 'updated_at', '-updated_at'], default: 'name' } },
     ],
@@ -406,8 +419,8 @@ export function buildOpenApi() {
     responses: { '200': pageResponse('PageStudentProfileData'), ...errorResponses },
   } }
   paths['/api/pages/students/{studentId}/private-details'] = { get: {
-    ...pageBase, operationId: 'page_student_private_details', summary: 'Read explicitly authorized student personal details and contacts',
-    'x-permission': 'teaching.students.read_sensitive', parameters: [{ name: 'studentId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+    ...pageBase, operationId: 'page_student_private_details', summary: 'Read explicitly authorized student personal details',
+    'x-permission': 'teaching.student_personal.read', parameters: [{ name: 'studentId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
     responses: { '200': pageResponse('PageStudentPrivateDetailsData'), ...errorResponses },
   } }
   paths['/api/pages/students/{studentId}/reports'] = { get: {
@@ -575,6 +588,23 @@ export function buildOpenApi() {
   paths['/api/users/{id}/status'] = {
     patch: { ...pageBase, operationId: 'user_status_update', 'x-permission': 'system.users.manage', parameters: [idParam, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/UserStatusMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
+  const roleIdsBody = { required: true, content: { 'application/json': { schema: { type: 'object', additionalProperties: false, properties: { role_ids: { type: 'array', maxItems: 20, items: { type: 'string', format: 'uuid' } } } } } } }
+  paths['/api/accounts/pending'] = {
+    get: { ...pageBase, operationId: 'pending_accounts_list', 'x-permission': 'system.users.manage', responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+  }
+  paths['/api/accounts/pending/count'] = {
+    get: { ...pageBase, operationId: 'pending_accounts_count', 'x-permission': 'system.users.manage', responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+  }
+  paths['/api/accounts/{id}/approve'] = {
+    post: { ...pageBase, operationId: 'account_approve', 'x-permission': 'system.users.manage + <domain>.role_assignments.manage per granted role', parameters: [idParam], requestBody: roleIdsBody, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+  }
+  paths['/api/accounts/invite'] = {
+    post: { ...pageBase, operationId: 'account_invite', 'x-permission': 'system.users.manage', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', additionalProperties: false, required: ['email'], properties: { email: { type: 'string', format: 'email' } } } } } }, responses: { '201': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+  }
+  paths['/api/settings/account-default-roles'] = {
+    get: { ...pageBase, operationId: 'account_default_roles_get', 'x-permission': 'system.users.manage', responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+    put: { ...pageBase, operationId: 'account_default_roles_update', 'x-permission': 'system.users.manage + <domain>.role_assignments.manage per role', requestBody: roleIdsBody, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+  }
   paths['/api/realtime'] = {
     get: {
       operationId: 'realtime_websocket',
@@ -732,13 +762,14 @@ export function buildOpenApi() {
       },
     },
     PageCoursesOverviewData: { type: 'array', items: { type: 'object', required: ['id', 'subject', 'stage'], properties: { id: { type: 'string', format: 'uuid' }, subject: { type: 'string' }, stage: { type: 'string' }, display_name: { type: ['string', 'null'] }, description: { type: ['string', 'null'] }, description_document: { type: ['object', 'null'] }, lessons: { type: 'array', items: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, course_id: { type: 'string', format: 'uuid' }, title: { type: 'string' }, sequence: { type: 'integer' } } } } } } },
-    StudentSchoolSummary: { type: 'object', required: ['name', 'status'], additionalProperties: false, properties: { name: { type: 'string' }, status: { type: 'string', enum: ['enrolled'] }, grade: { type: ['string', 'null'] }, class: { type: ['string', 'null'] } } },
+    StudentSchoolSummary: { type: 'object', description: 'Without teaching.student_schools.read only grade is returned.', additionalProperties: false, properties: { name: { type: 'string' }, status: { type: 'string', enum: ['enrolled'] }, grade: { type: ['string', 'null'] }, class: { type: ['string', 'null'] } } },
     PageStudentsOverviewData: { type: 'array', items: { type: 'object', required: ['id', 'name'], properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' }, notes: { type: ['string', 'null'] }, notes_document: { type: ['object', 'null'] }, external_link: { type: ['string', 'null'] }, created_at: { type: 'string', format: 'date-time' }, updated_at: { type: ['string', 'null'], format: 'date-time' }, current_school: { anyOf: [{ $ref: '#/components/schemas/StudentSchoolSummary' }, { type: 'null' }] } } } },
-    PageStudentProfileData: { type: 'object', required: ['id', 'name', 'enrollments', 'capabilities'], properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' }, notes: { type: ['string', 'null'] }, notes_document: { type: ['object', 'null'] }, external_link: { type: ['string', 'null'] }, created_at: { type: 'string', format: 'date-time' }, updated_at: { type: ['string', 'null'], format: 'date-time' }, current_school: { anyOf: [{ $ref: '#/components/schemas/StudentSchoolSummary' }, { type: 'null' }] }, enrollments: { type: 'array', items: { type: 'object' } }, capabilities: { type: 'object', required: ['read_sensitive', 'update_sensitive'], properties: { read_sensitive: { type: 'boolean' }, update_sensitive: { type: 'boolean' } } } } },
+    PageStudentProfileData: { type: 'object', required: ['id', 'name', 'enrollments', 'capabilities'], properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' }, notes: { type: ['string', 'null'] }, notes_document: { type: ['object', 'null'] }, external_link: { type: ['string', 'null'] }, created_at: { type: 'string', format: 'date-time' }, updated_at: { type: ['string', 'null'], format: 'date-time' }, current_school: { anyOf: [{ $ref: '#/components/schemas/StudentSchoolSummary' }, { type: 'null' }] }, enrollments: { type: 'array', items: { type: 'object' } }, capabilities: { type: 'object', required: ['schools', 'personal', 'contacts', 'credentials'], additionalProperties: false, properties: { schools: { $ref: '#/components/schemas/StudentSectionCapability' }, personal: { $ref: '#/components/schemas/StudentSectionCapability' }, contacts: { $ref: '#/components/schemas/StudentSectionCapability' }, credentials: { $ref: '#/components/schemas/StudentSectionCapability' } } } } },
+    StudentSectionCapability: { type: 'object', required: ['read', 'update'], additionalProperties: false, properties: { read: { type: 'boolean' }, update: { type: 'boolean' } } },
     StudentSensitiveProfile: { type: 'object', required: ['id'], additionalProperties: false, properties: { id: { type: 'string', format: 'uuid' }, gov_id: { type: ['string', 'null'] }, email: { type: ['string', 'null'], format: 'email' }, phone: { type: ['string', 'null'] }, residence_address: { type: ['string', 'null'] }, mailing_address: { type: ['string', 'null'] }, birthday: { type: ['string', 'null'], format: 'date' } } },
     StudentContactSensitiveData: { type: 'object', required: ['id', 'name'], additionalProperties: false, properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' }, relation: { type: ['string', 'null'] }, phone: { type: ['string', 'null'] }, email: { type: ['string', 'null'], format: 'email' }, created_at: { type: 'string', format: 'date-time' }, updated_at: { type: ['string', 'null'], format: 'date-time' } } },
     StudentSchoolSensitiveData: { type: 'object', required: ['id', 'student_id', 'name'], additionalProperties: false, properties: { id: { type: 'string', format: 'uuid' }, student_id: { type: 'string', format: 'uuid' }, name: { type: 'string' }, status: { type: ['string', 'null'] }, grade: { type: ['string', 'null'] }, class: { type: ['string', 'null'] }, school_student_id: { type: ['string', 'null'] }, start_date: { type: ['string', 'null'] }, end_date: { type: ['string', 'null'] }, time_zone: { type: ['string', 'null'] }, created_at: { type: 'string', format: 'date-time' }, updated_at: { type: ['string', 'null'], format: 'date-time' } } },
-    PageStudentPrivateDetailsData: { type: 'object', required: ['student', 'contacts', 'schools'], properties: { student: { $ref: '#/components/schemas/StudentSensitiveProfile' }, contacts: { type: 'array', items: { $ref: '#/components/schemas/StudentContactSensitiveData' } }, schools: { type: 'array', items: { $ref: '#/components/schemas/StudentSchoolSensitiveData' } } } },
+    PageStudentPrivateDetailsData: { type: 'object', required: ['student'], properties: { student: { $ref: '#/components/schemas/StudentSensitiveProfile' } } },
     StudentCredentialSensitiveData: { type: 'array', items: { type: 'object', required: ['id', 'student_id', 'platform'], properties: { id: { type: 'string', format: 'uuid' }, student_id: { type: 'string', format: 'uuid' }, platform: { type: 'string' }, username: { type: ['string', 'null'] }, password: { type: ['string', 'null'], writeOnly: false }, url: { type: ['string', 'null'] }, created_at: { type: 'string', format: 'date-time' }, updated_at: { type: ['string', 'null'], format: 'date-time' } } } },
     PageStudentReportsData: { type: 'object', required: ['student', 'enrollments'], properties: { student: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' } } }, enrollments: { type: 'array', items: { type: 'object' } } } },
     IncompleteReportPageItem: {

@@ -13,8 +13,8 @@
 "system_permissions": "系統角色權限",
 "system_title": "系統管理",
 "system_subtitle": "管理系統角色、指派與帳號狀態，所有變更都會經過版本檢查與稽核。",
-"system_sections": { "label": "系統設定分區", "permissions": "系統角色權限", "teaching_permissions": "教學角色權限", "teaching_assignments": "教學角色指派", "notifications": "報告通知設定", "dashboard_schedule": "今日課表顯示範圍", "assignments": "系統角色指派", "users": "使用者狀態", "audit": "稽核紀錄", "ai": "AI 報告助手" },
-"system_ui": { "role_assignments": "角色指派", "user": "使用者", "select_user": "搜尋並選擇使用者", "user_search": "依姓名或 Email 搜尋使用者", "user_search_hint": "輸入姓名或 Email 即可搜尋使用者。", "no_users_found": "找不到符合條件的使用者，請嘗試其他姓名或 Email。", "search_user_to_view": "先搜尋並選取使用者，再檢視此人的系統角色。", "no_assignments_for_user": "此使用者目前沒有系統角色指派。", "system_role": "系統角色", "select_system_role": "選擇系統角色", "system_role_search": "搜尋系統角色", "assign_role": "指派角色", "effective_from": "生效日", "effective_to": "結束日（選填）", "no_end_date": "無結束日", "assignment_overlap": "此使用者在重疊期間已具有相同的系統角色。", "unknown_user": "無法取得使用者資料", "account_status": "帳號狀態", "status_user": "狀態使用者", "active": "啟用中", "scheduled": "尚未生效", "expired": "已到期", "disabled": "停用", "disable_reason": "停用理由", "last_owner_guard": "最後一位系統擁有者無法被移除、降級或停用。", "remove_assignment_confirm": "確定要移除此系統角色指派嗎？", "assignments_loading": "正在載入 {user} 的角色…", "assignment_load_failed": "無法載入此使用者的系統角色指派。", "retry": "重試", "current_status": "目前狀態", "change_to": "變更為", "disabled_at": "停用日期", "disabled_reason_recorded": "停用原因", "no_disable_reason": "未記錄停用原因。" },
+"system_sections": { "label": "系統設定分區", "permissions": "系統角色權限", "teaching_permissions": "教學角色權限", "teaching_assignments": "教學角色指派", "notifications": "報告通知設定", "dashboard_schedule": "今日課表顯示範圍", "assignments": "系統角色指派", "users": "使用者狀態", "account_approval": "帳號審核", "audit": "稽核紀錄", "ai": "AI 報告助手" },
+"system_ui": { "role_assignments": "角色指派", "user": "使用者", "select_user": "搜尋並選擇使用者", "user_search": "依姓名或 Email 搜尋使用者", "user_search_hint": "輸入姓名或 Email 即可搜尋使用者。", "no_users_found": "找不到符合條件的使用者，請嘗試其他姓名或 Email。", "search_user_to_view": "先搜尋並選取使用者，再檢視此人的系統角色。", "no_assignments_for_user": "此使用者目前沒有系統角色指派。", "system_role": "系統角色", "select_system_role": "選擇系統角色", "system_role_search": "搜尋系統角色", "assign_role": "指派角色", "effective_from": "生效日", "effective_to": "結束日（選填）", "no_end_date": "無結束日", "assignment_overlap": "此使用者在重疊期間已具有相同的系統角色。", "unknown_user": "無法取得使用者資料", "account_status": "帳號狀態", "status_user": "狀態使用者", "active": "啟用中", "scheduled": "尚未生效", "expired": "已到期", "disabled": "停用", "disable_reason": "停用理由", "last_owner_guard": "最後一位系統擁有者無法被移除、降級或停用。", "remove_assignment_confirm": "確定要移除此系統角色指派嗎？", "assignments_loading": "正在載入 {user} 的角色…", "assignment_load_failed": "無法載入此使用者的系統角色指派。", "retry": "重試", "current_status": "目前狀態", "change_to": "變更為", "disabled_at": "停用日期", "disabled_reason_recorded": "停用原因", "no_disable_reason": "未記錄停用原因。", "pending": "待核准" },
 "audit_title": "稽核紀錄",
 "audit_description": "搜尋並檢視已記錄的系統與教學事件。",
 "audit_action": "動作",
@@ -45,6 +45,8 @@
 "audit_total": "共 {count} 筆事件",
 "audit_domains": { "system": "系統", "teaching": "教學" },
 "audit_outcomes": { "success": "成功", "denied": "拒絕", "failure": "失敗" },
+"audit_actions": { "oauth_connect": "以 OAuth 連結", "approve": "核准", "invite": "邀請", "password-set": "設定密碼", "email-change-request": "申請變更 Email", "password-change": "變更密碼", "apply-check": "套用前檢查", "save": "儲存", "acknowledge": "確認已讀", "test": "測試", "insert": "新增", "replace": "取代", "patch": "編輯", "status": "變更狀態", "correct_occurrence": "更正課次" },
+"audit_resources": { "classroom-role-assignments": "教室角色指派", "account-default-roles": "新帳號預設角色", "account-security": "帳號安全", "ai_credentials": "AI 供應商憑證", "ai_generations": "AI 生成紀錄", "ai_models": "AI 模型", "ai_notice_acknowledgements": "AI 告知確認", "class-session-teachers": "班級教師", "class-sessions": "班級", "effective-role-assignments": "有效角色指派", "enrollment-reports": "註冊報告", "person-profile": "個人資料", "platform-role-assignments": "全平台角色指派", "role-assignment-exclusions": "角色排除", "role-assignments": "角色指派", "role-permissions": "角色權限", "scoped-role-assignments": "教室與班級角色指派", "student-credentials": "學生帳號密碼", "student-suspensions": "學生停課", "teacher-account-link": "教師帳號連結", "teacher-assignments": "授課安排", "user_preferences": "使用者偏好設定" },
 "audit_actor_unknown": "使用者未知或已刪除",
 "audit_value_missing": "未記錄",
 "audit_view_details": "詳情",
@@ -79,8 +81,8 @@
   "denied": "拒絕",
   "version_conflict": "權限設定已變更。已保留目前草稿，請重新載入後再儲存。",
 "save_permissions": "儲存權限",
-"scope": { "label": "政策範圍", "global_teaching": "全平台", "teaching": "教學空間", "teaching_context": "教學空間", "classroom": "教室", "class_session": "班級／課堂", "select_context": "請選擇範圍以檢視教學角色權限。" },
-"sensitive_student_data_hint": "學生敏感資料權限控制個人資料、聯絡方式、學校資料及憑證的存取。報告依所屬課堂套用教室或課堂範圍。",
+"scope": { "label": "政策範圍", "system": "系統", "global_teaching": "全平台", "teaching": "教學空間", "teaching_context": "教學空間", "classroom": "教室", "class_session": "班級／課堂", "select_context": "請選擇範圍以檢視教學角色權限。" },
+"sensitive_student_data_hint": "學生敏感資料分為學籍、個人資料、聯絡人與帳號密碼四類，各自設定讀取與更新權限。沒有學籍讀取權限時，學生清單與檔案只顯示年級。「進入頁面」權限只開放頁面，資料仍依各資源的列表與讀取範圍顯示。",
   "permissions": {
     "title": "角色權限",
     "subtitle": "設定本地政策並檢視繼承後的存取結果。"
@@ -107,7 +109,7 @@
     "lessons": { "name": "課次", "description": "課程中的課次" },
     "classrooms": { "name": "教室", "description": "教室空間" },
     "class_sessions": { "name": "班級時段", "description": "排程中的教學時段" },
-    "students": { "name": "學生", "description": "學生資料與敏感資訊" },
+    "students": { "name": "學生", "description": "學生基本資料；敏感資料由各自的權限組控管" },
     "teachers": { "name": "教師", "description": "教師身分與指派" },
     "enrollments": { "name": "課程註冊", "description": "學生的課程註冊資料" },
     "occurrences": { "name": "課堂", "description": "排程產生的實際課堂" },
@@ -115,10 +117,15 @@
     "templates": { "name": "範本", "description": "報告與教學範本" },
     "report-templates": { "name": "報告範本", "description": "建立與管理學生報告使用的範本" },
     "dashboard": { "name": "儀表板", "description": "首頁儀表板與今日課表" },
+    "student_schools": { "name": "學生學籍", "description": "學生的學校、年級、班級與學號" },
+    "student_personal": { "name": "學生個人資料", "description": "身分證字號、電子郵件、電話、地址與生日" },
+    "student_contacts": { "name": "學生聯絡人", "description": "家長與緊急聯絡人" },
+    "student_credentials": { "name": "學生帳號密碼", "description": "學生在各學習平台的帳號與密碼" },
     "holidays": { "name": "假日", "description": "教學行事曆假日" },
     "ai": { "name": "AI 報告助手", "description": "AI 生成學習報告與教學建議、供應商憑證與生成紀錄" }
   },
   "actions": {
+    "access": { "name": "進入頁面", "description": "開啟頁面；顯示的資料仍依列表與讀取權限的範圍" },
     "list": { "name": "列表", "description": "查看資料集合" },
     "read": { "name": "讀取", "description": "查看單筆資料" },
     "create": { "name": "建立", "description": "建立新資料" },
@@ -142,7 +149,8 @@
     "teaching_manager": { "name": "教學管理員", "description": "依指派範圍管理教學資料與作業" },
     "teacher": { "name": "教師", "description": "建立與維護教學紀錄" },
     "assistant": { "name": "助教", "description": "協助教師進行課堂教學與學生學習活動" },
-    "viewer": { "name": "檢視者", "description": "只能讀取教學資料" }
+    "viewer": { "name": "檢視者", "description": "只能讀取教學資料" },
+    "member": { "name": "基本成員", "description": "可進入基本頁面，但不授予任何資料權限" }
   },
   "permission_search": "搜尋資源、操作、權限代碼或說明",
   "permission_resource_jump": "快速跳至資源",
@@ -155,5 +163,6 @@
   "delete_role_message": "確定要刪除角色「{name}」嗎？刪除後無法復原。仍有人使用此角色時無法刪除。",
   "role_in_use": "仍有使用者或班級老師使用此角色，請先移除這些指派再刪除。",
   "custom_teaching_roles_hint": "可在「平台」範圍新增、改名或刪除自訂教學角色；教室與班級範圍只調整權限。",
-  "system_assignment_saved": "系統角色已指派。"
+  "system_assignment_saved": "系統角色已指派。",
+  "account_approval": {"pending_title": "待核准帳號", "pending_count": "{n} 個待核准", "pending_badge": "個帳號待核准", "pending_description": "透過第三方登入或自行註冊的新帳號，需經核准才能使用。核准時可一併指派平台層級的角色。", "none_pending": "目前沒有等待核准的帳號。", "signed_up_with": "透過 {provider} 註冊", "roles_to_grant": "核准後指派的角色", "no_roles_warning": "未選擇角色：核准後此帳號可登入，但看不到任何功能。", "approve": "核准", "reject": "拒絕", "reject_reason": "拒絕原因（至少 3 個字，會記錄於稽核紀錄）", "confirm_reject": "確認拒絕", "approved": "已核准帳號。", "rejected": "已拒絕並停用帳號；之後仍可在「使用者狀態」重新啟用。", "approve_failed": "無法核准帳號", "reject_failed": "無法拒絕帳號", "load_failed": "無法載入待核准帳號。", "invite_title": "邀請使用者", "invite_description": "寄送邀請信給新使用者。受邀帳號免審核，並會自動取得下方的預設角色。", "send_invite": "寄送邀請", "invited": "已寄出邀請信。", "invite_failed": "無法寄送邀請", "defaults_title": "新帳號預設角色", "defaults_description": "受邀帳號建立時、以及待核准帳號核准時預設帶入的角色（平台範圍）。擁有者角色不能設為預設。", "defaults_none": "未設定預設角色：新帳號不會自動取得任何角色。", "defaults_saved": "已儲存預設角色。", "defaults_failed": "無法儲存預設角色", "domain_teaching": "教學角色", "domain_system": "系統角色"}
 }

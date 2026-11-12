@@ -1,6 +1,46 @@
 {
     "entries": [
         {
+            "version": "2.0.0-alpha.7",
+            "date": "2026-11-13",
+            "changes": {
+                "added": [
+                    "A single class report can now record progress for multiple lessons and courses while keeping attendance and comments shared."
+                ],
+                "changed": [
+                    "OAuth and password sessions are managed through the EduLog API. Company history sync now targets a confirmed lesson entry."
+                ],
+                "fixed": [
+                    "Class-scoped occurrence calendars now authorize session_ids correctly. Reports can be corrected to the taught occurrence without replacing report identity or history.",
+                    "The About page now links to EduLog GitHub Packages and its image instructions. Transactional email subjects and templates have been refreshed."
+                ],
+                "deployment": [
+                    "Use matching frontend, API, and Presidio images tagged 2.0.0-alpha.7. Alpha does not update stable image tags.",
+                    "Back up the database, then apply all unapplied migrations in filename order through 1000171_extension_primary_lesson_sync.sql before deploying the matching API and extension."
+                ]
+            }
+        },
+        {
+            "version": "2.0.0-alpha.6",
+            "date": "2026-11-10",
+            "changes": {
+                "added": [
+                    "System role names, audit actions and resources, account approval errors, and RBAC domain errors now have English and Traditional Chinese labels."
+                ],
+                "changed": [
+                    "Teaching and system role grants now obey the caller's permission ceiling. Accounts that are not active resolve to no permissions, and leaving the active state revokes extension tokens."
+                ],
+                "fixed": [
+                    "Pending-account notices, last-owner operations, teacher account links, and student profile enrollments now follow their authorization scopes.",
+                    "Public-schema privileges are restricted for anon and authenticated, and default privileges do not restore revoked access."
+                ],
+                "deployment": [
+                    "Use matching frontend, API, and Presidio images tagged 2.0.0-alpha.6. Alpha does not update stable image tags.",
+                    "Back up the database, then apply all unapplied migrations in filename order through 1000168_web_extension_policy_initplan.sql. Migrations 1000164 and 1000165 remove inheritance rows and revoke extension tokens for accounts that are not active; restore the database backup to reverse those changes."
+                ]
+            }
+        },
+        {
             "version": "2.0.0-alpha.5",
             "date": "2026-11-09",
             "changes": {

@@ -187,6 +187,9 @@ can_access_report
 - `class_session_schedule_rules` 等歷史表的 policy 必須確認沒有殘留全域存取；若 production catalog 仍存在，使用 forward migration 補 canonical CRUD policies。
 - RLS 不取代 table privilege；authenticated 必須有必要 SQL privilege，但 row access 仍由 policy 限制。
 - 凡是 `SECURITY DEFINER` function 都必須固定 `search_path`、明確 revoke/grant，並避免把它變成跨 teaching existence oracle。
+- `anon` 在 `public` schema 沒有任何權限（1000167）。瀏覽器不直接呼叫 PostgREST，所有存取都經 API server，以 `authenticated`（使用者 JWT）或 `service_role` 身分進行。
+- 新函式預設不可執行：1000167 已關閉 `anon`、`authenticated` 的 default privileges，以及 `postgres` 給 `PUBLIC` 的預設 EXECUTE。每個新函式都要在 migration 中寫 `REVOKE ALL ON FUNCTION ... FROM PUBLIC, anon, authenticated`，再明確 `GRANT EXECUTE` 給實際呼叫它的角色；開放給 `authenticated` 的函式還要加進 `supabase/tests/privilege_lockdown_integration.sql` 的清單，否則 CI 會失敗。只寫 `FROM PUBLIC` 不夠，Supabase 的 default privileges 會以角色名稱直接授權給 `anon`。
+- 不使用 GraphQL：`pg_graphql` 已移除，`PGRST_DB_SCHEMAS` 不含 `graphql_public`。
 
 ## 5. 平台控制資料
 

@@ -32,6 +32,15 @@ describe('personal Ollama endpoint policy', () => {
     expect(isPublicIpAddress('::ffff:127.0.0.1')).toBe(false)
   })
 
+  it.each([
+    ['RFC 9637 documentation prefix', '3fff::1'],
+    ['RFC 9602 SRv6 SID prefix', '5f00::1'],
+    ['RFC 8215 local-use translation prefix', '64:ff9b:1::1'],
+    ['RFC 3879 deprecated site-local prefix', 'fec0::1'],
+  ])('rejects the non-public address in the %s (%s)', (_range, address) => {
+    expect(isPublicIpAddress(address)).toBe(false)
+  })
+
   it('rejects mixed DNS answers and pins the actual lookup to a validated address', () => {
     expect(() => validatePublicDnsAnswers([
       { address: '8.8.8.8', family: 4 },

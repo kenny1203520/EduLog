@@ -8,6 +8,7 @@ import { errorHandler, ApiError } from './http/errors.js'
 import { createSupabaseClients, type SupabaseClients } from './infra/supabase.js'
 import { createAiServices } from './ai/aiServices.js'
 import { createAuthRouter, csrfProtection, requireAuth } from './auth/auth.js'
+import { createOAuthBridgeRouter } from './auth/oauthBridge.js'
 import { createResourceRouter } from './routes/rest/resourceRouter.js'
 import { rateLimitMiddleware } from './http/rateLimit.js'
 import { buildOpenApi } from './openapi/openapi.js'
@@ -33,6 +34,8 @@ import { createAiMeRouter } from './routes/rest/aiMeRouter.js'
 import { createAiAdminRouter } from './routes/rest/aiAdminRouter.js'
 import { createAiDeidRouter } from './routes/rest/aiDeidRouter.js'
 import { createRealtimeTicketRouter } from './routes/rest/realtimeTicketRouter.js'
+import { createAccountRouter } from './routes/rest/accountRouter.js'
+import { EMAIL_TEMPLATES, isEmailTemplateName } from './mail/emailTemplates.js'
 
 /** Builds the Express app from an already-validated config (see `loadConfig`). */
 export function createApp(config: ApiConfig, clients: SupabaseClients = createSupabaseClients(config)) {
@@ -48,8 +51,15 @@ export function createApp(config: ApiConfig, clients: SupabaseClients = createSu
   // cache.  The frontend Page API cache is a short-lived in-memory cache per
   // signed-in tab and never changes this HTTP boundary.
   app.use((_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next() })
-  app.use(express.json({ limit: config.API_BODY_LIMIT, strict: true }))
+  const jsonParser = express.json({ limit: config.API_BODY_LIMIT, strict: true })
   app.use((req, res, next) => {
+    if (req.path === '/api/auth/bridge/callback' && req.method === 'POST') return next()
+    jsonParser(req, res, next)
+  })
+  app.use((req, res, next) => {
+    // The IdP posts Apple form_post callbacks cross-site. This exact public
+    // endpoint is state/PKCE validated and does not enable browser CORS.
+    if (req.path === '/api/auth/bridge/callback' && ['GET', 'POST'].includes(req.method)) return next()
     const origin = req.header('origin')
     if (origin && !allowedOrigins.includes(origin)) return next(new ApiError(403, 'ORIGIN_FORBIDDEN', 'Origin is not allowed'))
     res.setHeader('Vary', 'Origin')
@@ -60,6 +70,13 @@ export function createApp(config: ApiConfig, clients: SupabaseClients = createSu
   app.get('/healthz', (_req, res) => res.json({ status: 'ok' }))
   app.get('/api/healthz', (_req, res) => res.json({ data: { status: 'ok' }, meta: {}, request_id: _req.requestId, trace_id: _req.traceId }))
   app.get('/api/openapi.json', (_req, res) => res.json(buildOpenApi()))
+  // GoTrue fetches its email templates here over the internal network.
+  app.get('/email-templates/:name.html', (req, res) => {
+    const name = req.params.name
+    if (!isEmailTemplateName(name)) return res.status(404).end()
+    res.type('html').send(EMAIL_TEMPLATES[name])
+  })
+  app.use('/api/auth/bridge/callback', rateLimitMiddleware(config, clients.adminClient), createOAuthBridgeRouter(config))
   app.use('/api/auth', csrfProtection, rateLimitMiddleware(config, clients.adminClient), createAuthRouter(clients, config))
   app.use('/api/extension', rateLimitMiddleware(config, clients.adminClient), createExtensionIntegrationRouter(clients, config))
   const protectedApi = Router()
@@ -68,6 +85,7 @@ export function createApp(config: ApiConfig, clients: SupabaseClients = createSu
   protectedApi.use('/users', createUserSearchRouter())
   protectedApi.use(createRealtimeTicketRouter(config))
   protectedApi.use(createRbacRouter())
+  protectedApi.use(createAccountRouter(config))
   protectedApi.use(createEnrollmentRouter())
   protectedApi.use(createReportRouter())
   protectedApi.use(createAiReportAssistRouter(defaultAiReportAssistDeps(ai)))

@@ -8,11 +8,13 @@ import LanguageSwitcher from '@/components/ui/LanguageSwitcher.vue'
 import { useFeedback } from '@/composables/useFeedback'
 import { useAccountIdentity } from '@/composables/useAccountIdentity'
 import { inExtensionPanel } from '@/composables/useExtensionPanel'
+import { usePendingAccounts } from '@/composables/usePendingAccounts'
 
 const auth = useAuthStore()
 const router = useRouter()
 const preferences = usePreferencesStore()
 const capabilities = useCapabilityStore()
+const pendingAccounts = usePendingAccounts()
 const { info, reportError } = useFeedback()
 const isSidebarOpen = ref(false)
 const isDesktopSidebarOpen = ref(true)
@@ -34,6 +36,7 @@ function onAccountKeydown(event: KeyboardEvent) {
 }
 
 onMounted(() => {
+    void pendingAccounts.refresh()
     preferences.loadUserPreferences()
     void capabilities.ensureLoaded()
     window.addEventListener('online', onOnline)
@@ -150,7 +153,7 @@ async function handleLogout() {
             <div class="mx-6 mt-2 h-px bg-gray-100/60"></div>
 
             <nav class="flex-1 p-4 space-y-2 overflow-y-auto">
-                <router-link to="/dashboard" @click="isSidebarOpen = false"
+                <router-link v-if="capabilities.can('teaching.dashboard.access')" to="/dashboard" @click="isSidebarOpen = false"
                     class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
                     exact-active-class="bg-emerald-50/60 text-emerald-600 font-bold relative before:absolute before:left-[-1rem] before:top-3 before:bottom-3 before:w-1 before:bg-emerald-500 before:rounded-r-full">
                     <div class="flex items-center gap-3">
@@ -163,7 +166,7 @@ async function handleLogout() {
                     </div>
                 </router-link>
 
-                <router-link v-if="capabilities.can('teaching.students.list')" to="/dashboard/students" @click="isSidebarOpen = false"
+                <router-link v-if="capabilities.can('teaching.students.access')" to="/dashboard/students" @click="isSidebarOpen = false"
                     class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
                     active-class="bg-emerald-50/60 text-emerald-600 font-bold relative before:absolute before:left-[-1rem] before:top-3 before:bottom-3 before:w-1 before:bg-emerald-500 before:rounded-r-full">
                     <div class="flex items-center gap-3">
@@ -176,7 +179,7 @@ async function handleLogout() {
                     </div>
                 </router-link>
 
-                <router-link v-if="capabilities.can('teaching.courses.list')" to="/dashboard/courses" @click="isSidebarOpen = false"
+                <router-link v-if="capabilities.can('teaching.courses.access')" to="/dashboard/courses" @click="isSidebarOpen = false"
                     class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
                     active-class="bg-emerald-50/60 text-emerald-600 font-bold relative before:absolute before:left-[-1rem] before:top-3 before:bottom-3 before:w-1 before:bg-emerald-500 before:rounded-r-full">
                     <div class="flex items-center gap-3">
@@ -189,7 +192,7 @@ async function handleLogout() {
                     </div>
                 </router-link>
 
-                <router-link v-if="capabilities.can('teaching.classrooms.list')" to="/dashboard/classrooms" @click="isSidebarOpen = false"
+                <router-link v-if="capabilities.can('teaching.classrooms.access')" to="/dashboard/classrooms" @click="isSidebarOpen = false"
                     class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
                     active-class="bg-emerald-50/60 text-emerald-600 font-bold relative before:absolute before:left-[-1rem] before:top-3 before:bottom-3 before:w-1 before:bg-emerald-500 before:rounded-r-full">
                     <div class="flex items-center gap-3">
@@ -202,7 +205,7 @@ async function handleLogout() {
                     </div>
                 </router-link>
 
-                <router-link v-if="capabilities.can('teaching.holidays.list')" to="/dashboard/holidays" @click="isSidebarOpen = false"
+                <router-link v-if="capabilities.can('teaching.holidays.access')" to="/dashboard/holidays" @click="isSidebarOpen = false"
                     class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
                     active-class="bg-emerald-50/60 text-emerald-600 font-bold relative before:absolute before:left-[-1rem] before:top-3 before:bottom-3 before:w-1 before:bg-emerald-500 before:rounded-r-full">
                     <div class="flex items-center gap-3">
@@ -231,7 +234,7 @@ async function handleLogout() {
                     </div>
                 </router-link>
 
-                <router-link v-if="capabilities.can('teaching.reports.list')" to="/dashboard/reports/incomplete" @click="isSidebarOpen = false"
+                <router-link v-if="capabilities.can('teaching.reports.access')" to="/dashboard/reports/incomplete" @click="isSidebarOpen = false"
                     class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
                     active-class="bg-emerald-50/60 text-emerald-600 font-bold relative before:absolute before:left-[-1rem] before:top-3 before:bottom-3 before:w-1 before:bg-emerald-500 before:rounded-r-full">
                     <div class="flex items-center gap-3">
@@ -256,6 +259,9 @@ async function handleLogout() {
                                 d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                         </svg>
                         {{ $t('nav.settings') }}
+                        <span v-if="pendingAccounts.count.value > 0" class="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-rose-600 px-1.5 text-xs font-black text-white" data-testid="pending-accounts-badge">
+                            {{ pendingAccounts.count.value }}<span class="sr-only">{{ $t('rbac.account_approval.pending_badge') }}</span>
+                        </span>
                     </div>
                 </router-link>
 

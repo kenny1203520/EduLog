@@ -479,6 +479,8 @@ INSERT INTO auth.users(id, email) VALUES
   ('00000000-0000-0000-0000-000000000003', 'unassigned@example.test'),
   ('00000000-0000-0000-0000-000000000004', 'enrollment-creator@example.test')
 ON CONFLICT (id) DO NOTHING;
+-- Accounts start pending (1000163) and hold no permission until active (1000165).
+UPDATE public.profiles SET account_status = 'active' WHERE account_status = 'pending';
 
 -- Teaching roles are assigned at the platform root and stay separate from
 -- system-administration roles. Either root teaching assignment covers the

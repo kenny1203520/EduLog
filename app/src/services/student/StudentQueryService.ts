@@ -1,5 +1,6 @@
-import { Student } from '@/models/Student'
+import { Student, type StudentContactDTO, type StudentCredentialDTO, type StudentDTO, type StudentSchoolDTO } from '@/models/Student'
 import { PageApiService } from '@/services/api/PageApiService'
+import { apiResourceClient } from '@/services/api/ApiResourceClient'
 import { StudentCredentialsQueryService } from './StudentCredentialsQueryService'
 
 /**
@@ -22,18 +23,18 @@ export class StudentQueryService {
     static async getById(id: string): Promise<Student | null> {
         const result = await PageApiService.getStudentProfile(id)
         if (!result.data) return null
-        if (result.data.capabilities?.read_sensitive !== true) return new Student(result.data)
-        const [privateDetails, credentials] = await Promise.all([
-            PageApiService.getStudentPrivateDetails(id),
-            StudentCredentialsQueryService.getForStudent(id),
+        // Each sensitive section is fetched only when its read capability holds.
+        const capabilities = result.data.capabilities
+        const [personal, contacts, schools, credentials] = await Promise.all([
+            capabilities?.personal?.read === true ? PageApiService.getStudentPrivateDetails(id).then(response => response.data?.student) : undefined,
+            capabilities?.contacts?.read === true ? apiResourceClient.list<StudentContactDTO>('student-contacts', { studentId: id, sort: 'created_at' }).then(response => response.data ?? []) : undefined,
+            capabilities?.schools?.read === true ? apiResourceClient.list<StudentSchoolDTO>('student-schools', { studentId: id, sort: '-start_date' }).then(response => response.data ?? []) : undefined,
+            capabilities?.credentials?.read === true ? StudentCredentialsQueryService.getForStudent(id) : undefined,
         ])
-        const privateData = privateDetails.data
-        return new Student({
-            ...result.data,
-            ...(privateData?.student ?? {}),
-            student_contacts: privateData?.contacts ?? [],
-            student_schools: privateData?.schools ?? [],
-            student_credentials: credentials,
-        })
+        const dto: StudentDTO = { ...result.data, ...(personal ?? {}) }
+        if (contacts) dto.student_contacts = contacts
+        if (schools) dto.student_schools = schools
+        if (credentials) dto.student_credentials = credentials satisfies StudentCredentialDTO[]
+        return new Student(dto)
     }
 }

@@ -8,7 +8,7 @@ const props = defineProps<{
     loading: boolean
     error: boolean
     gaps: Array<{ id: string; sequence: number; title: string }>
-    previous: { report: { progress_letter?: string | null; is_completed?: boolean | null }; lesson: { sequence: number; title: string } } | null
+    previous: { report: { progress_letter?: string | null; is_completed?: boolean | null; shared_content?: string; can_open_report?: boolean }; lesson: { sequence: number; title: string } } | null
     summary: string
 }>()
 
@@ -55,8 +55,11 @@ const panelUi = usePanelUiState()
                         <span v-if="previous.report.progress_letter"> · {{ previous.report.progress_letter }}</span>
                         <span> · {{ previous.report.is_completed ? $t('report.editor.progress_check.completed') : $t('report.editor.progress_check.incomplete') }}</span>
                     </p>
+                    <p v-if="previous.report.shared_content" class="mt-2 whitespace-pre-wrap rounded-lg bg-white/80 px-3 py-2 text-slate-700">
+                        <span class="font-semibold">{{ $t('report.editor.progress_check.shared_comment') }}：</span>{{ previous.report.shared_content }}
+                    </p>
                 </div>
-                <button type="button" class="min-h-9 shrink-0 rounded-lg border border-amber-300 bg-white px-3 font-semibold text-amber-950 hover:bg-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-700"
+                <button v-if="previous.report.can_open_report !== false" type="button" class="min-h-9 shrink-0 rounded-lg border border-amber-300 bg-white px-3 font-semibold text-amber-950 hover:bg-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-700"
                     @click="emit('view-previous')">{{ $t('report.editor.progress_check.view_report') }}</button>
             </div>
         </div>

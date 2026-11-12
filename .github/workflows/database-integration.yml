@@ -62,15 +62,24 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/tests/ai_generation_running_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/ai_generation_details_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/ai_deidentification_rules_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/presidio_languages_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/security_lint_remediation_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/rbac_scope_constraint_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/report_lifecycle_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/report_occurrence_correction_integration.sql
+          bash supabase/tests/report_lifecycle_concurrency.sh
           psql -v ON_ERROR_STOP=1 -f supabase/tests/report_version_null_content_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/student_create_permission_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/student_sensitive_permission_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/incomplete_report_notification_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/scoped_teaching_access_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/teacher_archive_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/member_role_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/account_approval_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/rbac_grant_ceiling_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/account_status_enforcement_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/rbac_review_fixes_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/privilege_lockdown_integration.sql
       - name: Reconciliation migrations are rerunnable
         shell: bash
         run: |
@@ -100,7 +109,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/tests/postgres_bootstrap.sql
           for migration in supabase/migrations/*.sql; do
             case "$migration" in
-            *1000156*|*1000157*) continue ;;
+            *1000156*|*1000157*|*1000164*|*1000165*|*1000166*) continue ;;
             esac
             psql -v ON_ERROR_STOP=1 -f "$migration"
           done
@@ -112,6 +121,18 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000156_drop_unused_legacy_objects.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000157_drop_teaching_workspace_model.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000157_drop_teaching_workspace_model.sql
+          # The 1000129 rerun above restores the pre-split sensitive helper;
+          # re-apply the page-access and sensitive-split migrations (twice).
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000161_page_access_permissions_and_member_role.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000161_page_access_permissions_and_member_role.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000162_split_student_sensitive_permissions.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000162_split_student_sensitive_permissions.sql
+          # 1000164 to 1000166 replace functions that 1000157 and the reruns
+          # above define, so they go last (twice).
+          for migration in supabase/migrations/1000164*.sql supabase/migrations/1000165*.sql supabase/migrations/1000166*.sql; do
+            psql -v ON_ERROR_STOP=1 -f "$migration"
+            psql -v ON_ERROR_STOP=1 -f "$migration"
+          done
           psql -v ON_ERROR_STOP=1 -f supabase/tests/student_create_permission_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/student_sensitive_permission_integration.sql
       - name: Upgrade an existing database and verify owner backfill
@@ -144,6 +165,7 @@ jobs:
           done
           psql -v ON_ERROR_STOP=1 -f supabase/tests/student_create_permission_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/student_sensitive_permission_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/privilege_lockdown_integration.sql
       - name: Upgrade an existing 1000061 database through 1000091
         shell: bash
         run: |

@@ -23,6 +23,17 @@ describe('roleDisplayName', () => {
             .toBe('教師')
     })
 
+    it('uses the shared RBAC locale keys for built-in system roles', () => {
+        const labels: Record<string, string> = {
+            'rbac.roles.system_admin.name': '系統管理員',
+            'rbac.roles.auditor.name': '稽核員',
+        }
+        const translate = (key: string) => labels[key] ?? key
+
+        expect(roleDisplayName({ code: 'system_admin', name: 'System Administrator', is_system: true }, translate)).toBe('系統管理員')
+        expect(roleDisplayName({ code: 'auditor', name: 'Auditor' }, translate)).toBe('稽核員')
+    })
+
     it('keeps custom role names as entered', () => {
         const translate = (key: string) => key
         expect(roleDisplayName({ code: null, name: '我的自訂職務', is_system: false }, translate)).toBe('我的自訂職務')

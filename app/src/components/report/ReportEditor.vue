@@ -125,7 +125,7 @@
             <div :class="props.compact ? 'mb-4' : 'mb-6'">
                 <div class="flex items-center justify-between mb-2">
                     <div class="flex items-center gap-2">
-                        <label :for="`${editorId}-lesson`" class="block text-sm font-medium text-gray-700">
+                        <label v-if="false" :for="`${editorId}-lesson`" class="block text-sm font-medium text-gray-700">
                             {{ $t('report.editor.lesson_label') }}
                         </label>
                         <button v-if="selectedLessonId" @click="copyCourseInfo"
@@ -161,7 +161,20 @@
                         <span v-if="!props.compact">{{ $t('report.editor.view_external_report') || $t('report.editor.course_folder') }}</span>
                     </a>
                 </div>
-                <BaseDropdown :id="`${editorId}-lesson`" data-collab-field="lesson" v-model="selectedLessonId" :options="lessonOptions" :disabled="disabled"
+                <ReportLessonEntriesEditor
+                    v-model:entries="lessonEntries"
+                    v-model:primary-entry-id="primaryLessonEntryId"
+                    :editor-id="editorId"
+                    :default-enrollment-id="props.enrollmentId || ''"
+                    :default-course-name="props.courseDisplayName || props.courseName"
+                    :default-lessons="props.availableLessons"
+                    :options="lessonEntryOptions"
+                    :options-loading="lessonEntryOptionsLoading"
+                    :options-error="lessonEntryOptionsError"
+                    :disabled="props.disabled"
+                    @retry-options="loadLessonEntryOptions"
+                />
+                <BaseDropdown v-if="false" :id="`${editorId}-lesson`" data-collab-field="lesson" v-model="selectedLessonId" :options="lessonOptions" :disabled="disabled"
                     theme="emerald" />
                 <ReportProgressCheck
                     :compact="props.compact"
@@ -208,7 +221,7 @@
             :show-absence-error="showAbsenceError" />
 
         <!-- Progress Letter (for lesson chapter record) -->
-        <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+        <div v-if="false" class="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
             <label class="block text-sm font-medium text-gray-700 mb-3" for="edulog-reporteditor-308-22308">
                 {{ $t('report.editor.progress_label') }}
             </label>
@@ -465,7 +478,7 @@
         </div>
 
         <ReportReferencePanel :show="showReferencePanel" :lesson-id="selectedLessonId"
-            :student-id="props.initialStudentId" :current-report-id="props.reportId" @close="closeReferencePanel"
+            :student-id="props.initialStudentId" :enrollment-id="props.enrollmentId" :current-report-id="props.reportId" @close="closeReferencePanel"
             :focused-report-id="focusedProgressReport?.id" :focused-lesson-sequence="focusedProgressReport?.lesson.sequence"
             :focused-lesson-title="focusedProgressReport?.lesson.title" :focused-course-name="props.courseDisplayName || props.courseName"
             :focused-student-name="props.initialStudentName"
@@ -524,7 +537,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, useId, useTemplateRef } from 'vue'
+import { computed, onMounted, ref, useId, useTemplateRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import RatingInput from '@/components/ui/RatingInput.vue'
 import RealtimeStatusBadge from '@/components/ui/RealtimeStatusBadge.vue'
@@ -540,6 +553,7 @@ import SourceReportLink from '@/components/report/SourceReportLink.vue'
 import ReportDraftRecoveryBanner from '@/components/report/ReportDraftRecoveryBanner.vue'
 import ReportProgressCheck from '@/components/report/ReportProgressCheck.vue'
 import ReportAttendanceSection from '@/components/report/ReportAttendanceSection.vue'
+import ReportLessonEntriesEditor from '@/components/report/ReportLessonEntriesEditor.vue'
 import CourseCopyTemplateModal from '@/components/report/CourseCopyTemplateModal.vue'
 import ReportTemplateManagerModal from '@/components/report/ReportTemplateManagerModal.vue'
 import type { ReportEditorEmit, ReportEditorEmits, ReportEditorProps } from '@/components/report/reportEditorContract'
@@ -550,6 +564,7 @@ import { useReportProgressContext } from '@/composables/report/useReportProgress
 import { useCourseCopyTemplate } from '@/composables/report/useCourseCopyTemplate'
 import { useReportTemplateManager } from '@/composables/report/useReportTemplateManager'
 import { safeExternalHref } from '@/utils/safeExternalHref'
+import { ReportQueryService, type LessonEntryOption } from '@/services/report/ReportQueryService'
 
 const props = withDefaults(defineProps<ReportEditorProps>(), {
     reportId: undefined,
@@ -569,6 +584,8 @@ const props = withDefaults(defineProps<ReportEditorProps>(), {
     initialStudentName: '',
     initialStudentId: '',
     initialLessonId: '',
+    initialLessonEntries: () => [],
+    initialPrimaryLessonEntryId: null,
     availableLessons: () => [],
     initialReportExternalLink: '',
     initialIsCompleted: false,
@@ -645,7 +662,7 @@ const {
     ydoc, awarenessProvider, ready, collaborationError, activePeers, onlineParticipantCount, reconnectCollaboration,
     collaborationUser, collaborationBadge, handleEditorFieldFocus, handleEditorFieldBlur, handleCollaborationActivity,
     version, localContent, contentEditorValue, contactNotesEditorValue, classNotesEditorValue,
-    selectedLessonId, isCompleted, progressStart, progressEnd, progressLetter, attendanceStatus, absenceReason,
+    lessonEntries, primaryLessonEntryId, selectedLessonId, isCompleted, progressStart, progressEnd, progressLetter, attendanceStatus, absenceReason,
     classParticipation, classroomBehavior, reportExternalLink, isSystemManagedAbsence, getSystemManagedAbsenceLabel,
     showAbsenceError, canSave,
     isSaving, lastSaved, hasUnsavedChanges, saveError, saveErrorMessage, saveProblemStatus, getLastSavedString,
@@ -654,6 +671,36 @@ const {
     pendingDraftRecovery, draftRecoveryTime, restoreLocalDraft, discardLocalDraft,
     handleCopyContent, aiInsertFlash, handleAiInsert, handleAiReplace, flushBeforeAi,
 } = session
+
+const lessonEntryOptions = ref<LessonEntryOption[]>([])
+const lessonEntryOptionsLoading = ref(false)
+const lessonEntryOptionsError = ref('')
+let lessonEntryOptionsRequest = 0
+async function loadLessonEntryOptions() {
+    const reportId = props.reportId
+    if (props.disabled || !reportId || props.loading) {
+        lessonEntryOptionsRequest += 1
+        lessonEntryOptions.value = []
+        lessonEntryOptionsError.value = ''
+        lessonEntryOptionsLoading.value = false
+        return
+    }
+    const request = ++lessonEntryOptionsRequest
+    lessonEntryOptionsLoading.value = true
+    lessonEntryOptionsError.value = ''
+    try {
+        const result = await ReportQueryService.getLessonEntryOptions(reportId)
+        if (request === lessonEntryOptionsRequest && props.reportId === reportId) lessonEntryOptions.value = result.enrollments || []
+    } catch {
+        if (request === lessonEntryOptionsRequest && props.reportId === reportId) {
+            lessonEntryOptionsError.value = t('report.editor.lesson_entries.options_error')
+        }
+    } finally {
+        if (request === lessonEntryOptionsRequest) lessonEntryOptionsLoading.value = false
+    }
+}
+
+watch([() => props.reportId, () => props.loading, () => props.disabled], () => { void loadLessonEntryOptions() }, { immediate: true })
 
 const toolbarVisible = (field: PanelToolbar) => props.compact ? panelUi.toolbars[field] : preferences.editorSettings.toolbarVisible
 

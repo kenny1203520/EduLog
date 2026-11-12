@@ -37,7 +37,17 @@
         "SOURCE_REPORT_HAS_CONTENT": "原日期已經有這位學生寫了內容的報告，無法取消調課。請先處理那份報告。",
         "TRANSFER_CHAIN_HAS_MERGED_REPORT": "這堂課之後的調課曾合併過報告，請先取消最後一筆調課。",
         "REPORT_ALREADY_EXISTS": "此課次已存在報告。",
-        "TRANSFER_NOTE_TOO_LONG": "轉班備註不可超過 200 字。"
+        "TRANSFER_NOTE_TOO_LONG": "轉班備註不可超過 200 字。",
+        "ACCOUNT_EXISTS": "此 Email 已有帳號。",
+        "ROLE_NOT_FOUND": "所選角色已不存在，請重新載入後再選擇。",
+        "PROTECTED_ROLE_NOT_ALLOWED": "擁有者角色無法在此指派。",
+        "ACCOUNT_NOT_PENDING": "此帳號已不在待核准狀態，請重新載入清單。",
+        "AUTH_ADMIN_UNAVAILABLE": "帳號服務暫時無法使用，未做任何變更。",
+        "SENSITIVE_PERMISSION_REQUIRED": "您沒有檢視或編輯此學生敏感資料的權限。",
+        "STUDENT_ACCESS_DENIED": "您沒有此學生的存取權限。",
+        "GRANT_EXCEEDS_CALLER": "無法授予您自己沒有的權限，請由具備該權限的人員操作。",
+        "OWNER_ROLE_REQUIRED": "只有擁有者可以指派或移除擁有者角色。",
+        "PROTECTED_ROLE_PARENT": "角色不能繼承擁有者角色。"
     },
     "rate_limited": "操作太頻繁，請稍候再試。",
     "service_unavailable": "服務暫時無法使用。",
