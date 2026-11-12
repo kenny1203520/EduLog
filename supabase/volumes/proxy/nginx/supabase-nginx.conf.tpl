@@ -132,6 +132,12 @@ server {
         proxy_pass ${EDULOG_PROXY_UPSTREAM_URL};
     }
 
+    location = /api/auth/confirm {
+        # Email confirmation and recovery URLs carry a single-use token_hash query.
+        access_log off;
+        proxy_pass ${EDULOG_PROXY_UPSTREAM_URL};
+    }
+
     location / {
         proxy_pass ${EDULOG_PROXY_UPSTREAM_URL};
     }
