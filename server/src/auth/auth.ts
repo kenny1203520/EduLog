@@ -109,16 +109,16 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
   const oauthCallbackUrl = new URL('/api/auth/oauth/callback', config.EDULOG_WEB_BASE_URL).toString()
   const clearOAuthCookie = (res: Response) => res.clearCookie(oauthCookie, { path: oauthCookiePath })
   const providers = () => enabledOAuthProviders(config)
-  // The persistent API limiter is also mounted above this router; this endpoint
-  // limiter makes the OAuth route boundary explicit to static analysis and adds
-  // a per-process defense in depth.
-  const oauthStartRateLimit = rateLimit({
+  // The persistent API limiter is also mounted above this router. Give each
+  // OAuth endpoint its own local limiter so a valid start does not consume the
+  // callback allowance, while keeping the route boundary explicit to analysis.
+  const oauthRateLimitOptions = {
     windowMs: 60_000,
     limit: config.API_RATE_LIMIT_PER_MINUTE,
     standardHeaders: true,
     legacyHeaders: false,
-    handler: (req, res) => sendError(req, res, new ApiError(429, 'RATE_LIMITED', 'Too many requests', undefined, 60)),
-  })
+    handler: (req: Request, res: Response) => sendError(req, res, new ApiError(429, 'RATE_LIMITED', 'Too many requests', undefined, 60)),
+  }
 
   /** Start a browser session from tokens GoTrue issued (OAuth or an email link). */
   async function startSession(req: Request, res: Response, session: GoTrueSession) {
@@ -138,7 +138,7 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
   router.get('/providers', async (req, res) => {
     res.json({ data: { providers: await providers() }, meta: {}, request_id: req.requestId, trace_id: req.traceId })
   })
-  router.get('/oauth/callback', async (req, res) => {
+  router.get('/oauth/callback', rateLimit(oauthRateLimitOptions), async (req, res) => {
     res.setHeader('Cache-Control', 'no-store')
     res.setHeader('Referrer-Policy', 'no-referrer')
     const verifier = req.cookies?.[oauthCookie]
@@ -153,7 +153,7 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
       return res.redirect(303, failureTarget(error, '/login?error=oauth'))
     }
   })
-  router.get('/oauth/:provider', oauthStartRateLimit, async (req, res) => {
+  router.get('/oauth/:provider', rateLimit(oauthRateLimitOptions), async (req, res) => {
     res.setHeader('Cache-Control', 'no-store')
     res.setHeader('Referrer-Policy', 'no-referrer')
     const provider = typeof req.params.provider === 'string' ? req.params.provider : ''
