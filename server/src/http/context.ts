@@ -22,6 +22,8 @@ declare global {
         errorCode?: string | null
         authorizationStage?: string | null
         authorizationResult?: 'allowed' | 'denied' | 'rpc_error' | 'check_failed' | null
+        /** Additional route-owned identifiers for auditable business operations. */
+        metadata?: Record<string, string | number | boolean | null>
       }
       user?: { id: string; email?: string; role?: string; app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> }
       accessToken?: string
