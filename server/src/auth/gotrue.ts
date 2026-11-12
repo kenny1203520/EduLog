@@ -10,7 +10,7 @@ import type { ApiConfig } from '../config/config.js'
 export type GoTrueSession = { access_token: string; refresh_token: string; expires_in?: number; user?: { id: string; email?: string | null } }
 export type EmailLinkType = 'invite' | 'recovery' | 'email_change' | 'signup' | 'email'
 
-type GoTrueConfig = Pick<ApiConfig, 'SUPABASE_URL' | 'SUPABASE_ANON_KEY'>
+type GoTrueConfig = Pick<ApiConfig, 'SUPABASE_URL' | 'SUPABASE_ANON_KEY' | 'GOTRUE_INTERNAL_URL' | 'NODE_ENV'>
 
 /** Settings keys that are not social sign-in providers. */
 const NON_OAUTH = new Set(['email', 'phone', 'anonymous_users', 'saml'])
@@ -72,14 +72,57 @@ export function createPkcePair() {
   return { verifier, challenge }
 }
 
-/** Where the browser goes to sign in with a provider (PKCE flow). */
-export function oauthAuthorizeUrl(publicUrl: string, provider: string, redirectTo: string, challenge: string) {
-  const url = new URL(`${withoutTrailingSlashes(publicUrl)}/auth/v1/authorize`)
+function oauthAuthUrl(config: GoTrueConfig, path: string) {
+  if (!config.GOTRUE_INTERNAL_URL) return authUrl(config, path)
+  return `${withoutTrailingSlashes(config.GOTRUE_INTERNAL_URL)}${path}`
+}
+
+function validProviderAuthorizeLocation(value: string, config: GoTrueConfig) {
+  try {
+    const url = new URL(value)
+    const localHosts = new Set(['localhost', '127.0.0.1', '[::1]'])
+    const localHttp = config.NODE_ENV !== 'production' && url.protocol === 'http:' && localHosts.has(url.hostname)
+    return (url.protocol === 'https:' || localHttp) && !url.username && !url.password && !url.hash
+  } catch {
+    return false
+  }
+}
+
+/** Ask internal GoTrue to start OAuth and return its validated provider redirect. */
+export async function startOAuthAuthorization(config: GoTrueConfig, provider: string, redirectTo: string, challenge: string) {
+  const url = new URL(oauthAuthUrl(config, '/authorize'))
   url.searchParams.set('provider', provider)
   url.searchParams.set('redirect_to', redirectTo)
   url.searchParams.set('code_challenge', challenge)
   url.searchParams.set('code_challenge_method', 's256')
-  return url.toString()
+  const response = await fetch(url, {
+    headers: { apikey: config.SUPABASE_ANON_KEY, accept: 'text/html', 'cache-control': 'no-store' },
+    redirect: 'manual',
+    signal: AbortSignal.timeout(10_000),
+  })
+  const location = response.headers.get('location')
+  await response.body?.cancel().catch(() => undefined)
+  if (![302, 303, 307, 308].includes(response.status) || !location || !validProviderAuthorizeLocation(location, config)) {
+    throw new Error('GOTRUE_OAUTH_AUTHORIZE_FAILED')
+  }
+  return location
+}
+
+/** Forward an OAuth provider callback to GoTrue's one fixed callback route. */
+export function forwardOAuthCallback(config: GoTrueConfig, method: 'GET' | 'POST', parameters: URLSearchParams) {
+  const url = new URL(oauthAuthUrl(config, '/callback'))
+  const init: RequestInit = {
+    method,
+    headers: { apikey: config.SUPABASE_ANON_KEY, 'cache-control': 'no-store' },
+    redirect: 'manual',
+    signal: AbortSignal.timeout(10_000),
+  }
+  if (method === 'GET') url.search = parameters.toString()
+  else {
+    init.headers = { ...init.headers, 'content-type': 'application/x-www-form-urlencoded' }
+    init.body = parameters.toString()
+  }
+  return fetch(url, init)
 }
 
 export function exchangeAuthCode(config: GoTrueConfig, authCode: string, codeVerifier: string) {

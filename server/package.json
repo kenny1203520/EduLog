@@ -26,6 +26,7 @@
     "cookie-parser": "^1.4.7",
     "diff-match-patch": "^1.0.5",
     "express": "^5.1.0",
+    "express-rate-limit": "^8.7.4",
     "helmet": "^8.1.0",
     "ipaddr.js": "^1.9.1",
     "jose": "^6.2.12",

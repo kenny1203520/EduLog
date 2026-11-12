@@ -40,6 +40,7 @@ The root `.env` key on the left becomes the container variable on the right.
 | `SERVICE_ROLE_KEY` (Supabase) | `SUPABASE_SERVICE_ROLE_KEY` | |
 | `JWT_SECRET` (Supabase) | `SUPABASE_JWT_SECRET` | |
 | `EDULOG_SUPABASE_INTERNAL_URL` (`http://kong:8000`) | `SUPABASE_URL` | |
+| `EDULOG_GOTRUE_INTERNAL_URL` (`http://auth:9999`) | `GOTRUE_INTERNAL_URL` | |
 | `EDULOG_SUPABASE_REALTIME_URL` | `SUPABASE_REALTIME_URL` | |
 | `EDULOG_COOKIE_SECURE` (`true`) | `COOKIE_SECURE` | |
 | `NODE_ENV` (`production`) | `NODE_ENV` | |
@@ -59,6 +60,7 @@ These root `.env` keys configure Compose itself (images, ports, mounts, build ar
 | `EDULOG_IMAGE_TAG` (`alpha`) | tag of the `edulog`, `edulog-api` and `edulog-presidio` images: an exact version, a channel (`alpha`, `beta`, `rc`) or `latest`. Replaces `EDULOG_API_IMAGE`; `docker-compose.build.yml` builds all three from source instead |
 | `EDULOG_SSL_DIR` (`./ssl`) | host directory mounted at `/app/ssl` for TLS certificates |
 | `EDULOG_PROXY_DOMAIN`, `EDULOG_PROXY_UPSTREAM_URL` | passed to the proxy container of the optional Caddy/nginx overlays under `supabase/` |
+| `SUPABASE_PUBLIC_URL` | public Supabase Dashboard/Storage integrations; not passed to the EduLog API |
 | `EDULOG_PRESIDIO_LANGUAGES` (`zh,en`) | languages the Presidio analyzer loads at start (`PRESIDIO_LANGUAGES` in the container); the image ships all 24, so changing it needs only a restart. An unknown code stops the container |
 
 Supabase uses more aliases for its own services. For example, `SERVICE_ROLE_KEY` reaches Studio and Kong as `SUPABASE_SERVICE_KEY` and Storage as `SERVICE_KEY`. Those are upstream and are not changed here.
@@ -89,7 +91,7 @@ Supabase uses more aliases for its own services. For example, `SERVICE_ROLE_KEY`
 | `AI_SECRET_KEY` | | | 32 bytes as base64; AI credential storage is off without it |
 | `PRESIDIO_ANALYZER_URL` | | | de-identification is off without it |
 | `OPENAI_SIWC_CLIENT_ID`, `OPENAI_SIWC_CLIENT_SECRET` | | | Sign in with ChatGPT is hidden without them. OpenAI's endpoints are constants in code, not env |
-| `SUPABASE_PUBLIC_URL` | for OAuth | | browser-facing Supabase gateway; the login page shows no OAuth providers without it |
+| `GOTRUE_INTERNAL_URL` | | | optional GoTrue service root for the server-only OAuth authorize/callback bridge; Compose defaults to `http://auth:9999` |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_ADMIN_EMAIL`, `SMTP_SENDER_NAME` | | `SMTP_PORT=587` | the API's own mail (pending-account notices to administrators); off without `SMTP_HOST` and `SMTP_ADMIN_EMAIL`. Compose passes GoTrue's SMTP settings |
 | `SYSTEM_OWNER_USER_ID` | for `npm run bootstrap:system-owner` | | uuid; read by that script only |
 

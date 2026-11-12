@@ -51,6 +51,24 @@ api_location() {
   api_upstream="${EDULOG_API_UPSTREAM:-api:3000}"
   api_body_limit="$(nginx_size "${EDULOG_API_BODY_LIMIT:-1mb}")"
   cat <<EOF
+  location = /api/auth/bridge/callback {
+    # Provider callbacks contain authorization codes in the query or form body.
+    access_log off;
+    proxy_pass http://$api_upstream;
+    proxy_http_version 1.1;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_set_header X-Request-Id \$http_x_request_id;
+    proxy_set_header traceparent \$http_traceparent;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection \$connection_upgrade;
+    proxy_read_timeout 60s;
+    proxy_send_timeout 60s;
+    client_max_body_size $api_body_limit;
+  }
+
   location ^~ /api/ {
     proxy_pass http://$api_upstream;
     proxy_http_version 1.1;
