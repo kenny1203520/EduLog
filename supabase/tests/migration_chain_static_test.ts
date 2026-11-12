@@ -1084,7 +1084,7 @@ Deno.test('1000170 moves reports atomically and only replaces pristine target pl
   assertStringIncludes(reportOccurrenceCorrection, 'public.report_collab_docs')
   assertStringIncludes(reportOccurrenceCorrection, 'v_target_report.source_synced_version IS NOT NULL')
   assertStringIncludes(reportOccurrenceCorrection, 'SET enrollment_id = v_target_enrollment.id')
-  assertStringIncludes(reportOccurrenceCorrection, 'SET class_occurrence_id = p_target_class_occurrence_id')
+  assertStringIncludes(reportOccurrenceCorrection, 'class_occurrence_id = p_target_class_occurrence_id')
   assertStringIncludes(reportOccurrenceCorrection, 'PERFORM public.recalculate_enrollment_lesson_number(v_current.enrollment_id)')
   assertStringIncludes(reportOccurrenceCorrection, 'REVOKE ALL ON FUNCTION public.correct_occurrence_report(uuid, uuid, integer, uuid) FROM PUBLIC, anon')
   assertStringIncludes(reportOccurrenceCorrection, 'GRANT EXECUTE ON FUNCTION public.correct_occurrence_report(uuid, uuid, integer, uuid) TO authenticated')

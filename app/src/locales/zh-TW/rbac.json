@@ -45,7 +45,7 @@
 "audit_total": "共 {count} 筆事件",
 "audit_domains": { "system": "系統", "teaching": "教學" },
 "audit_outcomes": { "success": "成功", "denied": "拒絕", "failure": "失敗" },
-"audit_actions": { "oauth_connect": "以 OAuth 連結", "approve": "核准", "invite": "邀請", "password-set": "設定密碼", "email-change-request": "申請變更 Email", "password-change": "變更密碼", "apply-check": "套用前檢查", "save": "儲存", "acknowledge": "確認已讀", "test": "測試", "insert": "新增", "replace": "取代", "patch": "編輯", "status": "變更狀態" },
+"audit_actions": { "oauth_connect": "以 OAuth 連結", "approve": "核准", "invite": "邀請", "password-set": "設定密碼", "email-change-request": "申請變更 Email", "password-change": "變更密碼", "apply-check": "套用前檢查", "save": "儲存", "acknowledge": "確認已讀", "test": "測試", "insert": "新增", "replace": "取代", "patch": "編輯", "status": "變更狀態", "correct_occurrence": "更正課次" },
 "audit_resources": { "classroom-role-assignments": "教室角色指派", "account-default-roles": "新帳號預設角色", "account-security": "帳號安全", "ai_credentials": "AI 供應商憑證", "ai_generations": "AI 生成紀錄", "ai_models": "AI 模型", "ai_notice_acknowledgements": "AI 告知確認", "class-session-teachers": "班級教師", "class-sessions": "班級", "effective-role-assignments": "有效角色指派", "enrollment-reports": "註冊報告", "person-profile": "個人資料", "platform-role-assignments": "全平台角色指派", "role-assignment-exclusions": "角色排除", "role-assignments": "角色指派", "role-permissions": "角色權限", "scoped-role-assignments": "教室與班級角色指派", "student-credentials": "學生帳號密碼", "student-suspensions": "學生停課", "teacher-account-link": "教師帳號連結", "teacher-assignments": "授課安排", "user_preferences": "使用者偏好設定" },
 "audit_actor_unknown": "使用者未知或已刪除",
 "audit_value_missing": "未記錄",
