@@ -256,6 +256,42 @@ describe('OAuth sign-in', () => {
     expect(String(disabled.headers['set-cookie'])).not.toContain('edulog_access=token')
   })
 
+  it('rate limits OAuth callbacks before exchanging their code', async () => {
+    const fetchMock = stubGoTrue({ '/auth/v1/token': () => json(session('callback-user')) })
+    const limitedApp = app({ 'callback-user': 'active' }, undefined, testConfig({
+      GOTRUE_INTERNAL_URL: 'http://auth:9999',
+      API_RATE_LIMIT_PER_MINUTE: '1',
+    }))
+
+    const first = await request(limitedApp.instance).get('/api/auth/oauth/callback?code=callback-user').set('Cookie', 'edulog_oauth=verifier')
+    const second = await request(limitedApp.instance).get('/api/auth/oauth/callback?code=callback-user').set('Cookie', 'edulog_oauth=verifier')
+
+    expect(first.status).toBe(303)
+    expect(first.headers.location).toBe('/dashboard')
+    expect(second.status).toBe(429)
+    expect(second.body.error.code).toBe('RATE_LIMITED')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps OAuth authorization and callback rate limits independent', async () => {
+    const fetchMock = stubGoTrue({
+      '/auth/v1/settings': () => json({ external: { github: true } }),
+      '/authorize': () => new Response(null, { status: 302, headers: { location: 'https://github.com/login/oauth/authorize' } }),
+      '/auth/v1/token': () => json(session('callback-user')),
+    })
+    const limitedApp = app({ 'callback-user': 'active' }, undefined, testConfig({
+      GOTRUE_INTERNAL_URL: 'http://auth:9999',
+      API_RATE_LIMIT_PER_MINUTE: '1',
+    }))
+
+    const start = await request(limitedApp.instance).get('/api/auth/oauth/github')
+    const callback = await request(limitedApp.instance).get('/api/auth/oauth/callback?code=callback-user').set('Cookie', 'edulog_oauth=verifier')
+
+    expect(start.status).toBe(303)
+    expect(callback.status).toBe(303)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
   it('rejects a callback without the PKCE cookie', async () => {
     const response = await request(app({}).instance).get('/api/auth/oauth/callback?code=abc')
     expect(response.headers.location).toBe('/login?error=oauth')
