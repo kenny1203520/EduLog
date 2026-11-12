@@ -38,7 +38,7 @@ function fakeClients(statuses: Record<string, string>) {
       admin: { updateUserById, signOut: async () => ({}) },
     },
   }
-  return { clients: { adminClient, publicClient: adminClient } as never, rpc, updateUserById }
+  return { clients: { adminClient } as never, rpc, updateUserById }
 }
 
 function app(statuses: Record<string, string>, mailer: Mailer = { enabled: true, send: vi.fn(async () => {}) }) {
@@ -64,7 +64,13 @@ function stubGoTrue(handlers: Record<string, (init?: RequestInit) => Response>) 
 }
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
-const session = (userId: string) => ({ access_token: `token-${userId}`, refresh_token: 'refresh', expires_in: 3600, user: { id: userId } })
+const session = (userId: string) => ({
+  access_token: `token-${userId}`,
+  token_type: 'bearer',
+  expires_in: 3600,
+  refresh_token: `refresh-${userId}`,
+  user: { id: userId, email: `${userId}@example.test`, app_metadata: { provider: 'email' }, user_metadata: {}, aud: 'authenticated', role: 'authenticated' },
+})
 
 beforeEach(() => { resetProviderCache() })
 afterEach(() => { vi.unstubAllGlobals() })
@@ -128,6 +134,75 @@ describe('OAuth sign-in', () => {
 })
 
 describe('email links and passwords', () => {
+  it('keeps concurrent password logins and refreshes bound to their own credentials', async () => {
+    let refreshRequests = 0
+    let releaseRefreshRequests!: () => void
+    const bothRefreshRequests = new Promise<void>((resolve) => { releaseRefreshRequests = resolve })
+    const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const requestUrl = new URL(String(url))
+      const body = JSON.parse(String(init?.body ?? '{}')) as { email?: string; password?: string; refresh_token?: string }
+
+      if (requestUrl.searchParams.get('grant_type') === 'password') {
+        const userId = body.email?.split('@')[0] ?? 'unknown'
+        return json(session(userId))
+      }
+
+      if (requestUrl.searchParams.get('grant_type') === 'refresh_token') {
+        refreshRequests += 1
+        if (refreshRequests === 2) releaseRefreshRequests()
+        await bothRefreshRequests
+        const userId = body.refresh_token?.replace('refresh-', '') ?? 'unknown'
+        const refreshedSession = session(userId)
+        return json({ ...refreshedSession, access_token: `token-${userId}-rotated`, refresh_token: `refresh-${userId}-rotated` })
+      }
+
+      return json({ message: 'not found' }, 404)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const harness = app({ 'first-user': 'active', 'second-user': 'active' })
+    const [firstLogin, secondLogin] = await Promise.all([
+      request(harness.instance).post('/api/auth/login').send({ email: 'first-user@example.test', password: 'first-password' }),
+      request(harness.instance).post('/api/auth/login').send({ email: 'second-user@example.test', password: 'second-password' }),
+    ])
+
+    expect(firstLogin.status).toBe(200)
+    expect(secondLogin.status).toBe(200)
+    expect(String(firstLogin.headers['set-cookie'])).toContain('edulog_access=token-first-user')
+    expect(String(firstLogin.headers['set-cookie'])).toContain('edulog_refresh=refresh-first-user')
+    expect(String(secondLogin.headers['set-cookie'])).toContain('edulog_access=token-second-user')
+    expect(String(secondLogin.headers['set-cookie'])).toContain('edulog_refresh=refresh-second-user')
+
+    const [firstRefresh, secondRefresh] = await Promise.all([
+      request(harness.instance).post('/api/auth/refresh').set('Cookie', 'edulog_refresh=refresh-first-user'),
+      request(harness.instance).post('/api/auth/refresh').set('Cookie', 'edulog_refresh=refresh-second-user'),
+    ])
+
+    expect(firstRefresh.status).toBe(200)
+    expect(secondRefresh.status).toBe(200)
+    const firstRefreshCookies = String(firstRefresh.headers['set-cookie'])
+    const secondRefreshCookies = String(secondRefresh.headers['set-cookie'])
+    expect(firstRefreshCookies).toContain('edulog_access=token-first-user-rotated;')
+    expect(firstRefreshCookies).toContain('edulog_refresh=refresh-first-user-rotated;')
+    expect(firstRefreshCookies).not.toContain("second-user")
+    expect(secondRefreshCookies).toContain('edulog_access=token-second-user-rotated;')
+    expect(secondRefreshCookies).toContain('edulog_refresh=refresh-second-user-rotated;')
+    expect(secondRefreshCookies).not.toContain("first-user")
+    expect(refreshRequests).toBe(2)
+  })
+
+  it('keeps the refresh failure response when GoTrue no longer recognizes a token', async () => {
+    stubGoTrue({ '/auth/v1/token': () => json({ code: 'refresh_token_not_found', message: 'Refresh token not found' }, 400) })
+
+    const response = await request(app({}).instance)
+      .post('/api/auth/refresh')
+      .set('Cookie', 'edulog_refresh=expired-refresh')
+
+    expect(response.status).toBe(401)
+    expect(response.body.error.code).toBe('AUTH_INVALID')
+    expect(String(response.headers['set-cookie'] ?? '')).not.toContain('edulog_access=')
+  })
+
   it('opens a session from a reset link and allows setting a password once', async () => {
     stubGoTrue({ '/auth/v1/verify': () => json(session('reset-user')) })
     const harness = app({ 'reset-user': 'active' })
