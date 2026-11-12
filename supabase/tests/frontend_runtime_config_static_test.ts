@@ -31,5 +31,7 @@ Deno.test('bundled Caddy runtime logs redact single-use email confirmation token
   assert(globalOptions.includes('log default'), 'Caddy must filter the default runtime logger')
   assert(globalOptions.includes('output stderr'), 'Caddy must retain its runtime log destination')
   assert(globalOptions.includes('request>uri query'), 'Caddy must filter request URI query parameters')
-  assert(globalOptions.includes('replace token_hash REDACTED'), 'Caddy must redact token_hash while retaining other request diagnostics')
+  for (const key of ['token_hash', 'code', 'state']) {
+    assert(globalOptions.includes(`replace ${key} REDACTED`), `Caddy must redact the ${key} query value while retaining other request diagnostics`)
+  }
 })
