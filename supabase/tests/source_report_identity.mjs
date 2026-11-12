@@ -27,13 +27,14 @@ try {
     ALTER TABLE public.classrooms ADD COLUMN teaching_id uuid; ALTER TABLE public.courses ADD COLUMN teaching_id uuid;
     ALTER TABLE public.class_sessions ADD COLUMN teaching_id uuid;
     CREATE TABLE public.denied_permissions(permission text PRIMARY KEY);
+    CREATE TABLE public.denied_enrollment_permissions(enrollment_id uuid NOT NULL,permission text NOT NULL,PRIMARY KEY(enrollment_id,permission));
     CREATE FUNCTION public.has_teaching_permission(uuid,text,uuid,uuid,uuid) RETURNS boolean LANGUAGE sql AS $$ SELECT auth.role()='authenticated' AND auth.uid()=$1 AND NOT EXISTS(SELECT 1 FROM public.denied_permissions WHERE permission=$2) $$;
     CREATE FUNCTION public.has_api_permission(uuid,text,uuid,uuid) RETURNS boolean LANGUAGE sql AS $$ SELECT public.has_teaching_permission($1,$2,NULL,$3,$4) $$;
     CREATE FUNCTION public.is_teaching_member(uuid,uuid DEFAULT auth.uid()) RETURNS boolean LANGUAGE sql AS $$ SELECT auth.role()='authenticated' AND auth.uid()=$2 $$;
     CREATE FUNCTION public.can_access_classroom(uuid,text) RETURNS boolean LANGUAGE sql AS $$ SELECT EXISTS(SELECT 1 FROM public.classrooms WHERE id=$1) AND public.has_api_permission(auth.uid(),$2,$1,NULL) $$;
     CREATE FUNCTION public.can_access_class_session(uuid,text) RETURNS boolean LANGUAGE sql AS $$ SELECT EXISTS(SELECT 1 FROM public.class_sessions WHERE id=$1) AND public.has_api_permission(auth.uid(),$2,NULL,$1) $$;
     CREATE FUNCTION public.can_access_student(uuid,text) RETURNS boolean LANGUAGE sql AS $$ SELECT EXISTS(SELECT 1 FROM public.students WHERE id=$1) AND public.has_api_permission(auth.uid(),$2,NULL,NULL) $$;
-    CREATE FUNCTION public.can_access_enrollment(uuid,text) RETURNS boolean LANGUAGE sql AS $$ SELECT EXISTS(SELECT 1 FROM public.enrollments WHERE id=$1) AND public.has_api_permission(auth.uid(),$2,NULL,NULL) $$;
+    CREATE FUNCTION public.can_access_enrollment(uuid,text) RETURNS boolean LANGUAGE sql AS $$ SELECT EXISTS(SELECT 1 FROM public.enrollments WHERE id=$1) AND public.has_api_permission(auth.uid(),$2,NULL,NULL) AND NOT EXISTS(SELECT 1 FROM public.denied_enrollment_permissions WHERE enrollment_id=$1 AND permission=$2) $$;
     CREATE FUNCTION public.can_access_enrollment_scope(uuid,uuid,uuid,uuid,text) RETURNS boolean LANGUAGE sql AS $$ SELECT public.has_api_permission(auth.uid(),$5,$3,$4) $$;
     CREATE FUNCTION public.can_access_report(uuid,text) RETURNS boolean LANGUAGE sql AS $$ SELECT EXISTS(SELECT 1 FROM public.occurrence_reports WHERE id=$1) AND public.has_api_permission(auth.uid(),$2,NULL,NULL) $$;
     CREATE FUNCTION public.can_create_occurrence_report(uuid,uuid) RETURNS boolean LANGUAGE sql AS $$ SELECT public.has_api_permission(auth.uid(),'teaching.reports.create',NULL,NULL) $$;
@@ -273,9 +274,16 @@ try {
   assert.equal(shared.source_report_id, '906'); assert.equal(shared.primary_lesson_entry_id, entryA)
   assert.deepEqual(shared.lesson_entries.map(item => item.id), [entryA, entryB], 'the correction RPC retains all lesson entries')
   assert.equal((await db.query("SELECT edulog_id FROM public.web_extension_source_links WHERE source_kind='report' AND source_id='906'")).rows[0].edulog_id,sharedReport,'the correction RPC retains the extension source link')
+  const snapshotSyncState = async () => ({
+    report: (await db.query('SELECT id,enrollment_id,class_occurrence_id,version,lesson_entries,primary_lesson_entry_id,content,attendance_status,source_report_id FROM public.occurrence_reports WHERE id=$1',[sharedReport])).rows[0],
+    history: (await db.query('SELECT id,enrollment_id,linked_report_id,source_origin,source_admission_id,source_report_id,source_key,is_completed,progress_letter FROM public.enrollment_history_reports WHERE id=$1',[historyB])).rows[0],
+    sourceLink: (await db.query("SELECT edulog_id,target_version FROM public.web_extension_source_links WHERE source_kind='report' AND source_id='906'")).rows[0],
+  })
+  const beforeUnconfirmed = await snapshotSyncState()
   const unconfirmed = { job_id: job.id, key: id(2299), fingerprint: 'f'.repeat(64), rows: [lessonSyncRow(true, 'E', correctedOccurrence, false)] }
   await rejectsWith(rpc('preview', unconfirmed), 'INVALID_REFERENCE')
   await rejectsWith(rpc('apply', unconfirmed), 'INVALID_REFERENCE')
+  assert.deepEqual(await snapshotSyncState(),beforeUnconfirmed,'missing confirmation changes no history, report, entry, or source binding')
 
   const decoyReport = id(2013)
   await db.query('INSERT INTO public.occurrence_reports(id,enrollment_id,class_occurrence_id,content) VALUES($1,$2,$3,$4)', [decoyReport,e2,correctedOccurrence,'Decoy must remain untouched'])
@@ -284,6 +292,7 @@ try {
   const wrongReport = { job_id: job.id, key: id(2298), fingerprint: 'e'.repeat(64), rows: [wrongReportRow] }
   await assert.rejects(rpc('preview', wrongReport), error => ['SOURCE_MAPPING_CONFLICT', 'HISTORY_ALREADY_LINKED'].includes(error.message), 'a reconfirmed request with a matching date cannot point at a decoy report')
   await assert.rejects(rpc('apply', wrongReport), error => ['SOURCE_MAPPING_CONFLICT', 'HISTORY_ALREADY_LINKED'].includes(error.message), 'apply rejects a matching-date decoy target too')
+  assert.deepEqual(await snapshotSyncState(),beforeUnconfirmed,'wrong report pairing changes no history, report, entry, or source binding')
   shared = (await db.query('SELECT * FROM public.occurrence_reports WHERE id=$1', [sharedReport])).rows[0]
   assert.equal(shared.class_occurrence_id, correctedOccurrence); assert.equal(shared.source_report_id, '906')
   assert.equal((await db.query('SELECT content FROM public.occurrence_reports WHERE id=$1',[decoyReport])).rows[0].content,'Decoy must remain untouched')
@@ -307,7 +316,51 @@ try {
   assert.equal(remappedRoutes.items[0].id, correctedOccurrence)
   const wrongLinkedRows = await historyRpc('route-linked', { enrollment_id: enrollmentB, linked_report_ids: [sharedReport], linked_history_ids: [h(1)] })
   assert.equal(wrongLinkedRows.items.length, 0, 'a different history row cannot authorize a report route')
-  await db.query('UPDATE public.enrollment_history_reports SET enrollment_id=$1 WHERE id=$2',[enrollmentB,historyB])
+
+  const missingRemapConfirmation = { job_id: job.id, key: id(2297), fingerprint: 'd'.repeat(64), rows: [lessonSyncRow(true,'G',correctedOccurrence,false)] }
+  await assert.rejects(rpc('preview', missingRemapConfirmation), error => error.message === 'INVALID_REFERENCE', 'a changed enrollment must be explicitly reconfirmed')
+  await assert.rejects(rpc('apply', missingRemapConfirmation), error => error.message === 'INVALID_REFERENCE', 'apply independently requires remap confirmation')
+
+  const unrelatedStudent = id(2014), unrelatedEnrollment = id(2015)
+  await db.query("INSERT INTO public.students(id,name,user_id) VALUES($1,'Unrelated student',$2)",[unrelatedStudent,actor])
+  await db.query("INSERT INTO public.enrollments(id,student_id,course_id,classroom_id,class_session_id,user_id,start_date,status) VALUES($1,$2,$3,$4,$5,$6,'2026-01-01','regular')",[unrelatedEnrollment,unrelatedStudent,courseB,roomB,sessionB,actor])
+  const beforeUnrelatedTarget = await snapshotSyncState()
+  const unrelatedRow = lessonSyncRow(false,'Z',correctedOccurrence,true)
+  unrelatedRow.record.data.enrollment_id = unrelatedEnrollment
+  unrelatedRow.record.data.report_date = '2026-10-17'
+  unrelatedRow.record.data.content = 'forged shared-field update'
+  unrelatedRow.history_reconciliation.include_fields = ['content']
+  unrelatedRow.history_reconciliation.overwrite = ['content']
+  delete unrelatedRow.history_reconciliation.lesson_entry
+  const unrelatedBatch = { job_id: job.id, key: id(2296), fingerprint: 'c'.repeat(64), rows: [unrelatedRow] }
+  await assert.rejects(rpc('preview', unrelatedBatch), error => error.message === 'INVALID_REFERENCE', 'a different student cannot receive shared report fields')
+  await assert.rejects(rpc('apply', unrelatedBatch), error => error.message === 'INVALID_REFERENCE', 'apply rejects an unrelated target before writes')
+  assert.deepEqual(await snapshotSyncState(),beforeUnrelatedTarget,'unrelated target rejection changes no history, report, entry, or source binding')
+
+  lessonBatch++
+  const remapBatch = { job_id: job.id, key: id(2200 + lessonBatch), fingerprint: String(lessonBatch % 10).repeat(64), rows: [lessonSyncRow(true,'F',correctedOccurrence,true)] }
+  await db.query('INSERT INTO public.denied_enrollment_permissions(enrollment_id,permission) VALUES($1,$2),($1,$3)',[e1,'teaching.enrollments.read','teaching.reports.read'])
+  await assert.rejects(rpc('preview', remapBatch), error => error.message === 'PERMISSION_DENIED', 'preview rechecks old-enrollment read access')
+  assert.deepEqual(await snapshotSyncState(),beforeUnrelatedTarget,'denied preview changes no history, report, entry, or source binding')
+  await db.query('DELETE FROM public.denied_enrollment_permissions WHERE enrollment_id=$1',[e1])
+  const remapPreview = await rpc('preview', remapBatch)
+  assert.equal(remapPreview.rows[0].history_reconciliation.report_id, sharedReport)
+  await db.query('INSERT INTO public.denied_enrollment_permissions(enrollment_id,permission) VALUES($1,$2),($1,$3)',[e1,'teaching.enrollments.read','teaching.reports.read'])
+  await assert.rejects(rpc('apply', remapBatch), error => error.message === 'PERMISSION_DENIED', 'apply rechecks old-enrollment read access')
+  assert.deepEqual(await snapshotSyncState(),beforeUnrelatedTarget,'denied apply leaves history, report entries, and source binding untouched')
+  await db.query('DELETE FROM public.denied_enrollment_permissions WHERE enrollment_id=$1',[e1])
+
+  await rpc('apply', remapBatch)
+  shared = (await db.query('SELECT * FROM public.occurrence_reports WHERE id=$1',[sharedReport])).rows[0]
+  assert.equal(shared.id,reportIdBeforeCorrection); assert.equal(shared.class_occurrence_id,correctedOccurrence)
+  assert.equal(shared.source_report_id,'906'); assert.equal(shared.primary_lesson_entry_id,entryA)
+  assert.deepEqual([entry(entryA).is_completed,entry(entryA).progress_letter],[true,'B'],'remap preserves the sibling lesson')
+  assert.deepEqual([entry(entryB).is_completed,entry(entryB).progress_letter],[true,'F'],'remap updates the exact target course lesson')
+  assert.equal(shared.content,'Shared teacher comment'); assert.equal(shared.attendance_status,'present')
+  const remappedHistory = (await db.query('SELECT enrollment_id,linked_report_id,source_origin,source_admission_id,source_report_id,source_key FROM public.enrollment_history_reports WHERE id=$1',[historyB])).rows[0]
+  assert.deepEqual(remappedHistory,{enrollment_id:enrollmentB,linked_report_id:sharedReport,source_origin:origin,source_admission_id:'6003',source_report_id:'906',source_key:'report:6003:906'},'apply persists the confirmed target enrollment while retaining exact source binding')
+  assert.equal((await db.query("SELECT edulog_id FROM public.web_extension_source_links WHERE source_kind='report' AND source_id='906'")).rows[0].edulog_id,sharedReport)
+  assert.equal((await db.query("SELECT count(*)::int AS n FROM public.occurrence_reports, jsonb_array_elements(lesson_entries) item WHERE id=$1 AND item->>'enrollment_id'=$2 AND item->>'lesson_id'=$3",[sharedReport,enrollmentB,lessonB])).rows[0].n,1,'one B lesson entry remains')
 
   lessonBatch++
   const staleBatch = { job_id: job.id, key: id(2200 + lessonBatch), fingerprint: String(lessonBatch % 10).repeat(64), rows: [lessonSyncRow(false, 'F', correctedOccurrence, true)] }
@@ -332,7 +385,7 @@ try {
   assert.equal((await db.query('SELECT linked_report_id FROM public.enrollment_history_reports WHERE id=$1',[historyB])).rows[0].linked_report_id, sharedReport)
   assert.equal((await db.query("SELECT count(*)::int AS n FROM public.web_extension_source_links WHERE source_kind='report' AND source_id='906' AND edulog_id=$1",[sharedReport])).rows[0].n,1)
 
-  const linkedAgain = await historyRpc('route-linked', { enrollment_id: enrollmentB, linked_report_ids: [sharedReport] })
+  const linkedAgain = await historyRpc('route-linked', { enrollment_id: enrollmentB, linked_report_ids: [sharedReport], linked_history_ids: [historyB] })
   assert.equal(linkedAgain.items[0].id, correctedOccurrence); assert.equal(linkedAgain.items[0].report.id, sharedReport)
   console.log('PASS: 1000171 updates only the cross-course lesson entry, preserves shared report identity and fields, blocks corrected occurrence sync until confirmation, and reuses the original report link')
 

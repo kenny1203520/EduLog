@@ -1,5 +1,204 @@
 BEGIN;
 
+CREATE OR REPLACE FUNCTION public.assert_extension_history_reconciliation_target(
+  p_history_id uuid,
+  p_report_id uuid,
+  p_target_enrollment_id uuid,
+  p_occurrence_id uuid,
+  p_meta jsonb,
+  p_data jsonb
+) RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $function$
+DECLARE
+  v_history public.enrollment_history_reports;
+  v_old public.enrollments;
+  v_target public.enrollments;
+  v_report public.occurrence_reports;
+  v_occurrence public.class_occurrences;
+  v_anchor public.enrollments;
+  v_old_course public.courses;
+  v_target_course public.courses;
+  v_anchor_course public.courses;
+  v_entry_meta jsonb;
+BEGIN
+  IF p_history_id IS NULL OR p_report_id IS NULL OR p_target_enrollment_id IS NULL OR p_occurrence_id IS NULL THEN RETURN false; END IF;
+  SELECT * INTO v_history FROM public.enrollment_history_reports WHERE id=p_history_id;
+  IF NOT FOUND OR v_history.linked_report_id IS DISTINCT FROM p_report_id THEN RETURN false; END IF;
+  SELECT * INTO v_old FROM public.enrollments WHERE id=v_history.enrollment_id;
+  SELECT * INTO v_target FROM public.enrollments WHERE id=p_target_enrollment_id;
+  SELECT * INTO v_report FROM public.occurrence_reports WHERE id=p_report_id AND class_occurrence_id=p_occurrence_id;
+  SELECT * INTO v_occurrence FROM public.class_occurrences WHERE id=p_occurrence_id;
+  IF v_old.id IS NULL OR v_target.id IS NULL OR v_report.id IS NULL OR v_occurrence.id IS NULL THEN RETURN false; END IF;
+  SELECT * INTO v_anchor FROM public.enrollments WHERE id=v_report.enrollment_id;
+  IF v_anchor.id IS NULL THEN RETURN false; END IF;
+
+  IF NOT public.can_access_enrollment(v_target.id,'teaching.enrollments.read')
+    OR NOT public.can_access_class_session(v_occurrence.class_session_id,'teaching.occurrences.read') THEN
+    RAISE EXCEPTION 'PERMISSION_DENIED';
+  END IF;
+  IF v_history.enrollment_id IS DISTINCT FROM v_target.id
+    AND (NOT public.can_access_enrollment(v_history.enrollment_id,'teaching.enrollments.read')
+      OR NOT public.can_access_enrollment(v_history.enrollment_id,'teaching.reports.read')) THEN
+    RAISE EXCEPTION 'PERMISSION_DENIED';
+  END IF;
+
+  SELECT * INTO v_old_course FROM public.courses WHERE id=v_old.course_id;
+  SELECT * INTO v_target_course FROM public.courses WHERE id=v_target.course_id;
+  SELECT * INTO v_anchor_course FROM public.courses WHERE id=v_anchor.course_id;
+  IF v_old.student_id IS DISTINCT FROM v_target.student_id
+    OR v_old.student_id IS DISTINCT FROM v_anchor.student_id
+    OR v_old_course.teaching_id IS DISTINCT FROM v_target_course.teaching_id
+    OR v_old_course.teaching_id IS DISTINCT FROM v_anchor_course.teaching_id
+    OR NOT public.history_occurrence_eligible(v_anchor.id,p_occurrence_id) THEN
+    RAISE EXCEPTION 'INVALID_REFERENCE';
+  END IF;
+
+  IF v_history.enrollment_id IS DISTINCT FROM v_target.id
+    AND NOT COALESCE((p_meta->>'reconfirm_occurrence')::boolean,false) THEN
+    RAISE EXCEPTION 'INVALID_REFERENCE';
+  END IF;
+
+  IF COALESCE(p_meta->'include_fields' ?| ARRAY['lesson_id','is_completed','progress_letter'],false) THEN
+    v_entry_meta:=p_meta->'lesson_entry';
+    IF jsonb_typeof(v_entry_meta) IS DISTINCT FROM 'object'
+      OR (v_entry_meta->>'enrollment_id') IS DISTINCT FROM v_target.id::text
+      OR (v_entry_meta->>'course_id') IS DISTINCT FROM v_target.course_id::text
+      OR (v_entry_meta->>'lesson_id') IS NULL
+      OR (p_data ? 'lesson_id' AND (p_data->>'lesson_id') IS DISTINCT FROM v_entry_meta->>'lesson_id')
+      OR NOT EXISTS(SELECT 1 FROM public.lessons lesson
+        WHERE lesson.id=(v_entry_meta->>'lesson_id')::uuid AND lesson.course_id=v_target.course_id)
+      OR v_entry_meta->>'entry_id' IS NULL
+      OR NOT EXISTS(
+        SELECT 1 FROM jsonb_array_elements(COALESCE(v_report.lesson_entries,'[]'::jsonb)) entry(value)
+        WHERE entry.value->>'id'=v_entry_meta->>'entry_id'
+          AND entry.value->>'enrollment_id'=v_target.id::text
+          AND entry.value->>'course_id'=v_target.course_id::text
+          AND entry.value->>'lesson_id'=v_entry_meta->>'lesson_id'
+      ) THEN RAISE EXCEPTION 'INVALID_REFERENCE'; END IF;
+  END IF;
+  RETURN true;
+END
+$function$;
+REVOKE ALL ON FUNCTION public.assert_extension_history_reconciliation_target(uuid,uuid,uuid,uuid,jsonb,jsonb) FROM PUBLIC,anon,authenticated,service_role;
+
+CREATE OR REPLACE FUNCTION public.extension_history_enrollment_remap_allowed(
+  p_current jsonb,
+  p_target_id uuid,
+  p_row jsonb,
+  p_data jsonb
+) RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $function$
+DECLARE
+  v_meta jsonb:=p_row->'history_reconciliation';
+BEGIN
+  IF p_current IS NULL OR p_current->>'id' IS DISTINCT FROM p_target_id::text
+    OR NOT COALESCE((v_meta->>'reconfirm_occurrence')::boolean,false)
+    OR p_current->>'linked_report_id' IS DISTINCT FROM v_meta->>'report_id'
+    OR p_current->>'source_origin' IS DISTINCT FROM p_data->>'source_origin'
+    OR p_current->>'source_admission_id' IS DISTINCT FROM p_data->>'source_admission_id'
+    OR p_current->>'source_report_id' IS DISTINCT FROM p_data->>'source_report_id'
+    OR p_current->>'source_key' IS DISTINCT FROM p_data->>'source_key' THEN
+    RETURN false;
+  END IF;
+  RETURN public.assert_extension_history_reconciliation_target(
+    p_target_id,(v_meta->>'report_id')::uuid,(p_data->>'enrollment_id')::uuid,
+    (v_meta->>'class_occurrence_id')::uuid,v_meta,p_data
+  );
+END
+$function$;
+REVOKE ALL ON FUNCTION public.extension_history_enrollment_remap_allowed(jsonb,uuid,jsonb,jsonb) FROM PUBLIC,anon,authenticated,service_role;
+
+-- Permit only a confirmed, same-source remap of a linked history row.
+DO $migration$
+DECLARE
+  v_definition text;
+  v_old text;
+  v_new text;
+BEGIN
+  v_definition:=replace(pg_get_functiondef('public.web_extension_workspace_before_history_reconciliation(uuid,text,text,jsonb)'::regprocedure),E'\\r','');
+  v_old:=$old$AND v_current->d.key IS DISTINCT FROM d.value$old$;
+  v_new:=$new$AND v_current->d.key IS DISTINCT FROM d.value
+       AND NOT (
+         v_kind='history_report' AND d.key='enrollment_id'
+         AND public.extension_history_enrollment_remap_allowed(v_current,v_id,v_row,v_data)
+       )$new$;
+  IF position(v_new IN v_definition)>0 THEN NULL;
+  ELSIF position(v_old IN v_definition)=0 OR strpos(substring(v_definition FROM position(v_old IN v_definition)+1),v_old)>0 THEN
+    RAISE EXCEPTION 'EXTENSION_HISTORY_IDENTITY_PATCH_FAILED';
+  ELSE
+    v_definition:=replace(v_definition,v_old,v_new);
+  END IF;
+  EXECUTE v_definition;
+END
+$migration$;
+
+-- Persist the confirmed target enrollment on the source history row only when
+-- the same exact-link authorization gate permits the immutable-key exception.
+DO $migration$
+DECLARE
+  v_definition text;
+  v_old text;
+  v_new text;
+BEGIN
+  v_definition:=replace(pg_get_functiondef('public.web_extension_workspace_before_history_reconciliation(uuid,text,text,jsonb)'::regprocedure),E'\\r','');
+  v_old:=$old$IF v_current IS NULL OR (v_current->v_field IS DISTINCT FROM v_data->v_field AND (v_row->'overwrite') ? v_field) THEN v_patch:=v_patch||jsonb_build_object(v_field,v_data->v_field); END IF;$old$;
+  v_new:=$new$IF v_current IS NULL OR (v_current->v_field IS DISTINCT FROM v_data->v_field AND (
+       (v_row->'overwrite') ? v_field
+       OR (v_kind='history_report' AND v_field='enrollment_id' AND public.extension_history_enrollment_remap_allowed(v_current,v_id,v_row,v_data))
+     )) THEN v_patch:=v_patch||jsonb_build_object(v_field,v_data->v_field); END IF;$new$;
+  IF position(v_new IN v_definition)>0 THEN NULL;
+  ELSIF position(v_old IN v_definition)=0 THEN RAISE EXCEPTION 'EXTENSION_HISTORY_ENROLLMENT_PATCH_FAILED';
+  ELSE v_definition:=replace(v_definition,v_old,v_new); END IF;
+  EXECUTE v_definition;
+END
+$migration$;
+
+-- Persist the enrollment through the existing typed update path once the
+-- shared remap gate added the enrollment_id to v_patch.
+DO $migration$
+DECLARE
+  v_definition text;
+  v_old text;
+  v_new text;
+BEGIN
+  v_definition:=replace(pg_get_functiondef('public.web_extension_workspace_before_history_reconciliation(uuid,text,text,jsonb)'::regprocedure),E'\\r','');
+  v_old:=$old$SET (lesson_id,is_completed,progress_letter,attendance_status,absence_reason,class_participation,classroom_behavior,content,contact_notes,class_notes,external_link,source_fields,source_evidence,version,updated_at)=(SELECT x.lesson_id,$old$;
+  v_new:=$new$SET (enrollment_id,lesson_id,is_completed,progress_letter,attendance_status,absence_reason,class_participation,classroom_behavior,content,contact_notes,class_notes,external_link,source_fields,source_evidence,version,updated_at)=(SELECT x.enrollment_id,x.lesson_id,$new$;
+  IF position(v_new IN v_definition)>0 THEN NULL;
+  ELSIF position(v_old IN v_definition)=0 THEN RAISE EXCEPTION 'EXTENSION_HISTORY_ENROLLMENT_WRITE_PATCH_FAILED';
+  ELSE v_definition:=replace(v_definition,v_old,v_new); END IF;
+  EXECUTE v_definition;
+END
+$migration$;
+
+-- A lesson can be synchronized into an already-linked shared report when the
+-- incoming enrollment is cross-course, provided the exact history/report link
+-- authorizes that student's matching lesson entry.
+DO $migration$
+DECLARE
+  v_definition text;
+  v_old text;
+  v_new text;
+BEGIN
+  v_definition:=replace(pg_get_functiondef('public.web_extension_workspace_before_history_reconciliation(uuid,text,text,jsonb)'::regprocedure),E'\\r','');
+  v_old:=$old$        ) THEN RAISE EXCEPTION 'INVALID_REFERENCE'; END IF;
+        IF v_data ? 'lesson_id' AND NOT EXISTS($old$;
+  v_new:=$new$        ) AND NOT public.assert_extension_history_reconciliation_target(
+          (v_row->>'target_id')::uuid,
+          (v_row->'history_reconciliation'->>'report_id')::uuid,
+          (v_data->>'enrollment_id')::uuid,
+          (v_row->'history_reconciliation'->>'class_occurrence_id')::uuid,
+          v_row->'history_reconciliation',v_data
+        ) THEN RAISE EXCEPTION 'INVALID_REFERENCE'; END IF;
+        IF v_data ? 'lesson_id' AND NOT EXISTS($new$;
+  IF position(v_new IN v_definition)>0 THEN NULL;
+  ELSIF position(v_old IN v_definition)=0 THEN RAISE EXCEPTION 'EXTENSION_HISTORY_TARGET_ELIGIBILITY_PATCH_FAILED';
+  ELSE v_definition:=replace(v_definition,v_old,v_new); END IF;
+  EXECUTE v_definition;
+END
+$migration$;
+
+
 -- Extension history routing can resolve the exact report already linked to a
 -- source row after an occurrence correction or enrollment remapping. A supplied
 -- history-row ID is accepted only when its report link, permissions, student,
@@ -185,7 +384,9 @@ BEGIN
 
   v_old := $old$IF v_enrollment.id IS NULL OR v_occurrence.id IS NULL OR v_occurrence.occurrence_date<>(v_data->>'report_date')::date OR v_occurrence.status='cancelled'
        OR NOT public.history_occurrence_eligible(v_enrollment.id,v_occurrence.id) THEN RAISE EXCEPTION 'INVALID_REFERENCE'; END IF;$old$;
-  v_new := $new$IF v_enrollment.id IS NULL OR v_occurrence.id IS NULL OR v_occurrence.status='cancelled'
+  v_new := $new$PERFORM public.assert_extension_history_reconciliation_target(
+        (v_row->>'target_id')::uuid,(v_meta->>'report_id')::uuid,v_enrollment.id,v_occurrence.id,v_meta,v_data);
+      IF v_enrollment.id IS NULL OR v_occurrence.id IS NULL OR v_occurrence.status='cancelled'
        OR (v_occurrence.occurrence_date<>(v_data->>'report_date')::date AND NOT (
          COALESCE((v_meta->>'reconfirm_occurrence')::boolean,false) AND v_meta->>'report_id' IS NOT NULL
          AND EXISTS(SELECT 1 FROM public.enrollment_history_reports history WHERE history.id=(v_row->>'target_id')::uuid AND history.linked_report_id=(v_meta->>'report_id')::uuid)
@@ -201,7 +402,7 @@ BEGIN
              AND anchor.student_id=v_enrollment.student_id AND anchor_course.teaching_id=target_course.teaching_id
              AND public.history_occurrence_eligible(anchor.id,v_occurrence.id))) THEN RAISE EXCEPTION 'INVALID_REFERENCE'; END IF;$new$;
   IF position(v_old IN v_definition)>0 THEN v_definition:=replace(v_definition,v_old,v_new);
-  ELSIF position('COALESCE((v_meta->>''reconfirm_occurrence'')::boolean,false)' IN v_definition)=0 THEN
+  ELSIF position('assert_extension_history_reconciliation_target' IN v_definition)=0 THEN
     v_start:=strpos(v_definition,'IF v_enrollment.id IS NULL OR v_occurrence.id IS NULL');
     v_old:=$old$THEN RAISE EXCEPTION 'INVALID_REFERENCE'; END IF;$old$;
     v_end:=CASE WHEN v_start=0 THEN 0 ELSE strpos(substring(v_definition FROM v_start),v_old) END;
@@ -347,7 +548,9 @@ BEGIN
         OR NOT public.history_occurrence_eligible(v_check_enrollment.id,v_check_occurrence.id)
         OR NOT public.can_access_enrollment(v_check_enrollment.id,'teaching.enrollments.read')
         OR NOT public.can_access_class_session(v_check_occurrence.class_session_id,'teaching.occurrences.read') THEN RAISE EXCEPTION 'INVALID_REFERENCE'; END IF;$old$;
-  v_new := $new$IF v_check_enrollment.id IS NULL OR v_check_occurrence.id IS NULL
+  v_new := $new$PERFORM public.assert_extension_history_reconciliation_target(
+         (v_check_row->>'target_id')::uuid,(v_check_meta->>'report_id')::uuid,v_check_enrollment.id,v_check_occurrence.id,v_check_meta,v_check_data);
+       IF v_check_enrollment.id IS NULL OR v_check_occurrence.id IS NULL
         OR v_check_occurrence.status='cancelled'
         OR (v_check_occurrence.occurrence_date<>(v_check_data->>'report_date')::date AND NOT (
           COALESCE((v_check_meta->>'reconfirm_occurrence')::boolean,false)
@@ -411,27 +614,10 @@ DECLARE
 BEGIN
   v_definition:=pg_get_functiondef('public.validate_enrollment_history(jsonb,jsonb,public.web_extension_import_jobs,jsonb)'::regprocedure);
   v_old:=$old$v_same_link:=EXISTS(SELECT 1 FROM public.occurrence_reports r WHERE r.id=existing.linked_report_id AND r.enrollment_id=existing.enrollment_id AND r.class_occurrence_id=(p_row->'history_reconciliation'->>'class_occurrence_id')::uuid);$old$;
-  v_new:=$new$v_same_link:=EXISTS(
-    SELECT 1 FROM public.occurrence_reports report
-    JOIN public.enrollments anchor ON anchor.id=report.enrollment_id
-    JOIN public.courses anchor_course ON anchor_course.id=anchor.course_id
-    JOIN public.enrollments target ON target.id=existing.enrollment_id
-    JOIN public.courses target_course ON target_course.id=target.course_id
-    WHERE report.id=existing.linked_report_id
-      AND report.class_occurrence_id=(p_row->'history_reconciliation'->>'class_occurrence_id')::uuid
-      AND (report.enrollment_id=existing.enrollment_id OR (
-        anchor.student_id=target.student_id
-        AND anchor_course.teaching_id=target_course.teaching_id
-        AND public.history_occurrence_eligible(anchor.id,report.class_occurrence_id)
-        AND EXISTS(SELECT 1 FROM jsonb_array_elements(COALESCE(report.lesson_entries,'[]'::jsonb)) entry(value)
-          WHERE entry.value->>'enrollment_id'=existing.enrollment_id::text
-            AND entry.value->>'course_id'=target.course_id::text
-            AND entry.value->>'lesson_id'=p_row->'history_reconciliation'->'lesson_entry'->>'lesson_id'
-            AND (p_row->'history_reconciliation'->'lesson_entry'->>'entry_id' IS NULL
-              OR entry.value->>'id'=p_row->'history_reconciliation'->'lesson_entry'->>'entry_id')
-        )
-      ))
-  );$new$;
+  v_new:=$new$v_same_link:=public.assert_extension_history_reconciliation_target(
+     existing.id,existing.linked_report_id,(p_data->>'enrollment_id')::uuid,
+     (p_row->'history_reconciliation'->>'class_occurrence_id')::uuid,
+     p_row->'history_reconciliation',p_data);$new$;
   IF position(v_old IN v_definition)>0 THEN v_definition:=replace(v_definition,v_old,v_new);
   ELSIF position(v_new IN v_definition)=0 THEN RAISE EXCEPTION 'EXTENSION_HISTORY_LINK_VALIDATOR_PATCH_FAILED'; END IF;
   EXECUTE v_definition;
