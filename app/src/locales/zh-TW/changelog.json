@@ -1,6 +1,26 @@
 {
     "entries": [
         {
+            "version": "2.0.0-alpha.7",
+            "date": "2026-11-13",
+            "changes": {
+                "added": [
+                    "單份課堂報告現在可記錄多個課次與課程的進度，並共用出席與評語。"
+                ],
+                "changed": [
+                    "OAuth 與密碼工作階段由 EduLog API 管理；公司網站歷史同步會指定已確認的課次進度項目。"
+                ],
+                "fixed": [
+                    "課堂日曆現在會依 session_ids 正確檢查班級權限。報告可更正到實際授課場次，同時保留報告 ID 與歷史紀錄。",
+                    "關於頁面改為連結 EduLog GitHub Packages 與映像檔使用說明；交易郵件主旨與模板也已更新。"
+                ],
+                "deployment": [
+                    "前端、API 與 Presidio 映像檔請使用相同版本 2.0.0-alpha.7；alpha 不會更新正式版映像標籤。",
+                    "部署相符版本的 API 與擴充功能前，請先備份資料庫，再依檔名順序套用所有尚未執行的 migration，直到 1000171_extension_primary_lesson_sync.sql。"
+                ]
+            }
+        },
+        {
             "version": "2.0.0-alpha.6",
             "date": "2026-11-10",
             "changes": {

@@ -1,6 +1,26 @@
 {
     "entries": [
         {
+            "version": "2.0.0-alpha.7",
+            "date": "2026-11-13",
+            "changes": {
+                "added": [
+                    "A single class report can now record progress for multiple lessons and courses while keeping attendance and comments shared."
+                ],
+                "changed": [
+                    "OAuth and password sessions are managed through the EduLog API. Company history sync now targets a confirmed lesson entry."
+                ],
+                "fixed": [
+                    "Class-scoped occurrence calendars now authorize session_ids correctly. Reports can be corrected to the taught occurrence without replacing report identity or history.",
+                    "The About page now links to EduLog GitHub Packages and its image instructions. Transactional email subjects and templates have been refreshed."
+                ],
+                "deployment": [
+                    "Use matching frontend, API, and Presidio images tagged 2.0.0-alpha.7. Alpha does not update stable image tags.",
+                    "Back up the database, then apply all unapplied migrations in filename order through 1000171_extension_primary_lesson_sync.sql before deploying the matching API and extension."
+                ]
+            }
+        },
+        {
             "version": "2.0.0-alpha.6",
             "date": "2026-11-10",
             "changes": {
