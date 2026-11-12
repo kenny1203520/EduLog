@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Request, Response } from 'express'
 import { readFileSync } from 'node:fs'
-import { readCollaboration, remove, reportLessonEntryOptions } from './reportRouter.js'
+import { correctOccurrence, readCollaboration, remove, reportLessonEntryOptions } from './reportRouter.js'
 import { assertClientManagedAttendanceReason, assertReportAttendanceUpdate, firstUncompletedSequence, legacySnapshotHasLessonState } from './reportRouter.js'
 
 describe('report lifecycle progress', () => {
@@ -115,6 +115,104 @@ describe('report lifecycle progress', () => {
     await expect(remove(req, response)).rejects.toMatchObject({ status: 400, code: 'INVALID_ID' })
     expect(dbRpc).not.toHaveBeenCalled()
     expect(adminRpc).not.toHaveBeenCalled()
+  })
+})
+
+describe('report occurrence correction API', () => {
+  const reportId = 'a1000000-0000-4000-8000-000000000001'
+  const targetOccurrenceId = 'a2000000-0000-4000-8000-000000000001'
+  const sourceEnrollmentId = 'b2000000-0000-4000-8000-000000000001'
+  const targetEnrollmentId = 'b2000000-0000-4000-8000-000000000002'
+
+  function makeRequest(dbRpc: ReturnType<typeof vi.fn>, adminRpc: ReturnType<typeof vi.fn>, body: {
+    target_class_occurrence_id: string
+    target_enrollment_id?: string
+    expected_version: number
+  } = {
+    target_class_occurrence_id: targetOccurrenceId,
+    expected_version: 3,
+  }) {
+    const req = {
+      method: 'POST', originalUrl: `/api/reports/${reportId}/correct-occurrence`,
+      params: { reportId }, body, requestId: 'request-correction', traceId: 'trace-correction',
+      header: vi.fn((name: string) => name.toLowerCase() === 'idempotency-key' ? 'correct-occurrence-1' : undefined),
+      user: { id: 'teacher-1' }, db: { rpc: dbRpc }, adminDb: { rpc: adminRpc }, auditContext: {},
+    } as unknown as Request
+    const response = { status: vi.fn().mockReturnThis(), json: vi.fn() } as unknown as Response
+    return { req, response }
+  }
+
+  it('checks the source scope, reserves idempotency, preserves the report response, and audits both scopes', async () => {
+    const correction = {
+      report: { id: reportId, enrollment_id: targetEnrollmentId, class_occurrence_id: targetOccurrenceId, version: 4, lesson_entries: [{ id: 'entry-1' }] },
+      source_enrollment_id: sourceEnrollmentId, target_enrollment_id: targetEnrollmentId,
+      source_class_occurrence_id: 'a2000000-0000-4000-8000-000000000002', target_class_occurrence_id: targetOccurrenceId,
+      source_class_session_id: 'c2000000-0000-4000-8000-000000000001', target_class_session_id: 'c2000000-0000-4000-8000-000000000002',
+      source_teaching_id: 'd2000000-0000-4000-8000-000000000001', target_teaching_id: 'd2000000-0000-4000-8000-000000000002',
+      replaced_report_id: 'e2000000-0000-4000-8000-000000000001',
+    }
+    const dbRpc = vi.fn().mockImplementation((name: string) => {
+      if (name === 'get_occurrence_report_mutation_context') return { maybeSingle: vi.fn().mockResolvedValue({ data: { teaching_id: 'teaching-a', class_session_id: 'session-a', class_occurrence_id: 'occurrence-a' }, error: null }) }
+      if (name === 'correct_occurrence_report') return Promise.resolve({ data: correction, error: null })
+      throw new Error(`unexpected db RPC ${name}`)
+    })
+    const adminRpc = vi.fn().mockResolvedValue({ data: [{ is_replay: false }], error: null })
+    const { req, response } = makeRequest(dbRpc, adminRpc, {
+      target_class_occurrence_id: targetOccurrenceId,
+      target_enrollment_id: targetEnrollmentId,
+      expected_version: 3,
+    })
+
+    await correctOccurrence(req, response)
+
+    expect(dbRpc).toHaveBeenCalledWith('correct_occurrence_report', {
+      p_report_id: reportId, p_target_class_occurrence_id: targetOccurrenceId,
+      p_expected_version: 3, p_target_enrollment_id: targetEnrollmentId,
+    })
+    expect(adminRpc).toHaveBeenCalledWith('reserve_api_idempotency', expect.objectContaining({
+      p_method: 'POST', p_route: `/api/reports/${reportId}/correct-occurrence`,
+    }))
+    expect(adminRpc).toHaveBeenCalledWith('complete_api_idempotency', expect.objectContaining({ p_status: 200 }))
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ data: correction.report }))
+    expect(req.auditContext).toMatchObject({
+      action: 'correct_occurrence', resourceId: reportId, teachingId: 'd2000000-0000-4000-8000-000000000002',
+      metadata: {
+        actor_user_id: 'teacher-1', source_enrollment_id: sourceEnrollmentId, target_enrollment_id: targetEnrollmentId,
+        source_class_occurrence_id: 'a2000000-0000-4000-8000-000000000002', target_class_occurrence_id: targetOccurrenceId,
+        source_class_session_id: 'c2000000-0000-4000-8000-000000000001', target_class_session_id: 'c2000000-0000-4000-8000-000000000002',
+        replaced_report_id: 'e2000000-0000-4000-8000-000000000001',
+      },
+    })
+  })
+
+  it('requires source report edit permission before reserving idempotency or correcting', async () => {
+    const dbRpc = vi.fn(() => ({ maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }) }))
+    const adminRpc = vi.fn()
+    const { req, response } = makeRequest(dbRpc, adminRpc)
+
+    await expect(correctOccurrence(req, response)).rejects.toMatchObject({ status: 403, code: 'PERMISSION_DENIED' })
+    expect(dbRpc).toHaveBeenCalledTimes(1)
+    expect(adminRpc).not.toHaveBeenCalled()
+    expect(response.json).not.toHaveBeenCalled()
+  })
+
+  it('returns a conflict when the database rejects an edited or synchronized target report', async () => {
+    const dbRpc = vi.fn().mockImplementation((name: string) => {
+      if (name === 'get_occurrence_report_mutation_context') return { maybeSingle: vi.fn().mockResolvedValue({ data: { teaching_id: 'teaching-a', class_session_id: 'session-a', class_occurrence_id: 'occurrence-a' }, error: null }) }
+      if (name === 'correct_occurrence_report') return Promise.resolve({ data: null, error: { code: 'P0001', message: 'REPORT_CORRECTION_TARGET_CONFLICT' } })
+      throw new Error(`unexpected db RPC ${name}`)
+    })
+    const adminRpc = vi.fn().mockResolvedValue({ data: [{ is_replay: false }], error: null })
+    const { req, response } = makeRequest(dbRpc, adminRpc, {
+      target_class_occurrence_id: targetOccurrenceId,
+      target_enrollment_id: targetEnrollmentId,
+      expected_version: 3,
+    })
+
+    await expect(correctOccurrence(req, response)).rejects.toMatchObject({ status: 409, code: 'BUSINESS_CONFLICT' })
+    expect(req.auditContext?.metadata).toMatchObject({ actor_user_id: 'teacher-1', target_class_occurrence_id: targetOccurrenceId, target_enrollment_id: targetEnrollmentId })
+    expect(adminRpc).not.toHaveBeenCalledWith('complete_api_idempotency', expect.anything())
+    expect(response.json).not.toHaveBeenCalled()
   })
 })
 

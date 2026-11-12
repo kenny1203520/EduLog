@@ -59,7 +59,9 @@ export function firstUncompletedSequence(lessons: Array<{ id: string; sequence: 
   return lessons.find((lesson) => !representedLessonIds.has(lesson.id))?.sequence ?? currentLessonNumber
 }
 function reportId(req: Request) {
-  const id = typeof req.params.id === 'string' ? req.params.id : undefined
+  const id = typeof req.params.id === 'string'
+    ? req.params.id
+    : typeof req.params.reportId === 'string' ? req.params.reportId : undefined
   if (!id || !z.string().uuid().safeParse(id).success) throw new ApiError(400, 'INVALID_ID', 'Report id is invalid')
   return id
 }
@@ -186,6 +188,92 @@ async function update(req: Request, res: Response) {
   // Track how much adopted AI text the saved report keeps; never blocks or fails the save.
   if (input.content !== undefined && req.adminDb) void measureReportAdoptions(req.adminDb, id, 'save').catch((error) => req.log?.warn({ err: error, report_id: id }, 'ai_adoption_measure_failed'))
   const envelope = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, envelope); return res.json(envelope)
+}
+
+/** Move the report, including its shared attendance/comment and lesson entries, to the occurrence that actually happened. */
+export async function correctOccurrence(req: Request, res: Response) {
+  if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
+  const id = reportId(req)
+  const input = z.object({
+    target_class_occurrence_id: uuid,
+    target_enrollment_id: uuid.optional(),
+    expected_version: z.number().int().min(1),
+  }).strict().parse(req.body)
+
+  setAuditContext(req, {
+    domain: 'teaching',
+    resource: 'reports',
+    resourceId: id,
+    action: 'correct_occurrence',
+    permission: 'teaching.reports.update',
+    scopeType: 'occurrence_report',
+    metadata: {
+      actor_user_id: req.user.id,
+      target_class_occurrence_id: input.target_class_occurrence_id,
+      target_enrollment_id: input.target_enrollment_id ?? null,
+    },
+  })
+  const contextResult = await req.db.rpc('get_occurrence_report_mutation_context', {
+    p_report_id: id,
+    p_permission_key: 'teaching.reports.update',
+  }).maybeSingle()
+  if (contextResult.error) throw mapDatabaseError(contextResult.error)
+  const context = contextResult.data as MutationContext | null
+  requireAuthorizationDecision(req, { data: Boolean(context), error: null }, {
+    permission: 'teaching.reports.update',
+    stage: 'report_scope_permission',
+    message: 'You do not have permission to correct this report',
+    scopeId: id,
+    scopeType: 'occurrence_report',
+    teachingId: context?.teaching_id ?? null,
+  })
+  if (!context) return
+
+  const replay = await idempotency(req, 200, null)
+  if (replay) return res.status(replay.status).json(replay.body)
+
+  const result = await req.db.rpc('correct_occurrence_report', {
+    p_report_id: id,
+    p_target_class_occurrence_id: input.target_class_occurrence_id,
+    p_expected_version: input.expected_version,
+    p_target_enrollment_id: input.target_enrollment_id ?? null,
+  })
+  if (result.error) throw mapDatabaseError(result.error)
+  const correction = result.data as {
+    report?: unknown
+    source_enrollment_id?: string
+    target_enrollment_id?: string
+    source_class_occurrence_id?: string
+    target_class_occurrence_id?: string
+    source_class_session_id?: string
+    target_class_session_id?: string
+    source_teaching_id?: string | null
+    target_teaching_id?: string | null
+    replaced_report_id?: string | null
+  } | null
+  if (!correction?.report) throw new ApiError(500, 'INTERNAL_ERROR', 'The report correction could not be completed')
+
+  setAuditContext(req, {
+    teachingId: correction.target_teaching_id ?? null,
+    scopeId: correction.target_class_occurrence_id ?? null,
+    scopeType: 'class_occurrence',
+    metadata: {
+      ...(req.auditContext?.metadata ?? {}),
+      actor_user_id: req.user.id,
+      source_enrollment_id: correction.source_enrollment_id ?? null,
+      target_enrollment_id: correction.target_enrollment_id ?? null,
+      source_class_occurrence_id: correction.source_class_occurrence_id ?? context.class_occurrence_id,
+      target_class_occurrence_id: correction.target_class_occurrence_id ?? input.target_class_occurrence_id,
+      source_class_session_id: correction.source_class_session_id ?? context.class_session_id,
+      target_class_session_id: correction.target_class_session_id ?? null,
+      source_teaching_id: correction.source_teaching_id ?? context.teaching_id,
+      target_teaching_id: correction.target_teaching_id ?? null,
+      replaced_report_id: correction.replaced_report_id ?? null,
+    },
+  })
+  const body = envelope(req, correction.report)
+  await complete(req, 200, body)
+  return res.json(body)
 }
 
 /** Course and lesson choices for the same student inside the report's teaching. */
@@ -404,6 +492,7 @@ async function progressSummaryReports(req: Request, res: Response) {
 export function createReportRouter() {
   const router = Router()
   router.post('/reports', wrap(create))
+  router.post('/reports/:reportId/correct-occurrence', wrap(correctOccurrence))
   router.get('/reports/:reportId/lesson-entry-options', wrap(reportLessonEntryOptions))
   router.patch('/reports/:id', wrap(update))
   router.delete('/reports/:id', wrap(remove))

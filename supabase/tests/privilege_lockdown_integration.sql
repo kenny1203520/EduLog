@@ -17,6 +17,7 @@ DECLARE
     'public.can_access_enrollment_scope(uuid,uuid,uuid,uuid,text)',
     'public.can_access_enrollment(uuid,text)',
     'public.can_access_occurrence_report(uuid)',
+    'public.correct_occurrence_report(uuid,uuid,integer,uuid)',
     'public.can_access_report(uuid,text)',
     'public.can_access_sensitive_student(uuid,text)',
     'public.can_access_single_lesson_transfer(uuid,text)',

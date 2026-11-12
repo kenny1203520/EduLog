@@ -4,6 +4,21 @@ import { buildOpenApi } from './openapi.js'
 import { genericOperationsOf, resources } from '../routes/rest/resources.js'
 
 describe('generated API contract', () => {
+  it('documents occurrence correction as a versioned, scoped report mutation', () => {
+    const spec = buildOpenApi() as { paths: Record<string, Record<string, any>> }
+    const operation = spec.paths['/api/reports/{reportId}/correct-occurrence'].post
+    expect(operation.operationId).toBe('report_correct_occurrence')
+    expect(operation.security).toEqual([{ cookieAuth: [] }])
+    expect(operation['x-permission']).toBe('teaching.reports.update')
+    expect(operation.parameters).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'reportId', in: 'path' }),
+      expect.objectContaining({ $ref: '#/components/parameters/IdempotencyKey' }),
+    ]))
+    expect(operation.requestBody.content['application/json'].schema.required).toEqual(['target_class_occurrence_id', 'expected_version'])
+    expect(operation.requestBody.content['application/json'].schema.properties.target_enrollment_id.format).toBe('uuid')
+    expect(operation.responses['409']).toBeDefined()
+  })
+
   it('documents blank email clearing for student and contact mutations', () => {
     const spec = buildOpenApi() as { paths: Record<string, Record<string, any>> }
     for (const resource of ['students', 'student-contacts']) {
