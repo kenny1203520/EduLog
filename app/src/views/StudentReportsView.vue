@@ -481,6 +481,8 @@
                         :course-display-name="enrollmentInfo?.courseDisplay || undefined"
                         :initial-student-name="enrollmentInfo?.studentName"
                         :initial-student-id="enrollmentInfo?.studentId" :initial-lesson-id="selectedReport.lessonId"
+                        :initial-lesson-entries="selectedReport.lessonEntries"
+                        :initial-primary-lesson-entry-id="selectedReport.primaryLessonEntryId"
                         :available-lessons="courseLessons" :initial-report-external-link="selectedReport.externalLink"
                         :source-identity="selectedReport"
                         :initial-is-completed="selectedReport.isCompleted"

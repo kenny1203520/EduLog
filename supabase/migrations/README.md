@@ -355,3 +355,11 @@ and remove `graphql_public` from `PGRST_DB_SCHEMAS` in the deployment's `.env` (
 Before applying, compare the target database with this chain (for example `pg_dump --schema-only` against a fresh database built from these migrations). The linter output that prompted this change still showed the `role_permission_policies` "manage" policy that `1000106` removed, and a `rls_auto_enable()` function this chain never created. `1000167` keeps `rls_auto_enable()` and only removes API access to it.
 
 `1000168` rewrites the four web-extension owner policies to `(SELECT auth.uid())`. Both migrations are rerunnable.
+
+## Multi-lesson report progress (1000169)
+
+`1000169_multi_lesson_report_entries.sql` adds `occurrence_reports.lesson_entries`, a JSON array with one progress entry per enrollment/course/lesson, plus `primary_lesson_entry_id`. Existing scalar lesson fields remain the projection for the primary entry so older clients can continue reading and writing a single lesson. The migration backfills existing scalar reports without changing their report IDs, versions, or `updated_at` values; version snapshots now include the complete entry array.
+
+Restoring a snapshot created before `1000169` reconstructs one entry from the saved scalar lesson and the report enrollment. If that enrollment or lesson is no longer compatible, restoration is rejected rather than reusing progress from the current version. Changing an enrollment's student or course is blocked while it has lesson progress; deleting it is blocked while another report refers to it or while its report contains another enrollment's progress. These references must be migrated explicitly before changing or removing an enrollment.
+
+Run `supabase/tests/report_lifecycle_integration.sql` after applying the migration. It covers multi-course saves, per-enrollment progress recalculation, old-client scalar writes and clears, version snapshots for secondary-entry edits, and enrollment-reference protection.

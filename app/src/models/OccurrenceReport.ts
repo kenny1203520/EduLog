@@ -14,6 +14,8 @@ export interface OccurrenceReportDTO {
     class_occurrence_id: string
     lesson_id?: string
     is_completed?: boolean
+    lesson_entries?: ReportLessonEntryDTO[]
+    primary_lesson_entry_id?: string | null
 
     // Detailed report fields
     progress_letter?: string  // A-Z when incomplete
@@ -41,11 +43,26 @@ export interface OccurrenceReportDTO {
     updated_at?: string
 }
 
+/** A course lesson recorded during a single attendance/report event. */
+export interface ReportLessonEntryDTO {
+    id: string
+    enrollment_id: string
+    lesson_id: string | null
+    is_completed: boolean
+    progress_letter: string | null
+    course_id?: string
+    course_name?: string
+    lesson_sequence?: number
+    lesson_title?: string
+}
+
 /** Immutable editor state used by the serialized report save queue. */
 export interface ReportDraftSnapshot {
     lessonId: string
     isCompleted: boolean
     progressLetter: string
+    lessonEntries?: ReportLessonEntryDTO[]
+    primaryLessonEntryId?: string | null
     attendanceStatus: 'present' | 'absent' | 'pending'
     absenceReason: string | null
     classParticipation: number | null
@@ -78,6 +95,8 @@ export class OccurrenceReport implements SourceReportIdentity {
     classOccurrenceId: string
     lessonId?: string
     isCompleted?: boolean
+    lessonEntries: ReportLessonEntryDTO[] = []
+    primaryLessonEntryId: string | null = null
 
     // Detailed fields
     progressLetter?: string
@@ -121,6 +140,17 @@ export class OccurrenceReport implements SourceReportIdentity {
         this.classOccurrenceId = data.class_occurrence_id
         this.lessonId = data.lesson_id
         this.isCompleted = data.is_completed ?? false
+        this.lessonEntries = Array.isArray(data.lesson_entries) ? data.lesson_entries.map(entry => ({ ...entry })) : []
+        if (!this.lessonEntries.length && data.lesson_id) {
+            this.lessonEntries = [{
+                id: globalThis.crypto?.randomUUID?.() ?? '00000000-0000-4000-8000-000000000001',
+                enrollment_id: data.enrollment_id,
+                lesson_id: data.lesson_id,
+                is_completed: data.is_completed ?? false,
+                progress_letter: data.progress_letter || null,
+            }]
+        }
+        this.primaryLessonEntryId = data.primary_lesson_entry_id ?? this.lessonEntries[0]?.id ?? null
 
         // Detailed fields
         this.progressLetter = data.progress_letter
@@ -162,6 +192,8 @@ export class OccurrenceReport implements SourceReportIdentity {
             class_occurrence_id: this.classOccurrenceId,
             lesson_id: this.lessonId,
             is_completed: this.isCompleted,
+            lesson_entries: this.lessonEntries.map(entry => ({ ...entry })),
+            primary_lesson_entry_id: this.primaryLessonEntryId,
 
             // Detailed fields
             progress_letter: this.progressLetter,

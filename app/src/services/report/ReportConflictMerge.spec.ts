@@ -33,4 +33,30 @@ describe('mergeReportConflict', () => {
         expect(result.payload.content).toBeUndefined()
         expect(result.conflictFields).toContain('content')
     })
+
+    it('merges the lesson collection when the server has not changed it', () => {
+        const entries = [{ id: 'entry-a', enrollment_id: 'enrollment-a', lesson_id: 'lesson-a', is_completed: false, progress_letter: 'A' }]
+        const baseWithEntries = { ...base, lessonEntries: entries, primaryLessonEntryId: 'entry-a' }
+        const local = {
+            ...baseWithEntries,
+            lessonEntries: [...entries, { id: 'entry-b', enrollment_id: 'enrollment-b', lesson_id: 'lesson-b', is_completed: true, progress_letter: 'C' }],
+        }
+        const result = mergeReportConflict(baseWithEntries, local, server({
+            lesson_entries: entries,
+            primary_lesson_entry_id: 'entry-a',
+        }), false)
+        expect(result.conflictFields).toEqual([])
+        expect(result.payload.lessonEntries).toEqual(local.lessonEntries)
+    })
+
+    it('reports a conflict when both editors changed lesson entries', () => {
+        const entries = [{ id: 'entry-a', enrollment_id: 'enrollment-a', lesson_id: 'lesson-a', is_completed: false, progress_letter: 'A' }]
+        const baseWithEntries = { ...base, lessonEntries: entries, primaryLessonEntryId: 'entry-a' }
+        const local = { ...baseWithEntries, lessonEntries: [{ ...entries[0]!, progress_letter: 'B' }] }
+        const result = mergeReportConflict(baseWithEntries, local, server({
+            lesson_entries: [{ ...entries[0]!, progress_letter: 'C' }],
+            primary_lesson_entry_id: 'entry-a',
+        }), false)
+        expect(result.conflictFields).toContain('lessonEntries')
+    })
 })

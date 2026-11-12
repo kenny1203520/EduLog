@@ -34,6 +34,23 @@ describe('classifyDraftRecovery', () => {
     it('routes to the merge/conflict flow when someone saved since', () => {
         expect(classifyDraftRecovery({ baseVersion: 3, snapshot: snapshot({ content: 'typed offline' }) }, server, server.snapshot)).toBe('merge')
     })
+
+    it('ignores display labels that changed while the saved lesson fields stayed the same', () => {
+        const draftSnapshot = snapshot({
+            lessonEntries: [{
+                id: 'entry-a', enrollment_id: 'enrollment-a', lesson_id: 'lesson-a', is_completed: false, progress_letter: 'B',
+                course_name: 'Course A', lesson_title: 'Lesson A',
+            }],
+            primaryLessonEntryId: 'entry-a',
+        })
+        const serverSnapshot = snapshot({
+            lessonEntries: [{
+                id: 'entry-a', enrollment_id: 'enrollment-a', lesson_id: 'lesson-a', is_completed: false, progress_letter: 'B',
+            }],
+            primaryLessonEntryId: 'entry-a',
+        })
+        expect(classifyDraftRecovery({ baseVersion: 4, snapshot: draftSnapshot }, { version: 4, snapshot: serverSnapshot }, serverSnapshot)).toBe('discard')
+    })
 })
 
 describe('mergeDraftOntoServer', () => {

@@ -1,5 +1,6 @@
 import { getCurrentScope, onScopeDispose, ref } from 'vue'
 import type { ReportDraftSnapshot } from '@/models/OccurrenceReport'
+import { reportLessonEntriesEqual } from '@/models/ReportEditorSnapshot'
 import { localDraftStore, type LocalDraftStore, type LocalReportDraft, type LocalReportDraftInput } from '@/services/report/LocalDraftStore'
 
 /**
@@ -14,6 +15,10 @@ export type DraftRecoveryAction = 'discard' | 'none' | 'restore' | 'merge'
 function sameSnapshot(a: ReportDraftSnapshot, b: ReportDraftSnapshot): boolean {
     const keys = new Set([...Object.keys(a), ...Object.keys(b)]) as Set<keyof ReportDraftSnapshot>
     for (const key of keys) {
+        if (key === 'lessonEntries') {
+            if (!reportLessonEntriesEqual(a.lessonEntries, b.lessonEntries)) return false
+            continue
+        }
         if (JSON.stringify(a[key] ?? null) !== JSON.stringify(b[key] ?? null)) return false
     }
     return true
@@ -39,7 +44,10 @@ export function mergeDraftOntoServer(
 ): ReportDraftSnapshot {
     const merged = { ...server } as Record<keyof ReportDraftSnapshot, unknown>
     for (const key of Object.keys(draft.snapshot) as Array<keyof ReportDraftSnapshot>) {
-        if (JSON.stringify(draft.snapshot[key] ?? null) !== JSON.stringify(draft.baseSnapshot?.[key] ?? null)) {
+        const changed = key === 'lessonEntries'
+            ? !reportLessonEntriesEqual(draft.snapshot.lessonEntries, draft.baseSnapshot?.lessonEntries)
+            : JSON.stringify(draft.snapshot[key] ?? null) !== JSON.stringify(draft.baseSnapshot?.[key] ?? null)
+        if (changed) {
             merged[key] = draft.snapshot[key]
         }
     }

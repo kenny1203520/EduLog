@@ -118,7 +118,7 @@ async function reportCompletion(req: Request, res: Response) {
 
 // Occurrence reads, report provisioning and the effective roster.
 const occurrenceFields = 'id,class_session_id,occurrence_date,status,original_start_time,original_end_time,actual_start_time,actual_end_time,time_zone,is_conducted,teacher_ids,teacher_attendance,created_at,updated_at,class_sessions(id,name,time_zone,classroom_id,classrooms(id,name,color))'
-const reportFields = 'id,enrollment_id,class_occurrence_id,lesson_id,is_completed,progress_letter,attendance_status,absence_reason,class_participation,classroom_behavior,contact_notes,contact_notes_document,class_notes,class_notes_document,content,content_document,external_link,source_origin,source_admission_id,source_report_id,version,last_edited_by,last_edited_at,created_at,updated_at'
+const reportFields = 'id,enrollment_id,class_occurrence_id,lesson_id,is_completed,progress_letter,lesson_entries,primary_lesson_entry_id,attendance_status,absence_reason,class_participation,classroom_behavior,contact_notes,contact_notes_document,class_notes,class_notes_document,content,content_document,external_link,source_origin,source_admission_id,source_report_id,version,last_edited_by,last_edited_at,created_at,updated_at'
 
 const occurrenceQuery = z.object({
   start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -252,6 +252,7 @@ export async function provisionReports(req: Request, res: Response) {
 }
 
 async function occurrenceReportProgressGaps(req: Request, res: Response) {
+  if (!req.adminDb) throw new ApiError(503, 'RESOURCE_SERVICE_UNAVAILABLE', 'The report service is unavailable')
   const occurrenceId = uuid.parse(req.params.id)
   const query = z.object({ enrollment_ids: z.string().min(1).max(10000) }).strict().parse(req.query)
   const enrollmentIds = [...new Set(query.enrollment_ids.split(',').filter(Boolean))]
@@ -269,35 +270,37 @@ async function occurrenceReportProgressGaps(req: Request, res: Response) {
   const effectiveIds = new Set(((effectiveRoster.data ?? []) as Array<{ enrollment_id: string }>).map((row) => row.enrollment_id))
   if (enrollmentIds.some((id) => !effectiveIds.has(id))) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found in this occurrence')
 
-  const enrollments = await req.db!.from('enrollments').select('id,course_id').in('id', enrollmentIds)
+  const enrollments = await req.adminDb.from('enrollments').select('id,course_id').in('id', enrollmentIds)
   if (enrollments.error) throw mapDatabaseError(enrollments.error)
   if ((enrollments.data ?? []).length !== enrollmentIds.length) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found')
   const courseIds = [...new Set((enrollments.data ?? []).map((row) => row.course_id).filter((id): id is string => Boolean(id)))]
+  const courseIdByEnrollment = new Map((enrollments.data ?? []).map((enrollment) => [enrollment.id, enrollment.course_id]))
 
   const [lessonResult, currentReports] = await Promise.all([
     courseIds.length
-      ? req.db!.from('lessons').select('id,course_id,sequence,title').in('course_id', courseIds).order('sequence', { ascending: true })
+      ? req.adminDb.from('lessons').select('id,course_id,sequence,title').in('course_id', courseIds).order('sequence', { ascending: true })
       : Promise.resolve({ data: [], error: null }),
-    req.db!.from('occurrence_reports').select('enrollment_id,lesson_id').eq('class_occurrence_id', occurrenceId).in('enrollment_id', enrollmentIds),
+    req.adminDb.from('occurrence_reports').select('enrollment_id,lesson_id,lesson_entries,primary_lesson_entry_id').eq('class_occurrence_id', occurrenceId),
   ])
   if (lessonResult.error) throw mapDatabaseError(lessonResult.error)
   if (currentReports.error) throw mapDatabaseError(currentReports.error)
 
   const priorReports: Array<{ enrollment_id: string; lesson_id: string }> = []
-  const pageSize = 500
-  for (let offset = 0; ; offset += pageSize) {
-    const result = await req.db!.from('occurrence_reports')
-      .select('enrollment_id,lesson_id,class_occurrences!inner(occurrence_date)')
-      .in('enrollment_id', enrollmentIds)
-      .eq('attendance_status', 'present')
-      .not('lesson_id', 'is', null)
-      .lt('class_occurrences.occurrence_date', occurrence.data.occurrence_date)
-      .order('id', { ascending: true })
-      .range(offset, offset + pageSize - 1)
-    if (result.error) throw mapDatabaseError(result.error)
-    const page = (result.data ?? []) as Array<{ enrollment_id: string; lesson_id: string | null }>
-    priorReports.push(...page.filter((row): row is { enrollment_id: string; lesson_id: string } => Boolean(row.lesson_id)))
-    if (page.length < pageSize) break
+  for (const enrollmentId of enrollmentIds) {
+    const [anchored, linked] = await Promise.all([
+      req.adminDb.from('occurrence_reports').select('id,enrollment_id,lesson_id,lesson_entries,class_occurrences!inner(occurrence_date)').eq('enrollment_id', enrollmentId).eq('attendance_status', 'present').lt('class_occurrences.occurrence_date', occurrence.data.occurrence_date).range(0, 999),
+      req.adminDb.from('occurrence_reports').select('id,enrollment_id,lesson_id,lesson_entries,class_occurrences!inner(occurrence_date)').contains('lesson_entries', [{ enrollment_id: enrollmentId }]).eq('attendance_status', 'present').lt('class_occurrences.occurrence_date', occurrence.data.occurrence_date).range(0, 999),
+    ])
+    if (anchored.error) throw mapDatabaseError(anchored.error)
+    if (linked.error) throw mapDatabaseError(linked.error)
+    const rows = new Map<string, Record<string, any>>()
+    for (const report of [...(anchored.data ?? []), ...(linked.data ?? [])] as Array<Record<string, any>>) rows.set(report.id, report)
+    for (const report of rows.values()) {
+      const entries = Array.isArray(report.lesson_entries) ? report.lesson_entries as Array<Record<string, any>> : []
+      const matching = entries.filter((entry) => entry.enrollment_id === enrollmentId && entry.course_id === courseIdByEnrollment.get(enrollmentId))
+      if (matching.length) priorReports.push(...matching.filter((entry) => typeof entry.lesson_id === 'string').map((entry) => ({ enrollment_id: enrollmentId, lesson_id: entry.lesson_id as string })))
+      else if (entries.length === 0 && report.enrollment_id === enrollmentId && typeof report.lesson_id === 'string') priorReports.push({ enrollment_id: enrollmentId, lesson_id: report.lesson_id })
+    }
   }
 
   const lessonByCourse = new Map<string, Array<{ id: string; sequence: number; title: string }>>()
@@ -306,7 +309,6 @@ async function occurrenceReportProgressGaps(req: Request, res: Response) {
     lessons.push({ id: lesson.id, sequence: lesson.sequence, title: lesson.title })
     lessonByCourse.set(lesson.course_id, lessons)
   }
-  const courseIdByEnrollment = new Map((enrollments.data ?? []).map((enrollment) => [enrollment.id, enrollment.course_id]))
   const recordedByEnrollment = new Map<string, string[]>()
   for (const report of priorReports) {
     const lessonIds = recordedByEnrollment.get(report.enrollment_id) ?? []
@@ -315,7 +317,12 @@ async function occurrenceReportProgressGaps(req: Request, res: Response) {
   }
   const selectedLessonByEnrollment = new Map<string, string>()
   for (const report of currentReports.data ?? []) {
-    if (report.lesson_id) selectedLessonByEnrollment.set(report.enrollment_id, report.lesson_id)
+    const entries = Array.isArray(report.lesson_entries) ? report.lesson_entries as Array<Record<string, any>> : []
+    const targetCourseId = courseIdByEnrollment.get(report.enrollment_id)
+    const matching = entries.filter((entry) => entry.enrollment_id === report.enrollment_id && entry.course_id === targetCourseId)
+    const primary = matching.find((entry) => entry.id === report.primary_lesson_entry_id) ?? matching[0]
+    if (primary?.lesson_id) selectedLessonByEnrollment.set(report.enrollment_id, primary.lesson_id)
+    else if (entries.length === 0 && report.lesson_id) selectedLessonByEnrollment.set(report.enrollment_id, report.lesson_id)
   }
 
   const summaries = enrollmentIds.map((enrollmentId) => {

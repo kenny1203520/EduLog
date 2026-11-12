@@ -61,6 +61,24 @@ describe('ReportQueryService.getEnrollmentReportProgressContext', () => {
     })
 })
 
+describe('ReportQueryService.getLinkedLessonReportHistory', () => {
+    it('requests a bounded safe history page with course, search, and sort filters', async () => {
+        const rows = [{
+            id: 'report-1', class_occurrence_id: 'occurrence-1', lesson_id: 'lesson-b', course_id: 'course-b',
+            course_name: 'Course B', lesson_sequence: 2, lesson_title: 'Lesson B2', progress_letter: 'C',
+            is_completed: false, attendance_status: 'present', content: 'Shared note', occurrence_date: '2026-11-11',
+        }]
+        apiV1GetMock.mockResolvedValueOnce({ data: rows, meta: { total: 24 } })
+
+        await expect(ReportQueryService.getLinkedLessonReportHistory('enrollment-b', {
+            limit: 10, offset: 20, search: 'make up', courseId: 'course-b', sort: '-occurrence_date',
+        })).resolves.toEqual({ data: rows, count: 24 })
+        expect(apiV1GetMock).toHaveBeenCalledWith(
+            '/enrollments/enrollment-b/linked-lesson-report-history?limit=10&offset=20&sort=-occurrence_date&search=make+up&course_id=course-b'
+        )
+    })
+})
+
 describe('ReportQueryService.getProgressGapsByEnrollments', () => {
     it('requests authorized batch summaries without loading report bodies', async () => {
         apiV1GetMock.mockResolvedValueOnce({ data: [

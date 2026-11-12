@@ -94,6 +94,23 @@
     "editor": {
         "title": "Class Report",
         "lesson_label": "Lesson",
+        "lesson_entries": {
+            "title": "Lesson progress in this class",
+            "description": "Record completed work and new progress for every course covered in this lesson.",
+            "add": "Add course progress",
+            "added": "Course progress added",
+            "course": "Course",
+            "lessons": "Lessons",
+            "entry_heading": "Course progress {index}",
+            "loading": "Loading this student's courses…",
+            "options_error": "Could not load this student's courses.",
+            "empty": "No lesson progress added yet.",
+            "primary": "Use as main lesson",
+            "remove": "Remove course progress {index}",
+            "removed": "Course progress removed",
+            "select_course": "Select a course",
+            "select_lesson_required": "Select a course and lesson before saving this entry."
+        },
         "progress_check": {
             "loading": "Checking progress for this course…",
             "load_error": "Unable to check course progress.",
@@ -101,6 +118,7 @@
             "gaps_title": "Course progress has gaps",
             "lesson": "Lesson {sequence}: {title}",
             "previous_title": "Most recent attended progress",
+            "shared_comment": "Shared report comment",
             "completed": "Completed",
             "incomplete": "Not completed",
             "view_report": "View full report",

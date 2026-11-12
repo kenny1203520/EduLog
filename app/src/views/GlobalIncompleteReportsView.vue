@@ -338,6 +338,8 @@
                             :initial-content="selectedReport.content"
                             :initial-content-document="selectedReport.contentDocument"
                             :initial-version="selectedReport.version"
+                            :initial-lesson-entries="selectedReport.lessonEntries"
+                            :initial-primary-lesson-entry-id="selectedReport.primaryLessonEntryId"
                             :loading="editorLoading"
                             :title="$t('report.report_for_date', { date: formatDateTime(selectedReport) })"
                             :show-manual-save="true" :available-lessons="activeLessons"
