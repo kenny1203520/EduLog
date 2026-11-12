@@ -47,15 +47,19 @@ docker exec "$frontend" grep -r -q "$version" /usr/share/nginx/html/assets
 docker exec "$api" node -e "fetch('http://127.0.0.1:3000/api/student-schools').then(r=>{if(r.status!==401)process.exit(1)}).catch(()=>process.exit(1))"
 echo 'Frontend/API image health, proxy, runtime configuration and authentication boundary passed.'
 
+# The model service is the largest container. Stop the already-verified web
+# services before loading spaCy pipelines on resource-limited CI runners.
+docker rm -f "$frontend" "$api" >/dev/null
+
 # Presidio: an unknown language must stop the container, and only the chosen
 # languages may be served.
 if docker run --rm -e PRESIDIO_LANGUAGES=zz edulog-release-smoke:presidio >/dev/null 2>&1; then
   echo 'Presidio started with an unknown language.'
   exit 1
 fi
-docker run -d --name "$presidio" --network "$network" -e PRESIDIO_LANGUAGES=zh,en,pl   edulog-release-smoke:presidio >/dev/null
+docker run -d --name "$presidio" --network "$network" -e PRESIDIO_LANGUAGES=zh,en edulog-release-smoke:presidio >/dev/null
 presidio_get() {
-  docker exec "$presidio" python -c "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:3000$1', timeout=5).status == 200 else 1)" >/dev/null 2>&1
+  docker exec "$presidio" python -c "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:3000$1', timeout=2).status == 200 else 1)" >/dev/null 2>&1
 }
 for attempt in {1..60}; do
   if presidio_get /health; then break; fi
@@ -66,7 +70,7 @@ for attempt in {1..60}; do
   sleep 3
 done
 presidio_get '/supportedentities?language=zh'
-presidio_get '/supportedentities?language=pl'
+presidio_get '/supportedentities?language=en'
 if presidio_get '/supportedentities?language=ja'; then
   echo 'Presidio served a language that was not selected.'
   exit 1
