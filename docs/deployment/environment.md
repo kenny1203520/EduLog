@@ -92,7 +92,7 @@ Supabase uses more aliases for its own services. For example, `SERVICE_ROLE_KEY`
 | `PRESIDIO_ANALYZER_URL` | | | de-identification is off without it |
 | `OPENAI_SIWC_CLIENT_ID`, `OPENAI_SIWC_CLIENT_SECRET` | | | Sign in with ChatGPT is hidden without them. OpenAI's endpoints are constants in code, not env |
 | `GOTRUE_INTERNAL_URL` | | | optional GoTrue service root for the server-only OAuth authorize/callback bridge; Compose defaults to `http://auth:9999` |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_ADMIN_EMAIL`, `SMTP_SENDER_NAME` | | `SMTP_PORT=587` | the API's own mail (pending-account notices to administrators); off without `SMTP_HOST` and `SMTP_ADMIN_EMAIL`. Compose passes GoTrue's SMTP settings |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_ADMIN_EMAIL`, `SMTP_SENDER_NAME` | | `SMTP_PORT=587`, `SMTP_SENDER_NAME=EduLog` | GoTrue Auth mail and API pending-account notices. API notices are off without `SMTP_HOST` and `SMTP_ADMIN_EMAIL`; production must use a verified sender domain |
 | `SYSTEM_OWNER_USER_ID` | for `npm run bootstrap:system-owner` | | uuid; read by that script only |
 
 Test-only variables (suites skip when they are unset): `PRESIDIO_ANALYZER_URL`, `AI_TEST_OLLAMA_MODEL`, `AI_TEST_OLLAMA_URL`.

@@ -1,3 +1,16 @@
+{
+    log default {
+        output stderr
+        format filter {
+            request>uri query {
+                replace token_hash REDACTED
+                replace code REDACTED
+                replace state REDACTED
+            }
+        }
+    }
+}
+
 {$PROXY_DOMAIN} {
     @supabase_api path /auth/v1/* /rest/v1/* /graphql/v1 /realtime/v1/* /storage/v1/* /mcp /sso/* /.well-known/oauth-authorization-server/auth/v1
 

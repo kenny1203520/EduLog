@@ -1,4 +1,5 @@
 import express from 'express'
+import nodemailer from 'nodemailer'
 import request from 'supertest'
 import { describe, expect, it, vi } from 'vitest'
 import { errorHandler } from '../../http/errors.js'
@@ -112,16 +113,53 @@ describe('mailer', () => {
     expect(createMailer({ SMTP_HOST: 'smtp.example.test', SMTP_PORT: 587, SMTP_ADMIN_EMAIL: 'edulog@example.test' }).enabled).toBe(true)
   })
 
+  it('uses EduLog as the visible sender when no name is configured', async () => {
+    const sendMail = vi.fn(async () => undefined)
+    const createTransport = vi.spyOn(nodemailer, 'createTransport').mockReturnValue({ sendMail } as never)
+    try {
+      await createMailer({
+        SMTP_HOST: 'smtp.example.test',
+        SMTP_PORT: 587,
+        SMTP_ADMIN_EMAIL: 'no-reply@edulog.example',
+        SMTP_SENDER_NAME: '',
+      }).send({ to: ['admin@example.test'], subject: 'Subject', text: 'Text', html: '<p>Text</p>' })
+      expect(createTransport).toHaveBeenCalledOnce()
+      expect(sendMail).toHaveBeenCalledWith(expect.objectContaining({
+        from: { name: 'EduLog', address: 'no-reply@edulog.example' },
+      }))
+    } finally {
+      createTransport.mockRestore()
+    }
+  })
+
   it('escapes account details in the notice', () => {
     const message = pendingAccountMessage('<b>x</b>@example.test', 'github', 'http://localhost:4173/dashboard/settings')
     expect(message.html).not.toContain('<b>x</b>')
     expect(message.html).toContain('&lt;b&gt;x&lt;/b&gt;')
   })
 
+  it('sends a concise bilingual approval notice with one safe action', () => {
+    const message = pendingAccountMessage(
+      'teacher@example.test',
+      'azure',
+      'https://edulog.example.test/dashboard/settings?tab=system&section=account_approval',
+    )
+
+    expect(message.subject).toContain('EduLog 帳號待審核')
+    expect(message.subject).toContain('New EduLog account awaiting review')
+    expect(message.text).toContain('登入方式：Microsoft')
+    expect(message.text).toContain('Sign-in method: Microsoft')
+    expect(message.text).toContain('https://edulog.example.test/dashboard/settings?tab=system&section=account_approval')
+    expect(message.html.match(/<a\b/g) ?? []).toHaveLength(1)
+    expect(message.html).toContain('tab=system&amp;section=account_approval')
+    expect(message.html).toContain('前往帳號審核')
+    expect(message.html).toContain('Review account')
+  })
+
   it('names the sign-in method instead of printing its id', () => {
-    expect(pendingAccountMessage('a@example.test', 'github', 'http://localhost:4173/x').text).toContain('（GitHub）')
-    expect(pendingAccountMessage('a@example.test', 'azure', 'http://localhost:4173/x').text).toContain('(Microsoft)')
-    expect(pendingAccountMessage('a@example.test', 'email', 'http://localhost:4173/x').html).toContain('（Email）')
-    expect(pendingAccountMessage('a@example.test', 'some_idp', 'http://localhost:4173/x').text).toContain('(Some Idp)')
+    expect(pendingAccountMessage('a@example.test', 'github', 'http://localhost:4173/x').text).toContain('Sign-in method: GitHub')
+    expect(pendingAccountMessage('a@example.test', 'azure', 'http://localhost:4173/x').text).toContain('Sign-in method: Microsoft')
+    expect(pendingAccountMessage('a@example.test', 'email', 'http://localhost:4173/x').html).toContain('Sign-in method: Email')
+    expect(pendingAccountMessage('a@example.test', 'some_idp', 'http://localhost:4173/x').text).toContain('Sign-in method: Some Idp')
   })
 })

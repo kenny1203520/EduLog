@@ -2,6 +2,7 @@ import request from 'supertest'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createApp } from './app.js'
 import { testConfig } from './test/testConfig.js'
+import { EMAIL_TEMPLATES } from './mail/emailTemplates.js'
 
 const config = testConfig()
 
@@ -45,6 +46,18 @@ describe('Express API boundary', () => {
     expect(api.headers['server-timing']).toMatch(/total;dur=/)
     expect(api.headers['cache-control']).toBe('private, no-store')
     expect(api.headers['content-security-policy']).toContain("default-src 'self'")
+  })
+
+  it.each(Object.keys(EMAIL_TEMPLATES))('serves the %s GoTrue template over the internal API route', async (name) => {
+    const response = await request(createApp(config)).get('/email-templates/' + name + '.html')
+    expect(response.status).toBe(200)
+    expect(response.headers['content-type']).toMatch(/text\/html/)
+    expect(response.text).toBe(EMAIL_TEMPLATES[name as keyof typeof EMAIL_TEMPLATES])
+  })
+
+  it('does not serve unknown GoTrue template names', async () => {
+    const response = await request(createApp(config)).get('/email-templates/password_changed_notification.html')
+    expect(response.status).toBe(404)
   })
 
   it('never returns SPA HTML or allows an unauthenticated resource request', async () => {

@@ -168,7 +168,7 @@ services:
       GOTRUE_SMTP_PORT: ${SMTP_PORT}
       GOTRUE_SMTP_USER: ${SMTP_USER}
       GOTRUE_SMTP_PASS: ${SMTP_PASS}
-      GOTRUE_SMTP_SENDER_NAME: ${SMTP_SENDER_NAME}
+      GOTRUE_SMTP_SENDER_NAME: ${SMTP_SENDER_NAME:-EduLog}
       GOTRUE_MAILER_URLPATHS_INVITE: ${MAILER_URLPATHS_INVITE}
       GOTRUE_MAILER_URLPATHS_CONFIRMATION: ${MAILER_URLPATHS_CONFIRMATION}
       GOTRUE_MAILER_URLPATHS_RECOVERY: ${MAILER_URLPATHS_RECOVERY}
@@ -179,10 +179,10 @@ services:
       GOTRUE_MAILER_TEMPLATES_RECOVERY: ${EDULOG_MAIL_TEMPLATE_BASE_URL:-http://api:3000/email-templates}/recovery.html
       GOTRUE_MAILER_TEMPLATES_EMAIL_CHANGE: ${EDULOG_MAIL_TEMPLATE_BASE_URL:-http://api:3000/email-templates}/email_change.html
       GOTRUE_MAILER_TEMPLATES_CONFIRMATION: ${EDULOG_MAIL_TEMPLATE_BASE_URL:-http://api:3000/email-templates}/confirmation.html
-      GOTRUE_MAILER_SUBJECTS_INVITE: "EduLog 邀請 / You are invited to EduLog"
-      GOTRUE_MAILER_SUBJECTS_RECOVERY: "EduLog 重設密碼 / Reset your EduLog password"
-      GOTRUE_MAILER_SUBJECTS_EMAIL_CHANGE: "EduLog 確認新 Email / Confirm your new email"
-      GOTRUE_MAILER_SUBJECTS_CONFIRMATION: "EduLog 確認 Email / Confirm your email"
+      GOTRUE_MAILER_SUBJECTS_INVITE: "EduLog 帳號邀請 / Your EduLog account invitation"
+      GOTRUE_MAILER_SUBJECTS_RECOVERY: "重設 EduLog 密碼 / Reset your EduLog password"
+      GOTRUE_MAILER_SUBJECTS_EMAIL_CHANGE: "確認 EduLog Email 變更 / Confirm your EduLog email change"
+      GOTRUE_MAILER_SUBJECTS_CONFIRMATION: "確認 EduLog Email / Confirm your EduLog email"
 
       GOTRUE_EXTERNAL_PHONE_ENABLED: ${ENABLE_PHONE_SIGNUP}
       GOTRUE_SMS_AUTOCONFIRM: ${ENABLE_PHONE_AUTOCONFIRM}
@@ -671,7 +671,7 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_ADMIN_EMAIL: ${SMTP_ADMIN_EMAIL:-}
-      SMTP_SENDER_NAME: ${SMTP_SENDER_NAME:-}
+      SMTP_SENDER_NAME: ${SMTP_SENDER_NAME:-EduLog}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r => { if (!r.ok) process.exit(1) })"]
       interval: 10s
