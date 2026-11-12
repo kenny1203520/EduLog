@@ -3,6 +3,20 @@ import { mergeClearToken, mergeSignature } from './history-merge.js'
 import '../shared/field-mappings.js'
 
 export const teachingFields = ['lesson_id','is_completed','progress_letter','attendance_status','absence_reason','class_participation','classroom_behavior','content','contact_notes','class_notes','external_link']
+const lessonProgressFields = ['lesson_id','is_completed','progress_letter']
+const matchingLessonEntry = (report, target, lessonId) => lessonId
+  ? (report?.lesson_entries || []).find(entry => entry.enrollment_id === target?.id && entry.course_id === target?.courseId && entry.lesson_id === lessonId) || null
+  : null
+const occurrenceConfirmation = (route, target, lessonId) => JSON.stringify({
+  occurrence_id: route?.id || null,
+  report_id: route?.report?.id || null,
+  occurrence_date: route?.occurrence_date || null,
+  enrollment_id: target?.id || null,
+  course_id: target?.courseId || null,
+  lesson_id: lessonId || null,
+  lesson_entry_id: matchingLessonEntry(route?.report, target, lessonId)?.id || null,
+  report_version: route?.report?.version ?? null,
+})
 // The source reportId is the report identity. Rows without one are attendance
 // evidence and keep only a display key.
 export const historyIdentity = r => `${r.enrollment_source_id}:${r.source_id ? `report:${r.source_id}` : r.historyKey || r.evidenceKey || `attendance:${r.date || r.dateRaw || 'undated'}`}`
@@ -78,6 +92,7 @@ export function planHistory(records, enrollmentTargets, archives, routes, option
     item.sourceKey = sourceKey
     if(item.existing&&item.existing.report_date!==record.date){needs(item,'saved-date-conflict','來源日期與已保存歷史不同；請核對原站與 EduLog，保留舊紀錄。',[{id:'saved-date-conflict',code:'date',message:'來源日期與已保存歷史不同；請核對原站與 EduLog，保留舊紀錄。',target:'date'}]);continue}
     const mapped = mappedReport(record, target.courseId, options.lessons || [])
+    const targetLessonId=mapped.data.lesson_id
     for(const field of teachingFields)if(!fieldAllowed(record,field))delete mapped.data[field]
     const includedFields=teachingFields.filter(field=>fieldAllowed(record,field)&&field!=='class_notes'&&field!=='external_link'&&Object.hasOwn(mapped.data,field));if(fieldAllowed(record,'class_notes')&&options.includeInternal&&Object.hasOwn(mapped.data,'class_notes'))includedFields.push('class_notes');if(fieldAllowed(record,'external_link'))includedFields.push('external_link');item.includedFields=[...new Set(includedFields)]
     if(!item.includedFields.length){item.category='system-excluded';item.reason='本次同步未選取任何可同步欄位；來源資料保留在本機。';continue}
@@ -95,15 +110,39 @@ export function planHistory(records, enrollmentTargets, archives, routes, option
     if(item.existing?.source_evidence?.length)item.data.source_evidence=[...item.existing.source_evidence,...item.data.source_evidence.filter(e=>!item.existing.source_evidence.some(old=>old.source_path===e.source_path&&old.table===e.table&&old.row===e.row))].slice(-50)
     for (const field of teachingFields.filter(f => f !== 'external_link' && f !== 'class_notes' && fieldAllowed(record,f))) if (mapped.data[field] !== undefined && (mapped.data[field] !== '' || ['content','contact_notes','absence_reason'].includes(field))) item.data[field] = mapped.data[field]
     if ((options.includeInternal||record.syncFieldOverrides?.class_notes===true) && fieldAllowed(record,'class_notes') && (record.sourceInternalNotes||record.sourceLearningStatus||record.sourceLearningStatusRaw)) item.data.class_notes=globalThis.edulogFieldMappings.composeClassNotes(record.sourceLearningStatus,record.sourceInternalNotes,record.sourceLearningStatusRaw&&!record.sourceLearningStatus?record.sourceLearningStatusRaw:'')
-    const candidates = (routes.get(target.id) || []).filter(o => o.occurrence_date === record.date)
+    const dateCandidates = (routes.get(target.id) || []).filter(o => o.occurrence_date === record.date)
+    const linkedRoute = item.existing?.linked_report_id
+      ? (routes.get(target.id) || []).find(route => route.report?.id === item.existing.linked_report_id)
+      : null
+    const candidates = item.existing?.linked_report_id ? (linkedRoute ? [linkedRoute] : []) : dateCandidates
     item.candidates = candidates
+    const lessonId = targetLessonId
+    const lesson = options.lessons?.find(entry => entry.id === lessonId)
+    const currentLessonEntry = matchingLessonEntry(linkedRoute?.report, target, lessonId)
+    if (lessonId) item.lessonSyncTarget = {
+      enrollment_id: target.id,
+      enrollment_name: target.name || '',
+      course_id: target.courseId,
+      lesson_id: lessonId,
+      lesson_name: lesson?.title || lesson?.name || record.sourceLessonLabel || record.sourceCourseLabel || lessonId,
+      entry_id: currentLessonEntry?.id || null,
+      primary: currentLessonEntry?.id === linkedRoute?.report?.primary_lesson_entry_id,
+    }
+    item.targetConfirmationOptions = Object.fromEntries(candidates.map(route => [route.id, occurrenceConfirmation(route, target, lessonId)]))
     let chosen
     if (item.existing?.linked_report_id) {
       const changed = [...teachingFields,'source_fields'].some(f => Object.hasOwn(item.data,f) && JSON.stringify(item.data[f]) !== JSON.stringify(item.existing[f]))
-      chosen=(routes.get(target.id)||[]).find(route=>route.report?.id===item.existing.linked_report_id)
+      chosen=linkedRoute
       // Matching source/history alone does not prove that the bound lesson is
       // still identical. Expose its real conflicts in the normal review editor.
-      const sameLesson=chosen?.can_write&&chosen.occurrence_date===record.date&&item.existing.enrollment_id===target.id&&teachingFields.filter(field=>field!=='external_link'&&Object.hasOwn(item.data,field)).every(field=>JSON.stringify(item.data[field])===JSON.stringify(chosen.report[field]))
+      const chosenLessonEntry=matchingLessonEntry(chosen?.report,target,lessonId)
+      const requiresReconfirmation=Boolean(chosen&&(chosen.occurrence_date!==record.date||(lessonId&&!chosenLessonEntry)||(item.existing.enrollment_id&&item.existing.enrollment_id!==target.id)))
+      const confirmedTarget=record.historyOccurrenceId===chosen?.id&&record.historyOccurrenceConfirmation===item.targetConfirmationOptions[chosen?.id]
+      if(requiresReconfirmation&&!confirmedTarget){item.reconfirmationRequired=true;needs(item,'linked-target-reconfirm','原站報告仍綁定同一份 EduLog 報告，但場次日期或課次報名資料已變更；請重新確認這份報告目前對應的課次後再同步。',[{id:'linked-target-reconfirm',code:'linked-target-reconfirm',message:'原站報告仍綁定同一份 EduLog 報告，但場次日期或課次報名資料已變更；請重新確認這份報告目前對應的課次後再同步。',target:'occurrence'}]);continue}
+      item.reconfirmedTarget=requiresReconfirmation
+      const comparison={...(chosen?.report||{})}
+      if(lessonId){for(const field of lessonProgressFields)delete comparison[field];if(chosenLessonEntry)Object.assign(comparison,{lesson_id:chosenLessonEntry.lesson_id,is_completed:chosenLessonEntry.is_completed,progress_letter:chosenLessonEntry.progress_letter})}
+      const sameLesson=chosen?.can_write&&(!requiresReconfirmation||confirmedTarget)&&item.existing.enrollment_id===target.id&&teachingFields.filter(field=>field!=='external_link'&&Object.hasOwn(item.data,field)).every(field=>JSON.stringify(item.data[field])===JSON.stringify(comparison[field]))
       if (!changed&&sameLesson&&!mappingNeeds.length) { item.category='linked'; item.reason='Already saved and linked; no duplicate will be created.'; continue }
       if(!chosen){needs(item,'linked-report-unavailable','The linked EduLog report could not be read. Recheck this enrollment before syncing.',[{id:'linked-report-unavailable',code:'report-read',message:'The linked EduLog report could not be read. Recheck this enrollment before syncing.',target:'report'}]);continue}
       item.boundExisting=true
@@ -114,9 +153,12 @@ export function planHistory(records, enrollmentTargets, archives, routes, option
       if (assigned?.code) { needs(item,assigned.code,assigned.message,[{id:assigned.code,code:assigned.code,message:assigned.message,target:assigned.code==='occurrence-mismatch'?'occurrence':'class'}]); continue }
       if (assigned?.occurrence) chosen = assigned.occurrence
     }
+    if(chosen?.ambiguous_report){needs(item,'ambiguous-report-target','此課次包含多份可能的報告；請先在 EduLog 核對報告目標，避免同步到錯誤紀錄。',[{id:'ambiguous-report-target',code:'ambiguous-report-target',message:'此課次包含多份可能的報告；請先在 EduLog 核對報告目標，避免同步到錯誤紀錄。',target:'occurrence'}]);continue}
+    if(lessonId){const syncEntry=matchingLessonEntry(chosen?.report,target,lessonId),lessonName=lesson?.title||lesson?.name||record.sourceLessonLabel||record.sourceCourseLabel||lessonId;item.lessonSyncTarget={enrollment_id:target.id,enrollment_name:target.name||'',course_id:target.courseId,lesson_id:lessonId,lesson_name:lessonName,entry_id:syncEntry?.id||null,primary:syncEntry?.id===chosen?.report?.primary_lesson_entry_id};const primaryEntry=chosen?.report?.lesson_entries?.find(entry=>entry.id===chosen.report.primary_lesson_entry_id);if(primaryEntry){const labels=chosen.report.lesson_entry_labels?.find(entry=>entry.id===primaryEntry.id);item.primaryLessonEntry={...primaryEntry,lesson_name:labels?.lesson_name||(primaryEntry.lesson_id===lessonId?lessonName:primaryEntry.lesson_id),enrollment_name:labels?.enrollment_name||(primaryEntry.enrollment_id===target.id?target.name||'':'報名 '+primaryEntry.enrollment_id)}}else item.primaryLessonEntry=item.lessonSyncTarget}
     if (mappingNeeds.length) { const issues=mappingNeeds.map((message,index)=>{const field=record.sourceFields?.find(f=>message.includes(f.label));const target=field?.key?`field:${field.key}`:message.includes('學生身份')?'enrollment':message.includes('列表與報告')?'source-conflict':message.includes('學習狀態標記')?'internal':'source';return{id:`mapping:${field?.key||index}`,code:'mapping',message,target,fieldKey:field?.key}});needs(item,'mapping',`${mappingNeeds.join('；')}。選擇確認、重讀或略過後再同步。`,issues);continue }
     item.sourceData={...item.data}
     item.comparisonReport=item.boundExisting?chosen?.report:(record.historyOnly?item.existing:(chosen?.report||item.existing))
+    if(lessonId&&chosen?.report){item.comparisonReport={...chosen.report};for(const field of lessonProgressFields)delete item.comparisonReport[field];const entry=matchingLessonEntry(chosen.report,target,lessonId);if(entry)Object.assign(item.comparisonReport,{lesson_id:entry.lesson_id,is_completed:entry.is_completed,progress_letter:entry.progress_letter})}
     if(item.comparisonReport)for(const field of ['content','contact_notes','class_notes']){const merge=record.historyMerge?.[field];if(merge?.signature===mergeSignature(item.sourceData?.[field],item.comparisonReport?.[field])&&typeof merge.text==='string')item.data[field]=merge.text}
     item.conflicts = teachingFields.filter(f => Object.hasOwn(item.sourceData,f) && item.comparisonReport?.[f] != null && (item.boundExisting || item.comparisonReport[f] !== '') && JSON.stringify(item.sourceData[f]) !== JSON.stringify(item.comparisonReport[f]))
     item.mergeClearNeeds=[]

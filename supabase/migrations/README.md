@@ -373,3 +373,11 @@ The RPC requires report-edit permission for both the source and target occurrenc
 An existing target report can be replaced only when it is still the untouched provisioned placeholder: version 1, not edited, empty of content/documents, lesson progress, ratings, comments, links or sync identity, pending attendance, and without a saved version or collaboration draft. Otherwise the RPC returns a conflict and rolls back without changing either report. Ordinary occurrence rescheduling continues to edit the occurrence date in place and leaves taught reports attached to that occurrence.
 
 Run `supabase/tests/report_occurrence_correction_integration.sql` after applying the migration. It covers same-class and cross-class correction, effective-roster selection, both edit grants, report identity and shared data preservation, target-placeholder rejection, enrollment history/progress, source-sync version drift, and ordinary rescheduling.
+
+## Company history primary-lesson sync (1000171)
+
+`1000171_extension_primary_lesson_sync.sql` extends extension history routing to read only reports already linked to the mapped enrollment, including reports moved by occurrence correction. Ordinary routing can resolve an existing same-student, same-teaching multi-lesson report and marks ambiguous report choices read-only. The report preview includes labels for lesson entries the caller may read.
+
+The atomic history reconciliation now accepts an exact report ID, an explicit correction reconfirmation flag, and the target enrollment/course/lesson entry identity. It updates shared attendance/comments at report level while applying lesson progress only to that entry. Existing entry IDs and all other entries are preserved; stale target entry identities and attempts to change a linked source report are rejected. The primary entry remains unchanged unless the report has no primary entry yet.
+
+Apply this migration before deploying the extension and API changes. Run the extension history planner/workbench tests, `server/src/routes/extension/extensionWorkspaceRouter.test.ts`, `supabase/tests/migration_chain_static_test.ts`, and the source-report identity database integration suite after applying the migration.
