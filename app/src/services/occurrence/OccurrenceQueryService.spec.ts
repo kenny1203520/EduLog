@@ -68,3 +68,45 @@ describe('OccurrenceQueryService navigation', () => {
             .resolves.toBeNull()
     })
 })
+
+describe('OccurrenceQueryService calendar range', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+    })
+
+    it('loads a session calendar through session_ids and maps the successful response', async () => {
+        const sessionId = '10000000-0000-4000-8000-000000000002'
+        apiV1GetMock.mockResolvedValue({
+            data: [{
+                ...row('2026-08-12', 'calendar-occurrence'),
+                class_session_id: sessionId,
+                class_sessions: {
+                    id: sessionId,
+                    name: 'Algebra',
+                    time_zone: 'Asia/Taipei',
+                    classrooms: { id: 'classroom-1', name: 'Room 1', color: '#22aa88' }
+                }
+            }],
+            meta: { total: 1 }
+        })
+
+        const occurrences = await OccurrenceQueryService.getOccurrencesByDateRange(
+            new Date(2026, 7, 1),
+            new Date(2026, 7, 31),
+            [sessionId]
+        )
+
+        expect(apiV1GetMock).toHaveBeenCalledWith(
+            `/occurrences?start=2026-08-01&end=2026-08-31&limit=100&offset=0&sort=occurrence_date&session_ids=${sessionId}`
+        )
+        expect(occurrences).toHaveLength(1)
+        expect(occurrences[0]).toMatchObject({
+            id: 'calendar-occurrence',
+            classSessionId: sessionId,
+            sessionName: 'Algebra',
+            classroomName: 'Room 1',
+            classroomColor: '#22aa88'
+        })
+        expect(occurrences[0]?.formatDate(occurrences[0].occurrenceDate)).toBe('2026-08-12')
+    })
+})
