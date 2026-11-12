@@ -20,5 +20,6 @@ Deno.test('bundled nginx proxies do not log single-use email confirmation tokens
     const block = config.match(/location = \/api\/auth\/confirm \{([^}]*)\}/)?.[1]
     assert(block, `${name} must declare an exact auth confirmation location`)
     assert(block.includes('access_log off;'), `${name} must not log the token_hash query`)
+    assert(block.includes('error_log /dev/null emerg;'), `${name} must not write token-bearing proxy errors to a log`)
   }
 })
