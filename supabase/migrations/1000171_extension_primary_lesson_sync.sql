@@ -33,7 +33,8 @@ BEGIN
   IF v_anchor.id IS NULL THEN RETURN false; END IF;
 
   IF NOT public.can_access_enrollment(v_target.id,'teaching.enrollments.read')
-    OR NOT public.can_access_class_session(v_occurrence.class_session_id,'teaching.occurrences.read') THEN
+    OR NOT public.can_access_class_session(v_occurrence.class_session_id,'teaching.occurrences.read')
+    OR NOT public.can_access_class_session(v_occurrence.class_session_id,'teaching.class_sessions.read') THEN
     RAISE EXCEPTION 'PERMISSION_DENIED';
   END IF;
   IF v_history.enrollment_id IS DISTINCT FROM v_target.id
@@ -67,14 +68,19 @@ BEGIN
       OR (p_data ? 'lesson_id' AND (p_data->>'lesson_id') IS DISTINCT FROM v_entry_meta->>'lesson_id')
       OR NOT EXISTS(SELECT 1 FROM public.lessons lesson
         WHERE lesson.id=(v_entry_meta->>'lesson_id')::uuid AND lesson.course_id=v_target.course_id)
-      OR v_entry_meta->>'entry_id' IS NULL
-      OR NOT EXISTS(
+      OR (v_entry_meta->>'entry_id' IS NULL AND EXISTS(
+        SELECT 1 FROM jsonb_array_elements(COALESCE(v_report.lesson_entries,'[]'::jsonb)) entry(value)
+        WHERE entry.value->>'enrollment_id'=v_target.id::text
+          AND entry.value->>'course_id'=v_target.course_id::text
+          AND entry.value->>'lesson_id'=v_entry_meta->>'lesson_id'
+      ))
+      OR (v_entry_meta->>'entry_id' IS NOT NULL AND NOT EXISTS(
         SELECT 1 FROM jsonb_array_elements(COALESCE(v_report.lesson_entries,'[]'::jsonb)) entry(value)
         WHERE entry.value->>'id'=v_entry_meta->>'entry_id'
           AND entry.value->>'enrollment_id'=v_target.id::text
           AND entry.value->>'course_id'=v_target.course_id::text
           AND entry.value->>'lesson_id'=v_entry_meta->>'lesson_id'
-      ) THEN RAISE EXCEPTION 'INVALID_REFERENCE'; END IF;
+      )) THEN RAISE EXCEPTION 'INVALID_REFERENCE'; END IF;
   END IF;
   RETURN true;
 END

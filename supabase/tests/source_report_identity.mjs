@@ -196,14 +196,15 @@ try {
   // Cross-course progress is synchronized into the matching lesson entry of
   // a shared report, and a corrected occurrence keeps that exact source link.
   const courseB = id(2001), roomB = id(2002), sessionB = id(2003), enrollmentB = id(2004)
-  const lessonA = id(2005), lessonB = id(2006), occurrenceB = id(2007), correctedOccurrence = id(2008)
+  const lessonA = id(2005), lessonB = id(2006), occurrenceB = id(2007), correctedOccurrence = id(2008), lessonNewEntry = id(2016)
   const sharedReport = id(2009), entryA = id(2010), entryB = id(2011), historyB = id(2012)
   await db.exec(`
     INSERT INTO public.classrooms(id,name,user_id,teaching_id) VALUES('${roomB}','Course B room','${actor}','${teaching}');
     INSERT INTO public.courses(id,subject,stage,user_id,teaching_id,display_name) VALUES('${courseB}','Course B','1','${actor}','${teaching}','Course B');
     INSERT INTO public.class_sessions(id,name,classroom_id,course_ids,start_time,end_time,user_id,teaching_id) VALUES('${sessionB}','Course B class','${roomB}',ARRAY['${courseB}'::uuid],'10:00','11:00','${actor}','${teaching}');
     INSERT INTO public.lessons(id,course_id,title,sequence,user_id) VALUES
-      ('${lessonA}','${course}','Course A lesson 1',1,'${actor}'),('${lessonB}','${courseB}','Course B lesson 4',4,'${actor}');
+      ('${lessonA}','${course}','Course A lesson 1',1,'${actor}'),('${lessonB}','${courseB}','Course B lesson 4',4,'${actor}'),
+      ('${lessonNewEntry}','${courseB}','Course B lesson 5',5,'${actor}');
     INSERT INTO public.enrollments(id,student_id,course_id,classroom_id,class_session_id,user_id,start_date,status) VALUES
       ('${enrollmentB}','${student}','${courseB}','${roomB}','${sessionB}','${actor}','2026-01-01','regular');
     INSERT INTO public.class_occurrences(id,class_session_id,occurrence_date) VALUES
@@ -388,6 +389,56 @@ try {
   const linkedAgain = await historyRpc('route-linked', { enrollment_id: enrollmentB, linked_report_ids: [sharedReport], linked_history_ids: [historyB] })
   assert.equal(linkedAgain.items[0].id, correctedOccurrence); assert.equal(linkedAgain.items[0].report.id, sharedReport)
   console.log('PASS: 1000171 updates only the cross-course lesson entry, preserves shared report identity and fields, blocks corrected occurrence sync until confirmation, and reuses the original report link')
+
+  // A confirmed remap may create a target lesson entry only when that exact
+  // enrollment/course/lesson tuple is absent. Once created, retries and stale
+  // entry-less or wrong-ID requests must not create or rebind another entry.
+  await db.query('UPDATE public.enrollment_history_reports SET enrollment_id=$1 WHERE id=$2',[e1,historyB])
+  const newEntryRoute = await historyRpc('route-linked', { enrollment_id: enrollmentB, linked_report_ids: [sharedReport], linked_history_ids: [historyB] })
+  assert.equal(newEntryRoute.items[0].report.id, sharedReport)
+  const newEntryRow = lessonSyncRow(true,'G',correctedOccurrence,true)
+  newEntryRow.record.data.lesson_id = lessonNewEntry
+  newEntryRow.history_reconciliation.lesson_entry = { enrollment_id: enrollmentB, course_id: courseB, lesson_id: lessonNewEntry }
+  lessonBatch++
+  const newEntryBatch = { job_id: job.id, key: id(2200 + lessonBatch), fingerprint: String(lessonBatch % 10).repeat(64), rows: [newEntryRow] }
+  const beforeNewEntry = await snapshotSyncState()
+  const wrongEntryRow = structuredClone(newEntryRow)
+  wrongEntryRow.history_reconciliation.lesson_entry.entry_id = entryA
+  await assert.rejects(rpc('preview',{ ...newEntryBatch, key: id(2301), fingerprint: 'a'.repeat(64), rows: [wrongEntryRow] }),error => error.message === 'INVALID_REFERENCE','a different lesson entry cannot be rebound')
+  assert.deepEqual(await snapshotSyncState(),beforeNewEntry,'wrong entry ID changes no history, report, entry, or source link')
+  const newEntryPreview = await rpc('preview',newEntryBatch)
+  assert.equal(newEntryPreview.rows[0].history_reconciliation.report_id,sharedReport)
+  await db.query("INSERT INTO public.denied_permissions(permission) VALUES('teaching.class_sessions.read')")
+  await assert.rejects(rpc('apply',newEntryBatch),error => error.message === 'PERMISSION_DENIED','apply rechecks class-session read permission after preview')
+  assert.deepEqual(await snapshotSyncState(),beforeNewEntry,'revoked class-session permission leaves all rows untouched')
+  await db.query("DELETE FROM public.denied_permissions WHERE permission='teaching.class_sessions.read'")
+  await rpc('apply',newEntryBatch)
+  shared = (await db.query('SELECT * FROM public.occurrence_reports WHERE id=$1',[sharedReport])).rows[0]
+  const createdEntries = shared.lesson_entries.filter(item => item.enrollment_id===enrollmentB && item.course_id===courseB && item.lesson_id===lessonNewEntry)
+  assert.equal(createdEntries.length,1,'confirmed remap creates exactly one missing target lesson entry')
+  const createdEntryId = createdEntries[0].id
+  assert.deepEqual([createdEntries[0].is_completed,createdEntries[0].progress_letter],[true,'G'])
+  assert.equal(shared.primary_lesson_entry_id,entryA); assert.equal(shared.id,sharedReport); assert.equal(shared.source_report_id,'906')
+  assert.equal((await db.query('SELECT enrollment_id,linked_report_id,source_report_id FROM public.enrollment_history_reports WHERE id=$1',[historyB])).rows[0].enrollment_id,enrollmentB)
+  assert.equal((await db.query('SELECT linked_report_id FROM public.enrollment_history_reports WHERE id=$1',[historyB])).rows[0].linked_report_id,sharedReport)
+  assert.deepEqual([entry(entryA).is_completed,entry(entryA).progress_letter],[true,'B'],'creating the new lesson entry preserves the sibling lesson')
+  await rpc('apply',newEntryBatch)
+  shared = (await db.query('SELECT * FROM public.occurrence_reports WHERE id=$1',[sharedReport])).rows[0]
+  assert.equal(shared.lesson_entries.filter(item => item.enrollment_id===enrollmentB && item.course_id===courseB && item.lesson_id===lessonNewEntry).length,1,'replaying the same batch does not duplicate the created entry')
+  const staleEntryless = structuredClone(newEntryRow)
+  lessonBatch++
+  const staleEntrylessBatch = { job_id: job.id, key: id(2200 + lessonBatch), fingerprint: String(lessonBatch % 10).repeat(64), rows: [staleEntryless] }
+  await assert.rejects(rpc('preview',staleEntrylessBatch),error => error.message === 'INVALID_REFERENCE','a new batch with stale entry-less metadata cannot duplicate the entry')
+  const exactEntryRow = structuredClone(newEntryRow)
+  exactEntryRow.history_reconciliation.lesson_entry.entry_id = createdEntryId
+  lessonBatch++
+  const exactEntryBatch = { job_id: job.id, key: id(2200 + lessonBatch), fingerprint: String(lessonBatch % 10).repeat(64), rows: [exactEntryRow] }
+  await rpc('preview',exactEntryBatch)
+  await rpc('apply',exactEntryBatch)
+  shared = (await db.query('SELECT * FROM public.occurrence_reports WHERE id=$1',[sharedReport])).rows[0]
+  assert.equal(shared.lesson_entries.filter(item => item.enrollment_id===enrollmentB && item.course_id===courseB && item.lesson_id===lessonNewEntry).length,1,'an exact-ID resync updates the existing entry without duplication')
+  assert.equal(shared.lesson_entries.find(item => item.id===createdEntryId).progress_letter,'G')
+  console.log('PASS: 1000171 allows a confirmed missing-entry remap, rechecks class-session access on apply, and blocks wrong/stale entry IDs without duplicates')
 
   // Attendance evidence: mapped admissions only, idempotent per date and class.
   const item = { enrollment_id: e1, source_admission_id: '6001', source_class_id: '11', evidence_date: '2026-10-10', attendance_count: 1, present_count: 1, absent_count: 0 }
