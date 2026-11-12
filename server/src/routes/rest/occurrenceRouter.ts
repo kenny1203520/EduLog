@@ -125,6 +125,7 @@ const occurrenceQuery = z.object({
   end: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   class_session_id: uuid.optional(),
+  // Bound raw query size even if repeated IDs later collapse to one session.
   session_ids: z.string().max(4000).optional(),
   ids: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
@@ -153,6 +154,7 @@ async function listOccurrences(req: Request, res: Response) {
     throw new ApiError(400, 'INVALID_QUERY', 'session_ids contains an invalid id')
   }
   const uniqueSessionIds = [...new Set(sessionIds)]
+  // Bound the per-request authorization RPC fan-out.
   if (uniqueSessionIds.length > 100) {
     throw new ApiError(400, 'INVALID_QUERY', 'session_ids contains too many class sessions')
   }

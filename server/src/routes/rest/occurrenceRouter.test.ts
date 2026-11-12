@@ -7,6 +7,22 @@ const testOccurrenceId = '10000000-0000-4000-8000-000000000001'
 const testSessionId = '10000000-0000-4000-8000-000000000002'
 const otherSessionId = '10000000-0000-4000-8000-000000000003'
 
+const globalMemberClassTeacher = {
+  userId: 'global-member-plus-class-teacher',
+  platformListPermission: false,
+  classSessionListPermissionIds: [testSessionId],
+}
+const globalMemberOnly = {
+  userId: 'global-member-only',
+  platformListPermission: false,
+  classSessionListPermissionIds: [],
+}
+const platformOccurrenceLister = {
+  userId: 'platform-occurrence-lister',
+  platformListPermission: true,
+  classSessionListPermissionIds: [],
+}
+
 describe('occurrence API contract', () => {
   it('enforces scoped permission, holiday and teacher-leave guards', () => {
     const source = readFileSync(new URL('./occurrenceRouter.ts', import.meta.url), 'utf8')
@@ -18,37 +34,42 @@ describe('occurrence API contract', () => {
 })
 
 describe('occurrence list scope authorization', () => {
-  it('allows a member with list permission in the requested class session', async () => {
-    const result = await listOccurrenceRequest({ session_ids: testSessionId }, [testSessionId])
+  it('allows a global member who has occurrence-list permission only as teacher of the requested session', async () => {
+    const result = await listOccurrenceRequest({ session_ids: testSessionId }, globalMemberClassTeacher)
 
     expect(result.status).toBe(200)
     expect(result.permissionScopes).toEqual([testSessionId])
+    expect(result.permissionScopes).not.toContain(null)
+    expect(result.permissionCalls).toEqual([{
+      permissionKey: 'teaching.occurrences.list',
+      scope: testSessionId,
+    }])
     expect(result.sessionFilter).toEqual([testSessionId])
   })
 
   it('deduplicates class session IDs before checking access and querying rows', async () => {
     const repeatedSessionIds = Array(101).fill(testSessionId).join(',')
-    const result = await listOccurrenceRequest({ session_ids: repeatedSessionIds }, [testSessionId])
+    const result = await listOccurrenceRequest({ session_ids: repeatedSessionIds }, globalMemberClassTeacher)
 
     expect(result.status).toBe(200)
     expect(result.permissionScopes).toEqual([testSessionId])
     expect(result.sessionFilter).toEqual([testSessionId])
   })
 
-  it('rejects more than 100 unique class sessions before querying', async () => {
+  it('caps distinct-session permission checks at 100 before querying', async () => {
     const sessionIds = Array.from({ length: 101 }, (_, index) => (
       `10000000-0000-4000-8000-${String(index).padStart(12, '0')}`
     )).join(',')
-    const result = await listOccurrenceRequest({ session_ids: sessionIds }, [])
+    const result = await listOccurrenceRequest({ session_ids: sessionIds }, globalMemberOnly)
 
     expect(result.status).toBe(400)
     expect(result.error).toMatchObject({ code: 'INVALID_QUERY' })
-    expect(result.permissionScopes).toEqual([])
+    expect(result.permissionCalls).toEqual([])
     expect(result.queryStarted).toBe(false)
   })
 
-  it('rejects a member who has no occurrence permission in the requested class', async () => {
-    const result = await listOccurrenceRequest({ session_ids: testSessionId }, [])
+  it('denies a global member without class-teacher occurrence-list permission', async () => {
+    const result = await listOccurrenceRequest({ session_ids: testSessionId }, globalMemberOnly)
 
     expect(result.status).toBe(403)
     expect(result.error).toMatchObject({ code: 'PERMISSION_DENIED' })
@@ -57,10 +78,20 @@ describe('occurrence list scope authorization', () => {
   })
 
   it('rejects the whole request when any requested class is unauthorized', async () => {
-    const result = await listOccurrenceRequest({ session_ids: `${testSessionId},${otherSessionId}` }, [testSessionId])
+    const result = await listOccurrenceRequest({ session_ids: `${testSessionId},${otherSessionId}` }, globalMemberClassTeacher)
 
     expect(result.status).toBe(403)
     expect(result.permissionScopes).toEqual([testSessionId, otherSessionId])
+    expect(result.queryStarted).toBe(false)
+  })
+
+  it('rejects repeated IDs when the raw session_ids value exceeds 4000 characters', async () => {
+    // This bounds URL input size even when de-duplication would leave one permission check.
+    const repeatedSessionIds = Array(111).fill(testSessionId).join(',')
+    const result = await listOccurrenceRequest({ session_ids: repeatedSessionIds }, globalMemberClassTeacher)
+
+    expect(result.error).toMatchObject({ name: 'ZodError' })
+    expect(result.permissionCalls).toEqual([])
     expect(result.queryStarted).toBe(false)
   })
 
@@ -69,7 +100,7 @@ describe('occurrence list scope authorization', () => {
     `${testSessionId},`,
     `${testSessionId},not-a-uuid`,
   ])('rejects malformed session_ids %s before querying', async (sessionIds) => {
-    const result = await listOccurrenceRequest({ session_ids: sessionIds }, [testSessionId])
+    const result = await listOccurrenceRequest({ session_ids: sessionIds }, globalMemberClassTeacher)
 
     expect(result.status).toBe(400)
     expect(result.error).toMatchObject({ code: 'INVALID_QUERY' })
@@ -78,7 +109,7 @@ describe('occurrence list scope authorization', () => {
   })
 
   it('keeps the single class_session_id authorization path scoped', async () => {
-    const result = await listOccurrenceRequest({ class_session_id: testSessionId }, [testSessionId])
+    const result = await listOccurrenceRequest({ class_session_id: testSessionId }, globalMemberClassTeacher)
 
     expect(result.status).toBe(200)
     expect(result.permissionScopes).toEqual([testSessionId])
@@ -86,7 +117,7 @@ describe('occurrence list scope authorization', () => {
   })
 
   it('keeps an unfiltered list restricted to platform permission', async () => {
-    const result = await listOccurrenceRequest({}, [], true)
+    const result = await listOccurrenceRequest({}, platformOccurrenceLister)
 
     expect(result.status).toBe(200)
     expect(result.permissionScopes).toEqual([null])
@@ -96,10 +127,13 @@ describe('occurrence list scope authorization', () => {
 
 async function listOccurrenceRequest(
   query: Record<string, string>,
-  allowedSessionIds: string[],
-  hasPlatformPermission = false,
+  grants: {
+    userId: string
+    platformListPermission: boolean
+    classSessionListPermissionIds: string[]
+  } = globalMemberOnly,
 ) {
-  const permissionScopes: Array<string | null> = []
+  const permissionCalls: Array<{ permissionKey: string; scope: string | null }> = []
   let sessionFilter: string[] | undefined
   let singleSessionFilter: string | undefined
   let queryStarted = false
@@ -107,9 +141,14 @@ async function listOccurrenceRequest(
     rpc: async (name: string, args: Record<string, unknown>) => {
       if (name !== 'has_api_permission') throw new Error(`Unexpected RPC ${name}`)
       const scope = args.p_class_session_id as string | null
-      permissionScopes.push(scope)
+      const permissionKey = args.p_permission_key as string
+      permissionCalls.push({ permissionKey, scope })
       return {
-        data: scope === null ? hasPlatformPermission : allowedSessionIds.includes(scope),
+        data: permissionKey === 'teaching.occurrences.list' && (
+          scope === null
+            ? grants.platformListPermission
+            : grants.classSessionListPermissionIds.includes(scope)
+        ),
         error: null,
       }
     },
@@ -137,7 +176,7 @@ async function listOccurrenceRequest(
   const request: any = {
     query,
     db: database,
-    user: { id: 'member-classroom-teacher' },
+    user: { id: grants.userId },
     requestId: 'request-1',
     traceId: 'trace-1',
   }
@@ -154,7 +193,14 @@ async function listOccurrenceRequest(
     handler(request, res, (error: any) => resolve({ status: error?.status ?? 500, error }))
   })
 
-  return { ...response, permissionScopes, sessionFilter, singleSessionFilter, queryStarted }
+  return {
+    ...response,
+    permissionCalls,
+    permissionScopes: permissionCalls.map((call) => call.scope),
+    sessionFilter,
+    singleSessionFilter,
+    queryStarted,
+  }
 }
 
 describe('class report completion summary', () => {
