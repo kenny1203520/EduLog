@@ -502,10 +502,12 @@ async function refreshHistoryPlan({admissions:admissionFilter}={}) {
       do{const page=await api('history-list',undefined,{query:{enrollment_id:target.id,source_admission_id:admission,limit:50,cursor}});if(!current())return;rows.push(...page.items||[]);cursor=page.next_cursor||undefined;if(cursor&&seenCursors.has(cursor))throw new Error('歷史清單分頁未前進，請重新核對。');if(cursor)seenCursors.add(cursor)}while(cursor)
       const existingArchive=archives.get(target.id)||[]
       archives.set(target.id,[...existingArchive.filter(row=>row.source_admission_id!==admission),...rows])
-      const dates=[...new Set(owner.snapshot.records.filter(r=>r.kind==='report'&&r.enrollment_source_id===admission&&r.date&&r.date>=owner.dateFrom&&r.date<=owner.dateTo).map(r=>r.date))],occurrences=[]
+      const dates=[...new Set(owner.snapshot.records.filter(r=>r.kind==='report'&&r.enrollment_source_id===admission&&r.date&&r.date>=owner.dateFrom&&r.date<=owner.dateTo).map(r=>r.date))],occurrences=[],linkedReportIds=[...new Set(rows.map(row=>row.linked_report_id).filter(id=>typeof id==='string'&&id))]
       for(let i=0;i<dates.length;i+=50){cursor=undefined;seenCursors=new Set();do{const page=await api('history-route',{enrollment_id:target.id,dates:dates.slice(i,i+50),limit:50,...(cursor?{cursor}:{})});if(!current())return;occurrences.push(...page.items||[]);cursor=page.next_cursor||undefined;if(cursor&&seenCursors.has(cursor))throw new Error('課次分頁未前進，請重新核對。');if(cursor)seenCursors.add(cursor)}while(cursor)}
+      for(let i=0;i<linkedReportIds.length;i+=50){cursor=undefined;seenCursors=new Set();do{const page=await api('history-route',{enrollment_id:target.id,linked_report_ids:linkedReportIds.slice(i,i+50),limit:50,...(cursor?{cursor}:{})});if(!current())return;occurrences.push(...page.items||[]);cursor=page.next_cursor||undefined;if(cursor&&seenCursors.has(cursor))throw new Error('已綁定課次分頁未前進，請重新核對。');if(cursor)seenCursors.add(cursor)}while(cursor)}
       const refreshedDates=new Set(dates)
-      const byId=new Map([...(routes.get(target.id)||[]).filter(row=>!refreshedDates.has(row.occurrence_date)),...occurrences].map(row=>[row.id,row]))
+      const refreshedLinks=new Set(linkedReportIds)
+      const byId=new Map([...(routes.get(target.id)||[]).filter(row=>!refreshedDates.has(row.occurrence_date)&&!refreshedLinks.has(row.report?.id)),...occurrences].map(row=>[row.id,row]))
       routes.set(target.id,[...byId.values()])
     }
   }
@@ -653,7 +655,7 @@ function prepareRows() {
     if(item.record.historyDuplicateConfirmed)historyRow.reviewed_duplicate=true
     if(item.category==='bind'){
       const binding={historyId:targetId,itemKey:item.key,expectedFields:Object.fromEntries(teachingFields.filter(f=>Object.hasOwn(item.data,f)).map(f=>[f,item.data[f]])),occurrence:item.occurrence,body:{key:crypto.randomUUID(),class_occurrence_id:item.occurrence.id,overwrite:historyRow.overwrite,include_internal:work.includeInternalNotes,include_fields:item.includedFields||[]},status:'pending',atomic:true}
-      historyRow.history_reconciliation={key:binding.body.key,class_occurrence_id:item.occurrence.id,overwrite:binding.body.overwrite,include_internal:work.includeInternalNotes,include_fields:item.includedFields||[]}
+       historyRow.history_reconciliation={key:binding.body.key,class_occurrence_id:item.occurrence.id,...(item.occurrence.report?.id?{report_id:item.occurrence.report.id}:{}),...(item.reconfirmedTarget?{reconfirm_occurrence:true}:{}),...(item.lessonSyncTarget&&item.includedFields?.some(field=>['lesson_id','is_completed','progress_letter'].includes(field))?{lesson_entry:{enrollment_id:item.lessonSyncTarget.enrollment_id,course_id:item.lessonSyncTarget.course_id,lesson_id:item.lessonSyncTarget.lesson_id,entry_id:item.lessonSyncTarget.entry_id}}:{}),overwrite:binding.body.overwrite,include_internal:work.includeInternalNotes,include_fields:item.includedFields||[]}
       historyBindings.push(binding)
     }
   }

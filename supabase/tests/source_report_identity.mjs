@@ -119,6 +119,10 @@ try {
   assert.equal(preflight[3].rows.length, 1); assert.equal(preflight[3].rows[0].occurrence_report_id, r3)
 
   await db.exec(read('1000148_source_report_identity.sql'))
+  await db.exec('ALTER TABLE public.report_versions ADD COLUMN IF NOT EXISTS snapshot jsonb')
+  await db.exec(read('1000169_multi_lesson_report_entries.sql'))
+  await db.exec(read('1000170_report_occurrence_correction.sql'))
+  await db.exec(read('1000171_extension_primary_lesson_sync.sql'))
   const retired = Object.fromEntries((await db.query('SELECT id,retired_as,superseded_by FROM public.enrollment_history_reports ORDER BY id')).rows.map(row => [row.id, [row.retired_as, row.superseded_by]]))
   assert.deepEqual(retired[h(2)], ['superseded', h(1)]); assert.deepEqual(retired[h(5)], ['superseded', h(6)])
   for (const n of [1, 3, 6, 10, 11]) assert.deepEqual(retired[h(n)], [null, null])
@@ -188,6 +192,136 @@ try {
   await rejectsWith(rpc('preview', { job_id: job.id, key: id(1503), fingerprint: 'c'.repeat(64), rows: [evidenceRow] }), 'INVALID_IMPORT', 'REPORT_IDENTITY_REQUIRED')
   console.log('PASS: 1000148 reportId upsert, report source links, untouched overwrite, both-changed preservation, explicit identity conflicts')
 
+  // Cross-course progress is synchronized into the matching lesson entry of
+  // a shared report, and a corrected occurrence keeps that exact source link.
+  const courseB = id(2001), roomB = id(2002), sessionB = id(2003), enrollmentB = id(2004)
+  const lessonA = id(2005), lessonB = id(2006), occurrenceB = id(2007), correctedOccurrence = id(2008)
+  const sharedReport = id(2009), entryA = id(2010), entryB = id(2011), historyB = id(2012)
+  await db.exec(`
+    INSERT INTO public.classrooms(id,name,user_id,teaching_id) VALUES('${roomB}','Course B room','${actor}','${teaching}');
+    INSERT INTO public.courses(id,subject,stage,user_id,teaching_id,display_name) VALUES('${courseB}','Course B','1','${actor}','${teaching}','Course B');
+    INSERT INTO public.class_sessions(id,name,classroom_id,course_ids,start_time,end_time,user_id,teaching_id) VALUES('${sessionB}','Course B class','${roomB}',ARRAY['${courseB}'::uuid],'10:00','11:00','${actor}','${teaching}');
+    INSERT INTO public.lessons(id,course_id,title,sequence,user_id) VALUES
+      ('${lessonA}','${course}','Course A lesson 1',1,'${actor}'),('${lessonB}','${courseB}','Course B lesson 4',4,'${actor}');
+    INSERT INTO public.enrollments(id,student_id,course_id,classroom_id,class_session_id,user_id,start_date,status) VALUES
+      ('${enrollmentB}','${student}','${courseB}','${roomB}','${sessionB}','${actor}','2026-01-01','regular');
+    INSERT INTO public.class_occurrences(id,class_session_id,occurrence_date) VALUES
+      ('${occurrenceB}','${session}','2026-10-10'),('${correctedOccurrence}','${session}','2026-10-17');
+    INSERT INTO public.occurrence_reports(id,enrollment_id,class_occurrence_id,lesson_id,is_completed,progress_letter,attendance_status,content,lesson_entries,primary_lesson_entry_id)
+    VALUES('${sharedReport}','${e1}','${occurrenceB}','${lessonA}',true,'B','present','Shared teacher comment',
+      jsonb_build_array(
+        jsonb_build_object('id','${entryA}','enrollment_id','${e1}','course_id','${course}','lesson_id','${lessonA}','is_completed',true,'progress_letter','B'),
+        jsonb_build_object('id','${entryB}','enrollment_id','${enrollmentB}','course_id','${courseB}','lesson_id','${lessonB}','is_completed',false,'progress_letter','A')
+      ),'${entryA}');
+    INSERT INTO public.enrollment_history_reports(id,user_id,enrollment_id,report_date,source_origin,source_admission_id,source_report_id,source_key,identity_status,lesson_id,is_completed,progress_letter,attendance_status,updated_at)
+    VALUES('${historyB}','${actor}','${enrollmentB}','2026-10-10','${origin}','6003','906','report:6003:906','verified','${lessonB}',false,'A','present',now());
+    INSERT INTO public.web_extension_mapping_memory(user_id,source_origin,kind,source_key,target_id,student_id,course_id,class_session_id)
+    VALUES('${actor}','${origin}','admission','6003','${enrollmentB}','${student}','${courseB}','${sessionB}');
+  `)
+  let lessonBatch = 1600
+  const lessonSyncRow = (completed, progressLetter, classOccurrenceId = occurrenceB, reconfirmOccurrence = false, reportId = sharedReport) => ({
+    source_id: '6003:report:906', target_id: historyB,
+    record: { kind: 'history_report', data: {
+      enrollment_id: enrollmentB, report_date: '2026-10-10', source_origin: origin,
+      source_admission_id: '6003', source_report_id: '906', source_key: 'report:6003:906', identity_status: 'verified',
+      source_fields: [
+        { key: 'is_completed', label: '完成狀態', text: String(completed) },
+        { key: 'progress_letter', label: '進度', text: progressLetter },
+      ],
+      lesson_id: lessonB, is_completed: completed, progress_letter: progressLetter,
+      external_link: `${origin}/dt_admissions/6003/reports/906/edit`,
+    } },
+    history_reconciliation: {
+      key: id(2100 + lessonBatch), class_occurrence_id: classOccurrenceId,
+      report_id: reportId, reconfirm_occurrence: reconfirmOccurrence,
+      lesson_entry: { enrollment_id: enrollmentB, course_id: courseB, lesson_id: lessonB, entry_id: entryB },
+      include_fields: ['lesson_id', 'is_completed', 'progress_letter'], overwrite: ['is_completed', 'progress_letter'], include_internal: false,
+    },
+  })
+  const syncLessonB = async (completed, progressLetter, classOccurrenceId = occurrenceB, reconfirmOccurrence = false, reportId = sharedReport) => {
+    lessonBatch++
+    const batch = { job_id: job.id, key: id(2200 + lessonBatch), fingerprint: String(lessonBatch % 10).repeat(64), rows: [lessonSyncRow(completed, progressLetter, classOccurrenceId, reconfirmOccurrence, reportId)] }
+    const preview = await rpc('preview', batch)
+    const applied = await rpc('apply', batch)
+    return { preview, applied }
+  }
+  let crossCourse = await syncLessonB(true, 'C')
+  assert.equal(crossCourse.preview.rows[0].history_reconciliation.report_id, sharedReport)
+  let shared = (await db.query('SELECT * FROM public.occurrence_reports WHERE id=$1', [sharedReport])).rows[0]
+  const entry = id => shared.lesson_entries.find(item => item.id === id)
+  assert.deepEqual([entry(entryA).is_completed, entry(entryA).progress_letter], [true, 'B'], 'course A entry is preserved')
+  assert.deepEqual([entry(entryB).is_completed, entry(entryB).progress_letter], [true, 'C'], 'course B entry is updated')
+  assert.equal(shared.primary_lesson_entry_id, entryA, 'the report primary entry is preserved')
+  assert.equal(shared.content, 'Shared teacher comment'); assert.equal(shared.attendance_status, 'present', 'shared report fields are preserved')
+  assert.equal(shared.source_report_id, '906'); assert.equal((await db.query('SELECT linked_report_id FROM public.enrollment_history_reports WHERE id=$1',[historyB])).rows[0].linked_report_id, sharedReport)
+
+  crossCourse = await syncLessonB(false, 'D')
+  shared = (await db.query('SELECT * FROM public.occurrence_reports WHERE id=$1', [sharedReport])).rows[0]
+  assert.deepEqual([entry(entryA).is_completed, entry(entryA).progress_letter], [true, 'B'], 're-sync does not overwrite the sibling course entry')
+  assert.deepEqual([entry(entryB).is_completed, entry(entryB).progress_letter], [false, 'D'], 'a changed source value re-syncs the exact lesson entry')
+  assert.equal(shared.primary_lesson_entry_id, entryA); assert.equal(shared.id, sharedReport); assert.equal(shared.source_report_id, '906')
+  assert.equal(shared.content, 'Shared teacher comment'); assert.equal(shared.attendance_status, 'present')
+
+  const reportIdBeforeCorrection = shared.id
+  await db.exec(`SELECT set_config('request.jwt.claims',jsonb_build_object('sub','${actor}','role','authenticated')::text,false);
+    SELECT set_config('request.jwt.claim.sub','${actor}',false);
+    SELECT set_config('request.jwt.claim.role','authenticated',false);`)
+  const correction = (await db.query('SELECT public.correct_occurrence_report($1,$2,$3) AS result',[sharedReport,correctedOccurrence,shared.version])).rows[0].result
+  shared = (await db.query('SELECT * FROM public.occurrence_reports WHERE id=$1', [sharedReport])).rows[0]
+  assert.equal(correction.report.id, reportIdBeforeCorrection, 'the occurrence correction RPC retains report identity')
+  assert.equal(shared.id, reportIdBeforeCorrection); assert.equal(shared.class_occurrence_id, correctedOccurrence)
+  assert.equal(shared.source_report_id, '906'); assert.equal(shared.primary_lesson_entry_id, entryA)
+  assert.deepEqual(shared.lesson_entries.map(item => item.id), [entryA, entryB], 'the correction RPC retains all lesson entries')
+  assert.equal((await db.query("SELECT edulog_id FROM public.web_extension_source_links WHERE source_kind='report' AND source_id='906'")).rows[0].edulog_id,sharedReport,'the correction RPC retains the extension source link')
+  const unconfirmed = { job_id: job.id, key: id(2299), fingerprint: 'f'.repeat(64), rows: [lessonSyncRow(true, 'E', correctedOccurrence, false)] }
+  await rejectsWith(rpc('preview', unconfirmed), 'INVALID_REFERENCE')
+  await rejectsWith(rpc('apply', unconfirmed), 'INVALID_REFERENCE')
+
+  const decoyReport = id(2013)
+  await db.query('INSERT INTO public.occurrence_reports(id,enrollment_id,class_occurrence_id,content) VALUES($1,$2,$3,$4)', [decoyReport,e2,correctedOccurrence,'Decoy must remain untouched'])
+  const wrongReportRow = lessonSyncRow(false, 'X', correctedOccurrence, true, decoyReport)
+  wrongReportRow.record.data.report_date = '2026-10-17'
+  const wrongReport = { job_id: job.id, key: id(2298), fingerprint: 'e'.repeat(64), rows: [wrongReportRow] }
+  await assert.rejects(rpc('preview', wrongReport), error => ['SOURCE_MAPPING_CONFLICT', 'HISTORY_ALREADY_LINKED'].includes(error.message), 'a reconfirmed request with a matching date cannot point at a decoy report')
+  await assert.rejects(rpc('apply', wrongReport), error => ['SOURCE_MAPPING_CONFLICT', 'HISTORY_ALREADY_LINKED'].includes(error.message), 'apply rejects a matching-date decoy target too')
+  shared = (await db.query('SELECT * FROM public.occurrence_reports WHERE id=$1', [sharedReport])).rows[0]
+  assert.equal(shared.class_occurrence_id, correctedOccurrence); assert.equal(shared.source_report_id, '906')
+  assert.equal((await db.query('SELECT content FROM public.occurrence_reports WHERE id=$1',[decoyReport])).rows[0].content,'Decoy must remain untouched')
+  assert.equal((await db.query('SELECT linked_report_id FROM public.enrollment_history_reports WHERE id=$1',[historyB])).rows[0].linked_report_id,sharedReport)
+  assert.equal((await db.query("SELECT edulog_id FROM public.web_extension_source_links WHERE source_kind='report' AND source_id='906'")).rows[0].edulog_id,sharedReport)
+
+  const linkedRoutes = await historyRpc('route-linked', { enrollment_id: enrollmentB, linked_report_ids: [sharedReport] })
+  assert.equal(linkedRoutes.items.length, 1); assert.equal(linkedRoutes.items[0].id, correctedOccurrence)
+  assert.equal(linkedRoutes.items[0].report.id, sharedReport)
+  assert.ok(linkedRoutes.items[0].report.lesson_entry_labels.some(item => item.id === entryB && item.enrollment_id === enrollmentB && item.lesson_id === lessonB))
+
+  lessonBatch++
+  const staleBatch = { job_id: job.id, key: id(2200 + lessonBatch), fingerprint: String(lessonBatch % 10).repeat(64), rows: [lessonSyncRow(false, 'F', correctedOccurrence, true)] }
+  const stalePreview = await rpc('preview', staleBatch)
+  assert.equal(stalePreview.rows[0].history_reconciliation.report_id, sharedReport)
+  shared = (await db.query('SELECT * FROM public.occurrence_reports WHERE id=$1', [sharedReport])).rows[0]
+  const beforeStaleEntry = entry(entryB)
+  await db.query('UPDATE public.occurrence_reports SET version=version+1 WHERE id=$1',[sharedReport])
+  await rejectsWith(rpc('apply', staleBatch), 'PREVIEW_STALE', 'OCCURRENCE_REPORT_VERSION_CHANGED')
+  shared = (await db.query('SELECT * FROM public.occurrence_reports WHERE id=$1', [sharedReport])).rows[0]
+  assert.deepEqual(entry(entryB), beforeStaleEntry, 'a stale shared-report version cannot partially update lesson progress')
+  assert.equal(shared.source_report_id, '906'); assert.equal(shared.class_occurrence_id, correctedOccurrence)
+  assert.equal((await db.query('SELECT linked_report_id,is_completed,progress_letter FROM public.enrollment_history_reports WHERE id=$1',[historyB])).rows[0].linked_report_id,sharedReport)
+
+  crossCourse = await syncLessonB(true, 'E', correctedOccurrence, true)
+  shared = (await db.query('SELECT * FROM public.occurrence_reports WHERE id=$1', [sharedReport])).rows[0]
+  assert.equal(shared.id, reportIdBeforeCorrection); assert.equal(shared.class_occurrence_id, correctedOccurrence)
+  assert.equal(shared.source_report_id, '906'); assert.equal(shared.primary_lesson_entry_id, entryA)
+  assert.deepEqual([entry(entryA).is_completed, entry(entryA).progress_letter], [true, 'B'])
+  assert.deepEqual([entry(entryB).is_completed, entry(entryB).progress_letter], [true, 'E'])
+  assert.equal(shared.content, 'Shared teacher comment'); assert.equal(shared.attendance_status, 'present')
+  assert.equal((await db.query('SELECT linked_report_id FROM public.enrollment_history_reports WHERE id=$1',[historyB])).rows[0].linked_report_id, sharedReport)
+  assert.equal((await db.query("SELECT count(*)::int AS n FROM public.web_extension_source_links WHERE source_kind='report' AND source_id='906' AND edulog_id=$1",[sharedReport])).rows[0].n,1)
+
+  const linkedAgain = await historyRpc('route-linked', { enrollment_id: enrollmentB, linked_report_ids: [sharedReport] })
+  assert.equal(linkedAgain.items[0].id, correctedOccurrence); assert.equal(linkedAgain.items[0].report.id, sharedReport)
+  console.log('PASS: 1000171 updates only the cross-course lesson entry, preserves shared report identity and fields, blocks corrected occurrence sync until confirmation, and reuses the original report link')
+
   // Attendance evidence: mapped admissions only, idempotent per date and class.
   const item = { enrollment_id: e1, source_admission_id: '6001', source_class_id: '11', evidence_date: '2026-10-10', attendance_count: 1, present_count: 1, absent_count: 0 }
   assert.equal((await evidenceRpc('record', { source_origin: origin, items: [item] })).items[0].attendance_count, 1)
@@ -203,5 +337,10 @@ try {
   assert.deepEqual((await conflictsRpc('list', {})).summary, report.summary)
   assert.equal((await rpc('capabilities', {})).attendance_evidence, true)
   console.log('PASS: 1000148 rerun is idempotent')
+
+  const beforePrimarySyncRerun = (await db.query('SELECT id,class_occurrence_id,lesson_entries,primary_lesson_entry_id,source_report_id FROM public.occurrence_reports WHERE id=$1',[sharedReport])).rows[0]
+  await db.exec(read('1000171_extension_primary_lesson_sync.sql'))
+  assert.deepEqual((await db.query('SELECT id,class_occurrence_id,lesson_entries,primary_lesson_entry_id,source_report_id FROM public.occurrence_reports WHERE id=$1',[sharedReport])).rows[0],beforePrimarySyncRerun)
+  console.log('PASS: 1000171 can be reapplied without changing report identity or lesson progress')
 } catch (error) { console.error(error.stack, error.detail || '', error.where || '', error.position || ''); process.exitCode = 1 }
 finally { await db.close() }
