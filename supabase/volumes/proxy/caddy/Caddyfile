@@ -4,6 +4,8 @@
         format filter {
             request>uri query {
                 replace token_hash REDACTED
+                replace code REDACTED
+                replace state REDACTED
             }
         }
     }
