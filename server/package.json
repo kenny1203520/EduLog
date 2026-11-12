@@ -28,7 +28,7 @@
     "express": "^5.1.0",
     "express-rate-limit": "^8.7.4",
     "helmet": "^8.1.0",
-    "ipaddr.js": "^1.9.1",
+    "ipaddr.js": "^2.5.0",
     "jose": "^6.2.12",
     "nodemailer": "^10.2.1",
     "pino": "^10.1.0",
