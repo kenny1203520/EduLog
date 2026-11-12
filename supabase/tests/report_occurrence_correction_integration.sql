@@ -85,6 +85,10 @@ FROM (VALUES
 INSERT INTO public.occurrence_reports(id, enrollment_id, class_occurrence_id, content, version, lesson_id, is_completed, progress_letter, lesson_entries, primary_lesson_entry_id, attendance_status, class_participation, contact_notes, class_notes) VALUES
   ('fb000000-0000-4000-8000-000000000101', 'f9000000-0000-4000-8000-000000000101', 'fa000000-0000-4000-8000-000000000101', 'same-class taught report', 1, 'f5000000-0000-4000-8000-000000000102', false, 'B', '[{"id":"fd000000-0000-4000-8000-000000000101","enrollment_id":"f9000000-0000-4000-8000-000000000101","course_id":"f4000000-0000-4000-8000-000000000101","lesson_id":"f5000000-0000-4000-8000-000000000102","is_completed":false,"progress_letter":"B"}]', 'fd000000-0000-4000-8000-000000000101', 'present', 4, 'Parent note', 'Internal note'),
   ('fb000000-0000-4000-8000-000000000102', 'f9000000-0000-4000-8000-000000000101', 'fa000000-0000-4000-8000-000000000103', 'cross-class source report', 1, 'f5000000-0000-4000-8000-000000000101', true, 'A', '[{"id":"fd000000-0000-4000-8000-000000000102","enrollment_id":"f9000000-0000-4000-8000-000000000101","course_id":"f4000000-0000-4000-8000-000000000101","lesson_id":"f5000000-0000-4000-8000-000000000101","is_completed":true,"progress_letter":"A"},{"id":"fd000000-0000-4000-8000-000000000103","enrollment_id":"f9000000-0000-4000-8000-000000000102","course_id":"f4000000-0000-4000-8000-000000000102","lesson_id":"f5000000-0000-4000-8000-000000000103","is_completed":false,"progress_letter":null}]', 'fd000000-0000-4000-8000-000000000102', 'present', 5, 'Cross parent note', 'Cross internal note');
+UPDATE public.occurrence_reports
+SET source_origin = 'https://corp.orangeapple.co', source_admission_id = '78102', source_report_id = '99102',
+    source_synced_at = now(), source_synced_version = 1, source_synced_fields = '{"content":"cross-class source report"}'
+WHERE id = 'fb000000-0000-4000-8000-000000000102';
 INSERT INTO public.occurrence_reports(id, enrollment_id, class_occurrence_id, content, attendance_status) VALUES
   ('fb000000-0000-4000-8000-000000000103', 'f9000000-0000-4000-8000-000000000101', 'fa000000-0000-4000-8000-000000000102', '', 'pending'),
   ('fb000000-0000-4000-8000-000000000104', 'f9000000-0000-4000-8000-000000000102', 'fa000000-0000-4000-8000-000000000104', '', 'pending'),
@@ -206,7 +210,7 @@ BEGIN
   PERFORM public.correct_occurrence_report(
     'fb000000-0000-4000-8000-000000000102', 'fa000000-0000-4000-8000-000000000104', 1, 'f9000000-0000-4000-8000-000000000102'
   );
-  IF NOT EXISTS (SELECT 1 FROM public.occurrence_reports WHERE id = 'fb000000-0000-4000-8000-000000000102' AND enrollment_id = 'f9000000-0000-4000-8000-000000000102' AND class_occurrence_id = 'fa000000-0000-4000-8000-000000000104' AND version = 2 AND source_synced_version = 1 AND source_report_id = '99113' AND content = 'cross-class source report' AND contact_notes = 'Cross parent note' AND class_notes = 'Cross internal note')
+  IF NOT EXISTS (SELECT 1 FROM public.occurrence_reports WHERE id = 'fb000000-0000-4000-8000-000000000102' AND enrollment_id = 'f9000000-0000-4000-8000-000000000102' AND class_occurrence_id = 'fa000000-0000-4000-8000-000000000104' AND version = 2 AND source_synced_version = 1 AND source_report_id = '99102' AND content = 'cross-class source report' AND contact_notes = 'Cross parent note' AND class_notes = 'Cross internal note')
      OR EXISTS (SELECT 1 FROM public.occurrence_reports WHERE id = 'fb000000-0000-4000-8000-000000000104') THEN
     RAISE EXCEPTION 'cross-class correction did not retain source identity or shared report data: report %, placeholder exists %',
       (SELECT to_jsonb(report) FROM public.occurrence_reports AS report WHERE report.id = 'fb000000-0000-4000-8000-000000000102'),
