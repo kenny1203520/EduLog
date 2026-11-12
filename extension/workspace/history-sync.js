@@ -136,7 +136,7 @@ export function planHistory(records, enrollmentTargets, archives, routes, option
       // Matching source/history alone does not prove that the bound lesson is
       // still identical. Expose its real conflicts in the normal review editor.
       const chosenLessonEntry=matchingLessonEntry(chosen?.report,target,lessonId)
-      const requiresReconfirmation=Boolean(chosen&&(chosen.occurrence_date!==record.date||(lessonId&&!chosenLessonEntry)))
+      const requiresReconfirmation=Boolean(chosen&&(chosen.occurrence_date!==record.date||(lessonId&&!chosenLessonEntry)||(item.existing.enrollment_id&&item.existing.enrollment_id!==target.id)))
       const confirmedTarget=record.historyOccurrenceId===chosen?.id&&record.historyOccurrenceConfirmation===item.targetConfirmationOptions[chosen?.id]
       if(requiresReconfirmation&&!confirmedTarget){item.reconfirmationRequired=true;needs(item,'linked-target-reconfirm','原站報告仍綁定同一份 EduLog 報告，但場次日期或課次報名資料已變更；請重新確認這份報告目前對應的課次後再同步。',[{id:'linked-target-reconfirm',code:'linked-target-reconfirm',message:'原站報告仍綁定同一份 EduLog 報告，但場次日期或課次報名資料已變更；請重新確認這份報告目前對應的課次後再同步。',target:'occurrence'}]);continue}
       item.reconfirmedTarget=requiresReconfirmation

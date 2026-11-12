@@ -1,8 +1,10 @@
 BEGIN;
 
 -- Extension history routing can resolve the exact report already linked to a
--- source row after an occurrence correction. Normal routing also returns a
--- same-student, same-teaching report that can receive another lesson entry.
+-- source row after an occurrence correction or enrollment remapping. A supplied
+-- history-row ID is accepted only when its report link, permissions, student,
+-- and teaching scope match the selected target. Normal routing can also return a
+-- same-student, same-teaching report for another lesson entry.
 DO $migration$
 DECLARE
   v_definition text;
@@ -29,7 +31,7 @@ BEGIN
   END IF;$old$, E'\n    ', E'\n   ');
   v_new := $new$IF p_operation IN ('route','route-linked') THEN
     IF p_operation='route' AND (jsonb_typeof(p_input->'dates') IS DISTINCT FROM 'array' OR jsonb_array_length(p_input->'dates') NOT BETWEEN 1 AND 50) THEN RAISE EXCEPTION 'INVALID_IMPORT'; END IF;
-    IF p_operation='route-linked' AND (jsonb_typeof(p_input->'linked_report_ids') IS DISTINCT FROM 'array' OR jsonb_array_length(p_input->'linked_report_ids') NOT BETWEEN 1 AND 50 OR EXISTS(SELECT 1 FROM jsonb_array_elements_text(p_input->'linked_report_ids') id WHERE id !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')) THEN RAISE EXCEPTION 'INVALID_IMPORT'; END IF;
+    IF p_operation='route-linked' AND (jsonb_typeof(p_input->'linked_report_ids') IS DISTINCT FROM 'array' OR jsonb_array_length(p_input->'linked_report_ids') NOT BETWEEN 1 AND 50 OR EXISTS(SELECT 1 FROM jsonb_array_elements_text(p_input->'linked_report_ids') id WHERE id !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$') OR (p_input ? 'linked_history_ids' AND (jsonb_typeof(p_input->'linked_history_ids') IS DISTINCT FROM 'array' OR jsonb_array_length(p_input->'linked_history_ids') NOT BETWEEN 1 AND 50 OR EXISTS(SELECT 1 FROM jsonb_array_elements_text(p_input->'linked_history_ids') id WHERE id !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')))) THEN RAISE EXCEPTION 'INVALID_IMPORT'; END IF;
     IF NOT public.can_access_enrollment((p_input->>'enrollment_id')::uuid,'teaching.enrollments.read') OR NOT public.can_access_enrollment((p_input->>'enrollment_id')::uuid,'teaching.reports.read') THEN RAISE EXCEPTION 'PERMISSION_DENIED'; END IF;
     SELECT COALESCE(jsonb_agg(x.row ORDER BY x.id),'[]') INTO v_items FROM (
      SELECT o.id,jsonb_build_object(
@@ -65,8 +67,24 @@ BEGIN
              AND public.history_occurrence_eligible(anchor_enrollment.id,o.id)
          ))
          OR (p_operation='route-linked' AND candidate.id::text IN (SELECT jsonb_array_elements_text(p_input->'linked_report_ids')) AND EXISTS(
-           SELECT 1 FROM public.enrollment_history_reports history
-           WHERE history.enrollment_id=(p_input->>'enrollment_id')::uuid AND history.linked_report_id=candidate.id
+           SELECT 1
+           FROM public.enrollment_history_reports history
+           JOIN public.enrollments linked_enrollment ON linked_enrollment.id=history.enrollment_id
+           JOIN public.courses linked_course ON linked_course.id=linked_enrollment.course_id
+           JOIN public.enrollments target_enrollment ON target_enrollment.id=(p_input->>'enrollment_id')::uuid
+           JOIN public.courses target_course ON target_course.id=target_enrollment.course_id
+           JOIN public.enrollments anchor_enrollment ON anchor_enrollment.id=candidate.enrollment_id
+           JOIN public.courses anchor_course ON anchor_course.id=anchor_enrollment.course_id
+           WHERE history.linked_report_id=candidate.id
+             AND (history.enrollment_id=target_enrollment.id OR (
+               history.id::text IN (SELECT jsonb_array_elements_text(p_input->'linked_history_ids'))
+               AND public.can_access_enrollment(history.enrollment_id,'teaching.enrollments.read')
+               AND public.can_access_enrollment(history.enrollment_id,'teaching.reports.read')
+               AND linked_enrollment.student_id=target_enrollment.student_id
+               AND linked_course.teaching_id=target_course.teaching_id
+               AND anchor_enrollment.student_id=target_enrollment.student_id
+               AND anchor_course.teaching_id=target_course.teaching_id
+             ))
          ))
        )
        AND (p_operation='route' OR candidate.id::text IN (SELECT jsonb_array_elements_text(p_input->'linked_report_ids')))
@@ -78,7 +96,9 @@ BEGIN
        AND ((p_operation='route' AND o.occurrence_date IN (SELECT value::date FROM jsonb_array_elements_text(p_input->'dates')))
          OR (p_operation='route-linked' AND r.id IS NOT NULL AND EXISTS(
            SELECT 1 FROM public.enrollment_history_reports history
-           WHERE history.enrollment_id=(p_input->>'enrollment_id')::uuid AND history.linked_report_id=r.id
+           WHERE history.linked_report_id=r.id
+             AND (history.enrollment_id=(p_input->>'enrollment_id')::uuid
+               OR history.id::text IN (SELECT jsonb_array_elements_text(p_input->'linked_history_ids')))
              AND r.id::text IN (SELECT jsonb_array_elements_text(p_input->'linked_report_ids'))
          )))
        AND (p_operation='route-linked' OR public.history_occurrence_eligible((p_input->>'enrollment_id')::uuid,o.id)

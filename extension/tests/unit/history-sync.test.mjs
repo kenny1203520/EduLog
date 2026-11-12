@@ -160,6 +160,31 @@ test('a corrected linked occurrence needs explicit reconfirmation and cannot be 
  source.historyOccurrenceConfirmation=JSON.stringify({occurrence_id:'different-report-occurrence'})
  assert.equal(plan([source],[history],[moved,other])[0].issues[0].code,'linked-target-reconfirm')
 })
+test('a remapped enrollment can reconfirm only the original source-bound report',()=>{
+ const source=record({data:{lesson_id:'lesson-b',is_completed:false,progress_letter:'B',content:'same'},sourceFields:[{key:'lesson_id',label:'課次',type:'stage',value:'lesson:2',options:[]},{key:'content',label:'評語',type:'text',value:'same'}]})
+ const history={id:'saved-history',enrollment_id:'old-enrollment',report_date:'2026-10-04',source_admission_id:'301',source_key:'report:301:401',source_report_id:'401',linked_report_id:'bound-report',version:4,content:'same',is_completed:false,progress_letter:'B'}
+ const bound={id:'corrected-occurrence',class_session_id:'sunday-session',class_name:'週日班',occurrence_date:'2026-10-11',can_write:true,report:{id:'bound-report',version:6,source_report_id:'401',source_synced_version:6,source_synced_fields:{content:'same'},primary_lesson_entry_id:'entry-a',lesson_entries:[
+  {id:'entry-a',enrollment_id:'other-enrollment',course_id:'other-course',lesson_id:'lesson-a',is_completed:true,progress_letter:'C'},
+  {id:'entry-b',enrollment_id:'new-enrollment',course_id:'course',lesson_id:'lesson-b',is_completed:false,progress_letter:'B'}
+ ]}}
+ const decoy={...bound,id:'decoy-occurrence',report:{...bound.report,id:'decoy-report',source_report_id:'999'}}
+ const targets=new Map([['301',{id:'new-enrollment',courseId:'course',name:'測試學生'}]])
+ const archives=new Map([['new-enrollment',[history]]]),routes=new Map([['new-enrollment',[bound,decoy]]])
+ const settings={...options,lessons:[{id:'lesson-b',course_id:'course',sequence:2,title:'Lesson B'}]}
+ const [pending]=planHistory([source],targets,archives,routes,settings)
+ assert.equal(pending.category,'needs')
+ assert.equal(pending.issues[0].code,'linked-target-reconfirm')
+ assert.equal(pending.reconfirmationRequired,true)
+ assert.deepEqual(pending.candidates.map(candidate=>candidate.report.id),['bound-report'],'the picker exposes only the report already bound to this source')
+ assert.equal(pending.occurrence,undefined)
+ source.historyOccurrenceId='corrected-occurrence'
+ source.historyOccurrenceConfirmation=pending.targetConfirmationOptions['corrected-occurrence']
+ const [confirmed]=planHistory([source],targets,archives,routes,settings)
+ assert.equal(confirmed.category,'bind')
+ assert.equal(confirmed.occurrence.id,'corrected-occurrence')
+ assert.equal(confirmed.occurrence.report.id,'bound-report')
+ assert.equal(confirmed.reconfirmedTarget,true)
+})
 test('list/editor disagreements wait for explicit confirmation before course-report binding',()=>{
  const conflict={key:'content',label:'學習表現',listValue:'舊列表',editValue:'已儲存內容'}
  assert.equal(plan([record({sourceFieldConflicts:[conflict]})])[0].category,'needs')

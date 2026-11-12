@@ -59,11 +59,11 @@ describe('workspace API contract', () => {
     const body={enrollment_id:id,dates:['2026-10-03','2026-10-04'],limit:50}
     expect((await request(app).post('/api/extension/v1/history-reports/route').set('Authorization','Bearer test').send(body)).status).toBe(200)
     expect(rpc.mock.calls[0]![1]).toMatchObject({p_operation:'route',p_input:body})
-    const linked={enrollment_id:id,linked_report_ids:[id],limit:50}
+    const linked={enrollment_id:id,linked_report_ids:[id],linked_history_ids:[id],limit:50}
     expect((await request(app).post('/api/extension/v1/history-reports/route').set('Authorization','Bearer test').send(linked)).status).toBe(200)
     expect(rpc.mock.calls[1]![1]).toMatchObject({p_operation:'route-linked',p_input:linked})
     for(const invalid of [{...body,dates:Array(51).fill('2026-10-04')},{...body,dates:['2026-02-30']},{...body,user_id:id}])expect((await request(app).post('/api/extension/v1/history-reports/route').send(invalid)).status).toBe(400)
-    for(const invalid of [{enrollment_id:id},{...linked,linked_report_ids:Array(51).fill(id)},{...linked,linked_report_ids:[id,id]}])expect((await request(app).post('/api/extension/v1/history-reports/route').send(invalid)).status).toBe(400)
+    for(const invalid of [{enrollment_id:id},{...linked,linked_report_ids:Array(51).fill(id)},{...linked,linked_report_ids:[id,id]}, {...linked,linked_history_ids:Array(51).fill(id)},{...linked,linked_history_ids:[id,id]},{enrollment_id:id,linked_history_ids:[id]}])expect((await request(app).post('/api/extension/v1/history-reports/route').send(invalid)).status).toBe(400)
     const binding={key:id,class_occurrence_id:id,history_version:1,overwrite:['content'],include_internal:false,include_fields:['content','attendance_status']}
     expect((await request(app).post(`/api/extension/v1/history-reports/${id}/bind/preview`).set('Authorization','Bearer test').send(binding)).status).toBe(200)
     expect(rpc.mock.calls.at(-1)![1]).toMatchObject({p_operation:'bind-preview',p_input:{...binding,history_id:id}})

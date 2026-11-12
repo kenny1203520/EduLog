@@ -295,6 +295,20 @@ try {
   assert.equal(linkedRoutes.items[0].report.id, sharedReport)
   assert.ok(linkedRoutes.items[0].report.lesson_entry_labels.some(item => item.id === entryB && item.enrollment_id === enrollmentB && item.lesson_id === lessonB))
 
+  // When the source admission maps to another enrollment, recover the old
+  // binding through the permission-filtered student/source-admission list and
+  // route only its exact linked history row to the new target.
+  await db.query('UPDATE public.enrollment_history_reports SET enrollment_id=$1 WHERE id=$2',[e1,historyB])
+  const remappedArchive = await historyRpc('list', { student_id: student, source_admission_id: '6003' })
+  assert.equal(remappedArchive.items.length, 1)
+  assert.equal(remappedArchive.items[0].id, historyB); assert.equal(remappedArchive.items[0].enrollment_id, e1)
+  const remappedRoutes = await historyRpc('route-linked', { enrollment_id: enrollmentB, linked_report_ids: [sharedReport], linked_history_ids: [historyB] })
+  assert.equal(remappedRoutes.items.length, 1); assert.equal(remappedRoutes.items[0].report.id, sharedReport)
+  assert.equal(remappedRoutes.items[0].id, correctedOccurrence)
+  const wrongLinkedRows = await historyRpc('route-linked', { enrollment_id: enrollmentB, linked_report_ids: [sharedReport], linked_history_ids: [h(1)] })
+  assert.equal(wrongLinkedRows.items.length, 0, 'a different history row cannot authorize a report route')
+  await db.query('UPDATE public.enrollment_history_reports SET enrollment_id=$1 WHERE id=$2',[enrollmentB,historyB])
+
   lessonBatch++
   const staleBatch = { job_id: job.id, key: id(2200 + lessonBatch), fingerprint: String(lessonBatch % 10).repeat(64), rows: [lessonSyncRow(false, 'F', correctedOccurrence, true)] }
   const stalePreview = await rpc('preview', staleBatch)
