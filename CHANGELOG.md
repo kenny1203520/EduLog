@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0-alpha.7] - 2026-11-13
+
+### Added
+- A single report can record completed makeup progress and new lesson progress across multiple courses. Attendance and comments remain shared.
+
+### Changed
+- OAuth now uses the EduLog API bridge so Supabase Gateway can remain private. Password and refresh-token exchanges use per-request GoTrue clients.
+- Company history synchronization targets a confirmed lesson entry and preserves other progress.
+
+### Fixed
+- Class occurrence authorization applies the requested session scope, fixing calendar 403 responses for classroom-scoped teachers.
+- Reports can be atomically corrected to the occurrence where teaching happened while preserving report identity and history.
+- The About page links to EduLog GitHub Packages and image instructions.
+- Transactional email subjects and templates have been refreshed, with sender display-name configuration.
+
+### Security
+- Upgrade the API IP address parser and cover additional reserved IPv6 ranges.
+- Patch API HTTP client security advisories.
+
+### Tests
+- Add regression coverage for scoped occurrence authorization, isolated authentication sessions, private Supabase OAuth callback handling, multi-course reports, occurrence correction, and extension history synchronization.
+- Run Docker image health and boundary smoke checks in CI.
+
+### Deployment Notes
+- Publish matching frontend, API, and Presidio images tagged 2.0.0-alpha.7. Alpha images do not update stable aliases.
+- Back up the database, then apply all unapplied migrations in filename order through 1000171_extension_primary_lesson_sync.sql.
+- Migration 1000169 backfills legacy single-lesson reports into lesson entries. Keep a database backup; code that predates multi-lesson reports may not display secondary lesson progress.
+- This release does not deploy or migrate the existing production environment.
+- No pre-production environment was available. Verify OAuth provider round-trips, live refresh-token behavior, and configured email delivery before production deployment. Sender-domain SPF, DKIM and DMARC alignment and SMTP reputation affect delivery.
+
+### Release Notes
+- See .github/releases/v2.0.0-alpha.7.md for highlights, migration details, and verification evidence.
+
 ## [2.0.0-alpha.6] - 2026-11-10
 
 ### Added
@@ -50,8 +83,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Release Notes
 - See `.github/releases/v2.0.0-alpha.6.md` for highlights, security changes, migration details and verification evidence.
-
-## [Unreleased]
 
 ## [2.0.0-alpha.5] - 2026-11-09
 
