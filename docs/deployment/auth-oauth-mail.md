@@ -20,8 +20,18 @@ Accounts with the same verified email are linked by GoTrue.
 
 ## Email
 
-GoTrue sends invitation, password-reset, email-change and confirmation mail through `SMTP_*`. Its templates (Traditional Chinese and English) are served by the API at `http://api:3000/email-templates/<name>.html`; override the base with `EDULOG_MAIL_TEMPLATE_BASE_URL`. Their links open `/api/auth/confirm`, which starts the session on the server. `SITE_URL` must be the EduLog web address.
+GoTrue sends invitations, password resets, email changes and signup confirmations through `SMTP_*`. The sender name defaults to `EduLog`; `SMTP_ADMIN_EMAIL` must be an address authorized by the SMTP provider. The Traditional Chinese and English templates and subjects are served/configured by EduLog. By default, GoTrue fetches them from `http://api:3000/email-templates/<name>.html` on the private Docker network; `EDULOG_MAIL_TEMPLATE_BASE_URL` can point to another internal template server. Every authentication link goes through `/api/auth/confirm`, which consumes the one-time token on the server and creates an HttpOnly session cookie. `SITE_URL` must be the EduLog web address.
 
-The API uses the same `SMTP_*` settings to tell administrators when an account is waiting for approval (once per account). Without `SMTP_HOST` no mail is sent and the sidebar badge is the only notice.
+GoTrue falls back to its default subject and body if the configured template URL cannot be reached or the response is not a valid Go template. The default text “Reset your password” therefore indicates that the deployed GoTrue did not use the custom recovery subject/template; it does not indicate that Supabase cannot customize them. After changing the Compose configuration or template source, recreate both `auth` and `api`, then verify a staging reset email shows the EduLog subject and content. In the auth container, confirm `GOTRUE_MAILER_TEMPLATES_RECOVERY` resolves to the internal API URL and that the URL returns the EduLog recovery template. If it still falls back, inspect Auth logs for `templatemailer_template_body_http_error` or `templatemailer_template_body_parse_error`.
+
+The API uses the same SMTP settings to notify administrators when an account is waiting for approval (once per account). Without `SMTP_HOST` no API notice is sent; the sidebar badge remains available.
+
+The pinned `supabase/gotrue:v2.197.0` SMTP path supports one HTML body per Auth email and does not add a separate `text/plain` MIME part ([GoTrue SMTP client](https://github.com/supabase/auth/blob/v2.197.0/internal/mailer/mailmeclient/mailmeclient.go)). These templates keep their copy readable and include a visible URL fallback; the API's pending-account notice sends both text and HTML alternatives. If Auth mail must include a true plain-text alternative, Supabase's [Send Email Hook](https://supabase.com/docs/guides/auth/auth-hooks/send-email-hook) can hand the message to a custom sender that builds multipart mail. This deployment does not enable that hook.
+
+## Delivery and spam filtering
+
+Templates can make the message clear and low-noise, but copy alone cannot guarantee inbox placement. Use a production custom SMTP provider, verify the sending domain with SPF and DKIM, publish a DMARC policy, and keep the visible From address aligned with that domain. Keep authentication and marketing mail on separate sending domains or subdomains, disable open/click tracking for authentication links, and send at a steady rate. The messages intentionally use plain text-friendly wording, one primary action, no remote images, and no promotional content.
+
+Self-hosted Supabase supports URL-served custom Auth templates and custom SMTP. See the [self-hosted custom email template guide](https://supabase.com/docs/guides/self-hosting/custom-email-templates) and [custom SMTP and deliverability guidance](https://supabase.com/docs/guides/auth/auth-smtp).
 
 Development: `supabase/dev/docker-compose.dev.yml` runs a mail catcher at `supabase-mail:2500`.
