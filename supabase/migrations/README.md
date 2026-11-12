@@ -363,3 +363,13 @@ Before applying, compare the target database with this chain (for example `pg_du
 Restoring a snapshot created before `1000169` reconstructs one entry from the saved scalar lesson and the report enrollment. If that enrollment or lesson is no longer compatible, restoration is rejected rather than reusing progress from the current version. Changing an enrollment's student or course is blocked while it has lesson progress; deleting it is blocked while another report refers to it or while its report contains another enrollment's progress. These references must be migrated explicitly before changing or removing an enrollment.
 
 Run `supabase/tests/report_lifecycle_integration.sql` after applying the migration. It covers multi-course saves, per-enrollment progress recalculation, old-client scalar writes and clears, version snapshots for secondary-entry edits, and enrollment-reference protection.
+
+## Report occurrence correction (1000170)
+
+`1000170_report_occurrence_correction.sql` adds the authenticated `correct_occurrence_report` RPC used by `POST /api/reports/:reportId/correct-occurrence`. Apply the migration before deploying the server route. It does not rewrite existing rows.
+
+The RPC requires report-edit permission for both the source and target occurrences, the same teaching, and an effective target-roster enrollment for the same student. Supply `target_enrollment_id` when the target occurrence has multiple eligible enrollments and the current enrollment is not one of them. The operation moves the existing report row in one transaction, keeps its ID, version-snapshots the old state, preserves attendance, comments, all lesson entries and source-sync identity, then recalculates progress for the affected enrollments.
+
+An existing target report can be replaced only when it is still the untouched provisioned placeholder: version 1, not edited, empty of content/documents, lesson progress, ratings, comments, links or sync identity, pending attendance, and without a saved version or collaboration draft. Otherwise the RPC returns a conflict and rolls back without changing either report. Ordinary occurrence rescheduling continues to edit the occurrence date in place and leaves taught reports attached to that occurrence.
+
+Run `supabase/tests/report_occurrence_correction_integration.sql` after applying the migration. It covers same-class and cross-class correction, effective-roster selection, both edit grants, report identity and shared data preservation, target-placeholder rejection, enrollment history/progress, source-sync version drift, and ordinary rescheduling.
