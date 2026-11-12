@@ -208,7 +208,9 @@ BEGIN
   );
   IF NOT EXISTS (SELECT 1 FROM public.occurrence_reports WHERE id = 'fb000000-0000-4000-8000-000000000102' AND enrollment_id = 'f9000000-0000-4000-8000-000000000102' AND class_occurrence_id = 'fa000000-0000-4000-8000-000000000104' AND version = 2 AND source_synced_version = 1 AND source_report_id = '99113' AND content = 'cross-class source report' AND contact_notes = 'Cross parent note' AND class_notes = 'Cross internal note')
      OR EXISTS (SELECT 1 FROM public.occurrence_reports WHERE id = 'fb000000-0000-4000-8000-000000000104') THEN
-    RAISE EXCEPTION 'cross-class correction did not retain source identity or shared report data';
+    RAISE EXCEPTION 'cross-class correction did not retain source identity or shared report data: report %, placeholder exists %',
+      (SELECT to_jsonb(report) FROM public.occurrence_reports AS report WHERE report.id = 'fb000000-0000-4000-8000-000000000102'),
+      EXISTS (SELECT 1 FROM public.occurrence_reports WHERE id = 'fb000000-0000-4000-8000-000000000104');
   END IF;
   IF NOT EXISTS (SELECT 1 FROM public.occurrence_reports report WHERE report.id = 'fb000000-0000-4000-8000-000000000102' AND report.lesson_entries @> '[{"enrollment_id":"f9000000-0000-4000-8000-000000000101"}]'::jsonb)
      OR NOT EXISTS (SELECT 1 FROM public.occurrence_reports report WHERE report.id = 'fb000000-0000-4000-8000-000000000102' AND report.lesson_entries @> '[{"enrollment_id":"f9000000-0000-4000-8000-000000000102"}]'::jsonb) THEN
