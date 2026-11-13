@@ -70,6 +70,7 @@ const ConfigSchema = z.object({
   SUPABASE_REALTIME_URL: optional(z.url()),
   COOKIE_SECRET: z.string().min(32),
   COOKIE_SECURE: z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
+  AUTH_MANUAL_LINKING_ENABLED: z.enum(['true', 'false']).default('false').transform(value => value === 'true'),
   RATE_LIMIT_STORE: z.enum(['supabase', 'memory']).default('supabase'),
   // Express/`bytes` syntax (e.g. `1mb`, `512kb`); the frontend nginx accepts the same value.
   API_BODY_LIMIT: z.string().default('1mb'),

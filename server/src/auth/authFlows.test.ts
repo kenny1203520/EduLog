@@ -48,7 +48,7 @@ function app(statuses: Record<string, string>, mailer: Mailer = { enabled: true,
   instance.use(cookieParser())
   instance.use(express.json())
   instance.use(requestContext(pino({ level: 'silent' })))
-  instance.use('/api/auth/bridge/callback', createOAuthBridgeRouter(appConfig))
+  instance.use('/api/auth/bridge/callback', createOAuthBridgeRouter(appConfig, fake.clients))
   instance.use('/api/auth', csrfProtection, createAuthRouter(fake.clients, appConfig, mailer))
   instance.use(errorHandler)
   return { instance, ...fake, mailer }
@@ -84,10 +84,98 @@ describe('OAuth sign-in', () => {
     expect(response.body.data.providers).toEqual(['github', 'google'])
   })
 
-  it('offers no provider when GoTrue settings cannot be read', async () => {
+  it('distinguishes upstream failure from a valid empty provider list', async () => {
     stubGoTrue({ '/auth/v1/settings': () => json({}, 500) })
     const response = await request(app({}).instance).get('/api/auth/providers')
+    expect(response.status).toBe(503)
+    expect(response.body.error.code).toBe('OAUTH_PROVIDERS_UNAVAILABLE')
+  })
+
+  it('returns an empty list when GoTrue reports that every provider is disabled', async () => {
+    stubGoTrue({ '/auth/v1/settings': () => json({ external: { github: false, email: true } }) })
+    const response = await request(app({}).instance).get('/api/auth/providers')
+    expect(response.status).toBe(200)
     expect(response.body.data.providers).toEqual([])
+  })
+
+  it('does not forward a manual-link callback without the originating browser flow', async () => {
+    const state = crypto.randomUUID()
+    const user = crypto.randomUUID()
+    const fixture = app({ [user]: 'active' }, undefined, testConfig({ AUTH_MANUAL_LINKING_ENABLED: 'true', GOTRUE_INTERNAL_URL: 'http://auth:9999' }))
+    fixture.rpc.mockResolvedValueOnce({ data: [{ state, user_id: user, provider: 'github' }] as never, error: null })
+    const fetchMock = stubGoTrue({})
+    const response = await request(fixture.instance).get('/api/auth/bridge/callback').query({ state, code: 'test-code' })
+    expect(response.status).toBe(400)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('binds a manual-link callback to its initiating account without replacing the session', async () => {
+    const state = crypto.randomUUID()
+    const user = crypto.randomUUID()
+    const appConfig = testConfig({ AUTH_MANUAL_LINKING_ENABLED: 'true', GOTRUE_INTERNAL_URL: 'http://auth:9999' })
+    const fixture = app({ [user]: 'active' }, undefined, appConfig)
+    const flow = [{ state, user_id: user, provider: 'github' }]
+    fixture.rpc.mockImplementation(async name => ({ data: name === 'get_oauth_link_flow' ? flow : null, error: null }) as never)
+    const callback = new URL('/api/auth/identities/callback?code=final-code', appConfig.EDULOG_WEB_BASE_URL)
+    const upstream = stubGoTrue({
+      '/auth/v1/settings': () => json({ external: { github: true } }),
+      '/user/identities/authorize': () => json({ url: `https://github.com/login/oauth/authorize?state=${state}` }),
+      '/callback': () => new Response(null, { status: 302, headers: { location: callback.href } }),
+      '/auth/v1/token?grant_type=pkce': () => json(session(user)),
+    })
+    const browser = request.agent(fixture.instance)
+    const credentials = `edulog_access=token-${user}; edulog_csrf=test-csrf`
+    const started = await browser.post('/api/auth/me/identities/link').set('Cookie', credentials)
+      .set('X-CSRF-Token', 'test-csrf').send({ provider: 'github' })
+    expect(started.status).toBe(200)
+    const bridged = await browser.get('/api/auth/bridge/callback').set('Cookie', credentials).query({ state, code: 'test-code' })
+    expect(bridged.headers.location).toBe(callback.href)
+    const done = await browser.get(callback.pathname + callback.search).set('Cookie', credentials)
+    expect(done.headers.location).toContain('identity=linked')
+    expect(String(done.headers['set-cookie'])).not.toContain('edulog_access=')
+    await browser.get(callback.pathname + callback.search).set('Cookie', credentials).expect(303)
+    expect(upstream.mock.calls.filter(([url]) => String(url).includes('grant_type=pkce'))).toHaveLength(1)
+  })
+
+  it('rejects unlinking when the current verified email identity would not remain', async () => {
+    const user = crypto.randomUUID()
+    const identity = crypto.randomUUID()
+    const fixture = app({ [user]: 'active' }, undefined, testConfig({ AUTH_MANUAL_LINKING_ENABLED: 'true' }))
+    const upstream = stubGoTrue({ '/auth/v1/user': () => json({
+      id: user, email: 'user@example.test', email_confirmed_at: new Date().toISOString(),
+      identities: [{ identity_id: identity, provider: 'github' }],
+    }) })
+    const response = await request(fixture.instance).post(`/api/auth/me/identities/${identity}/unlink`)
+      .set('Cookie', [`edulog_access=token-${user}`, 'edulog_csrf=test-csrf'])
+      .set('X-CSRF-Token', 'test-csrf').send({ current_password: 'test-password' })
+    expect(response.status).toBe(422)
+    expect(response.body.error.code).toBe('OAUTH_BACKUP_LOGIN_REQUIRED')
+    expect(upstream).toHaveBeenCalledTimes(1)
+  })
+
+  it('removes only the requested OAuth identity after password verification for the same account', async () => {
+    const user = crypto.randomUUID()
+    const identity = crypto.randomUUID()
+    const fixture = app({ [user]: 'active' }, undefined, testConfig({ AUTH_MANUAL_LINKING_ENABLED: 'true' }))
+    let passwordMatches = false
+    const upstream = stubGoTrue({
+      '/auth/v1/user/identities/': () => json({}),
+      '/auth/v1/user': () => json({
+        id: user, email: 'user@example.test', email_confirmed_at: new Date().toISOString(),
+        identities: [{ identity_id: identity, provider: 'github' }, { identity_id: crypto.randomUUID(), provider: 'email', identity_data: { email: 'user@example.test' } }],
+      }),
+      '/auth/v1/token?grant_type=password': () => json(session(passwordMatches ? user : crypto.randomUUID())),
+    })
+    const unlink = () => request(fixture.instance).post(`/api/auth/me/identities/${identity}/unlink`)
+      .set('Cookie', [`edulog_access=token-${user}`, 'edulog_csrf=test-csrf'])
+      .set('X-CSRF-Token', 'test-csrf').send({ current_password: 'test-password' })
+    const wrong = await unlink()
+    expect(wrong.status).toBe(403)
+    expect(upstream.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false)
+    passwordMatches = true
+    const success = await unlink()
+    expect(success.status).toBe(200)
+    expect(upstream.mock.calls.filter(([url, init]) => String(url).endsWith(`/user/identities/${identity}`) && init?.method === 'DELETE')).toHaveLength(1)
   })
 
   it('starts OAuth through private GoTrue with a PKCE challenge in an httpOnly cookie', async () => {

@@ -82,6 +82,8 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
     const isQuickAttendanceExpanded = ref(true)
     const isOccurrenceLoading = ref(false)
     const occurrenceLoadError = ref<string | null>(null)
+    const reportLoadFailed = ref(false)
+    const progressSummaryFailed = ref(false)
     const previousOccurrence = ref<ClassOccurrence | null>(null)
     const nextOccurrence = ref<ClassOccurrence | null>(null)
     const loading = ref(true)
@@ -318,6 +320,11 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
         isOccurrenceLoading.value = true
         occurrenceLoadError.value = null
         todayOccurrence.value = occurrence
+        reportLoadFailed.value = false
+        progressSummaryFailed.value = false
+        reportLoadRequest++
+        reportMap.value = new Map()
+        progress.clearStudentProgress()
 
         try {
             if (!occurrence?.occurrenceDate) {
@@ -348,19 +355,11 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
             previousOccurrence.value = navigation.previous
             nextOccurrence.value = navigation.next
 
+            isOccurrenceLoading.value = false
             await Promise.all([
-                loadReportsForCurrentOccurrence().catch(error => {
-                    // Placeholder report creation is best-effort. If the scoped
-                    // INSERT policy is not deployed yet, keep the class workspace
-                    // usable and allow existing reports to be opened.
-                    if (isReportAuthorizationError(error)) {
-                        console.warn('Report data provisioning is not authorized; continuing with existing reports.')
-                        return
-                    }
-                    throw error
-                }),
+                retryOccurrenceReports(),
                 loadOccurrenceTeachers(),
-                loadStudentProgressSummaries(enrollments.value, 'replace', occurrence.occurrenceDate),
+                retryProgressSummary(),
                 loadStudentProgressGaps(enrollments.value, occurrence)
             ])
         } catch (error) {
@@ -371,6 +370,33 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
             throw error
         } finally {
             if (loadToken === occurrenceLoadToken) isOccurrenceLoading.value = false
+        }
+    }
+
+    async function retryOccurrenceReports() {
+        const token = occurrenceLoadToken
+        try {
+            await loadReportsForCurrentOccurrence()
+            if (token === occurrenceLoadToken) reportLoadFailed.value = false
+        } catch (error) {
+            if (token !== occurrenceLoadToken) return
+            reportLoadFailed.value = true
+            try { await loadReportsForCurrentOccurrence({ createMissing: false }) }
+            catch (readError) { console.error('Failed to read existing class reports:', readError) }
+        }
+    }
+
+    async function retryProgressSummary() {
+        const occurrence = todayOccurrence.value
+        if (!occurrence) return
+        const token = occurrenceLoadToken
+        try {
+            await loadStudentProgressSummaries(enrollments.value, 'replace', occurrence.occurrenceDate)
+            if (token === occurrenceLoadToken) progressSummaryFailed.value = false
+        } catch (error) {
+            if (token !== occurrenceLoadToken) return
+            progressSummaryFailed.value = true
+            console.error('Failed to load class progress summary:', error)
         }
     }
 
@@ -538,7 +564,9 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
             if (initialOccurrence?.occurrenceDate) {
                 selectedDateKey.value = DateUtils.formatLocalDate(initialOccurrence.occurrenceDate)
             }
-            await setCurrentOccurrence(initialOccurrence)
+            const initialLoad = setCurrentOccurrence(initialOccurrence)
+            loading.value = false
+            await initialLoad
             if (initialOccurrence?.occurrenceDate) {
                 selectedDateKey.value = DateUtils.formatLocalDate(initialOccurrence.occurrenceDate)
             } else {
@@ -808,12 +836,12 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
             todayProgress: today.chapterProgress,
             todayCompletion: today.completionStatus,
             todayTone: today.tone,
-            highestTitle: summary.highestProgressTitle,
-            highestStatus: summary.highestProgressStatus,
-            highestTone: summary.highestProgressTone,
-            latestTitle: summary.latestProgressTitle,
-            latestStatus: summary.latestProgressStatus,
-            latestTone: summary.latestProgressTone,
+            highestTitle: progressSummaryFailed.value ? '—' : summary.highestProgressTitle,
+            highestStatus: progressSummaryFailed.value ? '' : summary.highestProgressStatus,
+            highestTone: progressSummaryFailed.value ? 'empty' : summary.highestProgressTone,
+            latestTitle: progressSummaryFailed.value ? '—' : summary.latestProgressTitle,
+            latestStatus: progressSummaryFailed.value ? '' : summary.latestProgressStatus,
+            latestTone: progressSummaryFailed.value ? 'empty' : summary.latestProgressTone,
             isEditing: selectedEnrollmentId.value === enrollment.id && showSplitView.value,
             reportAvailable: reportMap.value.has(enrollment.id!),
             progressGaps: progress.studentProgressGaps.value[enrollment.id!] || []
@@ -895,6 +923,10 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
         isQuickAttendanceExpanded,
         isOccurrenceLoading,
         occurrenceLoadError,
+        reportLoadFailed,
+        retryOccurrenceReports,
+        progressSummaryFailed,
+        retryProgressSummary,
         previousOccurrence,
         nextOccurrence,
         loading,

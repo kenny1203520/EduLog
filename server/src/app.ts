@@ -76,7 +76,7 @@ export function createApp(config: ApiConfig, clients: SupabaseClients = createSu
     if (!isEmailTemplateName(name)) return res.status(404).end()
     res.type('html').send(EMAIL_TEMPLATES[name])
   })
-  app.use('/api/auth/bridge/callback', rateLimitMiddleware(config, clients.adminClient), createOAuthBridgeRouter(config))
+  app.use('/api/auth/bridge/callback', rateLimitMiddleware(config, clients.adminClient), createOAuthBridgeRouter(config, clients))
   app.use('/api/auth', csrfProtection, rateLimitMiddleware(config, clients.adminClient), createAuthRouter(clients, config))
   app.use('/api/extension', rateLimitMiddleware(config, clients.adminClient), createExtensionIntegrationRouter(clients, config))
   const protectedApi = Router()

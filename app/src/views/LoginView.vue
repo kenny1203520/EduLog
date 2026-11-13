@@ -17,6 +17,15 @@ const password = ref('')
 const errorMsg = ref('')
 /** OAuth providers GoTrue has enabled; each is a full-page link to the API. */
 const providers = ref<string[]>([])
+const providerError = ref(false)
+const providersLoading = ref(false)
+async function loadProviders() {
+    providersLoading.value = true
+    providerError.value = false
+    try { providers.value = await authService.oauthProviders() }
+    catch { providerError.value = true }
+    finally { providersLoading.value = false }
+}
 const loading = ref(false)
 const isOnline = ref(typeof navigator === 'undefined' ? true : navigator.onLine)
 function onOnline() { isOnline.value = true }
@@ -32,7 +41,7 @@ onMounted(() => {
     // A failed OAuth sign-in or an expired email link comes back here.
     if (route.query.error === 'oauth') errorMsg.value = t('auth.error_oauth')
     else if (route.query.error === 'link') errorMsg.value = t('auth.error_link')
-    void authService.oauthProviders().then((list) => { providers.value = list })
+    void loadProviders()
 })
 onUnmounted(() => {
     window.removeEventListener('online', onOnline)
@@ -148,6 +157,8 @@ async function handleLogin() {
                 </button>
             </form>
 
+            <p role="status" class="mt-4 text-sm text-slate-700">{{ providerError ? $t('auth.providers_unavailable') : '' }}</p>
+            <button v-if="providerError" type="button" :disabled="providersLoading" class="mt-2 rounded-lg px-3 py-2 font-semibold text-emerald-800 focus-visible:ring-2" @click="loadProviders">{{ $t('auth.retry_providers') }}</button>
             <div v-if="providers.length" class="mt-8 w-full" data-testid="oauth-providers">
                 <div class="mb-4 flex items-center gap-3 text-xs font-bold text-gray-400" aria-hidden="true">
                     <span class="h-px flex-1 bg-gray-200"></span>{{ $t('auth.or_continue_with') }}<span class="h-px flex-1 bg-gray-200"></span>

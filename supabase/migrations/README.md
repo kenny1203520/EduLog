@@ -378,6 +378,14 @@ Run `supabase/tests/report_occurrence_correction_integration.sql` after applying
 
 `1000171_extension_primary_lesson_sync.sql` extends extension history routing to read only reports already linked to the mapped enrollment, including reports moved by occurrence correction. Ordinary routing can resolve an existing same-student, same-teaching multi-lesson report and marks ambiguous report choices read-only. The report preview includes labels for lesson entries the caller may read.
 
+## Scoped class reports and OAuth identity linking (1000172–1000173)
+
+Apply these before updating the API. `1000172` adds the class-scoped completion,
+report provisioning and holiday-check RPCs, and an index for JSONB lesson entries.
+`1000173` adds a service-role-only lookup of GoTrue's manual OAuth link flow;
+GoTrue must have initialized its Auth schema first. See the
+[OAuth deployment guide](../../docs/deployment/auth-oauth-mail.md) for callback and provider configuration.
+
 The atomic history reconciliation now accepts an exact report ID, an explicit correction reconfirmation flag, and the target enrollment/course/lesson entry identity. It updates shared attendance/comments at report level while applying lesson progress only to that entry. Existing entry IDs and all other entries are preserved; stale target entry identities and attempts to change a linked source report are rejected. The primary entry remains unchanged unless the report has no primary entry yet.
 
 Apply this migration before deploying the extension and API changes. Run the extension history planner/workbench tests, `server/src/routes/extension/extensionWorkspaceRouter.test.ts`, `supabase/tests/migration_chain_static_test.ts`, and the source-report identity database integration suite after applying the migration.

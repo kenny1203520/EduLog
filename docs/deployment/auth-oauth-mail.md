@@ -16,6 +16,21 @@ EduLog signs people in through the API (cookie sessions); the browser never hold
 3. Keep `${EDULOG_WEB_BASE_URL}/api/auth/oauth/callback` in `ADDITIONAL_REDIRECT_URLS`; GoTrue returns its PKCE code there after the bridge processes the provider callback. The API uses `EDULOG_GOTRUE_INTERNAL_URL` (default `http://auth:9999`) for direct, server-only `/authorize` and `/callback` requests. `SUPABASE_PUBLIC_URL` is not needed for OAuth, and `API_EXTERNAL_URL` / `GOTRUE_JWT_ISSUER` must remain unchanged.
 4. Restart `auth` and `api`. The login page lists every provider GoTrue reports as enabled (`/auth/v1/settings`). EduLog's bundled nginx proxies disable access logging on the callback path; if a separate public ingress sits in front, redact query strings on `/api/auth/bridge/callback` because providers may include authorization codes there.
 
+For manual linking in Personal settings → Account security, apply migrations through
+`1000173` after GoTrue has migrated its Auth schema. Set
+`EDULOG_AUTH_MANUAL_LINKING_ENABLED=true` for both containers, add
+`${EDULOG_WEB_BASE_URL}/api/auth/identities/callback` to
+`ADDITIONAL_REDIRECT_URLS`, and recreate the containers. Redact query strings on
+both API OAuth callbacks as well as the bridge. Keep HTTPS and secure cookies
+enabled (providers that return a cross-site form POST need the secure flow cookie).
+An empty successful provider list means GoTrue reported no enabled social provider;
+a 503 means EduLog could not retrieve the settings. Verify the effective enabled
+provider names and whether credentials are present without printing their values.
+Before rollout, sign in and link with every configured provider on staging, unlink
+with a verified password account, and sign back in with that password. Confirm
+that cancellation preserves the original session and no callback credentials
+appear in access logs.
+
 Accounts with the same verified email are linked by GoTrue.
 
 ## Email

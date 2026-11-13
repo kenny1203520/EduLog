@@ -183,6 +183,11 @@ async function remove(req: Request, res: Response) {
 
 async function check(req: Request, res: Response) {
   const input = z.object({ date, classroom_id: z.string().uuid().optional(), class_session_id: z.string().uuid().optional(), teacher_id: z.string().uuid().optional() }).strict().parse(req.query)
+  if (input.class_session_id) {
+    const result = await req.db!.rpc('check_class_holiday', { p_session_id: input.class_session_id, p_date: input.date, p_teacher_id: input.teacher_id ?? null })
+    if (result.error) throw mapDatabaseError(result.error)
+    return res.json({ data: { matched: result.data === true }, meta: {}, request_id: req.requestId, trace_id: req.traceId })
+  }
   await permission(req, 'list', { classroom_ids: input.classroom_id ? [input.classroom_id] : [], class_session_ids: input.class_session_id ? [input.class_session_id] : [] })
   let query = req.db!.from('holidays').select(fields).lte('start_date', input.date).gte('end_date', input.date)
   if (input.teacher_id) query = query.eq('kind', 'teacher_leave').contains('teacher_ids', [input.teacher_id])

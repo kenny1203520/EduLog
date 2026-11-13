@@ -14,6 +14,14 @@ $$;
 ALTER ROLE service_role BYPASSRLS;
 
 CREATE SCHEMA IF NOT EXISTS auth;
+-- GoTrue owns this table in deployments; the SQL-only runner needs its lookup shape.
+CREATE TABLE IF NOT EXISTS auth.flow_state (
+  id uuid PRIMARY KEY,
+  linking_target_id uuid,
+  provider_type text NOT NULL,
+  code_challenge text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
 CREATE TABLE IF NOT EXISTS auth.users (
   id uuid PRIMARY KEY,
   email text UNIQUE,
@@ -22,10 +30,12 @@ CREATE TABLE IF NOT EXISTS auth.users (
   updated_at timestamptz NOT NULL DEFAULT timezone('utc'::text, now())
 );
 CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$
-  SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid;
+  SELECT COALESCE(NULLIF(current_setting('request.jwt.claim.sub', true), ''),
+    NULLIF(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub')::uuid;
 $$;
 CREATE OR REPLACE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS $$
-  SELECT COALESCE(NULLIF(current_setting('request.jwt.claim.role', true), ''), current_user);
+  SELECT COALESCE(NULLIF(current_setting('request.jwt.claim.role', true), ''),
+    NULLIF(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role', current_user);
 $$;
 
 CREATE SCHEMA IF NOT EXISTS realtime;

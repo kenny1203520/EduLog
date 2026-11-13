@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
 import type { ApiConfig } from '../config/config.js'
+import { ApiError } from '../http/errors.js'
 
 /**
  * GoTrue calls the API makes on the browser's behalf. They use plain HTTP
@@ -31,6 +32,7 @@ async function call<T>(config: GoTrueConfig, path: string, init: RequestInit = {
     ...init,
     headers: { apikey: config.SUPABASE_ANON_KEY, 'content-type': 'application/json', ...(init.headers ?? {}) },
     signal: init.signal ?? AbortSignal.timeout(10_000),
+    redirect: init.redirect ?? 'error',
   })
   if (!response.ok) {
     const error = new Error('GOTRUE_REQUEST_FAILED') as Error & { status?: number }
@@ -48,7 +50,8 @@ export async function enabledOAuthProviders(config: GoTrueConfig, now = Date.now
   if (providerCache && now - providerCache.at < PROVIDER_CACHE_MS) return providerCache.providers
   try {
     const settings = await call<{ external?: Record<string, unknown> }>(config, '/settings')
-    const providers = Object.entries(settings?.external ?? {})
+    if (!settings?.external || typeof settings.external !== 'object' || Array.isArray(settings.external)) throw new Error('INVALID_GOTRUE_SETTINGS')
+    const providers = Object.entries(settings.external)
       .filter(([name, enabled]) => enabled === true && !NON_OAUTH.has(name) && PROVIDER_PATTERN.test(name))
       .map(([name]) => name)
       .sort((a, b) => a.localeCompare(b))
@@ -56,7 +59,7 @@ export async function enabledOAuthProviders(config: GoTrueConfig, now = Date.now
     return providers
   } catch {
     // Never cache a failure: the next page load tries again.
-    return []
+    throw new ApiError(503, 'OAUTH_PROVIDERS_UNAVAILABLE', 'Third-party sign-in options are temporarily unavailable', undefined, 1)
   }
 }
 
@@ -77,7 +80,7 @@ function oauthAuthUrl(config: GoTrueConfig, path: string) {
   return `${withoutTrailingSlashes(config.GOTRUE_INTERNAL_URL)}${path}`
 }
 
-function validProviderAuthorizeLocation(value: string, config: GoTrueConfig) {
+export function validProviderAuthorizeLocation(value: string, config: GoTrueConfig) {
   try {
     const url = new URL(value)
     const localHosts = new Set(['localhost', '127.0.0.1', '[::1]'])
@@ -128,6 +131,30 @@ export function forwardOAuthCallback(config: GoTrueConfig, method: 'GET' | 'POST
 export function exchangeAuthCode(config: GoTrueConfig, authCode: string, codeVerifier: string) {
   return call<GoTrueSession>(config, '/token?grant_type=pkce', {
     method: 'POST', body: JSON.stringify({ auth_code: authCode, code_verifier: codeVerifier }),
+  })
+}
+
+export async function startIdentityLink(config: GoTrueConfig, token: string, provider: string, redirectTo: string, challenge: string) {
+  const url = new URL(oauthAuthUrl(config, '/user/identities/authorize'))
+  url.search = new URLSearchParams({ provider, redirect_to: redirectTo, code_challenge: challenge, code_challenge_method: 's256', skip_http_redirect: 'true' }).toString()
+  const response = await fetch(url, {
+    headers: { apikey: config.SUPABASE_ANON_KEY, authorization: `Bearer ${token}` },
+    redirect: 'error', signal: AbortSignal.timeout(10_000),
+  })
+  if (!response.ok) throw new ApiError(503, 'OAUTH_LINK_UNAVAILABLE', 'Third-party account linking is unavailable')
+  const data = await response.json() as { url?: string }
+  if (typeof data.url !== 'string' || !validProviderAuthorizeLocation(data.url, config)) throw new ApiError(502, 'OAUTH_LINK_UNAVAILABLE', 'Third-party account linking is unavailable')
+  return data.url
+}
+
+export function readIdentityUser(config: GoTrueConfig, token: string) {
+  return call<{ id: string; email?: string; email_confirmed_at?: string; identities?: Array<{ identity_id: string; provider: string; identity_data?: { email?: string } }> }>(
+    config, '/user', { headers: { authorization: `Bearer ${token}` }, redirect: 'error' })
+}
+
+export function deleteIdentity(config: GoTrueConfig, token: string, id: string) {
+  return call(config, `/user/identities/${encodeURIComponent(id)}`, {
+    method: 'DELETE', headers: { authorization: `Bearer ${token}` }, redirect: 'error',
   })
 }
 

@@ -83,6 +83,26 @@ SELECT set_config('request.jwt.claim.role', 'authenticated', true);
 -- Session-only teacher (class roster grant in session one).
 SELECT set_config('request.jwt.claim.sub', '15800000-0000-4000-8000-000000000002', true);
 DO $$
+DECLARE s uuid := '15800000-0000-4000-8000-0000000000e1';
+BEGIN
+  IF (SELECT total FROM public.get_class_report_completion(s, CURRENT_DATE - 7, CURRENT_DATE)) <> 1 THEN
+    RAISE EXCEPTION 'class-scoped completion should count the existing report';
+  END IF;
+  IF NOT public.check_class_holiday(s, CURRENT_DATE + 10) THEN
+    RAISE EXCEPTION 'class-scoped teacher should see the platform holiday flag';
+  END IF;
+  IF (SELECT count(*) FROM public.provision_class_reports('15800000-0000-4000-8000-000000000011')) <> 1
+    OR EXISTS (SELECT 1 FROM public.provision_class_reports('15800000-0000-4000-8000-000000000011') WHERE provisioned) THEN
+    RAISE EXCEPTION 'repeat provisioning must retain the roster and not duplicate existing reports';
+  END IF;
+  BEGIN
+    PERFORM public.get_class_report_completion('15800000-0000-4000-8000-0000000000e2', CURRENT_DATE - 7, CURRENT_DATE);
+    RAISE EXCEPTION 'out-of-scope report completion was allowed';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END;
+$$;
+DO $$
 DECLARE v jsonb; v_ids uuid[];
 BEGIN
   IF NOT public.has_active_teaching_role(auth.uid()) THEN
