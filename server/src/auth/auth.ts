@@ -7,6 +7,8 @@ import { assertUserActive, clearAccessTokenValidation, createAuthenticatedUserCl
 import type { ApiConfig } from '../config/config.js'
 import { measureRequestPhase, setAuditContext } from '../http/context.js'
 import { createPkcePair, enabledOAuthProviders, exchangeAuthCode, isValidProviderName, requestPasswordRecovery, startOAuthAuthorization, verifyEmailLink, type EmailLinkType, type GoTrueSession } from './gotrue.js'
+import { deleteIdentity, readIdentityUser, startIdentityLink } from './gotrue.js'
+import { clearIdentityFlow, identityCallback, identityReturn, readIdentityFlow, setIdentityFlow } from './identityFlow.js'
 import { createMailer, notifyPendingAccount, type Mailer } from '../mail/mailer.js'
 
 const accessCookie = 'edulog_access'
@@ -126,6 +128,7 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
     if (!userId) throw new Error('AUTH_INVALID')
     const status = await assertUserActive(clients.adminClient, userId, { allowPending: true })
     setSession(res, config, session)
+    clearIdentityFlow(res)
     if (status === 'pending') void notifyPendingAccount(clients.adminClient, mailer, config.EDULOG_WEB_BASE_URL, userId, req.log)
     return status
   }
@@ -134,9 +137,82 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
     return error instanceof Error && error.message === 'AUTH_DISABLED' ? '/account-disabled' : fallback
   }
 
-  /** OAuth providers enabled in GoTrue; none unless the browser can reach GoTrue. */
+  /** OAuth providers reported by GoTrue; outages are retryable. */
   router.get('/providers', async (req, res) => {
     res.json({ data: { providers: await providers() }, meta: {}, request_id: req.requestId, trace_id: req.traceId })
+  })
+  const activeAccount = requireAuth(clients, config)
+  const identityResult = (req: Request, res: Response, data: unknown) => {
+    res.setHeader('Cache-Control', 'no-store')
+    return res.json({ data, meta: {}, request_id: req.requestId, trace_id: req.traceId })
+  }
+  function requireIdentityManagement() {
+    if (!config.AUTH_MANUAL_LINKING_ENABLED) throw new ApiError(403, 'OAUTH_LINK_DISABLED', 'Third-party account linking is disabled')
+  }
+  router.get('/me/identities', activeAccount, async (req, res) => {
+    const user = await readIdentityUser(config, req.accessToken!)
+    if (user.id !== req.user!.id) throw new ApiError(403, 'PERMISSION_DENIED', 'The account does not match')
+    const providers = await enabledOAuthProviders(config)
+    return identityResult(req, res, {
+      identities: (user.identities ?? []).filter(item => isValidProviderName(item.provider))
+        .map(item => ({ id: item.identity_id, provider: item.provider })),
+      providers,
+      manual_linking: config.AUTH_MANUAL_LINKING_ENABLED,
+    })
+  })
+  router.post('/me/identities/link', activeAccount, rateLimit(oauthRateLimitOptions), async (req, res) => {
+    requireIdentityManagement()
+    const { provider } = z.object({ provider: z.string().max(41) }).strict().parse(req.body)
+    if (!isValidProviderName(provider) || !(await providers()).includes(provider)) throw new ApiError(422, 'OAUTH_PROVIDER_DISABLED', 'The provider is unavailable')
+    if (!req.cookies?.[accessCookie]) throw new ApiError(401, 'AUTH_REQUIRED', 'A browser session is required')
+    const { verifier, challenge } = createPkcePair()
+    const url = await startIdentityLink(config, req.accessToken!, provider, new URL(identityCallback, config.EDULOG_WEB_BASE_URL).toString(), challenge)
+    const { data, error } = await clients.adminClient.rpc('get_oauth_link_flow', { p_challenge: challenge })
+    const flow = data?.[0]
+    if (error || flow?.user_id !== req.user!.id || flow?.provider !== provider) throw new ApiError(503, 'OAUTH_LINK_UNAVAILABLE', 'Third-party account linking is unavailable')
+    setIdentityFlow(res, config, { state: flow.state, userId: req.user!.id, provider, verifier })
+    return identityResult(req, res, { url })
+  })
+  router.get('/identities/callback', activeAccount, rateLimit(oauthRateLimitOptions), async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store')
+    res.setHeader('Referrer-Policy', 'no-referrer')
+    const flow = readIdentityFlow(req, config)
+    clearIdentityFlow(res)
+    const code = typeof req.query.code === 'string' ? req.query.code : ''
+    let linked = false
+    if (config.AUTH_MANUAL_LINKING_ENABLED && flow && flow.userId === req.user!.id && code) {
+      try {
+        const session = await exchangeAuthCode(config, code, flow.verifier)
+        linked = session.user?.id === req.user!.id
+        // The PKCE exchange creates a separate GoTrue session. Keep the
+        // browser's original session and revoke the unused one.
+        await clients.adminClient.auth.admin.signOut(session.access_token, 'local').catch(() => undefined)
+      } catch { /* Keep the original session and show a recoverable error. */ }
+    }
+    return res.redirect(303, `${identityReturn}&identity=${linked ? 'linked' : 'error'}#security`)
+  })
+  router.post('/me/identities/:id/unlink', activeAccount, rateLimit(oauthRateLimitOptions), async (req, res) => {
+    requireIdentityManagement()
+    const id = z.string().uuid().parse(req.params.id)
+    const { current_password } = z.object({ current_password: z.string().min(1).max(1024) }).strict().parse(req.body)
+    const user = await readIdentityUser(config, req.accessToken!)
+    const identities = user.identities ?? []
+    const target = identities.find(item => item.identity_id === id && isValidProviderName(item.provider))
+    if (user.id !== req.user!.id || !target) throw new ApiError(404, 'NOT_FOUND', 'The linked identity was not found')
+    if (!user.email_confirmed_at || !user.email || !identities.some(item => item.provider === 'email' && item.identity_data?.email === user.email)) {
+      throw new ApiError(422, 'OAUTH_BACKUP_LOGIN_REQUIRED', 'A verified email sign-in must remain available')
+    }
+    const verified = await verifyCurrentPassword(config, user.email, current_password)
+    if (verified?.user.id !== user.id) throw new ApiError(403, 'CURRENT_PASSWORD_INVALID', 'The current password is incorrect')
+    try {
+      await deleteIdentity(config, req.accessToken!, id)
+    } catch {
+      throw new ApiError(422, 'OAUTH_UNLINK_FAILED', 'The identity could not be removed')
+    } finally {
+      await clients.adminClient.auth.admin.signOut(verified.access_token, 'local').catch(() => undefined)
+    }
+    setAuditContext(req, { domain: 'system', resource: 'account-security', resourceId: user.id, action: 'identity-unlink' })
+    return identityResult(req, res, { removed: true })
   })
   router.get('/oauth/callback', rateLimit(oauthRateLimitOptions), async (req, res) => {
     res.setHeader('Cache-Control', 'no-store')
@@ -157,7 +233,10 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
     res.setHeader('Cache-Control', 'no-store')
     res.setHeader('Referrer-Policy', 'no-referrer')
     const provider = typeof req.params.provider === 'string' ? req.params.provider : ''
-    if (!isValidProviderName(provider) || !(await providers()).includes(provider)) return res.redirect(303, '/login?error=oauth')
+    if (!isValidProviderName(provider)) return res.redirect(303, '/login?error=oauth')
+    try {
+      if (!(await providers()).includes(provider)) return res.redirect(303, '/login?error=oauth')
+    } catch { return res.redirect(303, '/login?error=oauth') }
     const { verifier, challenge } = createPkcePair()
     res.cookie(oauthCookie, verifier, { httpOnly: true, secure: config.COOKIE_SECURE, sameSite: 'lax', path: oauthCookiePath, maxAge: 10 * 60 * 1000 })
     try {
@@ -216,6 +295,7 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
     } catch (error) { next(error) }
   })
   router.post('/login', async (req, res, next) => {
+    clearIdentityFlow(res)
     try {
       const input = credentialsSchema.parse(req.body)
       const result = await signIn(config, input.email, input.password)
@@ -239,6 +319,7 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
     } catch (error) { next(error instanceof ApiError ? error : new ApiError(401, 'AUTH_INVALID', 'Authentication is invalid')) }
   })
   router.post('/logout', async (req, res, next) => {
+    clearIdentityFlow(res)
     try {
       const token = req.cookies?.[accessCookie]
       if (token) await clients.adminClient.auth.admin.signOut(token).catch(() => undefined)

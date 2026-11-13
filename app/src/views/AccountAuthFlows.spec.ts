@@ -70,6 +70,22 @@ describe('LoginView sign-in options', () => {
         expect(wrapper.find('[data-testid="oauth-providers"]').exists()).toBe(false)
         expect(wrapper.text()).toContain('第三方登入未完成')
     })
+
+    it('keeps password sign-in available and reloads only OAuth providers after an outage', async () => {
+        service.oauthProviders.mockRejectedValueOnce(new Error('upstream unavailable')).mockResolvedValueOnce(['google'])
+        const router = testRouter()
+        await router.isReady()
+        const wrapper = mount(LoginView, { global: { plugins: [i18n, router] } })
+        await flushPromises()
+        expect(wrapper.find('input[type="password"]').exists()).toBe(true)
+        expect(wrapper.get('[role="status"]').text()).toContain('暫時無法載入')
+        const retry = wrapper.findAll('button').find(button => button.text() === '重試載入登入選項')
+        expect(retry).toBeDefined()
+        await retry!.trigger('click')
+        await flushPromises()
+        expect(wrapper.get('[data-testid="oauth-providers"] a').attributes('href')).toBe('/api/auth/oauth/google')
+        expect(service.oauthProviders).toHaveBeenCalledTimes(2)
+    })
 })
 
 describe('AccountApprovalPanel', () => {

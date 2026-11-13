@@ -1,6 +1,15 @@
 {
     "entries": [
         {
+            "version": "2.0.0-alpha.8",
+            "date": "2026-11-13",
+            "changes": {
+                "fixed": ["Restore teacher and assistant access to class reports, lesson lists, and leave checks."],
+                "added": ["Manage configured OAuth sign-in identities in account security."],
+                "deployment": ["Apply migrations through 1000173 before deploying the matching alpha.8 images."]
+            }
+        },
+        {
             "version": "2.0.0-alpha.7",
             "date": "2026-11-13",
             "changes": {

@@ -25,6 +25,11 @@ export function useSessionCalendar(source: SessionCalendarSource) {
     const joinFlagsByDate = computed(() => countJoinFlagsByDate(Object.values(rosterFlagsByDate.value).flat()))
     // The month grid the calendar shows; occurrences load per grid, not per year.
     const visibleCalendarRange = ref<CalendarDateRange | null>(null)
+    const failedCompletionRanges = ref<Record<string, boolean>>({})
+    const rangeKey = (range: CalendarDateRange) => `${range.start}|${range.end}`
+    const completionFailed = computed(() => Boolean(visibleCalendarRange.value && failedCompletionRanges.value[rangeKey(visibleCalendarRange.value)]))
+    let completionSequence = 0
+    const completionRequests = new Map<string, number>()
     const loadedOccurrenceRanges = new Map<string, Promise<void>>()
 
     function findOccurrenceByDate(date: Date): ClassOccurrence | undefined {
@@ -33,13 +38,27 @@ export function useSessionCalendar(source: SessionCalendarSource) {
     }
 
     async function loadReportCompletion(range: CalendarDateRange) {
+        const key = rangeKey(range)
+        const request = ++completionSequence
+        completionRequests.set(key, request)
         try {
             const completion = await OccurrenceQueryService.getReportCompletionByDate(sessionId, range.start, range.end)
+            if (completionRequests.get(key) !== request) return
             reportCompletionByDate.value = { ...withoutRange(reportCompletionByDate.value, range), ...completion }
+            delete failedCompletionRanges.value[key]
         } catch (error) {
-            // The completion dot is a hint; the calendar works without it.
+            if (completionRequests.get(key) !== request) return
+            failedCompletionRanges.value[key] = true
+            reportCompletionByDate.value = withoutRange(reportCompletionByDate.value, range)
             console.error('Failed to load report completion:', error)
+        } finally {
+            if (completionRequests.get(key) === request) completionRequests.delete(key)
         }
+    }
+
+    function retryReportCompletion() {
+        const range = visibleCalendarRange.value
+        if (range && !completionRequests.has(rangeKey(range))) void loadReportCompletion(range)
     }
 
     async function loadRosterFlags(range: CalendarDateRange) {
@@ -109,6 +128,8 @@ export function useSessionCalendar(source: SessionCalendarSource) {
     return {
         sessionOccurrences,
         reportCompletionByDate,
+        completionFailed,
+        retryReportCompletion,
         joinFlagsByDate,
         classTransferInIds,
         findOccurrenceByDate,

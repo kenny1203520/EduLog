@@ -20,6 +20,7 @@ on:
       - '.github/workflows/docker-publish.yml'
       - 'scripts/release/**'
       - 'scripts/release-image-smoke.sh'
+      - 'scripts/release-class-smoke.sh'
       - 'scripts/lib/**'
       - '.github/releases/**'
       - 'CHANGELOG.md'
@@ -41,6 +42,7 @@ on:
       - '.github/workflows/docker-publish.yml'
       - 'scripts/release/**'
       - 'scripts/release-image-smoke.sh'
+      - 'scripts/release-class-smoke.sh'
       - 'scripts/lib/**'
       - '.github/releases/**'
       - 'CHANGELOG.md'
@@ -165,3 +167,6 @@ jobs:
           tags: edulog-release-smoke:presidio
       - name: Verify images before publication
         run: bash scripts/release-image-smoke.sh
+
+      - name: Verify class workspace against PostgreSQL and PostgREST
+        run: bash scripts/release-class-smoke.sh

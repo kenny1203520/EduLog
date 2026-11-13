@@ -2,6 +2,8 @@ import express, { Router, type Request, type Response } from 'express'
 import type { ApiConfig } from '../config/config.js'
 import { ApiError } from '../http/errors.js'
 import { forwardOAuthCallback } from './gotrue.js'
+import { clearIdentityFlow, identityCallback, identityReturn, readIdentityFlow } from './identityFlow.js'
+import { validateAccessToken, assertUserActive, type SupabaseClients } from '../infra/supabase.js'
 
 const CALLBACK_STATE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const CALLBACK_KEY = /^[A-Za-z0-9_.-]{1,80}$/
@@ -55,10 +57,10 @@ function callbackParameters(req: Request, config: ApiConfig): URLSearchParams {
   return parameters
 }
 
-function finalCallbackLocation(config: ApiConfig, location: string): string | null {
+function finalCallbackLocation(config: ApiConfig, location: string, callback = '/api/auth/oauth/callback'): string | null {
   try {
     if (Buffer.byteLength(location) > MAX_CALLBACK_BYTES) return null
-    const expected = new URL('/api/auth/oauth/callback', config.EDULOG_WEB_BASE_URL)
+    const expected = new URL(callback, config.EDULOG_WEB_BASE_URL)
     const target = new URL(location, expected)
     if (target.origin !== expected.origin || target.pathname !== expected.pathname || target.username || target.password) return null
     if (target.hash) {
@@ -93,12 +95,32 @@ function markSensitiveRedirect(res: Response) {
 }
 
 /** Fixed callback bridge for external OAuth providers; GoTrue validates state and consumes its PKCE flow. */
-export function createOAuthBridgeRouter(config: ApiConfig) {
+export function createOAuthBridgeRouter(config: ApiConfig, clients: SupabaseClients) {
   const router = Router()
 
   const handle = async (req: Request, res: Response) => {
     markSensitiveRedirect(res)
     const parameters = callbackParameters(req, config)
+    let linking = false
+    {
+      const { data, error } = await clients.adminClient.rpc('get_oauth_link_flow', { p_state: parameters.get('state') })
+      if (error) throw new ApiError(503, 'OAUTH_CALLBACK_FAILED', 'OAuth could not be completed')
+      const target = data?.[0]
+      linking = Boolean(target)
+      if (target) {
+        if (!config.AUTH_MANUAL_LINKING_ENABLED) throw invalidCallback()
+        const flow = readIdentityFlow(req, config)
+        if (!flow || flow.state !== target.state || flow.userId !== target.user_id || flow.provider !== target.provider) throw invalidCallback()
+        // A provider form_post may omit the normal SameSite=Lax session.
+        // The dedicated signed flow cookie is still required on that POST.
+        const token = req.cookies?.edulog_access
+        if (typeof token === 'string') {
+          const user = await validateAccessToken(clients.adminClient, token, config)
+          if (user.id !== flow.userId) throw invalidCallback()
+        }
+        await assertUserActive(clients.adminClient, flow.userId)
+      }
+    }
     let response: globalThis.Response
     try {
       response = await forwardOAuthCallback(config, req.method as 'GET' | 'POST', parameters)
@@ -108,8 +130,12 @@ export function createOAuthBridgeRouter(config: ApiConfig) {
     const location = response.headers.get('location')
     await response.body?.cancel().catch(() => undefined)
     const safeLocation = [302, 303, 307, 308].includes(response.status) && location
-      ? finalCallbackLocation(config, location)
+      ? finalCallbackLocation(config, location, linking ? identityCallback : undefined)
       : null
+    if (!safeLocation && linking) {
+      clearIdentityFlow(res)
+      return res.redirect(303, `${identityReturn}&identity=error#security`)
+    }
     if (!safeLocation) throw new ApiError(502, 'OAUTH_CALLBACK_FAILED', 'OAuth sign-in could not be completed')
     return res.redirect(303, safeLocation)
   }

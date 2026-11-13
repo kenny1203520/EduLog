@@ -102,6 +102,11 @@ export function summarizeReportCompletion(rows: Array<{ id: string; occurrence_d
   })
 }
 
+function reportDatabaseError(req: Request, stage: string, started: number, error: { code?: string; message?: string }) {
+  req.log?.warn({ event: 'class_report_query_failed', stage, database_error_code: error.code, latency_ms: Math.round(performance.now() - started) }, 'class_report_query_failed')
+  return mapDatabaseError(error)
+}
+
 async function reportCompletion(req: Request, res: Response) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const sessionId = z.string().uuid().parse(req.params.id)
@@ -110,9 +115,10 @@ async function reportCompletion(req: Request, res: Response) {
   setAuditContext(req, { domain: 'teaching', resource: 'reports', action: 'list', permission: 'teaching.reports.list', scopeId: sessionId, scopeType: 'class_session' })
   const permission = await req.db.rpc('has_api_permission', { p_user_id: req.user.id, p_permission_key: 'teaching.reports.list', p_classroom_id: null, p_class_session_id: sessionId })
   requireAuthorizationDecision(req, permission, { permission: 'teaching.reports.list', stage: 'report_completion_permission', message: 'You do not have permission to list reports in this class', scopeId: sessionId, scopeType: 'class_session' })
-  const result = await req.db.from('class_occurrences').select('id,occurrence_date,occurrence_reports(is_completed)').eq('class_session_id', sessionId).gte('occurrence_date', query.from).lte('occurrence_date', query.to).order('occurrence_date', { ascending: true }).limit(800)
-  if (result.error) throw mapDatabaseError(result.error)
-  const data = summarizeReportCompletion((result.data ?? []) as Parameters<typeof summarizeReportCompletion>[0])
+  const started = performance.now()
+  const result = await req.db.rpc('get_class_report_completion', { p_session_id: sessionId, p_from: query.from, p_to: query.to })
+  if (result.error) throw reportDatabaseError(req, 'completion', started, result.error)
+  const data = result.data ?? []
   return res.json({ data, meta: { from: query.from, to: query.to, total: data.length }, request_id: req.requestId, trace_id: req.traceId })
 }
 
@@ -237,31 +243,17 @@ export async function provisionReports(req: Request, res: Response) {
   await permission(req, 'teaching.reports.list', occurrence.data.class_session_id)
   const replay = await idempotency(req, 201, null)
   if (replay) return res.status(replay.status).json(replay.body)
-  const roster = await req.db!.rpc('get_effective_occurrence_enrollment_ids', { p_occurrence_id: occurrenceId })
-  if (roster.error) throw mapDatabaseError(roster.error)
-  const enrollmentIds = [...new Set(((roster.data ?? []) as Array<{ enrollment_id: string }>).map((row) => row.enrollment_id))]
+  const started = performance.now()
+  const roster = await req.db!.rpc('provision_class_reports', { p_occurrence_id: occurrenceId })
+  if (roster.error) throw reportDatabaseError(req, 'provision', started, roster.error)
+  const rows = (roster.data ?? []) as Array<{ enrollment_id: string; provisioned: boolean }>
+  const enrollmentIds = rows.map(row => row.enrollment_id)
+  const missingCount = rows.filter(row => row.provisioned).length
 
-  // Provisioning has a deliberately narrower scope (active regular
-  // enrollments). Existing reports for completed and makeup students are
-  // still part of the effective occurrence roster and must be returned.
-  let missingCount = 0
-  if (enrollmentIds.length) {
-    const provisionable = await req.db!.rpc('get_provisionable_occurrence_enrollment_ids', { p_occurrence_id: occurrenceId })
-    if (provisionable.error) throw mapDatabaseError(provisionable.error)
-    const provisionableIds = [...new Set(((provisionable.data ?? []) as Array<{ enrollment_id: string }>).map((row) => row.enrollment_id))]
-    if (provisionableIds.length) {
-      const existing = await req.db!.from('occurrence_reports').select('enrollment_id').eq('class_occurrence_id', occurrenceId).in('enrollment_id', provisionableIds)
-      if (existing.error) throw mapDatabaseError(existing.error)
-      const existingIds = new Set((existing.data ?? []).map((row) => row.enrollment_id))
-      missingCount = provisionableIds.filter((enrollmentId) => !existingIds.has(enrollmentId)).length
-      const provision = await req.db!.rpc('provision_occurrence_reports', { p_occurrence_id: occurrenceId })
-      if (provision.error) throw mapDatabaseError(provision.error)
-    }
-  }
-
+  const readStarted = performance.now()
   const reportsQuery = req.db!.from('occurrence_reports').select(reportFields).eq('class_occurrence_id', occurrenceId)
   const reports = enrollmentIds.length ? await reportsQuery.in('enrollment_id', enrollmentIds) : { data: [], error: null }
-  if (reports.error) throw mapDatabaseError(reports.error)
+  if (reports.error) throw reportDatabaseError(req, 'provisioned_report_read', readStarted, reports.error)
   const body = envelope(req, reports.data ?? [], { provisioned: missingCount, total: reports.data?.length ?? 0 })
   await complete(req, 201, body)
   return res.status(201).json(body)
@@ -305,7 +297,7 @@ async function occurrenceReportProgressGaps(req: Request, res: Response) {
   for (const enrollmentId of enrollmentIds) {
     const [anchored, linked] = await Promise.all([
       req.adminDb.from('occurrence_reports').select('id,enrollment_id,lesson_id,lesson_entries,class_occurrences!inner(occurrence_date)').eq('enrollment_id', enrollmentId).eq('attendance_status', 'present').lt('class_occurrences.occurrence_date', occurrence.data.occurrence_date).range(0, 999),
-      req.adminDb.from('occurrence_reports').select('id,enrollment_id,lesson_id,lesson_entries,class_occurrences!inner(occurrence_date)').contains('lesson_entries', [{ enrollment_id: enrollmentId }]).eq('attendance_status', 'present').lt('class_occurrences.occurrence_date', occurrence.data.occurrence_date).range(0, 999),
+      req.adminDb.from('occurrence_reports').select('id,enrollment_id,lesson_id,lesson_entries,class_occurrences!inner(occurrence_date)').contains('lesson_entries', JSON.stringify([{ enrollment_id: enrollmentId }])).eq('attendance_status', 'present').lt('class_occurrences.occurrence_date', occurrence.data.occurrence_date).range(0, 999),
     ])
     if (anchored.error) throw mapDatabaseError(anchored.error)
     if (linked.error) throw mapDatabaseError(linked.error)

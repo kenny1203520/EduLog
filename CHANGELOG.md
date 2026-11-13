@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0-alpha.8] - 2026-11-13
+
+### Fixed
+- Restore class workspace access for assigned teachers and assistants, including lesson and leave reads.
+- Fix JSONB progress queries and reduce database work for report completion and provisioning.
+- Keep the class roster usable when an auxiliary request fails.
+
+### Added
+- Show and manage configured OAuth identities from account security.
+- Verify class workspace access against PostgreSQL and PostgREST before publishing images.
+
+### Deployment
+- Apply migrations through 1000173 before deploying the matching frontend and API images. See the OAuth deployment guide before enabling manual identity linking.
+
 ## [2.0.0-alpha.7] - 2026-11-13
 
 ### Added

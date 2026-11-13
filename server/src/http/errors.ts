@@ -24,6 +24,7 @@ export function mapDatabaseError(error: { code?: string; message?: string } | nu
   if (error.code === '23503') return new ApiError(422, 'INVALID_REFERENCE', 'A referenced resource is invalid')
   if (error.code === '23514') return new ApiError(422, 'BUSINESS_VALIDATION_FAILED', 'The request violates a business rule')
   if (error.code === '22P02') return new ApiError(400, 'INVALID_VALUE', 'A request value has an invalid format')
+  if (error.code === '57014') return new ApiError(503, 'DATABASE_TIMEOUT', 'The database query timed out', undefined, 1)
   if (error.code === '22007' || error.code === '22008') return new ApiError(422, 'INVALID_DATE_VALUE', 'A date or time value is invalid')
   if (error.code === '22023' && /IDEMPOTENCY_KEY_REUSED/i.test(error.message ?? '')) return new ApiError(409, 'IDEMPOTENCY_KEY_REUSED', 'The Idempotency-Key is already bound to another request')
   if (error.code === '22023') return new ApiError(422, 'INVALID_ARGUMENT', 'A request argument is invalid')

@@ -216,33 +216,15 @@ describe('class report completion summary', () => {
   })
 })
 
-describe('occurrence report provisioning contract', () => {
-  it('provisions only eligible reports but reads the complete authorized occurrence roster', () => {
-    const source = readFileSync(new URL('./occurrenceRouter.ts', import.meta.url), 'utf8')
-    const provisioningHandler = source.slice(source.indexOf('async function provisionReports'), source.indexOf('async function occurrenceReportProgressGaps'))
-
-    expect(provisioningHandler).toContain("rpc('get_provisionable_occurrence_enrollment_ids'")
-    expect(provisioningHandler).toContain("rpc('provision_occurrence_reports'")
-    expect(provisioningHandler).toContain("rpc('get_effective_occurrence_enrollment_ids'")
-    expect(provisioningHandler).toContain("permission(req, 'teaching.reports.list'")
-    expect(provisioningHandler).toContain("select(reportFields).eq('class_occurrence_id', occurrenceId)")
-    expect(provisioningHandler).toContain('const enrollmentIds = [...new Set(')
-    expect(provisioningHandler).toContain('let missingCount = 0')
-    expect(provisioningHandler).not.toContain('if (!enrollmentIds.length) { const body = envelope(req, [])')
-  })
-
-})
-
 function reportProvisionRequest(provisionableIds: string[], persistedReports: Array<Record<string, unknown>>, allowList = true) {
   const rpcCalls: string[] = []
   const database = {
     rpc: async (name: string, args?: Record<string, unknown>) => {
       rpcCalls.push(name)
       if (name === 'has_api_permission') return { data: args?.p_permission_key === 'teaching.reports.list' ? allowList : true, error: null }
-      if (name === 'get_effective_occurrence_enrollment_ids') return { data: [
-        { enrollment_id: 'active' }, { enrollment_id: 'completed' }, { enrollment_id: 'makeup' }
-      ], error: null }
-      if (name === 'get_provisionable_occurrence_enrollment_ids') return { data: provisionableIds.map(enrollment_id => ({ enrollment_id })), error: null }
+      if (name === 'provision_class_reports') return { data: ['active', 'completed', 'makeup'].map(enrollment_id => ({
+        enrollment_id, provisioned: provisionableIds.includes(enrollment_id)
+      })), error: null }
       return { data: null, error: null }
     },
     from: (table: string) => {
@@ -290,8 +272,8 @@ describe('occurrence report provisioning response', () => {
 
     expect(response.statusCode).toBe(201)
     expect(response.body.data.map((report: any) => report.id)).toEqual(['report-active', 'report-completed', 'report-makeup'])
-    expect(rpcCalls).toContain('get_effective_occurrence_enrollment_ids')
-    expect(rpcCalls).toContain('provision_occurrence_reports')
+    expect(rpcCalls.filter(call => call === 'provision_class_reports')).toHaveLength(1)
+    expect(response.body.meta.provisioned).toBe(1)
   })
 
   it('returns existing reports when no enrollment is eligible for placeholder creation', async () => {
@@ -301,7 +283,8 @@ describe('occurrence report provisioning response', () => {
     await provisionReports(req, response)
 
     expect(response.body.data).toEqual(reports)
-    expect(rpcCalls).not.toContain('provision_occurrence_reports')
+    expect(rpcCalls).toContain('provision_class_reports')
+    expect(response.body.meta.provisioned).toBe(0)
   })
 
   it('checks report-list access before provisioning any report', async () => {
@@ -309,8 +292,7 @@ describe('occurrence report provisioning response', () => {
 
     await expect(provisionReports(req, response)).rejects.toMatchObject({ status: 403, code: 'PERMISSION_DENIED' })
 
-    expect(rpcCalls).not.toContain('get_effective_occurrence_enrollment_ids')
-    expect(rpcCalls).not.toContain('provision_occurrence_reports')
+    expect(rpcCalls).not.toContain('provision_class_reports')
   })
 })
 
