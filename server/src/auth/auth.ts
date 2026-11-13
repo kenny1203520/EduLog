@@ -149,7 +149,7 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
   function requireIdentityManagement() {
     if (!config.AUTH_MANUAL_LINKING_ENABLED) throw new ApiError(403, 'OAUTH_LINK_DISABLED', 'Third-party account linking is disabled')
   }
-  router.get('/me/identities', activeAccount, async (req, res) => {
+  router.get('/me/identities', rateLimit(oauthRateLimitOptions), activeAccount, async (req, res) => {
     const user = await readIdentityUser(config, req.accessToken!)
     if (user.id !== req.user!.id) throw new ApiError(403, 'PERMISSION_DENIED', 'The account does not match')
     const providers = await enabledOAuthProviders(config)
