@@ -169,7 +169,7 @@ jobs:
             type=raw,value=${{ needs.validate.outputs.channel }},enable=${{ needs.validate.outputs.channel != '' }}
 
       - name: Build frontend image for smoke testing
-        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ./app
           build-contexts: legal=.
@@ -179,7 +179,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build API image for smoke testing
-        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ./server
           build-contexts: legal=.
@@ -189,7 +189,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build Presidio analyzer image for smoke testing
-        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ./docker/presidio
           build-contexts: legal=.
@@ -208,7 +208,7 @@ jobs:
 
       - name: Build and push frontend Docker image
         id: build-and-push-frontend
-        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ./app
           build-contexts: legal=.
@@ -220,7 +220,7 @@ jobs:
 
       - name: Build and push API Docker image
         id: build-and-push-api
-        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ./server
           build-contexts: legal=.
@@ -232,7 +232,7 @@ jobs:
 
       - name: Build and push Presidio analyzer Docker image
         id: build-and-push-presidio
-        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ./docker/presidio
           build-contexts: legal=.
