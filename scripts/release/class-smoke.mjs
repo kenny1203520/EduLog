@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 const { SMOKE_DATE: date, SMOKE_HOLIDAY: holiday, ACTOR: actor, TOKEN: token } = process.env
-const base = 'http://frontend:4173/api'
+const base = process.env.SMOKE_API_ORIGIN + '/api'
 const session = '15800000-0000-4000-8000-0000000000e1'
 const occurrence = '15800000-0000-4000-8000-000000000011'
 const enrollment = '15800000-0000-4000-8000-0000000000b1'

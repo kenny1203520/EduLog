@@ -58,7 +58,7 @@ onMounted(load)
                     <button v-if="data.manual_linking" type="button" :disabled="busy" class="rounded-lg border px-3 py-2 focus-visible:ring-2" @click="cancel(); selected = item.id">{{ $t('auth.unlink_provider', { provider: providerLabel(item.provider) }) }}</button>
                     <form v-if="selected === item.id" class="flex w-full flex-wrap items-end gap-2" @submit.prevent="unlink">
                         <label for="identity-current-password" class="text-sm">{{ $t('auth.identity_confirm_password') }}
-                            <PasswordInput id="identity-current-password" v-model="password" name="current-password" autocomplete="current-password" required :maxlength="1024" input-class="block rounded-lg border px-3 py-2" />
+                            <PasswordInput id="identity-current-password" v-model="password" required :maxlength="1024" input-class="block rounded-lg border px-3 py-2" />
                         </label>
                         <button type="submit" :disabled="busy" class="rounded-lg bg-red-700 px-3 py-2 text-white focus-visible:ring-2">{{ $t('auth.unlink_provider', { provider: providerLabel(item.provider) }) }}</button>
                         <button type="button" :disabled="busy" class="rounded-lg border px-3 py-2 focus-visible:ring-2" @click="cancel">{{ $t('common.cancel') }}</button>
