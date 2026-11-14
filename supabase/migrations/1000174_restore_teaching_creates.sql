@@ -185,7 +185,7 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.save_class_session_with_schedule(jsonb, jsonb, uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.save_class_session_with_schedule(jsonb, jsonb, uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.save_class_session_with_schedule(jsonb, jsonb, uuid) TO authenticated;
 
 -- Read the new room in a subsequent statement under the caller's SELECT policy.

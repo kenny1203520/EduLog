@@ -237,8 +237,13 @@ BEGIN
 END;
 $$;
 
--- Exercise same-row creation and per-teacher attendance as authenticated users.
+-- Exercise same-row creation and per-teacher attendance with the shipped
+-- teacher grants. Earlier CI fixtures may temporarily grant role management.
 RESET ROLE;
+DELETE FROM public.role_permission_policies policy
+USING public.roles role, public.permissions permission
+WHERE policy.role_id = role.id AND policy.permission_id = permission.id
+  AND role.code = 'teacher' AND role.domain = 'teaching' AND permission.key = 'teaching.roles.manage';
 UPDATE public.user_role_assignments SET role_id = (
   SELECT id FROM public.roles WHERE domain = 'teaching' AND code = 'teaching_owner' AND is_builtin
 ) WHERE user_id = '15800000-0000-4000-8000-000000000007';

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
+import { request } from 'node:http'
 const { SMOKE_DATE: date, SMOKE_HOLIDAY: holiday, ACTOR: actor, TOKEN: token } = process.env
-const base = process.env.SMOKE_API_ORIGIN + '/api'
 const session = '15800000-0000-4000-8000-0000000000e1'
 const occurrence = '15800000-0000-4000-8000-000000000011'
 const enrollment = '15800000-0000-4000-8000-0000000000b1'
@@ -8,12 +8,27 @@ const second = '15800000-0000-4000-8000-0000000000b3'
 const makeup = '15800000-0000-4000-8000-0000000000b4'
 const course = '15800000-0000-4000-8000-0000000000d1'
 async function call(path, expected = [200], postKey, payload, method = postKey ? "POST" : "GET") {
-  const response = await fetch(base + path, {
-    method,
-    body: payload === undefined ? undefined : JSON.stringify(payload),
-    headers: { Authorization: `Bearer ${token}`, ...(postKey ? { 'Idempotency-Key': postKey } : {}), ...(payload === undefined ? {} : { 'Content-Type': 'application/json' }) },
+  const bodyText = payload === undefined ? undefined : JSON.stringify(payload)
+  const response = await new Promise((resolve, reject) => {
+    const client = request({
+      hostname: 'frontend', port: 4173, path: '/api' + path,
+      method,
+      headers: {
+        Authorization: 'Bearer ' + token,
+        ...(postKey ? { 'Idempotency-Key': postKey } : {}),
+        ...(bodyText ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(bodyText) } : {}),
+      },
+    }, async (incoming) => {
+      try {
+        const chunks = []
+        for await (const chunk of incoming) chunks.push(chunk)
+        resolve({ status: incoming.statusCode, body: JSON.parse(Buffer.concat(chunks).toString()) })
+      } catch (error) { reject(error) }
+    })
+    client.on('error', reject)
+    client.end(bodyText)
   })
-  const body = await response.json()
+  const { body } = response
   assert.ok(expected.includes(response.status), `${actor} ${path}: ${response.status} ${body.error?.code ?? ''}`)
   return body
 }

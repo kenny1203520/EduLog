@@ -15,9 +15,9 @@ describe('holiday API contract', () => {
     expect(source).toContain("idempotency(req, 200, null)")
   })
 
-  it('keeps report and teacher attendance side effects explicit', () => {
+  it('applies report changes without overwriting teacher attendance', () => {
     expect(source).toContain('updateReports')
-    expect(source).toContain('teacher_attendance')
+    expect(source).not.toContain('teacher_attendance')
     expect(source).toContain("'/holidays/check'")
   })
 
