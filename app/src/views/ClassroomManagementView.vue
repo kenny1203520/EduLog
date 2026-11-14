@@ -181,6 +181,21 @@ const isCreateRoomModalOpen = ref(false)
 const isCreateSessionModalOpen = ref(false)
 const isSavingRoom = ref(false)
 const isSavingSession = ref(false)
+const pendingOccurrenceSync = ref<string | null>(null)
+const retryingOccurrenceSync = ref(false)
+
+async function retryOccurrenceSync() {
+    if (!pendingOccurrenceSync.value || retryingOccurrenceSync.value) return
+    retryingOccurrenceSync.value = true
+    try {
+        await OccurrenceSyncService.syncSessionOccurrences(pendingOccurrenceSync.value)
+        pendingOccurrenceSync.value = null
+    } catch (error) {
+        reportError(error)
+    } finally {
+        retryingOccurrenceSync.value = false
+    }
+}
 
 // Forms
 const newClassroom = ref<Partial<ClassroomDTO>>({ name: '', address: '', phone: '', color: '#10b981', external_link: '' })
@@ -757,14 +772,19 @@ async function saveSession() {
             teacherAssignmentBaseline.value = assignmentsToSave.map(item => ({ ...item }))
         }
         await saveScopePolicies({ type: 'class_session', id: sessionId }, sessionPolicySelections.value, sessionScheduleSelections.value)
-        const reconciliation = await OccurrenceSyncService.syncSessionOccurrences(sessionId)
+        let preserved = 0
+        try {
+            preserved = (await OccurrenceSyncService.syncSessionOccurrences(sessionId)).preserved
+        } catch {
+            pendingOccurrenceSync.value = sessionId
+        }
 
         AggregateService.clearCache()
         await Promise.all([loadSessions(), refreshRolePolicies()])
         if (returnToRoomAfterSession.value && saved.classroom_id) await loadRoomSessions(saved.classroom_id)
         closeSessionModal()
         toast.success(t('classroom.session_save_success') || 'Session saved successfully')
-        if (reconciliation.preserved > 0) toast.info(t('classroom.schedule_preserved_notice', { count: reconciliation.preserved }))
+        if (preserved > 0) toast.info(t('classroom.schedule_preserved_notice', { count: preserved }))
     } catch (e: any) {
         reportError(e)
     } finally {
@@ -976,6 +996,10 @@ function clearTeacherSelection() {
                 </div>
 
                 <!-- Primary Action Button -->
+                <div v-if="pendingOccurrenceSync" role="status" class="flex items-center gap-2">
+                    {{ $t('classroom.session_sync_failed') }}
+                    <button type="button" class="underline" :disabled="retryingOccurrenceSync" @click="retryOccurrenceSync">{{ $t('classroom.retry_occurrence_data') }}</button>
+                </div>
                 <button v-if="activeTab === 'rooms' && capabilities.canPlatform('teaching.classrooms.create')" @click="openCreateRoomModal"
                     class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl transition-all shadow-lg shadow-emerald-200 font-black flex items-center justify-center gap-2 active:scale-95 text-sm uppercase tracking-widest w-full md:w-auto shrink-0">
                     <span class="text-xl leading-none">+</span> {{ t('classroom.add_room') }}

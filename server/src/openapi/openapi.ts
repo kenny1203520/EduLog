@@ -201,6 +201,8 @@ export function buildOpenApi() {
     const method = action === 'create' ? 'post' : action === 'update' ? 'patch' : 'delete'
     addSpecialized(`/api${route}`, method, `${route.slice(1).replaceAll('/', '_').replaceAll('{id}', 'id')}_${action}`, permission, status, action === 'create' ? [mutationParam] : [idParam, mutationParam], action === 'delete' ? undefined : bodyFor(route, action as 'create' | 'update'))
   }
+  const occurrencePatch = (paths['/api/occurrences/{id}'] as { patch: { description?: string } }).patch
+  occurrencePatch.description = 'General changes require teaching.occurrences.update. Submit teacher_attendance separately as a map of teacher-record UUIDs to booleans. The API merges those entries and verifies effective assignment and self or class-manager authority.'
   addSpecialized('/api/occurrences/{id}', 'get', 'occurrences_get', 'teaching.occurrences.read', '200', [idParam])
   addSpecialized('/api/students/{id}', 'delete', 'students_delete', 'teaching.students.delete', '200', [idParam, mutationParam])
   addSpecialized('/api/occurrences/generate', 'post', 'occurrences_generate', 'teaching.occurrences.create', '200', [mutationParam], refBody('OccurrenceGenerationMutation'))

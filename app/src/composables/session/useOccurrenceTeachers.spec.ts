@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { effectScope, ref } from 'vue'
 import type { SessionTeacherAssignmentDTO } from '@/services/teacher/TeacherService'
 
+const roster = vi.hoisted(() => ({ getSessionTeachers: vi.fn() }))
 const holiday = vi.hoisted(() => ({ isTeacherOnLeave: vi.fn() }))
 const occurrenceApi = vi.hoisted(() => ({ updateOccurrence: vi.fn() }))
 const feedback = vi.hoisted(() => ({ errorKey: vi.fn(), reportError: vi.fn() }))
@@ -9,7 +10,7 @@ vi.mock('@/services/holiday/HolidayQueryService', () => ({ HolidayQueryService: 
 vi.mock('@/services/occurrence/OccurrenceQueryService', () => ({ OccurrenceQueryService: occurrenceApi }))
 vi.mock('@/services/occurrence/OccurrenceCommandService', () => ({ OccurrenceCommandService: occurrenceApi }))
 vi.mock('@/services/occurrence/OccurrenceSyncService', () => ({ OccurrenceSyncService: occurrenceApi }))
-vi.mock('@/services/teacher/TeacherService', () => ({ TeacherService: {} }))
+vi.mock('@/services/teacher/TeacherService', () => ({ TeacherService: roster }))
 vi.mock('vue-i18n', async importOriginal => ({ ...(await importOriginal<typeof import('vue-i18n')>()), useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock('vue-toastification', () => ({ useToast: () => ({ success: vi.fn() }) }))
 vi.mock('@/composables/useFeedback', () => ({ useFeedback: () => feedback }))
@@ -53,10 +54,10 @@ describe('occurrence teachers', () => {
     it('derives attendance rows and counts from the effective assignments and leave', async () => {
         holiday.isTeacherOnLeave.mockImplementation(async (_date: string, teacherId: string) => teacherId === 'c')
         const teachers = setup()
-        teachers.sessionTeachers.value = [assignment('a', '2026-01-01'), assignment('b', '2026-01-01'), assignment('c', '2026-01-01')]
+        roster.getSessionTeachers.mockResolvedValue([assignment('a', '2026-01-01'), assignment('b', '2026-01-01'), assignment('c', '2026-01-01')])
         await teachers.loadOccurrenceTeachers()
 
-        expect(teachers.teacherAttendanceCounts.value).toEqual({ present: 1, absent: 1, onLeave: 1 })
+        expect(teachers.teacherAttendanceCounts.value).toEqual({ present: 1, absent: 0, onLeave: 1, pending: 1 })
         expect(teachers.teacherAttendanceRows.value.map(row => [row.teacher.id, row.present, row.onLeave, row.canEdit])).toEqual([
             ['a', true, false, true],
             ['b', false, false, false],
@@ -64,23 +65,42 @@ describe('occurrence teachers', () => {
         ])
     })
 
-    it('refuses to mark a teacher present on a holiday and resets the checkbox', async () => {
+    it('retries a failed roster read and includes a newly assigned teacher on an existing lesson', async () => {
+        const teachers = setup()
+        roster.getSessionTeachers.mockRejectedValueOnce(new Error('unavailable'))
+        await teachers.loadOccurrenceTeachers()
+        expect(teachers.teacherRosterFailed.value).toBe(true)
+        roster.getSessionTeachers.mockResolvedValueOnce([assignment('a', '2026-01-01'), assignment('new', '2026-11-07')])
+        holiday.isTeacherOnLeave.mockResolvedValue(false)
+        await teachers.loadOccurrenceTeachers()
+        expect(roster.getSessionTeachers).toHaveBeenLastCalledWith('session', '2026-11-07')
+        expect(teachers.teacherRosterFailed.value).toBe(false)
+        expect(teachers.teacherAttendanceRows.value.find(row => row.teacher.id === 'new')?.pending).toBe(true)
+    })
+
+    it('sends only the edited teacher and keeps the other attendance entry', async () => {
+        const teachers = setup()
+        occurrenceApi.updateOccurrence.mockResolvedValue({ teacherAttendance: { b: false } })
+        await teachers.toggleTeacherAttendance('b', false)
+        expect(occurrenceApi.updateOccurrence).toHaveBeenCalledWith('occ', { teacher_attendance: { b: false } })
+        expect(todayOccurrence.value.teacherAttendance).toEqual({ a: true, b: false })
+    })
+
+    it('refuses to mark a teacher present on a holiday', async () => {
         isOccurrenceInHoliday.value = true
         const teachers = setup()
-        const event = { target: { checked: true } }
-        await teachers.toggleTeacherAttendance('a', event)
-        expect(event.target.checked).toBe(false)
+        await teachers.toggleTeacherAttendance('a', true)
+        expect(todayOccurrence.value.teacherAttendance).toEqual({ a: true })
         expect(feedback.errorKey).toHaveBeenCalledWith('report.error.cannot_set_teacher_present_during_holiday')
         expect(occurrenceApi.updateOccurrence).not.toHaveBeenCalled()
     })
 
-    it('reverts the checkbox when the server rejects a teacher on leave', async () => {
-        occurrenceApi.updateOccurrence.mockRejectedValue(new Error('cannot mark present while the teacher is on leave'))
+    it('keeps the original attendance when the server rejects a teacher on leave', async () => {
+        occurrenceApi.updateOccurrence.mockRejectedValue({ code: 'TEACHER_ON_LEAVE' })
         vi.spyOn(console, 'error').mockImplementation(() => {})
         const teachers = setup()
-        const event = { target: { checked: true } }
-        await teachers.toggleTeacherAttendance('b', event)
-        expect(event.target.checked).toBe(false)
+        await teachers.toggleTeacherAttendance('b', true)
+        expect(todayOccurrence.value.teacherAttendance).toEqual({ a: true })
         expect(feedback.errorKey).toHaveBeenCalledWith('report.error.cannot_set_teacher_present_during_leave')
     })
 })

@@ -401,7 +401,7 @@
         "sent_skipped": "已覆蓋左邊 {count} 個欄位，{skipped} 個需在原站選擇；請確認後送出。",
         "sent_same": "左邊的表單已經和這份報告相同。",
         "sent_review": "這份報告與左邊表單的學生或日期不同，請在左邊確認要填入的欄位。",
-        "failed": "無法送回教學網站（{reason}）。請確認左邊的報告仍開著，再試一次。",
+        "failed": "無法送回教學網站。請確認左邊的報告仍開著，再試一次。",
         "date_missing": "這位學生在 {date} 沒有課堂；已改為顯示最近一堂。",
         "hint_short": "先儲存，再送回左邊的教學網站"
     },
@@ -410,5 +410,13 @@
         "next": "下一堂",
         "calendar": "選擇其他日期",
         "koding_check": "作業檢查"
+    },
+    "history": {
+        "loading": "\u6b63\u5728\u8b80\u53d6\u6b77\u53f2\u7d00\u9304\u2026",
+        "loaded": "\u5df2\u8f09\u5165 {count} \u4efd\u6b77\u53f2\u7d00\u9304\u3002",
+        "choose_occurrence": "\u8acb\u6838\u5c0d\u53ef\u7d81\u5b9a\u7684\u8ab2\u6b21\u3002",
+        "no_candidates": "\u6c92\u6709\u53ef\u7d81\u5b9a\u8ab2\u6b21\uff0c\u6b77\u53f2\u7d00\u9304\u5df2\u4fdd\u5b58\u3002",
+        "bound": "\u6b77\u53f2\u7d00\u9304\u5df2\u7d81\u5b9a\u5230\u8ab2\u6b21\u3002",
+        "preview": "\u8acb\u6838\u5c0d\u5dee\u7570\u518d\u78ba\u8a8d\u7d81\u5b9a\u3002"
     }
 }

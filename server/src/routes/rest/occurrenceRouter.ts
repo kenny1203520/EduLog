@@ -10,7 +10,7 @@ import { envelope, permission, uuid, wrap } from './domainAccess.js'
 import { assertOccurrencePermission, transferRpcError } from './transferRouter.js'
 
 const fields = 'id,class_session_id,occurrence_date,status,notes,original_start_time,original_end_time,actual_start_time,actual_end_time,teacher_ids,teacher_attendance,is_conducted,time_zone,created_at,updated_at'
-export const occurrenceBodySchema = z.object({ status: z.enum(['scheduled', 'completed', 'cancelled']).optional(), notes: z.string().max(10000).nullable().optional(), actual_start_time: z.string().max(32).nullable().optional(), actual_end_time: z.string().max(32).nullable().optional(), teacher_attendance: z.record(z.string(), z.boolean()).optional(), is_conducted: z.boolean().optional() }).strict()
+export const occurrenceBodySchema = z.object({ status: z.enum(['scheduled', 'completed', 'cancelled']).optional(), notes: z.string().max(10000).nullable().optional(), actual_start_time: z.string().max(32).nullable().optional(), actual_end_time: z.string().max(32).nullable().optional(), teacher_attendance: z.record(z.string().uuid(), z.boolean()).optional(), is_conducted: z.boolean().optional() }).strict()
 async function authorize(req: Request, id: string, action: 'update' | 'delete' = 'update') {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const occurrence = await req.db.from('class_occurrences').select('class_session_id,occurrence_date').eq('id', id).maybeSingle(); if (occurrence.error) throw mapDatabaseError(occurrence.error); if (!occurrence.data) throw new ApiError(404, 'NOT_FOUND', 'Occurrence was not found')
@@ -21,13 +21,26 @@ async function authorize(req: Request, id: string, action: 'update' | 'delete' =
 async function update(req: Request, res: Response) {
   if (!req.db) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const id = typeof req.params.id === 'string' ? req.params.id : undefined; if (!id) throw new ApiError(400, 'INVALID_ID', 'Occurrence id is required')
-  const context = await authorize(req, id); const input = occurrenceBodySchema.parse(req.body)
+  const input = occurrenceBodySchema.parse(req.body)
+  if (input.teacher_attendance && Object.keys(input).length === 1) {
+    setAuditContext(req, { domain: 'teaching', resource: 'occurrences', resourceId: id, action: 'update', authorizationStage: 'teacher_attendance' })
+    const result = await req.db.rpc('set_occurrence_teacher_attendance', { p_occurrence: id, p_changes: input.teacher_attendance })
+    if (result.error) throw mapDatabaseError(result.error)
+    const occurrence = await req.db.from('class_occurrences').select(fields).eq('id', id).maybeSingle()
+    if (occurrence.error) throw mapDatabaseError(occurrence.error)
+    if (!occurrence.data) throw new ApiError(404, 'NOT_FOUND', 'Occurrence was not found')
+    return res.json({ data: occurrence.data, meta: {}, request_id: req.requestId, trace_id: req.traceId })
+  }
+  if (input.teacher_attendance) throw new ApiError(422, 'INVALID_ARGUMENT', 'Submit attendance separately from other occurrence changes')
+  const context = await authorize(req, id)
   const session = await req.db.from('class_sessions').select('classroom_id').eq('id', context.class_session_id).maybeSingle(); if (session.error) throw mapDatabaseError(session.error)
   const holidays = await req.db.from('holidays').select('kind,classroom_ids,class_session_ids,teacher_ids').lte('start_date', context.occurrence_date).gte('end_date', context.occurrence_date); if (holidays.error) throw mapDatabaseError(holidays.error)
-  const closure = (holidays.data ?? []).some((holiday) => holiday.kind === 'closure' && ((holiday.classroom_ids ?? []).includes(session.data?.classroom_id) || (holiday.class_session_ids ?? []).includes(context.class_session_id)))
-  if (closure && (input.is_conducted === true || Object.values(input.teacher_attendance ?? {}).some(Boolean))) throw new ApiError(422, 'HOLIDAY_OCCURRENCE', 'Attendance cannot be marked present during a holiday')
-  const leave = (holidays.data ?? []).find((holiday) => holiday.kind === 'teacher_leave' && (holiday.teacher_ids ?? []).some((teacherId: string) => input.teacher_attendance?.[teacherId] === true))
-  if (leave) throw new ApiError(422, 'TEACHER_ON_LEAVE', 'Attendance cannot be marked present while a teacher is on leave')
+  const closure = (holidays.data ?? []).some((holiday) => holiday.kind === 'closure' && (
+    !(holiday.classroom_ids?.length || holiday.class_session_ids?.length)
+    || (holiday.classroom_ids ?? []).includes(session.data?.classroom_id)
+    || (holiday.class_session_ids ?? []).includes(context.class_session_id)
+  ))
+  if (closure && input.is_conducted === true) throw new ApiError(422, 'HOLIDAY_OCCURRENCE', 'Attendance cannot be marked present during a holiday')
   const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
   const result = await req.db.from('class_occurrences').update(input).eq('id', id).select(fields).maybeSingle(); if (result.error) throw mapDatabaseError(result.error); if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Occurrence was not found')
   const envelope = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, envelope); return res.json(envelope)
@@ -64,8 +77,6 @@ async function generate(req: Request, res: Response) {
   const existing = await req.db.from('class_occurrences').select('occurrence_date,teacher_attendance,time_zone').eq('class_session_id', input.class_session_id).gte('occurrence_date', input.start_date).lte('occurrence_date', input.end_date)
   if (existing.error) throw mapDatabaseError(existing.error)
   const existingByDate = new Map((existing.data ?? []).map((row) => [row.occurrence_date, row]))
-  const assignments = await req.db.from('class_session_teachers').select('teacher_id,effective_from,effective_to').eq('class_session_id', input.class_session_id)
-  if (assignments.error) throw mapDatabaseError(assignments.error)
   const rules = (session.data.class_session_schedule_rules ?? []) as ScheduleRule[]
   const skip = new Set(input.skip_existing_dates ?? [])
   const rows: Record<string, unknown>[] = []
@@ -73,10 +84,8 @@ async function generate(req: Request, res: Response) {
     if (skip.has(date) || (session.data.start_date && date < session.data.start_date) || (session.data.end_date && date > session.data.end_date)) continue
     const rule = matchScheduleRule(rules, date)
     if (!rule) continue
-    const activeTeachers = assignments.data.filter((assignment) => assignment.effective_from <= date && (!assignment.effective_to || assignment.effective_to >= date)).map((assignment) => assignment.teacher_id)
-    const teacherIds = [...new Set(activeTeachers.length ? activeTeachers : [session.data.user_id].filter(Boolean))]
     const previous = existingByDate.get(date)
-    rows.push({ class_session_id: input.class_session_id, occurrence_date: date, status: 'scheduled', original_start_time: rule.start_time, original_end_time: rule.end_time, time_zone: previous?.time_zone || session.data.time_zone || 'Asia/Taipei', is_conducted: true, teacher_ids: teacherIds, teacher_attendance: previous?.teacher_attendance || Object.fromEntries(teacherIds.map((id) => [id, true])) })
+    rows.push({ class_session_id: input.class_session_id, occurrence_date: date, status: 'scheduled', original_start_time: rule.start_time, original_end_time: rule.end_time, time_zone: previous?.time_zone || session.data.time_zone || 'Asia/Taipei', is_conducted: true })
   }
   if (!rows.length) {
     const body = { data: [], meta: { generated: 0 }, request_id: req.requestId, trace_id: req.traceId }

@@ -25,7 +25,7 @@ type Holiday = {
   kind: 'closure' | 'teacher_leave'; classroom_ids: string[] | null; class_session_ids: string[] | null
   teacher_ids: string[] | null; created_at?: string; updated_at?: string
 }
-type Occurrence = { id: string; class_session_id: string | null; occurrence_date: string; teacher_ids: string[] | null; teacher_attendance: Record<string, boolean> | null; is_conducted: boolean | null; class_sessions?: { classroom_id: string | null } | { classroom_id: string | null }[] | null }
+type Occurrence = { id: string; class_session_id: string | null; occurrence_date: string; is_conducted: boolean | null; class_sessions?: { classroom_id: string | null } | { classroom_id: string | null }[] | null }
 
 function wrap(handler: (req: Request, res: Response) => Promise<unknown>) { return (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res)).catch(next) }
 function validRange(start: string, end: string) { if (end < start) throw new ApiError(422, 'INVALID_DATE_RANGE', 'end_date must not be before start_date') }
@@ -75,7 +75,7 @@ export async function permission(req: Request, action: 'create' | 'update' | 'de
 }
 
 async function occurrences(req: Request, holiday: Holiday) {
-  let query = req.db!.from('class_occurrences').select('id,class_session_id,occurrence_date,teacher_ids,teacher_attendance,is_conducted,class_sessions(classroom_id)').gte('occurrence_date', holiday.start_date).lte('occurrence_date', holiday.end_date)
+  let query = req.db!.from('class_occurrences').select('id,class_session_id,occurrence_date,is_conducted,class_sessions(classroom_id)').gte('occurrence_date', holiday.start_date).lte('occurrence_date', holiday.end_date)
   const sessions = array(holiday.class_session_ids)
   if (sessions.length) query = query.in('class_session_id', sessions)
   else if (array(holiday.classroom_ids).length) {
@@ -88,8 +88,7 @@ async function occurrences(req: Request, holiday: Holiday) {
   const result = await query
   if (result.error) throw mapDatabaseError(result.error)
   const rows = (result.data ?? []) as Occurrence[]
-  if (holiday.kind !== 'teacher_leave') return rows.filter((row) => applies(holiday, row))
-  const teacherIds = new Set(array(holiday.teacher_ids)); return rows.filter((row) => applies(holiday, row) && (row.teacher_ids ?? []).some((id) => teacherIds.has(id)))
+  return rows.filter((row) => applies(holiday, row))
 }
 
 async function updateReports(req: Request, occurrenceIds: string[], status: 'absent' | 'pending', reason: 'holiday' | null) {
@@ -111,45 +110,23 @@ async function activeClosure(req: Request, occurrence: Occurrence, excludedId?: 
 }
 
 async function release(req: Request, holiday: Holiday) {
+  if (holiday.kind === 'teacher_leave') return
   const rows = await occurrences(req, holiday)
-  if (holiday.kind === 'teacher_leave') {
-    for (const row of rows) {
-      const attendance = { ...(row.teacher_attendance ?? {}) }; let changed = false
-      for (const teacherId of array(holiday.teacher_ids)) if (!(await activeTeacherLeave(req, row, teacherId, holiday.id)) && attendance[teacherId] === false) { attendance[teacherId] = true; changed = true }
-      if (changed) { const result = await req.db!.from('class_occurrences').update({ teacher_attendance: attendance }).eq('id', row.id); if (result.error) throw mapDatabaseError(result.error) }
-    }
-    return
-  }
   const releasable = [] as Occurrence[]
   for (const row of rows) if (!(await activeClosure(req, row, holiday.id))) releasable.push(row)
   await updateReports(req, releasable.map((row) => row.id), 'pending', null)
   for (const row of releasable) {
-    const attendance = Object.fromEntries((row.teacher_ids ?? []).map((id) => [id, true]))
-    const result = await req.db!.from('class_occurrences').update({ is_conducted: true, teacher_attendance: attendance }).eq('id', row.id)
+    const result = await req.db!.from('class_occurrences').update({ is_conducted: true }).eq('id', row.id)
     if (result.error) throw mapDatabaseError(result.error)
   }
 }
 
-async function activeTeacherLeave(req: Request, occurrence: Occurrence, teacherId: string, excludedId?: string) {
-  const result = await req.db!.from('holidays').select(fields).lte('start_date', occurrence.occurrence_date).gte('end_date', occurrence.occurrence_date)
-  if (result.error) throw mapDatabaseError(result.error)
-  return (result.data as Holiday[] ?? []).filter((holiday) => holiday.id !== excludedId && applies(holiday, occurrence)).some((holiday) => holiday.kind === 'closure' || array(holiday.teacher_ids).includes(teacherId))
-}
-
 async function sync(req: Request, holiday: Holiday) {
+  if (holiday.kind === 'teacher_leave') return
   const rows = await occurrences(req, holiday)
-  if (holiday.kind === 'teacher_leave') {
-    for (const row of rows) {
-      const attendance = { ...(row.teacher_attendance ?? {}) }; let changed = false
-      for (const teacherId of array(holiday.teacher_ids)) if ((row.teacher_ids ?? []).includes(teacherId) && attendance[teacherId] !== false) { attendance[teacherId] = false; changed = true }
-      if (changed) { const result = await req.db!.from('class_occurrences').update({ teacher_attendance: attendance }).eq('id', row.id); if (result.error) throw mapDatabaseError(result.error) }
-    }
-    return
-  }
   await updateReports(req, rows.map((row) => row.id), 'absent', 'holiday')
   for (const row of rows) {
-    const attendance = Object.fromEntries((row.teacher_ids ?? []).map((id) => [id, false]))
-    const result = await req.db!.from('class_occurrences').update({ is_conducted: false, teacher_attendance: attendance }).eq('id', row.id)
+    const result = await req.db!.from('class_occurrences').update({ is_conducted: false }).eq('id', row.id)
     if (result.error) throw mapDatabaseError(result.error)
   }
 }

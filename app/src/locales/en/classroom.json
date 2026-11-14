@@ -410,5 +410,10 @@
         "joined": "Students joining by make-up or transfer",
         "joined_makeup": "{count} joining for a make-up",
         "joined_transfer": "{count} transferring in"
-    }
+    },
+    "teacher_attendance_pending": "Pending",
+    "teacher_roster_failed": "Could not load the teacher roster.",
+    "session_sync_failed": "The class was saved. Its lessons could not be synchronized.",
+    "retry_occurrence_data": "Retry",
+    "teacher_leave_failed": "Could not check teacher leave."
 }

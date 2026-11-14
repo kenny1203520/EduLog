@@ -32,14 +32,10 @@ export async function ensurePlannedLessons(req: Request, sessionId: string, from
   const existingDates = new Set((existing.data ?? []).map((row) => row.occurrence_date))
   const missing = dates.filter((date) => !existingDates.has(date))
   if (!missing.length) return { planned: dates.length, exhausted }
-  const assignments = await req.db!.from('class_session_teachers').select('teacher_id,effective_from,effective_to').eq('class_session_id', sessionId)
-  if (assignments.error) return { planned: dates.length, exhausted: true }
   const rows = missing.map((date) => {
     const rule = matchScheduleRule(rules, date)!
-    const active = (assignments.data ?? []).filter((assignment) => assignment.effective_from <= date && (!assignment.effective_to || assignment.effective_to >= date)).map((assignment) => assignment.teacher_id)
-    const teacherIds = [...new Set(active.length ? active : [sessionRow.user_id].filter(Boolean))]
     const conducted = !isClosed(date)
-    return { class_session_id: sessionId, occurrence_date: date, status: 'scheduled', original_start_time: rule.start_time, original_end_time: rule.end_time, time_zone: sessionRow.time_zone || 'Asia/Taipei', is_conducted: conducted, teacher_ids: teacherIds, teacher_attendance: Object.fromEntries(teacherIds.map((id) => [id, conducted])) }
+    return { class_session_id: sessionId, occurrence_date: date, status: 'scheduled', original_start_time: rule.start_time, original_end_time: rule.end_time, time_zone: sessionRow.time_zone || 'Asia/Taipei', is_conducted: conducted }
   })
   const inserted = await req.db!.from('class_occurrences').upsert(rows, { onConflict: 'class_session_id,occurrence_date', ignoreDuplicates: true })
   if (inserted.error) {
