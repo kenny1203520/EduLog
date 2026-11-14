@@ -303,8 +303,8 @@
         "classroom_filter": "教室篩選",
         "to_classroom": "目標班級時段",
         "effective_date": "生效日期",
-        "target_total_reports": "預計啟用課堂數",
-        "target_total_reports_hint": "預設為課程長度：{count} 堂。系統僅會補足缺少的報告。| 預設為課程長度：{count} 堂。系統僅會補足缺少的報告。",
+        "regular_reports": "正式上課堂數",
+        "regular_reports_hint": "課程共 {total} 堂，試聽已出席 {attended} 堂，預設再上 {count} 堂。已記錄的試聽報告會保留，不計入這個數字。",
         "note": "報名狀態將更新為「正式」，並可分配到新的班級時段。"
     },
     "credentials": {

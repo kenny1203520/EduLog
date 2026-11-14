@@ -16,6 +16,8 @@ type EnrollmentCreateOptions = {
 
 type EnrollmentUpdateOptions = {
     targetTotalReports?: number
+    /** Regular lessons to add on top of the reports already recorded, when a trial becomes regular. */
+    targetRegularReports?: number
 }
 
 export interface EnrollmentStartDateImpact {
@@ -55,7 +57,7 @@ export class EnrollmentCommandService {
         updates: Partial<EnrollmentDTO>,
         options: EnrollmentUpdateOptions = {}
     ): Promise<Enrollment> {
-        const response = await apiV1Client.patch<any>('/enrollments/' + encodeURIComponent(enrollmentId), { ...updates, ...(options.targetTotalReports !== undefined ? { target_total_reports: options.targetTotalReports } : {}) })
+        const response = await apiV1Client.patch<any>('/enrollments/' + encodeURIComponent(enrollmentId), { ...updates, ...(options.targetTotalReports !== undefined ? { target_total_reports: options.targetTotalReports } : {}), ...(options.targetRegularReports !== undefined ? { target_regular_reports: options.targetRegularReports } : {}) })
         return new Enrollment(response.data)
     }
 
