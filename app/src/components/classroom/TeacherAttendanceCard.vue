@@ -5,17 +5,27 @@ import type { TeacherAttendanceRow } from '@/composables/session/useOccurrenceTe
 
 defineProps<{
     rows: TeacherAttendanceRow[]
-    counts: { present: number; absent: number; onLeave: number }
+    counts: { present: number; absent: number; onLeave: number; pending?: number }
+    rosterFailed?: boolean
+    leaveFailed?: boolean
     canManage: boolean
     isHoliday: boolean
 }>()
 
 const emit = defineEmits<{
     edit: []
-    'toggle-attendance': [teacherId: string | undefined, event: Event]
+    retry: []
+    'toggle-attendance': [teacherId: string | undefined, present: boolean]
 }>()
 
 const { t } = useI18n()
+
+function requestAttendanceChange(teacherId: string | undefined, current: string, event: Event) {
+    const select = event.target as HTMLSelectElement
+    const present = select.value === 'true'
+    select.value = current
+    emit('toggle-attendance', teacherId, present)
+}
 </script>
 
 <template>
@@ -34,7 +44,7 @@ const { t } = useI18n()
                 </div>
             </div>
 
-            <button @click="emit('edit')"
+            <button v-if="canManage" type="button" @click="emit('edit')"
                 class="flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-50 border border-gray-100 text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 transition-all text-xs font-black uppercase tracking-widest">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                     stroke="currentColor">
@@ -45,8 +55,16 @@ const { t } = useI18n()
             </button>
         </div>
 
-        <div v-if="rows.length > 0" class="mt-2 divide-y divide-gray-100 rounded-2xl border border-gray-100 bg-gray-50/70">
-            <div v-for="{ teacher, onLeave, present, canEdit } in rows" :key="teacher.id"
+        <div v-if="leaveFailed && !rosterFailed" role="status">
+            {{ $t('classroom.teacher_leave_failed') }}
+            <button type="button" class="underline" @click="emit('retry')">{{ $t('classroom.retry_occurrence_data') }}</button>
+        </div>
+        <div v-if="rosterFailed" role="alert">
+            {{ $t('classroom.teacher_roster_failed') }}
+            <button type="button" class="underline" @click="emit('retry')">{{ $t('classroom.retry_occurrence_data') }}</button>
+        </div>
+        <div v-else-if="rows.length > 0" class="mt-2 divide-y divide-gray-100 rounded-2xl border border-gray-100 bg-gray-50/70">
+            <div v-for="{ teacher, onLeave, present, canEdit, pending } in rows" :key="teacher.id"
                 class="flex min-w-0 items-center gap-3 px-4 py-3 transition-colors"
                 :class="onLeave ? 'bg-amber-50/70' : (present ? 'bg-emerald-50/50' : '')">
                 <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-bold"
@@ -61,20 +79,17 @@ const { t } = useI18n()
                 </div>
                 <span class="shrink-0 rounded-full px-3 py-1 text-[10px] font-black"
                     :class="onLeave ? 'bg-amber-100 text-amber-800' : (present ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-600')">
-                    {{ onLeave ? $t('classroom.teacher_on_leave') : (present ? $t('attendance.present') : $t('attendance.absent')) }}
+                    {{ onLeave ? $t('classroom.teacher_on_leave') : (present ? $t('attendance.present') : (pending ? $t('classroom.teacher_attendance_pending') : $t('attendance.absent'))) }}
                 </span>
-                <label class="relative inline-flex shrink-0 items-center cursor-pointer"
-                    :class="{ 'opacity-50 cursor-not-allowed': !canEdit || isHoliday || onLeave }"
-                    :title="onLeave ? $t('classroom.teacher_attendance_on_leave') : (isHoliday ? $t('report.error.cannot_set_teacher_present_during_holiday') : (!canEdit ? $t('classroom.teacher_attendance_only_self') : ''))">
-                    <span class="sr-only">{{ teacher.name }} - {{ $t('attendance.present') }}</span>
-                    <input type="checkbox" :checked="present"
-                        :disabled="!canEdit || isHoliday || onLeave"
-                        @change="emit('toggle-attendance', teacher.id, $event)"
-                        :aria-label="`${teacher.name} - ${$t('attendance.present')}`" class="sr-only peer">
-                    <div :class="isHoliday ? 'bg-red-100' : 'bg-gray-200'"
-                        class="relative h-6 w-11 rounded-full transition-colors after:absolute after:left-[2px] after:top-0.5 after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all peer-checked:bg-emerald-500 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none">
-                    </div>
-                </label>
+                <select class="rounded border px-2 py-1"
+                    :value="pending ? '' : String(present)"
+                    :disabled="!canEdit || isHoliday || onLeave"
+                    :aria-label="teacher.name + ' · ' + $t('classroom.teacher_attendance_title')"
+                    @change="requestAttendanceChange(teacher.id, pending ? '' : String(present), $event)">
+                    <option value="" disabled>{{ $t('classroom.teacher_attendance_pending') }}</option>
+                    <option value="true">{{ $t('attendance.present') }}</option>
+                    <option value="false">{{ $t('attendance.absent') }}</option>
+                </select>
             </div>
         </div>
         <div v-else

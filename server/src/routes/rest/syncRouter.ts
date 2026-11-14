@@ -15,7 +15,7 @@ function today() { return new Date().toISOString().slice(0, 10) }
 function addMonths(date: string, months: number) { const value = new Date(`${date}T00:00:00Z`); value.setUTCMonth(value.getUTCMonth() + months); return value.toISOString().slice(0, 10) }
 function nextDate(value: string) { const date = new Date(`${value}T00:00:00Z`); date.setUTCDate(date.getUTCDate() + 1); return date.toISOString().slice(0, 10) }
 function protectedData(row: Existing) {
-  const manual = Boolean(row.notes?.trim() || row.actual_start_time || row.actual_end_time || row.status !== 'scheduled' || row.is_conducted === false || Object.values(row.teacher_attendance || {}).some((value) => value === false))
+  const manual = Boolean(row.notes?.trim() || row.actual_start_time || row.actual_end_time || row.status !== 'scheduled' || row.is_conducted === false || Object.keys(row.teacher_attendance || {}).length > 0)
   const report = row.occurrence_reports.some((item) => Boolean(item.content?.trim() || item.class_notes?.trim() || item.contact_notes?.trim() || item.is_completed || (item.attendance_status && item.attendance_status !== 'pending') || (item.version || 1) > 1))
   return manual || report
 }
@@ -63,17 +63,13 @@ async function sync(req: Request, res: Response) {
   }
   if (placeholderReports.length) { const result = await req.db.from('occurrence_reports').delete().in('id', placeholderReports); if (result.error) throw mapDatabaseError(result.error) }
   if (stale.length) { const result = await req.db.from('class_occurrences').delete().in('id', stale); if (result.error) throw mapDatabaseError(result.error) }
-  const assignments = await req.db.from('class_session_teachers').select('teacher_id,effective_from,effective_to').eq('class_session_id', sessionId)
-  if (assignments.error) throw mapDatabaseError(assignments.error)
   const rows: Record<string, unknown>[] = []
   for (const [date, rule] of planned) {
     if (retained.has(date)) continue
-    const teachers = assignments.data.filter((assignment) => assignment.effective_from <= date && (!assignment.effective_to || assignment.effective_to >= date)).map((assignment) => assignment.teacher_id)
-    const teacherIds = [...new Set(teachers.length ? teachers : [session.data.user_id].filter(Boolean))]
-    rows.push({ class_session_id: sessionId, occurrence_date: date, status: 'scheduled', original_start_time: rule.start_time, original_end_time: rule.end_time, time_zone: session.data.time_zone || 'Asia/Taipei', is_conducted: true, teacher_ids: teacherIds, teacher_attendance: Object.fromEntries(teacherIds.map((id) => [id, true])) })
+    rows.push({ class_session_id: sessionId, occurrence_date: date, status: 'scheduled', original_start_time: rule.start_time, original_end_time: rule.end_time, time_zone: session.data.time_zone || 'Asia/Taipei', is_conducted: true })
   }
   let created = 0
-  if (rows.length) { const result = await req.db.from('class_occurrences').upsert(rows, { onConflict: 'class_session_id,occurrence_date' }).select(fields); if (result.error) throw mapDatabaseError(result.error); created = result.data?.length ?? 0 }
+  if (rows.length) { const result = await req.db.from('class_occurrences').upsert(rows, { onConflict: 'class_session_id,occurrence_date', ignoreDuplicates: true }).select(fields); if (result.error) throw mapDatabaseError(result.error); created = result.data?.length ?? 0 }
   const body = { data: { created, updated, deleted: stale.length, preserved }, meta: {}, request_id: req.requestId, trace_id: req.traceId }
   await complete(req, 200, body)
   return res.json(body)

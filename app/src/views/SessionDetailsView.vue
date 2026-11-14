@@ -35,7 +35,7 @@ const {
     realtimeBadge, realtimeStatusMessage, realtimeStatusDetail, lastRealtimeUpdateAt, lastRealtimeUpdateLabel,
     realtimeRefreshError, isRealtimeRefreshing, retryRealtimeAction,
     requestRefreshSchedule, showRefreshConfirm, isRefreshing, handleConfirmRefresh,
-    teacherAttendanceRows, teacherAttendanceCounts, canManageTeacherAttendance, toggleTeacherAttendance,
+    teacherAttendanceRows, teacherAttendanceCounts, canManageTeacherAttendance, toggleTeacherAttendance, teacherRosterFailed, teacherLeaveFailed, loadOccurrenceTeachers,
     openTeacherEditModal, showTeacherEditModal, teacherSearchQuery, currentSessionTeachers, filteredTeachers,
     addTeacherForToday, removeAssignment,
     studentSearchQuery, studentAttendanceFilter, filteredEnrollments, allRosterEnrollments, hasActiveStudentFilters,
@@ -156,6 +156,9 @@ const {
                         :counts="teacherAttendanceCounts"
                         :can-manage="canManageTeacherAttendance"
                         :is-holiday="isOccurrenceInHoliday"
+                        :roster-failed="teacherRosterFailed"
+                        :leave-failed="teacherLeaveFailed"
+                        @retry="loadOccurrenceTeachers"
                         @edit="openTeacherEditModal"
                         @toggle-attendance="toggleTeacherAttendance" />
 

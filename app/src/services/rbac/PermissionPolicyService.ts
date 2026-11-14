@@ -50,10 +50,22 @@ function toPublicError(error: unknown): unknown {
 }
 
 export class PermissionPolicyService {
+    static async canManageSessionTeachers(classSessionId: string): Promise<boolean> {
+        const results = await Promise.all([
+            this.canInSession('teaching.class_sessions.update', classSessionId),
+            this.canInSession('teaching.roles.manage', classSessionId),
+        ])
+        return results.every(Boolean)
+    }
+
     static async canUpdateOccurrence(classSessionId: string): Promise<boolean> {
+        return this.canInSession('teaching.occurrences.update', classSessionId)
+    }
+
+    private static async canInSession(permission: string, classSessionId: string): Promise<boolean> {
         try {
             const query = new URLSearchParams({
-                permission: 'teaching.occurrences.update',
+                permission,
                 class_session_id: classSessionId
             })
             return (await apiV1Client.get<{ allowed: boolean }>(`/rbac/capability?${query.toString()}`)).data?.allowed === true

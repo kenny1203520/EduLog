@@ -237,6 +237,45 @@ BEGIN
 END;
 $$;
 
+-- Exercise same-row creation and per-teacher attendance as authenticated users.
+RESET ROLE;
+UPDATE public.user_role_assignments SET role_id = (
+  SELECT id FROM public.roles WHERE domain = 'teaching' AND code = 'teaching_owner' AND is_builtin
+) WHERE user_id = '15800000-0000-4000-8000-000000000007';
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE
+  room jsonb;
+  session_id uuid;
+BEGIN
+  room := public.create_classroom_with_details('{"name":"Scope created room"}');
+  session_id := public.save_class_session_with_schedule(
+    jsonb_build_object('name','Scope created session','classroom_id',room->>'id','start_date',CURRENT_DATE),
+    '[{"schedule_kind":"weekly","day_of_week":1,"start_time":"13:00","end_time":"14:00"}]'
+  );
+  IF NOT EXISTS (SELECT 1 FROM public.class_session_schedule_rules WHERE class_session_id = session_id)
+     OR NOT EXISTS (SELECT 1 FROM public.class_sessions WHERE id = session_id AND start_time = '13:00') THEN
+    RAISE EXCEPTION 'Created session must be readable with its schedule';
+  END IF;
+END $$;
+
+SELECT set_config('request.jwt.claim.sub', '15800000-0000-4000-8000-000000000002', true);
+DO $$
+DECLARE
+  occurrence_id uuid := '15800000-0000-4000-8000-000000000011';
+  result jsonb;
+BEGIN
+  result := public.set_occurrence_teacher_attendance(occurrence_id, '{"15800000-0000-4000-8000-0000000000f2":true}');
+  IF result->>'15800000-0000-4000-8000-0000000000f2' IS DISTINCT FROM 'true' THEN
+    RAISE EXCEPTION 'Teacher cannot register own attendance';
+  END IF;
+  BEGIN
+    PERFORM public.set_occurrence_teacher_attendance(occurrence_id, '{"15800000-0000-4000-8000-0000000000f5":true}');
+    RAISE EXCEPTION 'Teacher can register attendance on behalf of a coworker';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END $$;
+
 -- Trial enrollments (1000176): a report can be added by hand in the trial
 -- enrollment's own class from its start date, without joining the roster.
 RESET ROLE;

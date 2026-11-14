@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { describeError } from '@/services/errors/describeError'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import SearchableSelect from '@/components/ui/SearchableSelect.vue'
@@ -38,6 +39,13 @@ const selectedRoleId = ref('')
 const effectiveFrom = ref(localToday())
 const effectiveTo = ref('')
 const formError = ref('')
+const formRequestId = ref<string | null>(null)
+
+function showFormError(error: unknown) {
+    const description = describeError(error)
+    formError.value = description.i18nKey
+    formRequestId.value = description.requestId
+}
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 let searchSequence = 0
 
@@ -96,6 +104,7 @@ function clearForm() {
     effectiveTo.value = ''
     userOptions.value = []
     formError.value = ''
+    formRequestId.value = null
 }
 
 function openCreateForm() {
@@ -118,6 +127,7 @@ function openEditForm(assignment: ClassroomRoleAssignmentDTO) {
         }]
     }
     formError.value = ''
+    formRequestId.value = null
     isFormOpen.value = true
 }
 
@@ -197,11 +207,12 @@ async function loadPanel() {
 async function submitAssignment() {
     if (!props.classroomId || !canManage.value || !canListUsers.value || !selectedUserId.value || !selectedRoleId.value || !effectiveFrom.value) return
     if (effectiveTo.value && effectiveTo.value < effectiveFrom.value) {
-        formError.value = t('classroom.role_assignments.invalid_date_range')
+        formError.value = 'classroom.role_assignments.invalid_date_range'
         return
     }
     saving.value = true
     formError.value = ''
+    formRequestId.value = null
     try {
         const isNewAssignment = !editingAssignment.value
         const capabilities = await RoleService.getCapabilities()
@@ -223,11 +234,9 @@ async function submitAssignment() {
         await loadAssignments()
     } catch (error: any) {
         if (error?.code === 'CLASSROOM_ROLE_ASSIGNMENT_OVERLAP') {
-            formError.value = t('classroom.role_assignments.overlap')
-        } else if (error?.status === 403) {
-            formError.value = t('classroom.role_assignments.directory_permission_required')
+            formError.value = 'classroom.role_assignments.overlap'
         } else {
-            formError.value = error?.message || t('classroom.role_assignments.save_failed')
+            showFormError(error)
         }
     } finally {
         saving.value = false
@@ -244,7 +253,7 @@ async function revokeAssignment(assignment: ClassroomRoleAssignmentDTO) {
         if (assignments.value.length === 1 && page.value > 1) page.value -= 1
         await loadAssignments()
     } catch (error: any) {
-        formError.value = error?.message || t('classroom.role_assignments.revoke_failed')
+        showFormError(error)
     } finally {
         saving.value = false
     }
@@ -297,7 +306,7 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
                 </label>
             </div>
             <EffectiveTeachingRoles v-if="selectedUserId && classroomId" :user-id="selectedUserId" scope-type="classroom" :scope-id="classroomId" />
-            <p v-if="formError" role="alert" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{{ formError }}</p>
+            <p v-if="formError" role="alert" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{{ t(formError) }} <span v-if="formRequestId">{{ t('errors.request_reference', { id: formRequestId }) }}</span></p>
             <div class="flex flex-col-reverse justify-end gap-2 sm:flex-row">
                 <button type="button" class="min-h-11 rounded-xl px-4 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400" :disabled="saving" @click="clearForm">{{ t('common.cancel') }}</button>
                 <button type="submit" class="min-h-11 rounded-xl bg-emerald-600 px-5 py-2 text-sm font-black text-white hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 disabled:opacity-50" :disabled="saving || !selectedUserId || !selectedRoleId || !effectiveFrom">

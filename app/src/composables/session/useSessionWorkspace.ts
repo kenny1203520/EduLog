@@ -5,7 +5,6 @@ import { useToast } from 'vue-toastification'
 import { PageApiService } from '@/services/api/PageApiService'
 import { SessionService } from '@/services/session/SessionService'
 import { PermissionPolicyService } from '@/services/rbac/PermissionPolicyService'
-import { TeacherService } from '@/services/teacher/TeacherService'
 import { parseClassSessionDate } from '@/services/session/ClassSessionInvalidation'
 import { shouldApplyCommittedReport } from '@/services/report/CommittedReportState'
 import type { OccurrenceLessonTransfer } from '@/services/enrollment/EnrollmentTransferQueryService'
@@ -112,7 +111,7 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
         progressGapCheckFailed,
     } = progress
     const teachers = useOccurrenceTeachers({ sessionId, session, todayOccurrence, isOccurrenceInHoliday })
-    const { sessionTeachers, loadOccurrenceTeachers } = teachers
+    const { loadOccurrenceTeachers } = teachers
 
     // Keep complete roster metrics separate from the workflow filter.
     const rosterLists = computed(() => getRosterEnrollments(
@@ -535,11 +534,7 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
             const allEnrollments = workspace.enrollments.map(enrollment => new Enrollment(enrollment))
             enrollments.value = allEnrollments
             workspaceRosterDate = typeof rawSession.roster_date === 'string' ? rawSession.roster_date : null
-            const [teacherAssignments, canManageAttendance] = await Promise.all([
-                TeacherService.getSessionTeachers(sessionId),
-                PermissionPolicyService.canUpdateOccurrence(sessionId)
-            ])
-            sessionTeachers.value = teacherAssignments
+            const canManageAttendance = await PermissionPolicyService.canManageSessionTeachers(sessionId)
             teachers.canManageTeacherAttendance.value = canManageAttendance
             teachers.allTeachersList.value = workspace.teachers
 
@@ -618,13 +613,11 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
                 const occurrenceDate = todayOccurrence.value.occurrenceDate
                 const date = DateUtils.formatLocalDate(occurrenceDate)
                 if (!options.reportOnly) {
-                    const [assignments, holiday, navigation] = await Promise.all([
-                        TeacherService.getSessionTeachers(sessionId),
+                    const [holiday, navigation] = await Promise.all([
                         HolidayQueryService.isHoliday(date, undefined, sessionId),
                         OccurrenceQueryService.getOccurrenceNavigationState(sessionId, occurrenceDate),
                     ])
                     if (requestId !== realtimeRefreshRequest || todayOccurrence.value?.id !== occurrenceId) return
-                    sessionTeachers.value = assignments
                     isOccurrenceInHoliday.value = holiday
                     previousOccurrence.value = navigation.previous
                     nextOccurrence.value = navigation.next

@@ -158,13 +158,14 @@ async function remove(req: Request, res: Response) {
   await authorize(req, id, 'update')
   const replay = await idempotency(req, 200, null)
   if (replay) return res.status(replay.status).json(replay.body)
-  let builder = req.db!.from('class_session_teachers').delete().eq('class_session_id', id)
-  if (req.params.teacherId) {
-    builder = builder.eq('teacher_id', req.params.teacherId)
+  if (req.params.teacherId && input.teacher_id && req.params.teacherId !== input.teacher_id) {
+    throw new ApiError(400, 'INVALID_ID', 'Teacher ids must agree')
   }
-  if (input.teacher_id) builder = builder.eq('teacher_id', input.teacher_id)
-  if (input.effective_from) builder = builder.eq('effective_from', input.effective_from)
-  const result = await builder.select(assignmentFields)
+  const result = await req.db!.rpc('end_class_session_teacher_assignments', {
+    p_session: id,
+    p_teacher: req.params.teacherId ?? input.teacher_id ?? null,
+    p_effective_from: input.effective_from ?? null,
+  })
   if (result.error) throw mapDatabaseError(result.error)
   const data = (await hydrateAssignments(req, result.data ?? [])).map(mapAssignment).filter(Boolean)
   setAuditContext(req, { resourceId: null, scopeId: id, scopeType: 'class_session' })
