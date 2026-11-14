@@ -1,4 +1,7 @@
 {
+    "progress_summary_unavailable": "Progress summaries are temporarily unavailable.",
+    "report_completion_unavailable": "Report completion markers are temporarily unavailable.",
+    "occurrence_reports_unavailable": "Some reports are unavailable. Retry to load or create missing reports.",
     "copy": {
         "session_delete_success": "Class session deleted successfully",
         "unknown_room": "Unknown classroom",

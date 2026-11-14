@@ -1,4 +1,7 @@
 {
+    "progress_summary_unavailable": "暫時無法載入進度摘要。",
+    "report_completion_unavailable": "暫時無法載入報告完成標記。",
+    "occurrence_reports_unavailable": "部分報告暫時無法使用。請重試載入或建立缺少的報告。",
     "copy": {
         "session_delete_success": "課堂已刪除",
         "unknown_room": "未知教室",

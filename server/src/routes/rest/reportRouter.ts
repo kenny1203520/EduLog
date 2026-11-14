@@ -453,7 +453,7 @@ async function progressSummaryReports(req: Request, res: Response) {
     if (!enrollmentById.has(enrollmentId)) continue
     const [anchored, linked] = await Promise.all([
       req.adminDb.from('occurrence_reports').select('id,enrollment_id,class_occurrence_id,lesson_id,is_completed,progress_letter,lesson_entries,attendance_status,created_at,updated_at,class_occurrences(occurrence_date)').eq('enrollment_id', enrollmentId).order(field, { ascending: !descending }).limit(query.limit),
-      req.adminDb.from('occurrence_reports').select('id,enrollment_id,class_occurrence_id,lesson_id,is_completed,progress_letter,lesson_entries,attendance_status,created_at,updated_at,class_occurrences(occurrence_date)').contains('lesson_entries', [{ enrollment_id: enrollmentId }]).order(field, { ascending: !descending }).limit(query.limit),
+      req.adminDb.from('occurrence_reports').select('id,enrollment_id,class_occurrence_id,lesson_id,is_completed,progress_letter,lesson_entries,attendance_status,created_at,updated_at,class_occurrences(occurrence_date)').contains('lesson_entries', JSON.stringify([{ enrollment_id: enrollmentId }])).order(field, { ascending: !descending }).limit(query.limit),
     ])
     if (anchored.error) throw mapDatabaseError(anchored.error)
     if (linked.error) throw mapDatabaseError(linked.error)

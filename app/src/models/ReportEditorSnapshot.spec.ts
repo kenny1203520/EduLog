@@ -98,6 +98,28 @@ describe('report editor snapshot rules', () => {
         expect(payload).toMatchObject({ lessonEntries: entries, primaryLessonEntryId: 'entry-b' })
     })
 
+    it('sends the primary entry id with the entries when only a second entry is added', () => {
+        const base = buildSnapshotFromProps({ enrollmentId: 'enrollment-a' })
+        const first = { id: 'entry-a', enrollment_id: 'enrollment-a', lesson_id: 'lesson-a', is_completed: true, progress_letter: null }
+        const previous = { ...base, lessonEntries: [first], primaryLessonEntryId: 'entry-a' }
+        const entries = [first, { id: 'entry-b', enrollment_id: 'enrollment-b', lesson_id: 'lesson-b', is_completed: false, progress_letter: 'C-D' }]
+        const { keys, payload } = buildDirtyReportPayload({ ...previous, lessonEntries: entries }, previous, { includeAttendance: true })
+        expect(keys).toEqual(['lessonEntries'])
+        expect(payload).toEqual({ lessonEntries: entries, primaryLessonEntryId: 'entry-a' })
+    })
+
+    it('sends the entries with the primary entry id when only the primary entry changes', () => {
+        const base = buildSnapshotFromProps({ enrollmentId: 'enrollment-a' })
+        const entries = [
+            { id: 'entry-a', enrollment_id: 'enrollment-a', lesson_id: 'lesson-a', is_completed: true, progress_letter: null },
+            { id: 'entry-b', enrollment_id: 'enrollment-b', lesson_id: 'lesson-b', is_completed: false, progress_letter: 'C-D' },
+        ]
+        const previous = { ...base, lessonEntries: entries, primaryLessonEntryId: 'entry-a' }
+        const { keys, payload } = buildDirtyReportPayload({ ...previous, primaryLessonEntryId: 'entry-b' }, previous, { includeAttendance: true })
+        expect(keys).toEqual(['primaryLessonEntryId'])
+        expect(payload).toEqual({ lessonEntries: entries, primaryLessonEntryId: 'entry-b' })
+    })
+
     it('ignores display-only course and lesson labels when deciding if entries changed', () => {
         const previous = buildSnapshotFromProps({ enrollmentId: 'enrollment-a' })
         const entry = {

@@ -288,6 +288,7 @@ export async function authorizeResource(
   if (scope === 'self') return selfPermission(req, row)
   if (scope === 'platform') return apiPermission(req, permission, null, null)
   if (scope === 'course') {
+    if (def.route === 'lessons' && isReadAction(permission)) return anyScopeTeachingPermission(req, permission)
     if (!req.db) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
     const courseId = rowId(row, 'course_id') ?? id
     if (!courseId) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
@@ -369,6 +370,7 @@ export async function authorizeCollection(req: Request, def: ResourceDefinition,
     return typeof candidate === 'string' ? candidate : null
   }
   if (def.scope === 'course') {
+    if (def.route === 'lessons' && isReadAction(permission)) return anyScopeTeachingPermission(req, permission)
     const courseId = value('course_id')
     if (courseId) return coursePermission(req, permission, courseId)
     const teachingId = value('teaching_id')

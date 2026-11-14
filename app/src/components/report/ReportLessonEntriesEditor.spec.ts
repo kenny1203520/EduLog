@@ -47,7 +47,7 @@ describe('ReportLessonEntriesEditor', () => {
         await wrapper.get('button').trigger('click')
         const added = wrapper.emitted('update:entries')?.at(-1)?.[0] as Array<typeof entry>
         expect(added).toHaveLength(2)
-        expect(added[1]).toMatchObject({ enrollment_id: 'enrollment-a', lesson_id: null, is_completed: false })
+        expect(added[1]).toMatchObject({ enrollment_id: 'enrollment-a', course_id: 'course-a', lesson_id: null, is_completed: false })
 
         await wrapper.setProps({ entries: added })
         expect(wrapper.find('[role="status"]').text()).toContain('report.editor.lesson_entries.select_lesson_required')

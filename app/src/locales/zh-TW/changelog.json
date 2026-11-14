@@ -1,6 +1,15 @@
 {
     "entries": [
         {
+            "version": "2.0.0-alpha.8",
+            "date": "2026-11-13",
+            "changes": {
+                "fixed": ["恢復教師與助教讀取授課班級報告、課程單元與請假狀態。"],
+                "added": ["在帳號安全頁管理已啟用的 OAuth 登入方式。"],
+                "deployment": ["部署 alpha.8 前，請先套用至 1000173 的資料庫遷移。"]
+            }
+        },
+        {
             "version": "2.0.0-alpha.7",
             "date": "2026-11-13",
             "changes": {
