@@ -389,3 +389,7 @@ GoTrue must have initialized its Auth schema first. See the
 The atomic history reconciliation now accepts an exact report ID, an explicit correction reconfirmation flag, and the target enrollment/course/lesson entry identity. It updates shared attendance/comments at report level while applying lesson progress only to that entry. Existing entry IDs and all other entries are preserved; stale target entry identities and attempts to change a linked source report are rejected. The primary entry remains unchanged unless the report has no primary entry yet.
 
 Apply this migration before deploying the extension and API changes. Run the extension history planner/workbench tests, `server/src/routes/extension/extensionWorkspaceRouter.test.ts`, `supabase/tests/migration_chain_static_test.ts`, and the source-report identity database integration suite after applying the migration.
+
+## Manual reports for trial enrollments (1000176)
+
+`1000176_trial_manual_reports.sql` lets `can_create_occurrence_report` accept a trial enrollment for a lesson of its own class on or after its start date, so a report can be added by hand. Trial enrollments stay off the roster until they hold a report and are still not provisioned automatically. Apply it before updating the API. Run `supabase/tests/scoped_teaching_access_integration.sql` after applying it.

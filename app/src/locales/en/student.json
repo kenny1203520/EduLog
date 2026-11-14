@@ -303,8 +303,8 @@
         "classroom_filter": "Classroom Filter",
         "to_classroom": "Target Session",
         "effective_date": "Effective Date",
-        "target_total_reports": "Expected active lessons",
-        "target_total_reports_hint": "Defaults to the course length: {count} lesson. The system only creates missing reports. | Defaults to the course length: {count} lessons. The system only creates missing reports.",
+        "regular_reports": "Regular lessons",
+        "regular_reports_hint": "The course has {total} lessons and {attended} trial lessons were attended, so the default is {count} more. Recorded trial reports are kept and are not part of this number.",
         "note": "The enrollment status will be updated to 'Regular' and a new session can be assigned."
     },
     "credentials": {

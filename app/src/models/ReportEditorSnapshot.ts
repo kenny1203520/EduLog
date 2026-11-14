@@ -238,12 +238,14 @@ export function buildDirtyReportPayload(
     addIfChanged('progressLetter', () => {
         payload.progressLetter = current.progressLetter || null
     })
-    addIfChanged('lessonEntries', () => {
+    // The API rejects a patch that carries only one of these two fields, so a
+    // change to either sends both.
+    const assignLessonEntries = () => {
         payload.lessonEntries = current.lessonEntries ?? []
-    })
-    addIfChanged('primaryLessonEntryId', () => {
         payload.primaryLessonEntryId = current.primaryLessonEntryId ?? null
-    })
+    }
+    addIfChanged('lessonEntries', assignLessonEntries)
+    addIfChanged('primaryLessonEntryId', assignLessonEntries)
     if (options.includeAttendance) {
         addIfChanged('attendanceStatus', () => {
             payload.attendanceStatus = current.attendanceStatus

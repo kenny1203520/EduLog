@@ -15,7 +15,7 @@ export const enrollmentBodySchema = z.object({
   student_id: z.string().uuid().optional(), course_id: z.string().uuid().optional(), classroom_id: z.string().uuid().nullable().optional(), class_session_id: z.string().uuid().nullable().optional(),
   status: z.enum(['trial', 'regular', 'dropped', 'completed']).optional(), start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), lesson_number: z.number().int().min(0).nullable().optional(),
   external_link: z.string().max(2048).nullable().optional(), time_zone: z.string().min(1).max(64).optional(), koding_admission_id: z.string().max(255).nullable().optional(),
-  target_report_count: z.number().int().min(0).max(200).optional(), target_total_reports: z.number().int().min(0).max(200).optional(),
+  target_report_count: z.number().int().min(0).max(200).optional(), target_total_reports: z.number().int().min(0).max(200).optional(), target_regular_reports: z.number().int().min(1).max(200).optional(),
 }).strict()
 export const enrollmentCreateSchema = enrollmentBodySchema.required({ student_id: true, course_id: true })
 type Input = z.infer<typeof enrollmentBodySchema>
@@ -37,7 +37,7 @@ async function authorizeExisting(req: Request, action: 'update' | 'delete', enro
 async function hasCrossEnrollmentReportReferences(req: Request, enrollmentId: string, preserveOwnProgress = false) {
   if (!req.adminDb) throw new ApiError(503, 'RESOURCE_SERVICE_UNAVAILABLE', 'The report service is unavailable')
   const [incoming, anchored] = await Promise.all([
-    req.adminDb.from('occurrence_reports').select('id').contains('lesson_entries', [{ enrollment_id: enrollmentId }]).neq('enrollment_id', enrollmentId).limit(1),
+    req.adminDb.from('occurrence_reports').select('id').contains('lesson_entries', JSON.stringify([{ enrollment_id: enrollmentId }])).neq('enrollment_id', enrollmentId).limit(1),
     req.adminDb.from('occurrence_reports').select('id,lesson_entries').eq('enrollment_id', enrollmentId).range(0, 9999),
   ])
   if (incoming.error) throw mapDatabaseError(incoming.error)
@@ -127,6 +127,7 @@ async function align(req: Request, input: Record<string, unknown>, existing?: Re
 type ReportSyncResult = {
   start_date: string
   target_count: number
+  fixed_count?: number
   created_dates: string[]
   removed_dates: string[]
   fixed_before_start_dates: string[]
@@ -137,6 +138,15 @@ type ReportSyncResult = {
 export function todayIn(timeZone: string, now = new Date()) {
   try { return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now) }
   catch { return now.toISOString().slice(0, 10) }
+}
+
+/**
+ * A trial enrollment whose reports are all recorded and all dated before its
+ * start date has no report left to fill in. Returns the report total that adds
+ * one placeholder from the start date, or null when none is needed.
+ */
+export function trialReportTargetAfterStartChange(plan: Pick<ReportSyncResult, 'target_count' | 'fixed_before_start_dates'>) {
+  return plan.target_count === plan.fixed_before_start_dates.length ? plan.target_count + 1 : null
 }
 
 /**
@@ -203,9 +213,18 @@ async function update(req: Request, res: Response) {
   }
   const result = await req.db.from('enrollments').update(aligned).eq('id', id).select(fields).maybeSingle(); if (result.error) throw mapDatabaseError(result.error); if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found')
   let reports: ReportSyncResult | null = null
-  if (input.status === 'regular' && previous.data.status !== 'regular' && input.target_total_reports) reports = await syncEnrollmentReports(req, result.data, { targetCount: input.target_total_reports })
+  if (input.status === 'regular' && previous.data.status !== 'regular' && input.target_regular_reports) {
+    // Regular lessons are added on top of the reports already recorded (the trial lessons).
+    const recorded = await syncEnrollmentReports(req, result.data, { dryRun: true })
+    if (recorded) reports = await syncEnrollmentReports(req, result.data, { targetCount: (recorded.fixed_count ?? 0) + input.target_regular_reports })
+  }
+  else if (input.status === 'regular' && previous.data.status !== 'regular' && input.target_total_reports) reports = await syncEnrollmentReports(req, result.data, { targetCount: input.target_total_reports })
   // A new start date shifts the same number of placeholders; content is kept.
-  else if (input.start_date && input.start_date !== previous.data.start_date && result.data.status !== 'dropped') reports = await syncEnrollmentReports(req, result.data)
+  else if (input.start_date && input.start_date !== previous.data.start_date && result.data.status !== 'dropped') {
+    reports = await syncEnrollmentReports(req, result.data)
+    const trialTarget = result.data.status === 'trial' && reports ? trialReportTargetAfterStartChange(reports) : null
+    if (trialTarget !== null) reports = await syncEnrollmentReports(req, result.data, { targetCount: trialTarget })
+  }
   if (input.status === 'dropped' && previous.data.status !== 'dropped') {
     const pending = await req.db.from('occurrence_reports').select('id,content,class_notes,contact_notes,progress_letter,lesson_id').eq('enrollment_id', id).eq('is_completed', false).eq('attendance_status', 'pending'); if (pending.error) throw mapDatabaseError(pending.error)
     const deletable = (pending.data ?? []).filter((row) => !row.lesson_id && [row.content, row.class_notes, row.contact_notes, row.progress_letter].every((value) => !value?.trim())).map((row) => row.id)
@@ -219,8 +238,10 @@ async function startDateImpact(req: Request, res: Response) {
   const id = typeof req.params.id === 'string' ? req.params.id : undefined; if (!id) throw new ApiError(400, 'INVALID_ID', 'Enrollment id is required')
   const query = z.object({ start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).strict().parse(req.query)
   await authorizeExisting(req, 'update', id)
-  const enrollment = await req.db.from('enrollments').select('id,class_session_id').eq('id', id).maybeSingle(); if (enrollment.error) throw mapDatabaseError(enrollment.error); if (!enrollment.data) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found')
-  const plan = await syncEnrollmentReports(req, enrollment.data, { startDate: query.start_date, dryRun: true })
+  const enrollment = await req.db.from('enrollments').select('id,class_session_id,status').eq('id', id).maybeSingle(); if (enrollment.error) throw mapDatabaseError(enrollment.error); if (!enrollment.data) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found')
+  let plan = await syncEnrollmentReports(req, enrollment.data, { startDate: query.start_date, dryRun: true })
+  const trialTarget = enrollment.data.status === 'trial' && plan ? trialReportTargetAfterStartChange(plan) : null
+  if (trialTarget !== null) plan = await syncEnrollmentReports(req, enrollment.data, { startDate: query.start_date, targetCount: trialTarget, dryRun: true })
   return res.json({ data: plan, meta: {}, request_id: req.requestId, trace_id: req.traceId })
 }
 async function remove(req: Request, res: Response) {
@@ -289,7 +310,7 @@ async function enrollmentReportProgressContext(req: Request, res: Response) {
     const linkedReportFields = 'id,enrollment_id,lesson_entries,attendance_status,content,content_document,class_occurrences!inner(occurrence_date,class_sessions!inner(teaching_id)),enrollments!inner(student_id)'
     for (let offset = 0; ; offset += pageSize) {
       let builder = req.adminDb.from('occurrence_reports').select(linkedReportFields)
-        .contains('lesson_entries', [{ enrollment_id: enrollmentId, course_id: targetEnrollment.course_id }])
+        .contains('lesson_entries', JSON.stringify([{ enrollment_id: enrollmentId, course_id: targetEnrollment.course_id }]))
         .neq('enrollment_id', enrollmentId)
         .neq('id', query.report_id)
         .eq('enrollments.student_id', targetEnrollment.student_id)
@@ -365,7 +386,7 @@ async function linkedLessonReportHistory(req: Request, res: Response) {
   const [reports, course, lessons] = await Promise.all([
     req.adminDb.from('occurrence_reports')
       .select('id,enrollment_id,class_occurrence_id,lesson_entries,attendance_status,content,content_document,class_occurrences!inner(occurrence_date),enrollments!inner(student_id)')
-      .contains('lesson_entries', [{ enrollment_id: enrollmentId }])
+      .contains('lesson_entries', JSON.stringify([{ enrollment_id: enrollmentId }]))
       .neq('enrollment_id', enrollmentId)
       .eq('enrollments.student_id', targetEnrollment.student_id)
       .range(0, 9999),
@@ -428,7 +449,7 @@ async function lessonCompletion(req: Request, enrollmentId: string, courseId: st
     req.db!.from('lessons').select('id,sequence,title').eq('course_id', courseId).order('sequence', { ascending: true }),
     Promise.all([
       req.adminDb.from('occurrence_reports').select('id,enrollment_id,lesson_id,is_completed,lesson_entries').eq('enrollment_id', enrollmentId).range(0, 9999),
-      req.adminDb.from('occurrence_reports').select('id,enrollment_id,lesson_id,is_completed,lesson_entries').contains('lesson_entries', [{ enrollment_id: enrollmentId }]).range(0, 9999),
+      req.adminDb.from('occurrence_reports').select('id,enrollment_id,lesson_id,is_completed,lesson_entries').contains('lesson_entries', JSON.stringify([{ enrollment_id: enrollmentId }])).range(0, 9999),
     ]),
   ])
   if (lessons.error) throw mapDatabaseError(lessons.error)

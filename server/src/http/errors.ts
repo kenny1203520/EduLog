@@ -14,6 +14,9 @@ export class ApiError extends Error {
     super(message)
     this.name = 'ApiError'
   }
+
+  /** Database error code behind an unmapped failure. Logged only, never sent to the client. */
+  databaseErrorCode?: string
 }
 
 export function mapDatabaseError(error: { code?: string; message?: string } | null | undefined): ApiError {
@@ -54,7 +57,9 @@ export function mapDatabaseError(error: { code?: string; message?: string } | nu
     if (match) return new ApiError(match[1], match[2], match[3])
     return new ApiError(422, 'BUSINESS_VALIDATION_FAILED', 'The request violates a business rule')
   }
-  return new ApiError(500, 'DATABASE_ERROR', 'The request could not be completed')
+  const unmapped = new ApiError(500, 'DATABASE_ERROR', 'The request could not be completed')
+  unmapped.databaseErrorCode = typeof error.code === 'string' && /^[A-Za-z0-9]{1,16}$/.test(error.code) ? error.code : 'UNKNOWN'
+  return unmapped
 }
 
 export function sendError(req: Request, res: Response, error: unknown) {
@@ -74,7 +79,7 @@ export function sendError(req: Request, res: Response, error: unknown) {
     req.log.error({ error_type: error instanceof Error ? error.name : 'UnknownError', request_id: req.requestId, trace_id: req.traceId }, 'unhandled_api_error')
   }
   if (apiError.status >= 500) {
-    req.log.error({ code: apiError.code, request_id: req.requestId, trace_id: req.traceId }, 'api_failure')
+    req.log.error({ code: apiError.code, ...(apiError.databaseErrorCode ? { database_error_code: apiError.databaseErrorCode } : {}), request_id: req.requestId, trace_id: req.traceId }, 'api_failure')
   }
 
   if (apiError.retryAfter) res.setHeader('Retry-After', String(apiError.retryAfter))

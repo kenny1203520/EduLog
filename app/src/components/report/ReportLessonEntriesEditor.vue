@@ -289,9 +289,13 @@ function changeProgress(entry: ReportLessonEntryDTO, edge: 'start' | 'end', lett
 }
 
 function addEntry() {
+    const enrollmentId = props.defaultEnrollmentId || enrollmentOptions.value[0]?.id || ''
+    const option = enrollmentOptions.value.find(item => item.id === enrollmentId)
     const entry: ReportLessonEntryDTO = {
         id: createLessonEntryId(),
-        enrollment_id: props.defaultEnrollmentId || enrollmentOptions.value[0]?.id || '',
+        enrollment_id: enrollmentId,
+        course_id: option?.course_id || undefined,
+        course_name: option?.course_name,
         lesson_id: null,
         is_completed: false,
         progress_letter: null,
