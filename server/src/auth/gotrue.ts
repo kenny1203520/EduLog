@@ -12,10 +12,13 @@ export type GoTrueSession = { access_token: string; refresh_token: string; expir
 export type EmailLinkType = 'invite' | 'recovery' | 'email_change' | 'signup' | 'email'
 
 type GoTrueConfig = Pick<ApiConfig, 'SUPABASE_URL' | 'SUPABASE_ANON_KEY' | 'GOTRUE_INTERNAL_URL' | 'NODE_ENV'>
+type ProviderDiscoveryConfig = GoTrueConfig & Pick<ApiConfig, 'AUTH_CUSTOM_OAUTH_DISCOVERY_ENABLED' | 'SUPABASE_SERVICE_ROLE_KEY'>
 
 /** Settings keys that are not social sign-in providers. */
 const NON_OAUTH = new Set(['email', 'phone', 'anonymous_users', 'saml'])
 const PROVIDER_PATTERN = /^[a-z][a-z0-9_]{1,40}$/
+const CUSTOM_PROVIDER_PATTERN = /^custom:[a-z0-9:-]{2,43}$/
+export const OAUTH_PROVIDER_MAX_LENGTH = 50
 
 function withoutTrailingSlashes(url: string) {
   let end = url.length
@@ -42,20 +45,38 @@ async function call<T>(config: GoTrueConfig, path: string, init: RequestInit = {
   return (response.status === 204 ? null : await response.json()) as T
 }
 
-let providerCache: { at: number; providers: string[] } | null = null
+let providerCache: { config: ProviderDiscoveryConfig; at: number; providers: string[] } | null = null
 const PROVIDER_CACHE_MS = 60_000
 
-/** OAuth providers GoTrue has enabled, read from its public settings. */
-export async function enabledOAuthProviders(config: GoTrueConfig, now = Date.now()): Promise<string[]> {
-  if (providerCache && now - providerCache.at < PROVIDER_CACHE_MS) return providerCache.providers
+async function enabledCustomProviders(config: ProviderDiscoveryConfig): Promise<string[]> {
+  if (!config.AUTH_CUSTOM_OAUTH_DISCOVERY_ENABLED) return []
+  if (!config.GOTRUE_INTERNAL_URL) throw new Error('GOTRUE_INTERNAL_URL_REQUIRED')
+  const response = await fetch(oauthAuthUrl(config, '/admin/custom-providers'), {
+    headers: { authorization: `Bearer ${config.SUPABASE_SERVICE_ROLE_KEY}`, accept: 'application/json' },
+    signal: AbortSignal.timeout(10_000),
+    redirect: 'error',
+  })
+  if (!response.ok) throw new Error('GOTRUE_CUSTOM_PROVIDERS_UNAVAILABLE')
+  const payload = await response.json() as { providers?: Array<{ identifier?: unknown; enabled?: unknown }> }
+  if (!Array.isArray(payload?.providers)) throw new Error('INVALID_GOTRUE_CUSTOM_PROVIDERS')
+  return payload.providers.flatMap(item => item?.enabled === true && typeof item.identifier === 'string'
+    && CUSTOM_PROVIDER_PATTERN.test(item.identifier) ? [item.identifier] : [])
+}
+
+/** Expose provider identifiers only. Custom discovery uses the private GoTrue admin API. */
+export async function enabledOAuthProviders(config: ProviderDiscoveryConfig, now = Date.now()): Promise<string[]> {
+  if (providerCache?.config === config && now - providerCache.at < PROVIDER_CACHE_MS) return providerCache.providers
   try {
-    const settings = await call<{ external?: Record<string, unknown> }>(config, '/settings')
+    const [settings, custom] = await Promise.all([
+      call<{ external?: Record<string, unknown> }>(config, '/settings'),
+      enabledCustomProviders(config),
+    ])
     if (!settings?.external || typeof settings.external !== 'object' || Array.isArray(settings.external)) throw new Error('INVALID_GOTRUE_SETTINGS')
-    const providers = Object.entries(settings.external)
+    const builtin = Object.entries(settings.external)
       .filter(([name, enabled]) => enabled === true && !NON_OAUTH.has(name) && PROVIDER_PATTERN.test(name))
       .map(([name]) => name)
-      .sort((a, b) => a.localeCompare(b))
-    providerCache = { at: now, providers }
+    const providers = [...new Set([...builtin, ...custom])].sort((a, b) => a.localeCompare(b))
+    providerCache = { config, at: now, providers }
     return providers
   } catch {
     // Never cache a failure: the next page load tries again.
@@ -66,7 +87,7 @@ export async function enabledOAuthProviders(config: GoTrueConfig, now = Date.now
 export function resetProviderCache() { providerCache = null }
 
 export function isValidProviderName(provider: string) {
-  return PROVIDER_PATTERN.test(provider) && !NON_OAUTH.has(provider)
+  return CUSTOM_PROVIDER_PATTERN.test(provider) || (PROVIDER_PATTERN.test(provider) && !NON_OAUTH.has(provider))
 }
 
 export function createPkcePair() {

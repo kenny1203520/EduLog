@@ -23,5 +23,9 @@ const LABELS: Record<string, string> = {
 }
 
 export function providerLabel(provider: string): string {
+    if (provider.startsWith('custom:')) {
+        return provider.slice('custom:'.length).split(/[-:]/).filter(Boolean)
+            .map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' ')
+    }
     return LABELS[provider] ?? provider.replace(/_oidc$/, '').split('_').map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ')
 }
