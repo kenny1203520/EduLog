@@ -29,7 +29,7 @@ function legacyLessonEntryId(enrollmentId: string | undefined, lessonId: string)
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`
 }
 
-function normalizeLessonEntries(
+export function normalizeLessonEntries(
     entries: ReportLessonEntryDTO[] | undefined,
     enrollmentId: string | undefined,
     lessonId: string | undefined,
@@ -97,10 +97,9 @@ export function normalizeReportRating(value: unknown): number | null {
     return typeof rating === 'number' && Number.isFinite(rating) && rating > 0 ? rating : null
 }
 
-/** "A-C" for a range, otherwise whichever end is set. */
+/** A-C and -C preserve which bounds were entered. */
 export function composeProgressLetter(start: string | null | undefined, end: string | null | undefined): string {
-    if (start && end) return `${start}-${end}`
-    return start || end || ''
+    return end ? `${start || ''}-${end}` : start || ''
 }
 
 function normalizeAbsenceReason(status: AttendanceStatus, reason: string | null | undefined): string | null {

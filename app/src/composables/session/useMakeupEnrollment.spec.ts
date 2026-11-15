@@ -43,6 +43,8 @@ describe('make-up enrollment helpers', () => {
         expect(makeupSubmitErrorKey(new Error('MAKEUP_DATE_NOT_CLASS_DAY'))).toBe('classroom.add_student_not_class_day')
         expect(makeupSubmitErrorKey(new Error('Invalid date format'))).toBe('classroom.add_student_invalid_date')
         expect(makeupSubmitErrorKey(new Error('boom'))).toBe('classroom.add_student_retry_error')
+        expect(makeupSubmitErrorKey({ status: 403, code: 'PERMISSION_DENIED' })).toBe('classroom.add_student_permission_denied')
+        expect(makeupSubmitErrorKey({ status: 409, code: 'RESOURCE_CONFLICT' })).toBe('classroom.add_student_duplicate_report')
     })
 })
 

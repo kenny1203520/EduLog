@@ -109,8 +109,14 @@ export class CopyTemplateQueryService {
 
     private static async getClassSessionNameMap(sessionIds: string[]): Promise<Record<string, string>> {
         const validIds = [...new Set(sessionIds.filter(Boolean))]
-        const response = await apiResourceClient.list<{ id: string; name: string }>('class-sessions', { perPage: 100 })
-        return Object.fromEntries((response.data || []).filter((row) => validIds.includes(row.id)).map((row) => [row.id, row.name]))
+        if (!validIds.length) return {}
+        try {
+            const response = await apiResourceClient.list<{ id: string; name: string }>('class-sessions', { perPage: 100 })
+            return Object.fromEntries((response.data || []).filter((row) => validIds.includes(row.id)).map((row) => [row.id, row.name]))
+        } catch {
+            // The template is still usable when its optional class label cannot be read.
+            return {}
+        }
     }
 
     static async getTemplateLoadOptions(

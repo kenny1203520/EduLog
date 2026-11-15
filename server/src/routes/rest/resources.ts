@@ -43,6 +43,7 @@ export function genericOperationsOf(def: Pick<ResourceDefinition, 'genericOperat
 const commonSort = ['created_at', 'updated_at', 'name', 'title'] as const
 const id = z.string().uuid()
 const optionalUuid = z.string().uuid().optional()
+const copyTemplateScopeEntity = z.union([z.literal('user_default'), id])
 export const listQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(25),
   offset: z.coerce.number().int().min(0).max(1000000).default(0),
@@ -54,7 +55,7 @@ export const listQuerySchema = z.object({
   sort: z.string().regex(/^-?[A-Za-z_][A-Za-z0-9_]*(?:\([A-Za-z_][A-Za-z0-9_]*\))?$/).default('-created_at'),
   teaching_id: optionalUuid, status: z.string().optional(), course_id: optionalUuid, classroom_id: optionalUuid,
   student_id: optionalUuid, teacher_id: optionalUuid, user_id: optionalUuid, class_session_id: optionalUuid,
-  enrollment_id: optionalUuid, filters: z.string().max(8000).optional(), instructor_id: optionalUuid, template_type: z.string().optional(), scope_type: z.string().optional(), scope_entity_id: optionalUuid, lesson_id: optionalUuid, entity_type: z.string().optional(), entity_id: optionalUuid, entity_ids: z.string().optional(), class_occurrence_id: optionalUuid, occurrence_report_id: optionalUuid,
+  enrollment_id: optionalUuid, filters: z.string().max(8000).optional(), instructor_id: optionalUuid, template_type: z.string().optional(), scope_type: z.string().optional(), scope_entity_id: copyTemplateScopeEntity.optional(), lesson_id: optionalUuid, entity_type: z.string().optional(), entity_id: optionalUuid, entity_ids: z.string().optional(), class_occurrence_id: optionalUuid, occurrence_report_id: optionalUuid,
   or: z.string().trim().max(2000).optional(),
 }).strict()
 export const idSchema = z.object({ id }).strict()
@@ -212,8 +213,8 @@ export const resourceSchemas: Record<string, { createSchema?: z.ZodType<Record<s
     updateSchema: z.object({ class_session_id: z.string().uuid().optional(), teacher_id: z.string().uuid().optional(), role_id: z.string().uuid().nullable().optional(), effective_from: optionalDate, effective_to: optionalDate }).strict(),
   },
   'copy-templates': {
-    createSchema: z.object({ template_type: z.string().trim().min(1).max(100), scope_type: z.string().trim().min(1).max(100), scope_entity_id: z.string().uuid().nullable().optional(), template_text: optionalText, template_document: optionalDocument }).strict(),
-    updateSchema: z.object({ template_type: z.string().trim().min(1).max(100).optional(), scope_type: z.string().trim().min(1).max(100).optional(), scope_entity_id: z.string().uuid().nullable().optional(), template_text: optionalText, template_document: optionalDocument }).strict(),
+    createSchema: z.object({ template_type: z.string().trim().min(1).max(100), scope_type: z.string().trim().min(1).max(100), scope_entity_id: copyTemplateScopeEntity.optional(), template_text: optionalText, template_document: optionalDocument }).strict(),
+    updateSchema: z.object({ template_type: z.string().trim().min(1).max(100).optional(), scope_type: z.string().trim().min(1).max(100).optional(), scope_entity_id: copyTemplateScopeEntity.optional(), template_text: optionalText, template_document: optionalDocument }).strict(),
   },
 }
 for (const [route, schema] of Object.entries(resourceSchemas)) Object.assign(resources[route], schema)

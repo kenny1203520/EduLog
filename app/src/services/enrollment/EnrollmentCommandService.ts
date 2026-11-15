@@ -7,8 +7,6 @@ import type { TransferReportFieldSelections } from '@/services/report/ReportFiel
 import { apiV1Client } from '@/services/api/ApiV1Client'
 import { OccurrenceCommandService } from '@/services/occurrence/OccurrenceCommandService'
 import { OccurrenceQueryService } from '@/services/occurrence/OccurrenceQueryService'
-import { ReportQueryService } from '@/services/report/ReportQueryService'
-import { ReportCommandService } from '@/services/report/ReportCommandService'
 
 type EnrollmentCreateOptions = {
     targetReportCount?: number
@@ -94,19 +92,11 @@ export class EnrollmentCommandService {
             throw new Error('Failed to find target occurrence: not found')
         }
 
-        const existing = await ReportQueryService.getReport(enrollmentId, targetOccurrence.id)
-        if (existing) {
-            throw new Error('DUPLICATE_OCCURRENCE_REPORT')
-        }
-
-        try {
-            await ReportCommandService.createReport(enrollmentId, targetOccurrence.id)
-        } catch (error: any) {
-            if (error?.message?.includes('duplicate key')) {
-                throw new Error('DUPLICATE_OCCURRENCE_REPORT')
-            }
-            throw error
-        }
+        await apiV1Client.post('/reports', {
+            makeup: true,
+            enrollment_id: enrollmentId,
+            class_occurrence_id: targetOccurrence.id,
+        })
     }
 
     static async transferClass(
