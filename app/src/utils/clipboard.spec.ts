@@ -3,9 +3,12 @@ import { createTextEditorContent } from '@/components/text-editor/content'
 import { copyRichTextToClipboard } from './clipboard'
 
 describe('copyRichTextToClipboard', () => {
-    afterEach(() => vi.restoreAllMocks())
+    afterEach(() => {
+        vi.restoreAllMocks()
+        vi.unstubAllGlobals()
+    })
 
-    it('writes matching text/plain and sanitized text/html representations', async () => {
+    it.each([false, true])('writes matching plain text and HTML (deferred: %s)', async deferred => {
         const write = vi.fn().mockResolvedValue(undefined)
         Object.defineProperty(window, 'isSecureContext', { configurable: true, value: true })
         Object.defineProperty(navigator, 'clipboard', {
@@ -14,8 +17,8 @@ describe('copyRichTextToClipboard', () => {
         })
 
         class ClipboardItemMock {
-            readonly data: Record<string, Promise<Blob>>
-            constructor(data: Record<string, Promise<Blob>>) {
+            readonly data: Record<string, Blob | Promise<Blob>>
+            constructor(data: Record<string, Blob | Promise<Blob>>) {
                 this.data = data
             }
         }
@@ -32,11 +35,11 @@ describe('copyRichTextToClipboard', () => {
             }
         })
 
-        await expect(copyRichTextToClipboard(content)).resolves.toBe(true)
+        await expect(copyRichTextToClipboard(deferred ? Promise.resolve(content) : content)).resolves.toBe(true)
         expect(write).toHaveBeenCalledOnce()
         const item = write.mock.calls[0]?.[0]?.[0] as ClipboardItemMock
         expect(Object.keys(item.data).sort()).toEqual(['text/html', 'text/plain'])
-        await expect(item.data['text/plain']).resolves.toMatchObject({ type: 'text/plain' })
-        await expect(item.data['text/html']).resolves.toMatchObject({ type: 'text/html' })
+        expect(await item.data['text/plain']).toMatchObject({ type: 'text/plain' })
+        expect(await item.data['text/html']).toMatchObject({ type: 'text/html' })
     })
 })

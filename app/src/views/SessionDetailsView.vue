@@ -14,6 +14,7 @@ import TeacherAssignmentModal from '@/components/classroom/TeacherAssignmentModa
 import AttendanceCopyTemplateModal from '@/components/classroom/AttendanceCopyTemplateModal.vue'
 import ConflictModal from '@/components/report/ConflictModal.vue'
 import ConfirmModal from '@/components/ui/ConfirmModal.vue'
+import CopyClipboardFeedback from '@/components/ui/CopyClipboardFeedback.vue'
 import KodingCodeCheckModal from '@/components/enrollment/KodingCodeCheckModal.vue'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { DateUtils } from '@/utils/dateUtils'
@@ -41,7 +42,7 @@ const {
     studentSearchQuery, studentAttendanceFilter, filteredEnrollments, allRosterEnrollments, hasActiveStudentFilters,
     clearStudentFilters, focusRosterStudent, highlightedEnrollmentId,
     isLoadingProgressGaps, progressGapCheckFailed, retryStudentProgressGaps,
-    completionFailed, retryReportCompletion, reportLoadFailed, retryOccurrenceReports,
+    completionFailed, retryReportCompletion, reportLoadFailed, retryOccurrenceReports, attendanceCopyReady,
     progressSummaryFailed, retryProgressSummary,
     isQuickAttendanceExpanded, quickAttendanceStudents, selectedEnrollmentIds, attendanceCounts, occupiedRosterCount,
     setAttendance, batchSetAttendance, toggleEnrollmentSelection, toggleSelectAll, studentRosterItems,
@@ -56,12 +57,14 @@ const {
 } = useSessionWorkspace(quickReportEditorRef)
 
 const {
+    clipboard: { loading: attendanceCopyLoading, loadFailed: attendanceCopyLoadFailed, manualText: attendanceCopyManualText,
+        reload: reloadAttendanceCopyTemplate, resetCopy: dismissAttendanceCopyText },
     showAttendanceTemplateModal, attendanceTemplateText, attendanceTemplateDocument, attendanceTemplateScope,
     isLoadingAttendanceTemplate, isSavingAttendanceTemplate, attendanceTemplateLoadOptionsDropdown,
     selectedAttendanceTemplateLoadKey, selectedAttendanceTemplateModes, attendanceTemplateVariables,
     attendanceTemplatePreviewText, loadSelectedAttendanceTemplate, openAttendanceTemplateModal,
     saveAttendanceTemplate, copyAttendanceInfo,
-} = useAttendanceCopyTemplate({ sessionId, session, todayOccurrence, rosterEnrollments: allRosterEnrollments, reportMap })
+} = useAttendanceCopyTemplate({ sessionId, session, todayOccurrence, rosterEnrollments: allRosterEnrollments, reportMap, ready: attendanceCopyReady })
 
 const makeupModal = ref<InstanceType<typeof MakeupStudentModal> | null>(null)
 const {
@@ -147,9 +150,15 @@ const {
                     <ClassHeldCard v-if="todayOccurrence"
                         :is-conducted="Boolean(todayOccurrence.isConducted)"
                         :is-holiday="isOccurrenceInHoliday"
+                        :copy-disabled="!attendanceCopyReady || attendanceCopyLoading"
                         @copy-attendance="copyAttendanceInfo"
                         @edit-template="openAttendanceTemplateModal"
                         @toggle-conducted="toggleIsConducted" />
+                    <p v-if="todayOccurrence && !attendanceCopyReady && !reportLoadFailed" role="status" class="my-2 text-sm text-slate-600">
+                        {{ $t('classroom.copy_attendance_waiting') }}
+                    </p>
+                    <CopyClipboardFeedback v-if="todayOccurrence" :loading="attendanceCopyLoading" :load-failed="attendanceCopyLoadFailed"
+                        :manual-text="attendanceCopyManualText" @retry="reloadAttendanceCopyTemplate" @dismiss="dismissAttendanceCopyText" />
 
                     <TeacherAttendanceCard v-if="todayOccurrence"
                         :rows="teacherAttendanceRows"

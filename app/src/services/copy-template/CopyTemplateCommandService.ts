@@ -17,7 +17,7 @@ export class CopyTemplateCommandService {
         template: TextEditorContentInput
     ): Promise<void> {
         const content = createTextEditorContent(template, { templateVariables: true })
-        const payload = { template_type: templateType, scope_type: scopeType, scope_entity_id: scopeEntityId, template_text: content.plainText, template_document: content.richText }
+        const payload = { template_text: content.plainText, template_document: content.richText }
         await apiV1Client.put(`/copy-templates/${encodeURIComponent(templateType)}/${encodeURIComponent(scopeType)}/${encodeURIComponent(scopeEntityId)}`, payload)
         return
     }

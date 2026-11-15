@@ -128,17 +128,19 @@
                         <label v-if="false" :for="`${editorId}-lesson`" class="block text-sm font-medium text-gray-700">
                             {{ $t('report.editor.lesson_label') }}
                         </label>
-                        <button v-if="selectedLessonId" @click="copyCourseInfo"
-                            class="p-1 text-gray-400 hover:text-indigo-600 transition-colors"
-                            :title="$t('report.editor.copy_course_info')">
-                            <svg v-if="!justCopiedCourse" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                        <button type="button" @click="copyCourseInfo"
+                            :disabled="!primaryCourseCopySelection || courseCopyLoading || props.loading"
+                            class="min-h-6 min-w-6 p-1 text-gray-400 hover:text-indigo-600 transition-colors disabled:opacity-50"
+                            :title="$t(primaryCourseCopySelection ? 'report.editor.copy_course_info' : 'report.editor.copy_course_select_lesson')"
+                            :aria-label="$t('report.editor.copy_course_info')">
+                            <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" class="h-4 w-4" fill="none"
                                 viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
                             </svg>
-                            <span v-else class="text-[10px] font-bold text-emerald-600 animate-pulse">{{
-                                $t('report.editor.copy_success_simple') }}</span>
                         </button>
+                        <span role="status" class="text-xs font-bold text-emerald-700">{{
+                            justCopiedCourse ? $t('report.editor.copy_success_simple') : '' }}</span>
                         <button @click="openCourseCopyTemplateModal"
                             class="p-1 text-gray-400 hover:text-indigo-600 transition-colors"
                             :title="$t('report.editor.copy_course_template_settings')">
@@ -161,10 +163,13 @@
                         <span v-if="!props.compact">{{ $t('report.editor.view_external_report') || $t('report.editor.course_folder') }}</span>
                     </a>
                 </div>
+                <CopyClipboardFeedback :loading="courseCopyLoading" :load-failed="courseCopyLoadFailed"
+                    :manual-text="courseCopyManualText" @retry="reloadCourseCopyTemplate" @dismiss="dismissCourseCopyText" />
                 <ReportLessonEntriesEditor
                     v-model:entries="lessonEntries"
                     v-model:primary-entry-id="primaryLessonEntryId"
                     :editor-id="editorId"
+                    :report-id="props.reportId"
                     :default-enrollment-id="props.enrollmentId || ''"
                     :default-course-name="props.courseDisplayName || props.courseName"
                     :default-lessons="props.availableLessons"
@@ -477,7 +482,7 @@
             </button>
         </div>
 
-        <ReportReferencePanel :show="showReferencePanel" :lesson-id="selectedLessonId"
+        <ReportReferencePanel :show="showReferencePanel" :lesson-choices="referenceLessonChoices" :primary-entry-id="primaryLessonEntryId"
             :student-id="props.initialStudentId" :enrollment-id="props.enrollmentId" :current-report-id="props.reportId" @close="closeReferencePanel"
             :focused-report-id="focusedProgressReport?.id" :focused-lesson-sequence="focusedProgressReport?.lesson.sequence"
             :focused-lesson-title="focusedProgressReport?.lesson.title" :focused-course-name="props.courseDisplayName || props.courseName"
@@ -562,6 +567,7 @@ import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { useReportEditorSession } from '@/composables/report/useReportEditorSession'
 import { useReportProgressContext } from '@/composables/report/useReportProgressContext'
 import { useCourseCopyTemplate } from '@/composables/report/useCourseCopyTemplate'
+import CopyClipboardFeedback from '@/components/ui/CopyClipboardFeedback.vue'
 import { useReportTemplateManager } from '@/composables/report/useReportTemplateManager'
 import { safeExternalHref } from '@/utils/safeExternalHref'
 import { ReportQueryService, type LessonEntryOption } from '@/services/report/ReportQueryService'
@@ -673,6 +679,36 @@ const {
 } = session
 
 const lessonEntryOptions = ref<LessonEntryOption[]>([])
+const lessonEntryOptionsReportId = ref<string>()
+const referenceLessonChoices = computed(() => lessonEntries.value.flatMap(entry => {
+    if (!entry.lesson_id) return []
+    const enrollment = lessonEntryOptionsReportId.value === props.reportId
+        ? lessonEntryOptions.value.find(option => option.id === entry.enrollment_id)
+        : undefined
+    const isHostEnrollment = entry.enrollment_id === props.enrollmentId
+    const lessons = enrollment?.lessons ?? (isHostEnrollment ? props.availableLessons : [])
+    const lesson = lessons.find(item => item.id === entry.lesson_id)
+    const courseName = enrollment?.course_name || entry.course_name ||
+        (isHostEnrollment ? props.courseDisplayName || props.courseName : '')
+    return [{
+        entryId: entry.id,
+        lessonId: entry.lesson_id,
+        courseName,
+        templateCourseName: isHostEnrollment ? props.courseName || courseName : courseName,
+        templateCourseDisplayName: isHostEnrollment ? props.courseDisplayName || '' : '',
+        sequence: lesson?.sequence ?? entry.lesson_sequence,
+        title: lesson?.title || entry.lesson_title,
+    }]
+}))
+const primaryCourseCopySelection = computed(() => {
+    const primary = referenceLessonChoices.value.find(choice => choice.entryId === primaryLessonEntryId.value)
+    if (!primary || primary.sequence == null || !primary.title || !primary.courseName) return null
+    return {
+        courseName: primary.templateCourseName,
+        courseDisplayName: primary.templateCourseDisplayName,
+        lesson: { sequence: primary.sequence, title: primary.title },
+    }
+})
 const lessonEntryOptionsLoading = ref(false)
 const lessonEntryOptionsError = ref('')
 let lessonEntryOptionsRequest = 0
@@ -690,7 +726,10 @@ async function loadLessonEntryOptions() {
     lessonEntryOptionsError.value = ''
     try {
         const result = await ReportQueryService.getLessonEntryOptions(reportId)
-        if (request === lessonEntryOptionsRequest && props.reportId === reportId) lessonEntryOptions.value = result.enrollments || []
+        if (request === lessonEntryOptionsRequest && props.reportId === reportId) {
+            lessonEntryOptions.value = result.enrollments || []
+            lessonEntryOptionsReportId.value = reportId
+        }
     } catch {
         if (request === lessonEntryOptionsRequest && props.reportId === reportId) {
             lessonEntryOptionsError.value = t('report.editor.lesson_entries.options_error')
@@ -716,16 +755,16 @@ const {
 })
 
 const {
+    clipboard: { loading: courseCopyLoading, loadFailed: courseCopyLoadFailed, manualText: courseCopyManualText,
+        reload: reloadCourseCopyTemplate, resetCopy: dismissCourseCopyText },
     justCopiedCourse, showCourseCopyTemplateModal, courseCopyTemplateText, courseCopyTemplateDocument,
     isLoadingCourseCopyTemplate, isSavingCourseCopyTemplate, selectedCourseTemplateModes,
     selectedCourseTemplateLoadKey, courseTemplateLoadOptionsDropdown, courseTemplateVariables,
     courseTemplatePreviewText, copyCourseInfo, openCourseCopyTemplateModal, loadSelectedCourseTemplate,
     saveCourseCopyTemplate,
 } = useCourseCopyTemplate({
-    courseName: () => props.courseName,
-    courseDisplayName: () => props.courseDisplayName,
-    availableLessons: () => props.availableLessons,
-    selectedLessonId,
+    selection: () => primaryCourseCopySelection.value,
+    reportKey: () => props.loading ? undefined : props.reportId || props.enrollmentId,
 })
 
 /** Values for `{{variable}}` tokens in report templates. */

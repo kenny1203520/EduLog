@@ -2,6 +2,7 @@
 defineProps<{
     isConducted: boolean
     isHoliday: boolean
+    copyDisabled: boolean
 }>()
 
 const emit = defineEmits<{
@@ -22,10 +23,11 @@ const emit = defineEmits<{
         </div>
 
         <div class="flex items-center gap-4">
-            <button @click="emit('copy-attendance')"
-                class="p-2 rounded-full bg-gray-50 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+            <button type="button" :disabled="copyDisabled" @click="emit('copy-attendance')"
+                class="p-2 rounded-full bg-gray-50 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-50"
+                :aria-label="$t('classroom.copy_attendance')"
                 :title="$t('classroom.copy_attendance')">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                     stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />

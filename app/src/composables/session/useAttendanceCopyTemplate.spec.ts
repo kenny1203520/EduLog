@@ -5,7 +5,7 @@ const copyTemplateServiceMock = vi.hoisted(() => ({}))
 vi.mock('@/services/copy-template/CopyTemplateQueryService', () => ({ CopyTemplateQueryService: copyTemplateServiceMock }))
 vi.mock('@/services/copy-template/CopyTemplateCommandService', () => ({ CopyTemplateCommandService: copyTemplateServiceMock }))
 
-import { buildAttendanceListFormatters, formatAttendanceNameList, groupAttendancePreviewNames } from './useAttendanceCopyTemplate'
+import { buildAttendanceListFormatters, formatAttendanceNameList, groupAttendanceNames, groupAttendancePreviewNames } from './useAttendanceCopyTemplate'
 
 const t = (key: string) => key
 const student = (id: string, studentName: string) => ({ id, studentName }) as Enrollment
@@ -35,6 +35,12 @@ describe('attendance copy template helpers', () => {
         expect(groups.present_list).toHaveLength(2)
         expect(groups.absent_list).toHaveLength(1)
         expect(groups.pending_list).toEqual(['classroom.pending_list'])
+    })
+
+    it('copies no sample names for an empty roster, including formatted list tokens', () => {
+        const groups = groupAttendanceNames([], new Map())
+        expect(groups).toEqual({ present_list: [], absent_list: [], pending_list: [] })
+        expect(buildAttendanceListFormatters(t, groups).present_list.slash()).toBe('common.none')
     })
 
     it('builds a formatter for every list and mode', () => {

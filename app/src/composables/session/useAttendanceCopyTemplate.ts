@@ -10,8 +10,9 @@ import {
     formatCopyTemplateToken,
     renderCopyTemplate
 } from '@/utils/copyTemplate'
-import { copyRichTextToClipboard } from '@/utils/clipboard'
-import { createTextEditorContent, renderTemplateContent } from '@/components/text-editor/content'
+import { useCopyTemplateClipboard } from '@/composables/useCopyTemplateClipboard'
+import { DateUtils } from '@/utils/dateUtils'
+import { createTextEditorContent } from '@/components/text-editor/content'
 import type { RichTextDocumentV1 } from '@/components/text-editor/types'
 import { CopyTemplateCommandService } from '@/services/copy-template/CopyTemplateCommandService'
 import { CopyTemplateQueryService } from '@/services/copy-template/CopyTemplateQueryService'
@@ -44,17 +45,10 @@ export function formatAttendanceNameList(t: Translate, names: string[], mode: st
     }
 }
 
-/**
- * Groups the roster's student names by attendance. An empty roster gets
- * sample names so the template preview still shows what each list renders.
- */
-export function groupAttendancePreviewNames(
-    t: Translate,
+export function groupAttendanceNames(
     enrollments: Enrollment[],
     reportMap: Map<string, any>
 ): AttendanceNameGroups {
-    const fallback = ['王小明', '陳小華', '林小美']
-
     const grouped: AttendanceNameGroups = {
         present_list: [],
         absent_list: [],
@@ -78,16 +72,21 @@ export function groupAttendancePreviewNames(
         }
     })
 
-    if (grouped.present_list.length === 0 && grouped.absent_list.length === 0 && grouped.pending_list.length === 0) {
-        grouped.present_list = [...fallback.slice(0, 2)]
-        grouped.absent_list = [fallback[2]]
-        grouped.pending_list = [t('classroom.pending_list')]
-    }
-
     return grouped
 }
 
-/** Per-mode formatters for the three name lists, used by `{{present_list:slash}}` style tokens. */
+/** Sample names are only available in the template editor preview. */
+export function groupAttendancePreviewNames(t: Translate, enrollments: Enrollment[], reportMap: Map<string, any>) {
+    const names = groupAttendanceNames(enrollments, reportMap)
+    if (Object.values(names).some(list => list.length)) return names
+    return {
+        present_list: ['王小明', '陳小華'],
+        absent_list: ['林小美'],
+        pending_list: [t('classroom.pending_list')],
+    }
+}
+
+/** Per-mode formatters for the three name lists, used by `{{present_list|slash}}` style tokens. */
 export function buildAttendanceListFormatters(t: Translate, names: AttendanceNameGroups) {
     const forList = (key: AttendanceListKey) => Object.fromEntries(
         LIST_MODES.map(mode => [mode, () => formatAttendanceNameList(t, names[key], mode)])
@@ -105,6 +104,7 @@ interface AttendanceCopyTemplateSource {
     todayOccurrence: Ref<any>
     rosterEnrollments: Ref<Enrollment[]>
     reportMap: Ref<Map<string, any>>
+    ready: Ref<boolean>
 }
 
 /** The attendance copy button and the editor modal for its template. */
@@ -113,7 +113,18 @@ export function useAttendanceCopyTemplate(source: AttendanceCopyTemplateSource) 
     const toast = useToast()
     const { errorKey, reportError } = useFeedback()
     const preferences = usePreferencesStore()
-    const { sessionId, session, todayOccurrence, rosterEnrollments, reportMap } = source
+    const { sessionId, session, todayOccurrence, rosterEnrollments, reportMap, ready } = source
+    const clipboard = useCopyTemplateClipboard(
+        () => session.value ? sessionId : undefined,
+        () => CopyTemplateQueryService.getEffectiveAttendanceTemplate(sessionId),
+        SYSTEM_ATTENDANCE_TEMPLATE
+    )
+    watch(() => [todayOccurrence.value?.id, ready.value], clipboard.resetCopy, { flush: 'sync' })
+
+    const occurrenceDate = computed(() =>
+        DateUtils.displayDate(todayOccurrence.value?.occurrenceDate, preferences.locale, preferences.timeZone))
+    const startTime = computed(() => todayOccurrence.value?.effectiveStartTime?.slice(0, 5) || '')
+    const endTime = computed(() => todayOccurrence.value?.effectiveEndTime?.slice(0, 5) || '')
 
     const showAttendanceTemplateModal = ref(false)
     let attendanceTemplateRequestGeneration = 0
@@ -164,12 +175,12 @@ export function useAttendanceCopyTemplate(source: AttendanceCopyTemplateSource) 
                 return session.value?.name || t('classroom.session')
             case 'occurrence_date':
                 return todayOccurrence.value?.occurrenceDate
-                    ? new Date(todayOccurrence.value.occurrenceDate).toLocaleDateString(preferences.locale)
+                    ? occurrenceDate.value
                     : t('classroom.no_teaching_day_selected')
             case 'start_time':
-                return todayOccurrence.value?.originalStartTime?.substring(0, 5) || '10:00'
+                return startTime.value || '10:00'
             case 'end_time':
-                return todayOccurrence.value?.originalEndTime?.substring(0, 5) || '12:00'
+                return endTime.value || '12:00'
             case 'time_range':
                 return `${getAttendanceVariablePreview('start_time', names)}-${getAttendanceVariablePreview('end_time', names)}`
             case 'present_list_label':
@@ -187,24 +198,23 @@ export function useAttendanceCopyTemplate(source: AttendanceCopyTemplateSource) 
         }
     }
 
-    function buildAttendanceTemplateContext() {
-        const previewNames = getAttendancePreviewNames()
+    function buildAttendanceTemplateContext(names: AttendanceNameGroups, preview = false) {
         return {
             values: {
                 class_info_title: t('classroom.class_info_title'),
                 session_name: session.value?.name || '',
-                occurrence_date: todayOccurrence.value?.occurrenceDate ? new Date(todayOccurrence.value.occurrenceDate).toLocaleDateString(preferences.locale) : '',
-                start_time: todayOccurrence.value?.originalStartTime?.substring(0, 5) || '',
-                end_time: todayOccurrence.value?.originalEndTime?.substring(0, 5) || '',
-                time_range: `${todayOccurrence.value?.originalStartTime?.substring(0, 5) || ''}-${todayOccurrence.value?.originalEndTime?.substring(0, 5) || ''}`,
+                occurrence_date: todayOccurrence.value?.occurrenceDate ? occurrenceDate.value : '',
+                start_time: startTime.value,
+                end_time: endTime.value,
+                time_range: [startTime.value, endTime.value].filter(Boolean).join('-'),
                 present_list_label: t('classroom.present_list'),
                 absent_list_label: t('classroom.absent_list'),
                 pending_list_label: t('classroom.pending_list'),
-                present_list: formatSelectedList(previewNames, 'present_list'),
-                absent_list: formatSelectedList(previewNames, 'absent_list'),
-                pending_list: formatSelectedList(previewNames, 'pending_list')
+                present_list: formatAttendanceNameList(t, names.present_list, preview ? getSelectedAttendanceTemplateMode('present_list') || 'comma' : 'comma'),
+                absent_list: formatAttendanceNameList(t, names.absent_list, preview ? getSelectedAttendanceTemplateMode('absent_list') || 'comma' : 'comma'),
+                pending_list: formatAttendanceNameList(t, names.pending_list, preview ? getSelectedAttendanceTemplateMode('pending_list') || 'comma' : 'comma')
             },
-            formatters: buildAttendanceListFormatters(t, previewNames)
+            formatters: buildAttendanceListFormatters(t, names)
         }
     }
 
@@ -232,7 +242,7 @@ export function useAttendanceCopyTemplate(source: AttendanceCopyTemplateSource) 
             return ''
         }
 
-        const context = buildAttendanceTemplateContext()
+        const context = buildAttendanceTemplateContext(getAttendancePreviewNames(), true)
         return renderCopyTemplate(attendanceTemplateText.value, context.values, context.formatters).trim()
     })
 
@@ -293,7 +303,7 @@ export function useAttendanceCopyTemplate(source: AttendanceCopyTemplateSource) 
                     templateDocument: item.templateDocument
                 }
             })
-            selectedAttendanceTemplateLoadKey.value = attendanceTemplateLoadOptions.value[0]?.key || ''
+            selectedAttendanceTemplateLoadKey.value = bundle.current?.key || attendanceTemplateLoadOptions.value[0]?.key || ''
 
             if (classTemplate) {
                 attendanceTemplateScope.value = 'class_session'
@@ -339,6 +349,7 @@ export function useAttendanceCopyTemplate(source: AttendanceCopyTemplateSource) 
                 toast.success(t('classroom.copy_template_saved_user'))
             }
 
+            void clipboard.reload()
             showAttendanceTemplateModal.value = false
         } catch (error) {
             console.error('Failed to save attendance copy template', error)
@@ -348,66 +359,18 @@ export function useAttendanceCopyTemplate(source: AttendanceCopyTemplateSource) 
         }
     }
 
-    function copyAttendanceInfo() {
-        if (!todayOccurrence.value || !session.value) return
+    async function copyAttendanceInfo() {
+        if (!ready.value || !todayOccurrence.value || !session.value || clipboard.loading.value) return
 
-        const date = new Date(todayOccurrence.value.occurrenceDate).toLocaleDateString(preferences.locale)
-        const startTime = todayOccurrence.value.originalStartTime?.substring(0, 5) || ''
-        const endTime = todayOccurrence.value.originalEndTime?.substring(0, 5) || ''
-        const time = `${startTime}-${endTime}`
-
-        const formatList = (status: 'present' | 'absent' | 'pending') => {
-            const list = rosterEnrollments.value
-                .filter(e => {
-                    const report = reportMap.value.get(e.id!)
-                    const s = report?.attendanceStatus || 'pending' // Default to pending if missing
-                    return s === status
-                })
-                .map(e => e.studentName)
-                .join(', ')
-            return list || t('common.none')
+        const names = groupAttendanceNames(rosterEnrollments.value, reportMap.value)
+        const context = buildAttendanceTemplateContext(names)
+        if (await clipboard.copy(context.values, context.formatters)) {
+            toast.success(t('classroom.copy_success'))
         }
-
-        const context = {
-            class_info_title: t('classroom.class_info_title'),
-            session_name: session.value.name || '',
-            occurrence_date: date,
-            start_time: startTime,
-            end_time: endTime,
-            time_range: time,
-            present_list_label: t('classroom.present_list'),
-            absent_list_label: t('classroom.absent_list'),
-            pending_list_label: t('classroom.pending_list'),
-            present_list: formatList('present'),
-            absent_list: formatList('absent'),
-            pending_list: formatList('pending')
-        }
-
-        const formatters = buildAttendanceTemplateContext().formatters
-        const copyPromise = CopyTemplateQueryService.getEffectiveAttendanceTemplate(sessionId)
-            .then(({ templateText, templateDocument }) => renderTemplateContent(
-                templateDocument || templateText,
-                (key, mode) => renderCopyTemplate(
-                    formatCopyTemplateToken(key, mode || undefined),
-                    context,
-                    formatters
-                ),
-                text => renderCopyTemplate(text, context, formatters)
-            ))
-
-        copyRichTextToClipboard(copyPromise).then(success => {
-            if (success) {
-                toast.success(t('classroom.copy_success'))
-            } else {
-                errorKey('classroom.copy_error')
-            }
-        }).catch(err => {
-            console.error('Failed to copy: ', err)
-            reportError(err, 'classroom.copy_error')
-        })
     }
 
     return {
+        clipboard,
         showAttendanceTemplateModal,
         attendanceTemplateText,
         attendanceTemplateDocument,

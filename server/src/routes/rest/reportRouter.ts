@@ -5,7 +5,9 @@ import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { initialReportAttendance } from '../../domain/reportSemantics.js'
 import { setAuditContext } from '../../http/context.js'
-import { requireAuthorizationDecision } from '../../auth/authorization.js'
+import { authorizeCollection, requireAuthorizationDecision } from '../../auth/authorization.js'
+import { resources } from './resources.js'
+import { orderByRelation } from '../../services/relationOrder.js'
 import { measureReportAdoptions } from '../../ai/adoption/adoptionTracker.js'
 import { envelope, permission, uuid, wrap } from './domainAccess.js'
 
@@ -17,11 +19,11 @@ const reportLessonEntrySchema = z.object({
   course_id: uuid,
   lesson_id: uuid,
   is_completed: z.boolean(),
-  progress_letter: z.string().regex(/^[A-Z](-[A-Z])?$/).max(32).nullable(),
+  progress_letter: z.string().regex(/^(?:[A-Z](?:-[A-Z])?|-[A-Z])$/).max(32).nullable(),
 }).strict()
 export const reportBodySchema = z.object({
   enrollment_id: z.string().uuid().optional(), class_occurrence_id: z.string().uuid().optional(), lesson_id: z.string().uuid().nullable().optional(),
-  is_completed: z.boolean().optional(), progress_letter: z.string().regex(/^[A-Z](-[A-Z])?$/).max(32).nullable().optional(), attendance_status: z.enum(['present', 'absent', 'pending']).optional(), absence_reason: z.string().max(64).nullable().optional(),
+  is_completed: z.boolean().optional(), progress_letter: z.string().regex(/^(?:[A-Z](?:-[A-Z])?|-[A-Z])$/).max(32).nullable().optional(), attendance_status: z.enum(['present', 'absent', 'pending']).optional(), absence_reason: z.string().max(64).nullable().optional(),
   lesson_entries: z.array(reportLessonEntrySchema).max(25).optional(), primary_lesson_entry_id: uuid.nullable().optional(),
   class_participation: z.number().min(0).max(5).nullable().optional(), classroom_behavior: z.number().min(0).max(5).nullable().optional(),
   contact_notes: z.string().max(10000).nullable().optional(), contact_notes_document: z.record(z.string(), z.unknown()).nullable().optional(), class_notes: z.string().max(10000).nullable().optional(), class_notes_document: z.record(z.string(), z.unknown()).nullable().optional(),
@@ -31,6 +33,47 @@ export const reportBodySchema = z.object({
 export const reportCreateSchema = reportBodySchema.omit({ expected_version: true, lesson_entries: true, primary_lesson_entry_id: true }).required({ enrollment_id: true, class_occurrence_id: true })
 export const reportUpdateSchema = reportBodySchema.omit({ enrollment_id: true, class_occurrence_id: true }).required({ expected_version: true })
 export const reportCollaborationSchema = z.object({ snapshot_base64: z.string().max(1400000), base_report_version: z.number().int().min(1) }).strict()
+export const reportReferenceQuery = z.object({
+  lesson_id: uuid,
+  exclude_report_id: uuid.optional(),
+  classroom_id: uuid.optional(),
+  class_session_id: uuid.optional(),
+  search: z.string().trim().max(200).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(10),
+  offset: z.coerce.number().int().min(0).max(100000).default(0),
+  sort: z.enum(['occurrence_date', '-occurrence_date']).default('-occurrence_date'),
+}).strict()
+
+async function referenceReports(req: Request, res: Response) {
+  const query = reportReferenceQuery.parse(req.query)
+  setAuditContext(req, { resource: 'reports', action: 'list' })
+  await authorizeCollection(req, resources.reports, 'teaching.reports.list', query)
+  if (!req.db) throw new ApiError(503, 'RESOURCE_SERVICE_UNAVAILABLE', 'The report service is unavailable')
+  // Quote PostgREST logic-tree values, including each embedded JSON quote.
+  const entries = JSON.stringify(JSON.stringify([{ lesson_id: query.lesson_id }]))
+  let builder = req.db.from('occurrence_reports').select(
+    'id,lesson_id,lesson_entries,is_completed,progress_letter,content,contact_notes,class_notes,external_link,updated_at,' +
+    'lessons(id,title,sequence),enrollments(id,course_id,students(id,name),courses(id,display_name)),' +
+    'class_occurrences!inner(id,occurrence_date,actual_start_time,original_start_time,time_zone,class_session_id,class_sessions!inner(id,name,classroom_id,classrooms(id,name)))',
+    { count: 'exact' },
+  ).or(`lesson_entries.cs.${entries},and(lesson_entries.eq.[],lesson_id.eq.${query.lesson_id})`).neq('content', '')
+  if (query.exclude_report_id) builder = builder.neq('id', query.exclude_report_id)
+  if (query.classroom_id) builder = builder.eq('class_occurrences.class_sessions.classroom_id', query.classroom_id)
+  if (query.class_session_id) builder = builder.eq('class_occurrences.class_session_id', query.class_session_id)
+  if (query.search) builder = builder.ilike('content', `%${query.search}%`)
+  const ascending = query.sort === 'occurrence_date'
+  const { data, error, count } = await orderByRelation(builder, 'class_occurrences', 'occurrence_date', ascending)
+    .order('id', { ascending }).range(query.offset, query.offset + query.limit - 1)
+    .overrideTypes<Array<Record<string, unknown> & { lesson_entries: Array<{ lesson_id: string }> }>, { merge: false }>()
+  if (error) throw mapDatabaseError(error)
+  const matching = (data ?? []).map(row => ({
+    ...row,
+    lesson_entries: Array.isArray(row.lesson_entries)
+      ? row.lesson_entries.filter(entry => entry?.lesson_id === query.lesson_id)
+      : [],
+  }))
+  return res.json(envelope(req, matching, { limit: query.limit, offset: query.offset, total: count ?? 0, sort: query.sort }))
+}
 type Body = z.infer<typeof reportBodySchema>
 type MutationContext = {
   report_id: string
@@ -491,6 +534,7 @@ async function progressSummaryReports(req: Request, res: Response) {
 
 export function createReportRouter() {
   const router = Router()
+  router.get('/reports/reference', wrap(referenceReports))
   router.post('/reports', wrap(create))
   router.post('/reports/:reportId/correct-occurrence', wrap(correctOccurrence))
   router.get('/reports/:reportId/lesson-entry-options', wrap(reportLessonEntryOptions))

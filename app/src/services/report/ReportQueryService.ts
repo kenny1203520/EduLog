@@ -284,21 +284,18 @@ export class ReportQueryService {
     ): Promise<{ data: any[], count: number }> {
         const { page = 1, pageSize = 10, excludeReportId, classroomId, sessionId, sortBy = 'desc', search } = params
 
-        const filters: Array<{ field: string; operator: 'eq' | 'neq' | 'ilike'; value: unknown }> = [
-            { field: 'lesson_id', operator: 'eq', value: lessonId },
-            { field: 'content', operator: 'neq', value: '' },
-        ]
-        if (excludeReportId) filters.push({ field: 'id', operator: 'neq', value: excludeReportId })
-        if (classroomId) filters.push({ field: 'class_occurrences.class_sessions.classroom_id', operator: 'eq', value: classroomId })
-        if (sessionId) filters.push({ field: 'class_occurrences.class_session_id', operator: 'eq', value: sessionId })
-        if (search) filters.push({ field: 'content', operator: 'ilike', value: `%${search}%` })
-        const response = await apiResourceClient.list<any>('reports', {
-            page,
-            perPage: pageSize,
-            sort: `${sortBy === 'asc' ? '' : '-'}class_occurrences(occurrence_date)`,
-            filters
+        const query = new URLSearchParams({
+            lesson_id: lessonId,
+            limit: String(pageSize),
+            offset: String((page - 1) * pageSize),
+            sort: sortBy === 'asc' ? 'occurrence_date' : '-occurrence_date',
         })
-        return { data: this.sortByOccurrenceDateTime(response.data || [], sortBy), count: Number(response.meta?.total || 0) }
+        if (excludeReportId) query.set('exclude_report_id', excludeReportId)
+        if (classroomId) query.set('classroom_id', classroomId)
+        if (sessionId) query.set('class_session_id', sessionId)
+        if (search) query.set('search', search)
+        const response = await apiV1Client.get<any[]>(`/reports/reference?${query}`)
+        return { data: response.data || [], count: Number(response.meta?.total || 0) }
     }
 
     static async getReportsByStudent(

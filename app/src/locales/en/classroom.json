@@ -139,6 +139,7 @@
     "room": "Classroom",
     "class_info": "Class Information",
     "copy_attendance": "Copy Attendance",
+    "copy_attendance_waiting": "Attendance can be copied after the roster and reports load.",
     "copy_template_settings": "Attendance Copy Style",
     "copy_template_title": "Attendance Copy Template",
     "copy_template_hint": "Use double-curly variable syntax (for example: session_name) to customize output. If not configured, system default template is used.",

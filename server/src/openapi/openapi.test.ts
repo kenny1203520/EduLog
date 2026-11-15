@@ -427,7 +427,7 @@ describe('generated API contract', () => {
     const spec = buildOpenApi() as { components: { schemas: Record<string, any> } }
     const progressLetter = spec.components.schemas.ReportUpdateMutation.properties.progress_letter
     const progressSchemas = progressLetter.anyOf ?? [progressLetter]
-    expect(progressSchemas).toEqual(expect.arrayContaining([expect.objectContaining({ pattern: '^[A-Z](-[A-Z])?$' })]))
+    expect(progressSchemas).toEqual(expect.arrayContaining([expect.objectContaining({ pattern: '^(?:[A-Z](?:-[A-Z])?|-[A-Z])$' })]))
     expect(spec.components.schemas.ReportCreateMutation.additionalProperties).toBe(false)
   })
 
