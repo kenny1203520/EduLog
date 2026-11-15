@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { computed, effectScope, nextTick, reactive, ref } from 'vue'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
+import { createTextEditorContent } from '@/components/text-editor/content'
 
 const reports = vi.hoisted(() => ({ saveReport: vi.fn(), saveAttendanceOnly: vi.fn(), deleteReportAndRevertProgress: vi.fn() }))
 const draft = vi.hoisted(() => ({ schedule: vi.fn(), discard: vi.fn(), load: vi.fn(), flush: vi.fn() }))
@@ -127,6 +128,21 @@ describe('report editor session', () => {
         expect(session.canSave.value).toBe(true)
     })
 
+    it('saves comments on a blank report without creating an incomplete lesson entry', async () => {
+        const session = await setup({ initialLessonId: undefined, initialLessonEntries: [], initialPrimaryLessonEntryId: null })
+        const result = saved({ lesson_entries: [], content: 'New comment' })
+        reports.saveReport.mockResolvedValue({ ...result, updatedReport: { ...result.updatedReport, lesson_id: null, primary_lesson_entry_id: null } })
+        session.handleTextEditorChange('content', {
+            content: createTextEditorContent('New comment'), source: 'local', value: 'New comment',
+        })
+        await nextTick()
+        await expect(session.saveNow()).resolves.toBe(true)
+        const payload = reports.saveReport.mock.calls[0]?.[3]
+        expect(payload).toMatchObject({ content: 'New comment' })
+        expect(payload).not.toHaveProperty('lessonEntries')
+        expect(session.lessonEntries.value).toEqual([])
+    })
+
     it('saves an attendance-only change through the attendance endpoint', async () => {
         reports.saveAttendanceOnly.mockResolvedValue(saved({ attendance_status: 'absent', absence_reason: 'reason_not_provided' }))
         const session = await setup()
@@ -170,12 +186,12 @@ describe('report editor session', () => {
         const session = await setup()
         session.isCompleted.value = true
         await nextTick()
-        session.replaceWithCanonicalReport({ id: 'report', version: 9, lesson_id: 'other', is_completed: false, attendance_status: 'present', content: 'Restored', progress_letter: 'A-B' } as OccurrenceReportDTO)
+        session.replaceWithCanonicalReport({ id: 'report', version: 9, lesson_id: 'other', is_completed: false, attendance_status: 'present', content: 'Restored', progress_letter: '-B' } as OccurrenceReportDTO)
 
         expect(session.version.value).toBe(9)
         expect(session.selectedLessonId.value).toBe('other')
         expect(session.localContent.value).toBe('Restored')
-        expect([session.progressStart.value, session.progressEnd.value]).toEqual(['A', 'B'])
+        expect([session.progressStart.value, session.progressEnd.value]).toEqual(['', 'B'])
         expect(session.hasUnsavedChanges.value).toBe(false)
         expect(draft.discard).toHaveBeenCalledWith('report')
     })

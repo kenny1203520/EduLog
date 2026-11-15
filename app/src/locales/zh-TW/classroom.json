@@ -139,6 +139,7 @@
     "room": "教室",
     "class_info": "班級資訊",
     "copy_attendance": "複製點名資訊",
+    "copy_attendance_waiting": "名單與報告載入後即可複製點名資訊。",
     "copy_template_settings": "點名樣式設定",
     "copy_template_title": "點名資訊複製樣式",
     "copy_template_hint": "可用雙大括號變數語法（例如 session_name）自定義輸出文字，未設定時會使用系統預設樣式。",

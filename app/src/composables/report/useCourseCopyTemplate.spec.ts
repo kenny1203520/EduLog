@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { effectScope, ref } from 'vue'
-import type { Lesson } from '@/models/Course'
+import { effectScope } from 'vue'
 
 const templates = vi.hoisted(() => ({ getEditorBundle: vi.fn(), saveCourseTemplateAsUserDefault: vi.fn(), getEffectiveCourseTemplate: vi.fn() }))
 const feedback = vi.hoisted(() => ({ errorKey: vi.fn(), reportError: vi.fn() }))
@@ -29,14 +28,19 @@ describe('course copy template', () => {
 
     describe('editor modal', () => {
         let scope: ReturnType<typeof effectScope>
-        const lessons = [{ id: 'l1', sequence: 1, title: 'Intro' }, { id: 'l2', sequence: 2, title: 'Loops' }] as Lesson[]
-        beforeEach(() => { vi.resetAllMocks(); scope = effectScope() })
+        beforeEach(() => {
+            vi.resetAllMocks()
+            templates.getEffectiveCourseTemplate.mockResolvedValue({ templateText: '{{course_name}} {{lesson_title}}' })
+            scope = effectScope()
+        })
         afterEach(() => scope.stop())
         const setup = () => scope.run(() => useCourseCopyTemplate({
-            courseName: () => 'Python',
-            courseDisplayName: () => 'Level 1',
-            availableLessons: () => lessons,
-            selectedLessonId: ref('l2'),
+            selection: () => ({
+                courseName: 'Python',
+                courseDisplayName: 'Level 1',
+                lesson: { sequence: 2, title: 'Loops' },
+            }),
+            reportKey: () => 'report',
         }))!
 
         it('loads the saved user template and labels the sources', async () => {

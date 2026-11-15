@@ -33,6 +33,30 @@ vi.mock('@/services/report/ReportQueryService', () => ({
 }))
 
 describe('ReportReferencePanel linked lesson history', () => {
+    it('defaults to the primary course and lesson and switches to another saved progress entry', async () => {
+        services.getReportsByLesson.mockResolvedValue({ count: 0, data: [] })
+        const wrapper = mount(ReportReferencePanel, {
+            props: {
+                show: true, primaryEntryId: 'primary', currentReportId: 'current',
+                lessonChoices: [
+                    { entryId: 'makeup', lessonId: 'lesson-a', courseName: 'Course A', title: 'Makeup' },
+                    { entryId: 'primary', lessonId: 'lesson-b', courseName: 'Course B', title: 'Loops' },
+                ],
+            },
+            global: { mocks: { $t: (key: string) => key }, stubs: { Teleport: true, BaseDropdown: true } },
+        })
+        await flushPromises()
+        const select = wrapper.get('select')
+        expect((select.element as HTMLSelectElement).value).toBe('primary')
+        expect(select.text()).toContain('Course B · Loops')
+        expect(services.getReportsByLesson).toHaveBeenLastCalledWith('lesson-b',
+            expect.objectContaining({ page: 1, excludeReportId: 'current' }))
+        await select.setValue('makeup')
+        await flushPromises()
+        expect(services.getReportsByLesson).toHaveBeenLastCalledWith('lesson-a', expect.objectContaining({ page: 1 }))
+        wrapper.unmount()
+    })
+
     it('shows only the safe linked projection when its parent report is also in student history', async () => {
         services.getReportsByStudent.mockResolvedValue({
             count: 1,
@@ -66,6 +90,9 @@ describe('ReportReferencePanel linked lesson history', () => {
         await wrapper.setProps({ show: true })
         await flushPromises()
 
+        await wrapper.findAll('button').find(button => button.text() === 'report.reference_panel.student_history')!.trigger('click')
+        await flushPromises()
+
         expect(services.getLinkedLessonReportHistory).toHaveBeenCalledWith('enrollment-b', expect.objectContaining({
             limit: 10, offset: 0, sort: '-occurrence_date',
         }))
@@ -88,6 +115,8 @@ describe('ReportReferencePanel linked lesson history', () => {
                 stubs: { Teleport: true, BaseDropdown: true, RichTextViewer: true },
             },
         })
+        await flushPromises()
+        await wrapper.findAll('button').find(button => button.text() === 'report.reference_panel.student_history')!.trigger('click')
         await flushPromises()
         await wrapper.get('input[type="text"]').setValue('  make up  ')
         await wrapper.get('input[type="text"]').trigger('keyup.enter')

@@ -34,7 +34,13 @@ WHERE teacher_id = '15800000-0000-4000-8000-0000000000f5';
 UPDATE public.user_role_assignments SET role_id = (SELECT id FROM public.roles WHERE code = 'teaching_owner' AND domain = 'teaching' AND is_builtin)
 WHERE user_id = '15800000-0000-4000-8000-000000000007';
 INSERT INTO public.lessons(id,course_id,title,sequence) VALUES
- ('15800000-0000-4000-8000-0000000000a9','15800000-0000-4000-8000-0000000000d1','Smoke unit',1);
+ ('15800000-0000-4000-8000-0000000000a9','15800000-0000-4000-8000-0000000000d1','Smoke unit',1),
+ ('15800000-0000-4000-8000-0000000000aa','15800000-0000-4000-8000-0000000000d1','Reference unit',2);
+INSERT INTO public.class_occurrences(id,class_session_id,occurrence_date,status,is_conducted) VALUES
+ ('15800000-0000-4000-8000-000000000019','15800000-0000-4000-8000-0000000000e1',CURRENT_DATE-3,'completed',true);
+INSERT INTO public.occurrence_reports(id,enrollment_id,class_occurrence_id,lesson_id,progress_letter,content,attendance_status)
+VALUES ('15800000-0000-4000-8000-000000000025','15800000-0000-4000-8000-0000000000b1',
+ '15800000-0000-4000-8000-000000000019','15800000-0000-4000-8000-0000000000aa','B','Legacy reference content','present');
 INSERT INTO public.students(id,name) VALUES ('15800000-0000-4000-8000-0000000000a3','Scope Student Three');
 INSERT INTO public.enrollments(id,student_id,course_id,classroom_id,class_session_id,status,start_date,lesson_number)
 VALUES ('15800000-0000-4000-8000-0000000000b3','15800000-0000-4000-8000-0000000000a3','15800000-0000-4000-8000-0000000000d1',

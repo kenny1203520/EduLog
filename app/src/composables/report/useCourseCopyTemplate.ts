@@ -1,4 +1,4 @@
-import { computed, ref, watch, type Ref } from 'vue'
+import { computed, onScopeDispose, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import { useFeedback } from '@/composables/useFeedback'
@@ -10,9 +10,9 @@ import {
     formatCopyTemplateToken,
     renderCopyTemplate
 } from '@/utils/copyTemplate'
-import { copyRichTextToClipboard } from '@/utils/clipboard'
+import { useCopyTemplateClipboard } from '@/composables/useCopyTemplateClipboard'
 import { formatNumber } from '@/utils/numberFormatting'
-import { createTextEditorContent, renderTemplateContent } from '@/components/text-editor/content'
+import { createTextEditorContent } from '@/components/text-editor/content'
 import { CopyTemplateCommandService } from '@/services/copy-template/CopyTemplateCommandService'
 import { CopyTemplateQueryService, type CopyTemplateLoadOption } from '@/services/copy-template/CopyTemplateQueryService'
 
@@ -67,10 +67,12 @@ export function buildCourseCopyContext(
 }
 
 interface CourseCopyTemplateSource {
-    courseName: () => string
-    courseDisplayName: () => string
-    availableLessons: () => Lesson[]
-    selectedLessonId: Ref<string>
+    selection: () => {
+        courseName: string
+        courseDisplayName: string
+        lesson: Pick<Lesson, 'sequence' | 'title'>
+    } | null
+    reportKey: () => string | undefined
 }
 
 /** The "copy course info" button and its template editor. */
@@ -80,6 +82,8 @@ export function useCourseCopyTemplate(source: CourseCopyTemplateSource) {
     const { errorKey, reportError } = useFeedback()
 
     const justCopiedCourse = ref(false)
+    let copiedTimer: ReturnType<typeof setTimeout> | undefined
+    onScopeDispose(() => clearTimeout(copiedTimer))
     const showCourseCopyTemplateModal = ref(false)
     let courseTemplateRequestGeneration = 0
     const courseCopyTemplateText = ref(SYSTEM_COURSE_TEMPLATE)
@@ -92,9 +96,14 @@ export function useCourseCopyTemplate(source: CourseCopyTemplateSource) {
     const courseTemplateLoadOptions = ref<Array<CopyTemplateLoadOption & { displayLabel: string }>>([])
     const selectedCourseTemplateLoadKey = ref('')
 
-    const selectedCoursePreviewLesson = computed(() => {
-        const lessons = source.availableLessons()
-        return lessons.find(l => l.id === source.selectedLessonId.value) || lessons[0] || null
+    const clipboard = useCopyTemplateClipboard(
+        source.reportKey,
+        () => CopyTemplateQueryService.getEffectiveCourseTemplate(),
+        SYSTEM_COURSE_TEMPLATE
+    )
+    watch(source.selection, () => {
+        clipboard.resetCopy()
+        justCopiedCourse.value = false
     })
 
     const courseTemplateLoadOptionsDropdown = computed(() => courseTemplateLoadOptions.value.map(opt => ({
@@ -107,9 +116,10 @@ export function useCourseCopyTemplate(source: CourseCopyTemplateSource) {
     }
 
     const courseTemplateVariables = computed(() => {
-        const lesson = selectedCoursePreviewLesson.value
-        const courseName = source.courseName() || ''
-        const courseDisplayName = source.courseDisplayName() || ''
+        const selection = source.selection()
+        const lesson = selection?.lesson
+        const courseName = selection?.courseName || ''
+        const courseDisplayName = selection?.courseDisplayName || ''
 
         return COURSE_TEMPLATE_VARIABLE_DEFINITIONS.map(definition => {
             let previewValue = ''
@@ -157,10 +167,11 @@ export function useCourseCopyTemplate(source: CourseCopyTemplateSource) {
     })
 
     const courseTemplatePreviewText = computed(() => {
+        const selection = source.selection()
         const context = buildCourseCopyContext(
-            source.courseName() || '',
-            source.courseDisplayName() || '',
-            selectedCoursePreviewLesson.value,
+            selection?.courseName || '',
+            selection?.courseDisplayName || '',
+            selection?.lesson,
             t('report.lesson_label')
         )
         return courseCopyTemplateText.value.trim()
@@ -168,45 +179,21 @@ export function useCourseCopyTemplate(source: CourseCopyTemplateSource) {
             : ''
     })
 
-    function copyCourseInfo() {
-        const lesson = source.availableLessons().find(l => l.id === source.selectedLessonId.value)
-        if (!lesson) return
+    async function copyCourseInfo() {
+        const selection = source.selection()
+        if (!selection || !source.reportKey() || clipboard.loading.value) return
 
         const context = buildCourseCopyContext(
-            source.courseName() || '',
-            source.courseDisplayName() || '',
-            lesson,
+            selection.courseName,
+            selection.courseDisplayName,
+            selection.lesson,
             t('report.lesson_label')
         )
-        const values = { ...context.values, lesson_sequence: lesson.sequence, lesson_title: lesson.title }
-        const copyPromise = CopyTemplateQueryService.getEffectiveCourseTemplate()
-            .then(({ templateText, templateDocument }) => {
-                const rendered = renderTemplateContent(
-                    templateDocument || templateText,
-                    (key, mode) => renderCopyTemplate(
-                        formatCopyTemplateToken(key, mode || undefined),
-                        values,
-                        context.formatters
-                    ),
-                    text => renderCopyTemplate(text, values, context.formatters)
-                )
-                const fallback = `${context.coursePrimaryName} Lesson ${lesson.sequence} ${lesson.title}`.trim()
-                return rendered.plainText.trim() ? rendered : createTextEditorContent(fallback)
-            })
-
-        copyRichTextToClipboard(copyPromise)
-            .then((success) => {
-                if (success) {
-                    justCopiedCourse.value = true
-                    setTimeout(() => { justCopiedCourse.value = false }, 2000)
-                } else {
-                    errorKey('report.editor.copy_course_template_copy_failed')
-                }
-            })
-            .catch(error => {
-                console.error('Failed to copy course info', error)
-                reportError(error, 'report.editor.copy_course_template_copy_failed')
-            })
+        if (await clipboard.copy(context.values, context.formatters)) {
+            justCopiedCourse.value = true
+            clearTimeout(copiedTimer)
+            copiedTimer = setTimeout(() => { justCopiedCourse.value = false }, 2000)
+        }
     }
 
     async function openCourseCopyTemplateModal() {
@@ -232,7 +219,7 @@ export function useCourseCopyTemplate(source: CourseCopyTemplateSource) {
                         ? t('report.editor.copy_course_template_source_user_default')
                         : item.label
             }))
-            selectedCourseTemplateLoadKey.value = courseTemplateLoadOptions.value[0]?.key || ''
+            selectedCourseTemplateLoadKey.value = bundle.current?.key || courseTemplateLoadOptions.value[0]?.key || ''
             courseCopyTemplateText.value = template || SYSTEM_COURSE_TEMPLATE
             const loaded = courseTemplateLoadOptions.value.find(item => item.scopeType === 'user_default')
             courseCopyTemplateDocument.value = loaded?.templateDocument || createTextEditorContent(courseCopyTemplateText.value, { templateVariables: true }).richText
@@ -266,6 +253,7 @@ export function useCourseCopyTemplate(source: CourseCopyTemplateSource) {
         try {
             isSavingCourseCopyTemplate.value = true
             await CopyTemplateCommandService.saveCourseTemplateAsUserDefault({ plainText: templateText, richText: courseCopyTemplateDocument.value })
+            void clipboard.reload()
             toast.success(t('report.editor.copy_course_template_saved'))
             showCourseCopyTemplateModal.value = false
         } catch (error) {
@@ -277,6 +265,7 @@ export function useCourseCopyTemplate(source: CourseCopyTemplateSource) {
     }
 
     return {
+        clipboard,
         justCopiedCourse,
         showCourseCopyTemplateModal,
         courseCopyTemplateText,

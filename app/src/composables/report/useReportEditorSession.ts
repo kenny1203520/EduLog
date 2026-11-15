@@ -17,9 +17,11 @@ import { DEFAULT_EDITOR_USER_SETTINGS, normalizeEditorUserSettings, type EditorU
 import type { OccurrenceReportDTO, ReportDraftSnapshot, ReportLessonEntryDTO, SaveReportResult } from '@/models/OccurrenceReport'
 import {
     buildDirtyReportPayload,
+    composeProgressLetter,
     buildSnapshotFromDto,
     buildSnapshotFromProps,
     createLessonEntryId,
+    normalizeLessonEntries,
     normalizeReportRating,
     normalizeSystemManagedReason,
     type AttendanceStatus
@@ -548,7 +550,7 @@ export function useReportEditorSession(
     function updatePrimaryLessonEntry(patch: Partial<ReportLessonEntryDTO>) {
         let current = primaryLessonEntry.value
         if (!current) {
-            if (!props.enrollmentId) return
+            if (!props.enrollmentId || !Object.values(patch).some(Boolean)) return
             current = {
                 id: createLessonEntryId(), enrollment_id: props.enrollmentId, lesson_id: null,
                 is_completed: false, progress_letter: null,
@@ -570,14 +572,14 @@ export function useReportEditorSession(
         get: () => primaryLessonEntry.value?.progress_letter?.split('-')[0] || '',
         set: (start: string) => {
             const end = primaryLessonEntry.value?.progress_letter?.split('-')[1] || ''
-            updatePrimaryLessonEntry({ progress_letter: start && end ? `${start}-${end}` : start || end || null })
+            updatePrimaryLessonEntry({ progress_letter: composeProgressLetter(start, end) || null })
         },
     })
     const progressEnd = computed({
         get: () => primaryLessonEntry.value?.progress_letter?.split('-')[1] || '',
         set: (end: string) => {
             const start = primaryLessonEntry.value?.progress_letter?.split('-')[0] || ''
-            updatePrimaryLessonEntry({ progress_letter: start && end ? `${start}-${end}` : start || end || null })
+            updatePrimaryLessonEntry({ progress_letter: composeProgressLetter(start, end) || null })
         },
     })
     const attendanceStatus = ref<'present' | 'absent' | 'pending'>(props.initialAttendanceStatus)
@@ -655,17 +657,7 @@ export function useReportEditorSession(
     const savedReportSnapshot = ref<ReportDraftSnapshot>(initialSnapshot)
 
 
-    // Computed progress letter for backend (combining start-end range)
-    const progressLetter = computed(() => {
-        if (progressStart.value && progressEnd.value) {
-            return `${progressStart.value}-${progressEnd.value}`
-        } else if (progressStart.value) {
-            return progressStart.value
-        } else if (progressEnd.value) {
-            return progressEnd.value
-        }
-        return ''
-    })
+    const progressLetter = computed(() => composeProgressLetter(progressStart.value, progressEnd.value))
 
     // Check if absence reason is system-managed (holiday or suspension)
     const isSystemManagedAbsence = computed(() => {
@@ -1155,13 +1147,12 @@ export function useReportEditorSession(
     }, { immediate: true })
 
     function applyDraftSnapshot(snapshot: ReportDraftSnapshot) {
-        const [start = '', end = ''] = (snapshot.progressLetter || '').split('-')
-        lessonEntries.value = snapshot.lessonEntries ?? []
-        primaryLessonEntryId.value = snapshot.primaryLessonEntryId ?? lessonEntries.value[0]?.id ?? null
-        selectedLessonId.value = snapshot.lessonId || ''
-        isCompleted.value = snapshot.isCompleted
-        progressStart.value = start
-        progressEnd.value = end
+        const { entries, primaryLessonEntryId: draftPrimary } = normalizeLessonEntries(
+            snapshot.lessonEntries, props.enrollmentId, snapshot.lessonId, snapshot.isCompleted,
+            snapshot.progressLetter, snapshot.primaryLessonEntryId,
+        )
+        lessonEntries.value = entries
+        primaryLessonEntryId.value = draftPrimary
         if (!canonicalSystemManagedReason()) {
             attendanceStatus.value = snapshot.attendanceStatus
             absenceReason.value = normalizeAbsenceReasonCode(snapshot.absenceReason)
@@ -1321,10 +1312,6 @@ export function useReportEditorSession(
         const classNotesContent = createTextEditorContent(report.class_notes_document || report.class_notes || '')
         localContent.value = main.plainText
         contentDocument.value = main.richText
-        selectedLessonId.value = report.lesson_id || ''
-        isCompleted.value = report.is_completed ?? false
-        progressStart.value = report.progress_letter ? report.progress_letter.split('-')[0] : ''
-        progressEnd.value = report.progress_letter && report.progress_letter.includes('-') ? report.progress_letter.split('-')[1] : ''
         attendanceStatus.value = report.attendance_status as any
         absenceReason.value = normalizeAbsenceReasonCode(report.absence_reason)
         classParticipation.value = normalizeReportRating(report.class_participation)

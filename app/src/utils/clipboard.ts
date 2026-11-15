@@ -99,26 +99,26 @@ export async function copyToClipboard(textOrPromise: string | Promise<string>): 
 export async function copyRichTextToClipboard(
     contentOrPromise: TextEditorContentInput | Promise<TextEditorContentInput>
 ): Promise<boolean> {
-    const contentPromise = Promise.resolve(contentOrPromise).then(createTextEditorContent)
+    const content = contentOrPromise instanceof Promise
+        ? contentOrPromise.then(createTextEditorContent)
+        : createTextEditorContent(contentOrPromise)
 
     if (navigator.clipboard?.write && window.isSecureContext && typeof ClipboardItem !== 'undefined') {
         try {
-            const plainBlob = contentPromise.then(content =>
-                new Blob([content.plainText], { type: 'text/plain' })
-            )
-            const htmlBlob = contentPromise.then(content =>
-                new Blob([richTextToHTML(content.richText, true)], { type: 'text/html' })
-            )
-            await navigator.clipboard.write([
-                new ClipboardItem({ 'text/plain': plainBlob, 'text/html': htmlBlob })
-            ])
+            const plain = (value: Awaited<typeof content>) => new Blob([value.plainText], { type: 'text/plain' })
+            const html = (value: Awaited<typeof content>) =>
+                new Blob([richTextToHTML(value.richText, true)], { type: 'text/html' })
+            const data = content instanceof Promise
+                ? { 'text/plain': content.then(plain), 'text/html': content.then(html) }
+                : { 'text/plain': plain(content), 'text/html': html(content) }
+            await navigator.clipboard.write([new ClipboardItem(data)])
             return true
         } catch (error) {
             console.warn('Rich clipboard API failed, trying plain-text fallback', error)
         }
     }
 
-    return copyToClipboard(contentPromise.then(content => content.plainText))
+    return copyToClipboard(content instanceof Promise ? content.then(value => value.plainText) : content.plainText)
 }
 import { createTextEditorContent, richTextToHTML } from '@/components/text-editor/content'
 import type { TextEditorContentInput } from '@/components/text-editor/types'
