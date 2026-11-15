@@ -41,7 +41,7 @@ for (const [name, launchOptions] of browserTargets()) {
           window.nativeForm = document.querySelector('form')
           window.nativeMarkup = nativeForm.outerHTML
           window.nativeChanges = 0
-          yearNode.addEventListener('change', () => nativeChanges++)
+          yearNode.addEventListener('change', () => { window.nativeChanges += 1 })
           ;(0, eval)(content)
         })
       }, { early, late, content: read('../../content/content.js'), failed })
@@ -77,7 +77,7 @@ for (const [name, launchOptions] of browserTargets()) {
       assert.equal(await page.evaluate(() => document.activeElement === monthNode), true)
       await page.keyboard.press('Tab')
       assert.equal(await page.evaluate(() => document.activeElement === nativeForm.querySelector('button')), true)
-      assert.equal(await page.evaluate(() => nativeChanges), 1)
+      assert.equal(await page.evaluate(() => window.nativeChanges), 1)
       assert.equal(await page.evaluate(() => yearNode === document.querySelector('[name=year]') && monthNode === document.querySelector('[name=month]') && yearNode.form === nativeForm), true)
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${name} ${width}: page overflow`)
       for (const selector of ['[name=year]', '[name=month]', 'form button']) assert.ok(await page.locator(selector).evaluate(el => {

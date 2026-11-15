@@ -1,6 +1,7 @@
 import { createHash, createPublicKey } from 'node:crypto'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { posix } from 'node:path'
 import { safePath, zipFiles, unzipFiles } from './archive.mjs'
 import { assertNoSecrets } from './secrets.mjs'
@@ -12,6 +13,17 @@ export const config = JSON.parse(readFileSync(new URL('./config.json', import.me
 export const sha256 = data => createHash('sha256').update(data).digest('hex')
 const gitExecutable = process.platform === 'win32' ? 'C:\\Program Files\\Git\\cmd\\git.exe' : '/usr/bin/git'
 const gitOptions = { cwd: repoRoot, maxBuffer: 20 * 1024 * 1024, shell: false }
+const requireToolDependency = createRequire(import.meta.url)
+
+function moduleReferences(source, name) {
+  const { initSync, parse } = requireToolDependency('es-module-lexer')
+  initSync()
+  const [imports] = parse(source, name)
+  return imports.filter(entry => entry.d !== -2).map(entry => {
+    if (entry.n === undefined) throw new Error(`Runtime imports must be statically verifiable: ${name}`)
+    return entry.n
+  })
+}
 
 function validateCommit(commit) {
   if (typeof commit !== 'string' || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(commit)) throw new Error('Invalid Git commit ID')
@@ -138,8 +150,7 @@ export function validateRuntime(files) {
     if (name.endsWith('.js')) {
       const checked = spawnSync(process.execPath, ['--input-type=module', '--check'], { input: text, encoding: 'utf8' })
       if (checked.status !== 0) throw new Error(`JavaScript syntax failure: ${name}\n${checked.stderr}`)
-      for (const match of text.matchAll(/\b(?:import|export)\s+(?:[^'";\n]*?\s+from\s*)?['"]([^'"]+)['"]|\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g)) {
-        const ref = match[1] || match[2]
+      for (const ref of moduleReferences(text, name)) {
         if (ref.startsWith('.')) reference(files, name, ref)
         else throw new Error(`Runtime imports must be bundled: ${name}: ${ref}`)
       }

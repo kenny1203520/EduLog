@@ -77,6 +77,19 @@ test('runtime validation rejects missing dependencies, syntax errors and unexpec
   assert.throws(() => validateRuntime(broken), /syntax failure/)
   const external = new Map(files); external.set('background/worker.js', Buffer.from("import 'external-package'"))
   assert.throws(() => validateRuntime(external), /bundled/)
+  const local = new Map(files)
+  local.set('background/worker.js', Buffer.from(`
+    // import 'ignored-comment'
+    const message = "import 'ignored-string'"
+    export * from './dependency.js'
+    import('./dependency.js')
+    console.log(message, import.meta.url)
+  `))
+  assert.throws(() => validateRuntime(local), /missing file/)
+  local.set('background/dependency.js', Buffer.from('export const enabled = true'))
+  validateRuntime(local)
+  local.set('background/worker.js', Buffer.from('import(globalThis.runtimePath)'))
+  assert.throws(() => validateRuntime(local), /statically verifiable/)
   const secret = new Map(files); secret.set('.env', Buffer.from('secret'))
   assert.throws(() => validateRuntime(secret), /Unexpected/)
 })
