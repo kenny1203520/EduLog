@@ -30,7 +30,9 @@ export const reportBodySchema = z.object({
   content: z.string().max(10000).nullable().optional(), content_document: z.record(z.string(), z.unknown()).nullable().optional(), external_link: z.string().max(2048).nullable().optional(),
   expected_version: z.number().int().min(1).optional(),
 }).strict()
-export const reportCreateSchema = reportBodySchema.omit({ expected_version: true, lesson_entries: true, primary_lesson_entry_id: true }).required({ enrollment_id: true, class_occurrence_id: true })
+const standardReportCreateSchema = reportBodySchema.omit({ expected_version: true, lesson_entries: true, primary_lesson_entry_id: true }).required({ enrollment_id: true, class_occurrence_id: true })
+const makeupReportCreateSchema = z.strictObject({ makeup: z.literal(true), enrollment_id: uuid, class_occurrence_id: uuid })
+export const reportCreateSchema = z.union([standardReportCreateSchema, makeupReportCreateSchema])
 export const reportUpdateSchema = reportBodySchema.omit({ enrollment_id: true, class_occurrence_id: true }).required({ expected_version: true })
 export const reportCollaborationSchema = z.object({ snapshot_base64: z.string().max(1400000), base_report_version: z.number().int().min(1) }).strict()
 export const reportReferenceQuery = z.object({
@@ -198,17 +200,28 @@ async function resolveInitialAttendance(req: Request, enrollmentId: string, occu
 }
 async function create(req: Request, res: Response) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
-    const input = reportCreateSchema.parse(req.body)
-    assertClientManagedAttendanceReason(input.absence_reason)
-    setAuditContext(req, { domain: 'teaching', resource: 'reports', action: 'create', permission: 'teaching.reports.create', scopeId: input.class_occurrence_id, scopeType: 'class_occurrence' })
-    const permission = await req.db.rpc('can_create_occurrence_report', { p_enrollment_id: input.enrollment_id, p_class_occurrence_id: input.class_occurrence_id })
-  requireAuthorizationDecision(req, permission, { permission: 'teaching.reports.create', stage: 'report_creation_scope_permission', message: 'You do not have permission to create this report', scopeId: input.class_occurrence_id, scopeType: 'occurrence' })
+  const input = reportCreateSchema.parse(req.body)
+  const makeup = 'makeup' in input
+  if (!makeup) assertClientManagedAttendanceReason(input.absence_reason)
+  setAuditContext(req, { domain: 'teaching', resource: 'reports', action: 'create', permission: 'teaching.reports.create', scopeId: input.class_occurrence_id, scopeType: 'class_occurrence' })
+  const args = { p_enrollment_id: input.enrollment_id, p_class_occurrence_id: input.class_occurrence_id }
+  const decision = await req.db.rpc(makeup ? 'can_create_makeup_report' : 'can_create_occurrence_report', args)
+  requireAuthorizationDecision(req, decision, { permission: 'teaching.reports.create', stage: makeup ? 'makeup_report_creation_scope_permission' : 'report_creation_scope_permission', message: 'You do not have permission to create this report', scopeId: input.class_occurrence_id, scopeType: 'occurrence' })
   const replay = await idempotency(req, 201, null); if (replay) return res.status(replay.status).json(replay.body)
+  const result = makeup
+    ? await req.db.rpc('create_makeup_report', args).select(fields).single()
+    : await insertStandardReport(req, input)
+  if (result.error) throw mapDatabaseError(result.error)
+  setAuditContext(req, { resourceId: result.data?.id ?? null })
+  const body = envelope(req, result.data)
+  await complete(req, 201, body)
+  return res.status(201).json(body)
+}
+
+async function insertStandardReport(req: Request, input: z.infer<typeof standardReportCreateSchema>) {
   const automaticAttendance = await resolveInitialAttendance(req, input.enrollment_id, input.class_occurrence_id)
   const payload = { enrollment_id: input.enrollment_id, class_occurrence_id: input.class_occurrence_id, content: input.content ?? '', version: 1, is_completed: input.is_completed ?? false, attendance_status: input.attendance_status ?? automaticAttendance.attendance_status, ...pick(input), ...(automaticAttendance.attendance_status === 'absent' ? automaticAttendance : {}) }
-  const result = await req.db.from('occurrence_reports').insert(payload).select(fields).single(); if (result.error) throw mapDatabaseError(result.error)
-    setAuditContext(req, { domain: 'teaching', resource: 'reports', resourceId: result.data?.id ?? null, teachingId: null, action: 'create', permission: 'teaching.reports.create', scopeId: input.class_occurrence_id, scopeType: 'class_occurrence' })
-  const envelope = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 201, envelope); return res.status(201).json(envelope)
+  return req.db!.from('occurrence_reports').insert(payload).select(fields).single()
 }
 async function update(req: Request, res: Response) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')

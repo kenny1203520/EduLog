@@ -393,3 +393,5 @@ Apply this migration before deploying the extension and API changes. Run the ext
 ## Manual reports for trial enrollments (1000176)
 
 `1000176_trial_manual_reports.sql` lets `can_create_occurrence_report` accept a trial enrollment for a lesson of its own class on or after its start date, so a report can be added by hand. Trial enrollments stay off the roster until they hold a report and are still not provisioned automatically. Apply it before updating the API. Run `supabase/tests/scoped_teaching_access_integration.sql` after applying it.
+
+`1000178_scoped_makeup_report_creation.sql` adds a report-only operation for adding a regular enrollment to an individual lesson. The caller must be able to read the source enrollment and create reports in the target class. Apply it before deploying the corresponding API and frontend. Run `scripts/release-class-smoke.sh` against the candidate images.

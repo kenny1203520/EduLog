@@ -103,3 +103,15 @@ for pair in 7:owner 2:teacher 5:assistant 4:outsider; do
   # The origin is confined to this private test network and uses synthetic credentials.
   docker exec -i -e SMOKE_DATE -e SMOKE_HOLIDAY -e ACTOR="${pair#*:}" -e TOKEN="$(token authenticated "$actor")" "$network-api" node --input-type=module - < scripts/release/class-smoke.mjs
 done
+sql >/dev/null <<'SQL'
+BEGIN;
+SELECT set_config('request.jwt.claim.role', 'service_role', true);
+SELECT set_config('request.jwt.claim.sub', '15800000-0000-4000-8000-000000000001', true);
+INSERT INTO public.class_session_teachers(class_session_id, teacher_id, role_id, effective_from)
+SELECT '15800000-0000-4000-8000-0000000000e2', '15800000-0000-4000-8000-0000000000f2', id, CURRENT_DATE - 30
+FROM public.roles WHERE code = 'teacher' AND domain = 'teaching' AND is_builtin;
+COMMIT;
+SQL
+docker exec -i -e SMOKE_DATE -e ACTOR=makeup-teacher \
+  -e TOKEN="$(token authenticated 15800000-0000-4000-8000-000000000002)" "$network-api" \
+  node --input-type=module - < scripts/release/class-smoke.mjs

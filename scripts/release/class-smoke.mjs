@@ -11,6 +11,8 @@ const firstLesson = '15800000-0000-4000-8000-0000000000a9'
 const referenceLesson = '15800000-0000-4000-8000-0000000000aa'
 const sourceReport = '15800000-0000-4000-8000-000000000021'
 const legacyReport = '15800000-0000-4000-8000-000000000025'
+const otherEnrollment = '15800000-0000-4000-8000-0000000000b2'
+const makeupOccurrence = '15800000-0000-4000-8000-000000000019'
 const references = `/reports/reference?lesson_id=${referenceLesson}`
 async function call(path, expected = [200], postKey, payload, method = postKey ? "POST" : "GET") {
   const bodyText = payload === undefined ? undefined : JSON.stringify(payload)
@@ -38,6 +40,15 @@ async function call(path, expected = [200], postKey, payload, method = postKey ?
   return body
 }
 const workspace = `/pages/class-sessions/${session}/workspace?occurrence_date=${date}`
+if (actor === 'makeup-teacher') {
+  const payload = { makeup: true, enrollment_id: otherEnrollment, class_occurrence_id: occurrence }
+  const created = await call('/reports', [201], 'class-smoke-scoped-makeup', payload)
+  assert.equal(created.data.enrollment_id, otherEnrollment)
+  const page = (await call(workspace)).data
+  assert.ok(page.enrollments.some(item => item.id === otherEnrollment), 'manual makeup must appear on the target roster')
+  console.log('Class workspace smoke passed: teacher with source and target scope')
+  process.exit(0)
+}
 const completion = `/class-sessions/${session}/report-completion?from=${date}&to=${date}`
 const classTemplate = `/copy-templates/attendance_copy/class_session/${session}`
 if (actor === 'outsider') {
@@ -128,5 +139,21 @@ if (actor === 'teacher') {
   assert.equal(checked.data.teacher_attendance[secondTeacher], false)
 } else if (actor === 'outsider') {
   await call(attendancePath, [403], 'class-smoke-attendance-outsider', { teacher_attendance: { [firstTeacher]: false } }, 'PATCH')
+}
+const makeupRequest = { enrollment_id: otherEnrollment, class_occurrence_id: makeupOccurrence }
+if (actor === 'owner') {
+  await call('/reports', [403], 'class-smoke-ordinary-cross-class', makeupRequest)
+  const request = { ...makeupRequest, makeup: true }
+  const created = await call('/reports', [201], 'class-smoke-add-makeup', request)
+  assert.equal(created.data.enrollment_id, otherEnrollment)
+  assert.equal(created.data.class_occurrence_id, makeupOccurrence)
+  assert.equal(created.data.attendance_status, 'pending')
+  const replay = await call('/reports', [201], 'class-smoke-add-makeup', request)
+  assert.equal(replay.data.id, created.data.id)
+  await call('/reports', [409], 'class-smoke-duplicate-makeup', request)
+  await call('/reports', [422], 'class-smoke-forged-makeup', { ...request, attendance_status: 'present' })
+  assert.equal((await call(`/enrollments/${otherEnrollment}`)).data.class_session_id, '15800000-0000-4000-8000-0000000000e2')
+} else {
+  await call('/reports', [403], `class-smoke-makeup-denied-${actor}`, { ...makeupRequest, makeup: true })
 }
 console.log(`Class workspace smoke passed: ${actor}`)
