@@ -18,10 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Preserve multi-lesson progress when saving reports and allow eligible trial reports to be added by hand.
 - Use the primary course and lesson for report reference and course copy. Preserve end-only progress.
 - Restore attendance copy and personal templates, using the selected occurrence time and roster.
+- Restore cross-class makeup report creation for teachers with source enrollment and target class access.
 - Translate classroom and account security messages and preserve native password autofill.
 
 ### Deployment
-- Apply pending migrations through 1000177 and deploy the matching frontend, API and Presidio images.
+- Apply pending migrations through 1000178 and deploy the matching frontend, API and Presidio images.
 
 ## [2.0.0-alpha.8] - 2026-11-13
 

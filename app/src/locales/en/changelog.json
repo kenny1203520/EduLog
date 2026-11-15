@@ -11,9 +11,10 @@
                     "Preserve multi-lesson report progress and allow eligible trial reports to be added by hand.",
                     "Use the primary course and lesson for report reference and course copy, and preserve end-only progress.",
                     "Restore attendance copy and personal templates using the selected occurrence time and roster.",
+                    "Restore cross-class makeup reports for authorized teachers and retain the original enrollment.",
                     "Translate inline classroom and account security messages and preserve password autofill."
                 ],
-                "deployment": ["Apply pending migrations through 1000177 before deploying the matching images."]
+                "deployment": ["Apply pending migrations through 1000178 before deploying the matching images."]
             }
         },
         {
