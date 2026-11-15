@@ -1,6 +1,6 @@
 -- A manually added makeup student is only roster-eligible after its report
 -- exists. Authorize that explicit operation without widening generic INSERT.
-CREATE FUNCTION public.can_create_makeup_report(p_enrollment_id uuid, p_class_occurrence_id uuid)
+CREATE OR REPLACE FUNCTION public.can_create_makeup_report(p_enrollment_id uuid, p_class_occurrence_id uuid)
 RETURNS boolean
 LANGUAGE sql
 STABLE SECURITY DEFINER
@@ -28,7 +28,7 @@ AS $$
     );
 $$;
 
-CREATE FUNCTION public.create_makeup_report(p_enrollment_id uuid, p_class_occurrence_id uuid)
+CREATE OR REPLACE FUNCTION public.create_makeup_report(p_enrollment_id uuid, p_class_occurrence_id uuid)
 RETURNS SETOF public.occurrence_reports
 LANGUAGE plpgsql
 VOLATILE SECURITY DEFINER
