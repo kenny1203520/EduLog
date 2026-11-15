@@ -2,7 +2,7 @@
     "entries": [
         {
             "version": "2.0.0-alpha.9",
-            "date": "2026-11-15",
+            "date": "2026-11-16",
             "changes": {
                 "added": ["透過 GoTrue 自訂 OIDC 支援 Authentik 登入與既有帳號綁定。"],
                 "fixed": [

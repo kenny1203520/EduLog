@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.0.0-alpha.9] - 2026-11-15
+## [2.0.0-alpha.9] - 2026-11-16
 
 ### Added
 - Support Authentik sign-in and existing-account linking through GoTrue custom OIDC.
