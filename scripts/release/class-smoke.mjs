@@ -71,7 +71,15 @@ const firstTeacher = '15800000-0000-4000-8000-0000000000f2'
 const secondTeacher = '15800000-0000-4000-8000-0000000000f5'
 if (actor === 'teacher') {
   await call(attendancePath, [403], 'class-smoke-attendance-denied', { teacher_attendance: { [secondTeacher]: true } }, 'PATCH')
-  await call(attendancePath, [200], 'class-smoke-attendance-self', { teacher_attendance: { [firstTeacher]: true } }, 'PATCH')
+  const present = { teacher_attendance: { [firstTeacher]: true } }
+  await call(attendancePath, [400], undefined, present, 'PATCH')
+  const original = await call(attendancePath, [200], 'class-smoke-attendance-self', present, 'PATCH')
+  await call(attendancePath, [200], 'class-smoke-attendance-absent', { teacher_attendance: { [firstTeacher]: false } }, 'PATCH')
+  const replay = await call(attendancePath, [200], 'class-smoke-attendance-self', present, 'PATCH')
+  assert.deepEqual(replay.data, original.data)
+  const current = await call(attendancePath)
+  assert.equal(current.data.teacher_attendance[firstTeacher], false)
+  await call(attendancePath, [200], 'class-smoke-attendance-present', present, 'PATCH')
 } else if (actor === 'assistant') {
   const checked = await call(attendancePath, [200], 'class-smoke-attendance-assistant', { teacher_attendance: { [secondTeacher]: false } }, 'PATCH')
   assert.equal(checked.data.teacher_attendance[firstTeacher], true)

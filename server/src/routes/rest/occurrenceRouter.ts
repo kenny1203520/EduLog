@@ -24,12 +24,21 @@ async function update(req: Request, res: Response) {
   const input = occurrenceBodySchema.parse(req.body)
   if (input.teacher_attendance && Object.keys(input).length === 1) {
     setAuditContext(req, { domain: 'teaching', resource: 'occurrences', resourceId: id, action: 'update', authorizationStage: 'teacher_attendance' })
+    const replay = await idempotency(req, 200, null)
+    if (replay) {
+      const visible = await req.db.from('class_occurrences').select('id').eq('id', id).maybeSingle()
+      if (visible.error) throw mapDatabaseError(visible.error)
+      if (!visible.data) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have access to this occurrence')
+      return res.status(replay.status).json(replay.body)
+    }
     const result = await req.db.rpc('set_occurrence_teacher_attendance', { p_occurrence: id, p_changes: input.teacher_attendance })
     if (result.error) throw mapDatabaseError(result.error)
     const occurrence = await req.db.from('class_occurrences').select(fields).eq('id', id).maybeSingle()
     if (occurrence.error) throw mapDatabaseError(occurrence.error)
     if (!occurrence.data) throw new ApiError(404, 'NOT_FOUND', 'Occurrence was not found')
-    return res.json({ data: occurrence.data, meta: {}, request_id: req.requestId, trace_id: req.traceId })
+    const body = { data: occurrence.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }
+    await complete(req, 200, body)
+    return res.json(body)
   }
   if (input.teacher_attendance) throw new ApiError(422, 'INVALID_ARGUMENT', 'Submit attendance separately from other occurrence changes')
   const context = await authorize(req, id)

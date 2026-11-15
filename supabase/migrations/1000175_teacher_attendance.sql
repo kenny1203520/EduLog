@@ -1,3 +1,22 @@
+-- Older clients used both teacher-record and account IDs. Preserve the previous
+-- absence result when their values conflict, then use teacher-record IDs for edits.
+WITH conflicting_attendance AS (
+  SELECT occurrence.id, jsonb_object_agg(teacher.id::text, false) AS canonical_absences
+  FROM public.class_occurrences occurrence
+  CROSS JOIN LATERAL jsonb_each(CASE WHEN jsonb_typeof(occurrence.teacher_attendance) = 'object'
+    THEN occurrence.teacher_attendance ELSE '{}'::jsonb END) AS entry(key, value)
+  JOIN public.teacher_records teacher ON teacher.id = CASE
+    WHEN entry.key ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+    THEN entry.key::uuid END AND entry.key = teacher.id::text
+  JOIN public.profiles profile ON profile.id = teacher.profile_id
+  WHERE entry.value = 'true'::jsonb
+    AND occurrence.teacher_attendance -> profile.auth_user_id::text = 'false'::jsonb
+  GROUP BY occurrence.id
+)
+UPDATE public.class_occurrences occurrence
+SET teacher_attendance = occurrence.teacher_attendance || conflicting_attendance.canonical_absences
+FROM conflicting_attendance WHERE occurrence.id = conflicting_attendance.id;
+
 -- Validate attendance against the dated assignment and the caller's scoped rights.
 CREATE FUNCTION private.assert_teacher_attendance_change(p_session uuid, p_date date, p_teacher uuid, p_present boolean)
 RETURNS void

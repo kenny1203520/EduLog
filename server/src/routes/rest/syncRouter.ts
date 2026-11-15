@@ -62,7 +62,15 @@ async function sync(req: Request, res: Response) {
     }
   }
   if (placeholderReports.length) { const result = await req.db.from('occurrence_reports').delete().in('id', placeholderReports); if (result.error) throw mapDatabaseError(result.error) }
-  if (stale.length) { const result = await req.db.from('class_occurrences').delete().in('id', stale); if (result.error) throw mapDatabaseError(result.error) }
+  let deleted = 0
+  if (stale.length) {
+    // PostgreSQL checks this predicate against the current row after any concurrent attendance update.
+    const result = await req.db.from('class_occurrences').delete().in('id', stale)
+      .or('teacher_attendance.is.null,teacher_attendance.eq.{}').select('id')
+    if (result.error) throw mapDatabaseError(result.error)
+    deleted = result.data?.length ?? 0
+    preserved += stale.length - deleted
+  }
   const rows: Record<string, unknown>[] = []
   for (const [date, rule] of planned) {
     if (retained.has(date)) continue
@@ -70,7 +78,7 @@ async function sync(req: Request, res: Response) {
   }
   let created = 0
   if (rows.length) { const result = await req.db.from('class_occurrences').upsert(rows, { onConflict: 'class_session_id,occurrence_date', ignoreDuplicates: true }).select(fields); if (result.error) throw mapDatabaseError(result.error); created = result.data?.length ?? 0 }
-  const body = { data: { created, updated, deleted: stale.length, preserved }, meta: {}, request_id: req.requestId, trace_id: req.traceId }
+  const body = { data: { created, updated, deleted, preserved }, meta: {}, request_id: req.requestId, trace_id: req.traceId }
   await complete(req, 200, body)
   return res.json(body)
 }

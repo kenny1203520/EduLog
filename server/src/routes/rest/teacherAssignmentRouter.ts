@@ -98,12 +98,12 @@ async function list(req: Request, res: Response) {
   const id = sessionId(req)
   await authorize(req, id, 'list')
   if (!req.adminDb) throw new ApiError(503, 'RESOURCE_SERVICE_UNAVAILABLE', 'The teacher service is unavailable')
-  const result = await req.adminDb.from('class_session_teachers').select(assignmentFields).eq('class_session_id', id).order('effective_from', { ascending: false })
-  if (result.error) throw mapDatabaseError(result.error)
   const onDate = typeof req.query.on_date === 'string' ? req.query.on_date : undefined
   if (onDate && !dateSchema.safeParse(onDate).success) throw new ApiError(400, 'INVALID_DATE', 'on_date is invalid')
-  const scopedRows = (result.data ?? []).filter((row: any) => !onDate || (row.effective_from <= onDate && (!row.effective_to || row.effective_to >= onDate)))
-  const data = (await hydrateAssignments(req, scopedRows)).map(mapAssignment).filter(Boolean)
+  const assignments = req.adminDb.from('class_session_teachers').select(assignmentFields).eq('class_session_id', id).order('effective_from', { ascending: false })
+  const result = await (onDate ? assignments.lte('effective_from', onDate).or(`effective_to.is.null,effective_to.gte.${onDate}`) : assignments)
+  if (result.error) throw mapDatabaseError(result.error)
+  const data = (await hydrateAssignments(req, result.data ?? [])).map(mapAssignment).filter(Boolean)
   const enriched = await attachTeacherProfile(req, data)
   return res.json({ data: enriched, meta: { limit: data.length, offset: 0, total: data.length, sort: 'effective_from' }, request_id: req.requestId, trace_id: req.traceId })
 }
