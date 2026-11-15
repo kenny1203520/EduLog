@@ -24,25 +24,59 @@ Deno.test('shared rate limit store is fail-closed and service-role only', () => 
 
 const lockdown = await readMigration('1000167_lockdown_public_privileges.sql')
 const migrationNumber = (name: string) => Number(/^(\d+)/.exec(name)?.[1] ?? 0)
-const withoutComments = (sql: string) => sql.replace(/--.*$/gm, '')
+function privilegeStatements(sql: string): string[][] {
+  const uncommented = sql.split('\n').map(line => {
+    const comment = line.indexOf('--')
+    return comment < 0 ? line : line.slice(0, comment)
+  }).join('\n')
+  return uncommented.split(';').map(statement =>
+    statement.toLowerCase().match(/[a-z_][a-z_0-9]*/g) ?? []
+  )
+}
+
+function functionPrivileges(sql: string) {
+  return privilegeStatements(sql).flatMap(tokens => {
+    const operation = tokens.findIndex(token => token === 'grant' || token === 'revoke')
+    if (operation < 0) return []
+    const on = tokens.indexOf('on', operation + 1)
+    if (on < 0 || tokens[on + 1] !== 'function') return []
+    const verb = tokens[operation]
+    const separator = tokens.lastIndexOf(verb === 'grant' ? 'to' : 'from')
+    if (separator <= on + 1) return []
+    return [{ verb, roles: tokens.slice(separator + 1) }]
+  })
+}
+
+Deno.test('privilege scan supports multiline statements, comments and reordered roles', () => {
+  const sql = `-- GRANT EXECUTE ON FUNCTION public.demo() TO anon;
+    REVOKE ALL ON FUNCTION public.demo(text) FROM authenticated, -- explanation
+      anon, PUBLIC;
+    GRANT EXECUTE ON FUNCTION public.demo(text) TO authenticated, anon;`
+  const [revoke, grant] = functionPrivileges(sql)
+  assert(revoke.verb === 'revoke' && revoke.roles.join(',') === 'authenticated,anon,public')
+  assert(grant.verb === 'grant' && grant.roles.includes('anon'))
+})
 
 Deno.test('1000167 locks anon out of public and stops default grants', () => {
   assertStringIncludes(lockdown, 'REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon')
   assertStringIncludes(lockdown, "REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon, authenticated")
   assertStringIncludes(lockdown, 'ALTER DEFAULT PRIVILEGES FOR ROLE postgres REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC')
   assertStringIncludes(lockdown, 'IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM anon, authenticated')
-  assertFalse(/GRANT\s+[^;]*\bTO\s+anon\b/i.test(withoutComments(lockdown)), '1000167 must not grant anything to anon')
+  assertFalse(privilegeStatements(lockdown).some(tokens => {
+    const grant = tokens.indexOf('grant')
+    const to = tokens.lastIndexOf('to')
+    return grant >= 0 && to > grant && tokens.slice(to + 1).includes('anon')
+  }), '1000167 must not grant anything to anon')
 })
 
 Deno.test('migrations after 1000167 revoke function access from anon, not only PUBLIC', async () => {
   for await (const entry of Deno.readDir(migrationDir)) {
     if (!entry.isFile || !entry.name.endsWith('.sql') || migrationNumber(entry.name) <= 1000167) continue
-    const sql = withoutComments(await readMigration(entry.name))
-    for (const statement of sql.match(/REVOKE\s[^;]*?ON\s+FUNCTION\s[^;]*?FROM\s[^;]*;/gis) ?? []) {
-      if (/\bPUBLIC\b/i.test(statement.split(/\bFROM\b/i).pop() ?? '')) {
-        assert(/\banon\b/i.test(statement), `${entry.name}: "${statement.trim()}" must also revoke from anon`)
+    for (const { verb, roles } of functionPrivileges(await readMigration(entry.name))) {
+      if (verb === 'revoke' && roles.includes('public')) {
+        assert(roles.includes('anon'), `${entry.name}: function revocation from PUBLIC must also revoke from anon`)
       }
+      assertFalse(verb === 'grant' && roles.includes('anon'), `${entry.name} must not grant functions to anon`)
     }
-    assertFalse(/GRANT\s[^;]*?ON\s+FUNCTION\s[^;]*?\bTO\s+[^;]*\banon\b/is.test(sql), `${entry.name} must not grant functions to anon`)
   }
 })

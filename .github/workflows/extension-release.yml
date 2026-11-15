@@ -148,6 +148,7 @@ jobs:
           EXTENSION_API_URL: ${{ vars.EXTENSION_API_URL }}
           EXTENSION_API_TOKEN: ${{ secrets.EXTENSION_API_TOKEN }}
         run: node scripts/extension/preflight.mjs extension/dist/release/release.json
+      - run: npm ci --ignore-scripts
       - name: Create release and verify immutable download assets
         env:
           GH_TOKEN: ${{ github.token }}
@@ -183,6 +184,7 @@ jobs:
           ACCOUNT: ${{ vars.CWS_SERVICE_ACCOUNT }}
           PUBLISHER: ${{ vars.CWS_PUBLISHER_ID }}
         run: node -e "for (const k of ['PROVIDER','ACCOUNT','PUBLISHER']) if (!process.env[k]) throw new Error('Missing store setting '+k)"
+      - run: npm ci --ignore-scripts
       - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         id: auth
         with:

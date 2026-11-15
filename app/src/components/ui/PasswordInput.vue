@@ -1,22 +1,23 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
     modelValue: string
     id?: string
-    autocomplete?: string
+    purpose?: 'current' | 'new' | 'external'
     placeholder?: string
     required?: boolean
     minlength?: number
     maxlength?: number
     disabled?: boolean
     inputClass?: string
-}>(), { autocomplete: 'current-password', required: false, disabled: false })
+}>(), { purpose: 'current', required: false, disabled: false })
 
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 const { t } = useI18n()
 const visible = ref(false)
+const autocomplete = computed(() => props.purpose === 'external' ? 'off' : `${props.purpose}-password`)
 </script>
 
 <template>

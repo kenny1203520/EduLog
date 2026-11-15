@@ -361,7 +361,7 @@ const labelClass = 'mb-1 block text-sm font-bold text-slate-700'
                                 </label>
                                 <div>
                                     <label :for="`teacher-credential-password-${credential.id}`" :class="labelClass">{{ t('teacher.credentials_password') }}</label>
-                                    <PasswordInput :id="`teacher-credential-password-${credential.id}`" :model-value="credential.password ?? ''" autocomplete="off" :input-class="inputClass" :placeholder="t('teacher.credentials_password')" @update:model-value="credential.password = $event" />
+                                    <PasswordInput :id="`teacher-credential-password-${credential.id}`" :model-value="credential.password ?? ''" purpose="external" :input-class="inputClass" :placeholder="t('teacher.credentials_password')" @update:model-value="credential.password = $event" />
                                 </div>
                                 <label class="block md:col-span-2"><span :class="labelClass">{{ t('teacher.credentials_url') }}</span>
                                     <input v-model="credential.url" type="url" :class="inputClass" />
@@ -392,7 +392,7 @@ const labelClass = 'mb-1 block text-sm font-bold text-slate-700'
                                 </label>
                                 <div>
                                     <label for="teacher-new-credential-password" :class="labelClass">{{ t('teacher.credentials_password') }}</label>
-                                    <PasswordInput id="teacher-new-credential-password" v-model="newCredential.password" autocomplete="off" :input-class="inputClass" :placeholder="t('teacher.credentials_password')" />
+                                    <PasswordInput id="teacher-new-credential-password" v-model="newCredential.password" purpose="external" :input-class="inputClass" :placeholder="t('teacher.credentials_password')" />
                                 </div>
                                 <label class="block md:col-span-2"><span :class="labelClass">{{ t('teacher.credentials_url') }}</span>
                                     <input v-model="newCredential.url" type="url" :class="inputClass" />
