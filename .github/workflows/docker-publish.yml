@@ -44,7 +44,7 @@ jobs:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
           fetch-depth: 0
       - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
       - name: Validate SemVer tag and app version
@@ -79,7 +79,7 @@ jobs:
           ref: ${{ needs.validate.outputs.commit }}
 
       - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
           # No dependency cache: a release build must not restore files that
@@ -123,7 +123,7 @@ jobs:
         uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226 # v3.0.0
 
       - name: Log into registry ${{ env.REGISTRY }}
-        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -169,7 +169,7 @@ jobs:
             type=raw,value=${{ needs.validate.outputs.channel }},enable=${{ needs.validate.outputs.channel != '' }}
 
       - name: Build frontend image for smoke testing
-        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ./app
           build-contexts: legal=.
@@ -179,7 +179,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build API image for smoke testing
-        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ./server
           build-contexts: legal=.
@@ -189,7 +189,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build Presidio analyzer image for smoke testing
-        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ./docker/presidio
           build-contexts: legal=.
@@ -202,9 +202,13 @@ jobs:
         shell: bash
         run: bash scripts/release-image-smoke.sh
 
+      - name: Verify class workspace against PostgreSQL and PostgREST
+        shell: bash
+        run: bash scripts/release-class-smoke.sh
+
       - name: Build and push frontend Docker image
         id: build-and-push-frontend
-        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ./app
           build-contexts: legal=.
@@ -216,7 +220,7 @@ jobs:
 
       - name: Build and push API Docker image
         id: build-and-push-api
-        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ./server
           build-contexts: legal=.
@@ -228,7 +232,7 @@ jobs:
 
       - name: Build and push Presidio analyzer Docker image
         id: build-and-push-presidio
-        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ./docker/presidio
           build-contexts: legal=.
@@ -251,7 +255,7 @@ jobs:
           ref: ${{ needs.validate.outputs.commit }}
           fetch-depth: 0
       - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
       - name: Create release and changelog

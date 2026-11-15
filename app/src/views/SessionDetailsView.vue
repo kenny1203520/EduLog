@@ -14,6 +14,7 @@ import TeacherAssignmentModal from '@/components/classroom/TeacherAssignmentModa
 import AttendanceCopyTemplateModal from '@/components/classroom/AttendanceCopyTemplateModal.vue'
 import ConflictModal from '@/components/report/ConflictModal.vue'
 import ConfirmModal from '@/components/ui/ConfirmModal.vue'
+import CopyClipboardFeedback from '@/components/ui/CopyClipboardFeedback.vue'
 import KodingCodeCheckModal from '@/components/enrollment/KodingCodeCheckModal.vue'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { DateUtils } from '@/utils/dateUtils'
@@ -35,12 +36,14 @@ const {
     realtimeBadge, realtimeStatusMessage, realtimeStatusDetail, lastRealtimeUpdateAt, lastRealtimeUpdateLabel,
     realtimeRefreshError, isRealtimeRefreshing, retryRealtimeAction,
     requestRefreshSchedule, showRefreshConfirm, isRefreshing, handleConfirmRefresh,
-    teacherAttendanceRows, teacherAttendanceCounts, canManageTeacherAttendance, toggleTeacherAttendance,
+    teacherAttendanceRows, teacherAttendanceCounts, canManageTeacherAttendance, toggleTeacherAttendance, teacherRosterFailed, teacherLeaveFailed, loadOccurrenceTeachers,
     openTeacherEditModal, showTeacherEditModal, teacherSearchQuery, currentSessionTeachers, filteredTeachers,
     addTeacherForToday, removeAssignment,
     studentSearchQuery, studentAttendanceFilter, filteredEnrollments, allRosterEnrollments, hasActiveStudentFilters,
     clearStudentFilters, focusRosterStudent, highlightedEnrollmentId,
     isLoadingProgressGaps, progressGapCheckFailed, retryStudentProgressGaps,
+    completionFailed, retryReportCompletion, reportLoadFailed, retryOccurrenceReports, attendanceCopyReady,
+    progressSummaryFailed, retryProgressSummary,
     isQuickAttendanceExpanded, quickAttendanceStudents, selectedEnrollmentIds, attendanceCounts, occupiedRosterCount,
     setAttendance, batchSetAttendance, toggleEnrollmentSelection, toggleSelectAll, studentRosterItems,
     transferredOutStudents, cancellingTransferId, pendingTransferCancel, openTransferTarget, confirmTransferCancel,
@@ -54,12 +57,14 @@ const {
 } = useSessionWorkspace(quickReportEditorRef)
 
 const {
+    clipboard: { loading: attendanceCopyLoading, loadFailed: attendanceCopyLoadFailed, manualText: attendanceCopyManualText,
+        reload: reloadAttendanceCopyTemplate, resetCopy: dismissAttendanceCopyText },
     showAttendanceTemplateModal, attendanceTemplateText, attendanceTemplateDocument, attendanceTemplateScope,
     isLoadingAttendanceTemplate, isSavingAttendanceTemplate, attendanceTemplateLoadOptionsDropdown,
     selectedAttendanceTemplateLoadKey, selectedAttendanceTemplateModes, attendanceTemplateVariables,
     attendanceTemplatePreviewText, loadSelectedAttendanceTemplate, openAttendanceTemplateModal,
     saveAttendanceTemplate, copyAttendanceInfo,
-} = useAttendanceCopyTemplate({ sessionId, session, todayOccurrence, rosterEnrollments: allRosterEnrollments, reportMap })
+} = useAttendanceCopyTemplate({ sessionId, session, todayOccurrence, rosterEnrollments: allRosterEnrollments, reportMap, ready: attendanceCopyReady })
 
 const makeupModal = ref<InstanceType<typeof MakeupStudentModal> | null>(null)
 const {
@@ -137,19 +142,32 @@ const {
                         @toggle-calendar="toggleCalendarPanel"
                         @select-date="handleCalendarDateSelect"
                         @range-change="handleCalendarRangeChange" />
+                    <div v-if="completionFailed && isCalendarExpanded" class="flex flex-wrap items-center gap-2 text-sm text-slate-700">
+                        <span role="status">{{ $t('classroom.report_completion_unavailable') }}</span>
+                        <button type="button" class="rounded-lg border px-3 py-2 focus-visible:ring-2" @click="retryReportCompletion">{{ $t('classroom.progress_gap_retry') }}</button>
+                    </div>
 
                     <ClassHeldCard v-if="todayOccurrence"
                         :is-conducted="Boolean(todayOccurrence.isConducted)"
                         :is-holiday="isOccurrenceInHoliday"
+                        :copy-disabled="!attendanceCopyReady || attendanceCopyLoading"
                         @copy-attendance="copyAttendanceInfo"
                         @edit-template="openAttendanceTemplateModal"
                         @toggle-conducted="toggleIsConducted" />
+                    <p v-if="todayOccurrence && !attendanceCopyReady && !reportLoadFailed" role="status" class="my-2 text-sm text-slate-600">
+                        {{ $t('classroom.copy_attendance_waiting') }}
+                    </p>
+                    <CopyClipboardFeedback v-if="todayOccurrence" :loading="attendanceCopyLoading" :load-failed="attendanceCopyLoadFailed"
+                        :manual-text="attendanceCopyManualText" @retry="reloadAttendanceCopyTemplate" @dismiss="dismissAttendanceCopyText" />
 
                     <TeacherAttendanceCard v-if="todayOccurrence"
                         :rows="teacherAttendanceRows"
                         :counts="teacherAttendanceCounts"
                         :can-manage="canManageTeacherAttendance"
                         :is-holiday="isOccurrenceInHoliday"
+                        :roster-failed="teacherRosterFailed"
+                        :leave-failed="teacherLeaveFailed"
+                        @retry="loadOccurrenceTeachers"
                         @edit="openTeacherEditModal"
                         @toggle-attendance="toggleTeacherAttendance" />
 
@@ -157,6 +175,13 @@ const {
                         v-model:search="studentSearchQuery"
                         v-model:attendance="studentAttendanceFilter"
                         :result-count="filteredEnrollments.length" />
+                    <div v-for="notice in [
+                        { failed: reportLoadFailed, text: 'occurrence_reports_unavailable', retry: retryOccurrenceReports },
+                        { failed: progressSummaryFailed, text: 'progress_summary_unavailable', retry: retryProgressSummary }
+                    ].filter(item => item.failed)" :key="notice.text" class="flex flex-wrap items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+                        <span role="status">{{ $t('classroom.' + notice.text) }}</span>
+                        <button type="button" class="rounded-lg border px-3 py-2 focus-visible:ring-2" @click="notice.retry">{{ $t('classroom.progress_gap_retry') }}</button>
+                    </div>
 
                     <div v-if="todayOccurrence && isLoadingProgressGaps" class="mb-3 flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600" role="status" aria-live="polite" aria-busy="true">
                         <span class="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-emerald-600 motion-reduce:animate-none" aria-hidden="true"></span>

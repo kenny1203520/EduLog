@@ -38,12 +38,19 @@ export class AuthService {
       return { session: null, error: (error as { code?: string })?.code === 'AUTH_REQUIRED' ? null : authError }
     }
   }
-  /** OAuth providers GoTrue has enabled; empty when none or unknown. */
+  /** OAuth providers GoTrue has enabled. An outage is distinct from an empty list. */
   async oauthProviders(): Promise<string[]> {
-    try {
-      const result = await apiV1Client.get<{ providers: string[] }>('/auth/providers')
-      return Array.isArray(result.data?.providers) ? result.data.providers : []
-    } catch { return [] }
+    const result = await apiV1Client.get<{ providers: string[] }>('/auth/providers')
+    return result.data.providers
+  }
+  async identities() {
+    return (await apiV1Client.get<{ identities: Array<{ id: string; provider: string }>; providers: string[]; manual_linking: boolean }>('/auth/me/identities')).data
+  }
+  async linkIdentity(provider: string) {
+    return (await apiV1Client.post<{ url: string }>('/auth/me/identities/link', { provider })).data.url
+  }
+  async unlinkIdentity(id: string, currentPassword: string) {
+    await apiV1Client.post(`/auth/me/identities/${encodeURIComponent(id)}/unlink`, { current_password: currentPassword })
   }
   /** Ask for a password-reset email. The server answers the same whether or not the account exists. */
   async requestPasswordReset(email: string): Promise<void> {

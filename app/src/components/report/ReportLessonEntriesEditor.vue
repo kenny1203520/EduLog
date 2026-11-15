@@ -27,12 +27,12 @@
             </button>
         </div>
 
-        <div v-if="!entries.length" class="rounded-lg border border-dashed border-amber-300 bg-white/70 p-4 text-sm text-gray-600">
+        <div v-if="!displayedEntries.length" class="rounded-lg border border-dashed border-amber-300 bg-white/70 p-4 text-sm text-gray-600">
             {{ $t('report.editor.lesson_entries.empty') }}
         </div>
 
         <fieldset
-            v-for="(entry, index) in entries"
+            v-for="(entry, index) in displayedEntries"
             :key="entry.id"
             class="mb-3 min-w-0 rounded-lg border border-amber-200 bg-white p-3 last:mb-0"
         >
@@ -143,7 +143,7 @@
                         :id="fieldId(entry.id, 'primary')"
                         :name="`${editorId}-primary-entry`"
                         :checked="entry.id === primaryEntryId"
-                        :disabled="disabled"
+                        :disabled="disabled || entry.id === initialDraft?.id"
                         class="h-4 w-4 accent-emerald-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700"
                         @change="$emit('update:primaryEntryId', entry.id)"
                     >
@@ -164,16 +164,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ReportLessonEntryDTO } from '@/models/OccurrenceReport'
-import { createLessonEntryId } from '@/models/ReportEditorSnapshot'
+import { composeProgressLetter, createLessonEntryId } from '@/models/ReportEditorSnapshot'
 import type { LessonEntryOption } from '@/services/report/ReportQueryService'
 
 const props = withDefaults(defineProps<{
     entries: ReportLessonEntryDTO[]
     primaryEntryId: string | null
     editorId: string
+    reportId?: string
     defaultEnrollmentId: string
     defaultCourseName?: string
     defaultLessons?: Array<{ id?: string; sequence?: number; title?: string }>
@@ -216,6 +217,22 @@ const enrollmentOptions = computed(() => {
     return options
 })
 
+const initialDraft = ref<ReportLessonEntryDTO | null>(null)
+const draftDismissed = ref(false)
+watch(() => props.reportId, () => {
+    initialDraft.value = null
+    draftDismissed.value = false
+})
+watch(() => [props.entries.length, props.defaultEnrollmentId, props.disabled, draftDismissed.value, props.reportId] as const,
+    ([count, enrollmentId, disabled, dismissed]) => {
+        if (count) {
+            initialDraft.value = null
+        } else if (enrollmentId && !disabled && !dismissed && !initialDraft.value) {
+            initialDraft.value = { id: createLessonEntryId(), enrollment_id: enrollmentId, lesson_id: null, is_completed: false, progress_letter: null }
+        }
+    }, { immediate: true })
+const displayedEntries = computed(() => props.entries.length ? props.entries : initialDraft.value ? [initialDraft.value] : [])
+
 function fieldId(entryId: string, name: string) {
     return `${props.editorId}-entry-${entryId}-${name}`
 }
@@ -229,11 +246,13 @@ function courseName(entry: ReportLessonEntryDTO) {
 }
 
 function isEntryIncomplete(entry: ReportLessonEntryDTO) {
+    if (entry.id === initialDraft.value?.id) return false
     return !entry.enrollment_id || !entry.course_id || !entry.lesson_id
 }
 
 function lessonsFor(entry: ReportLessonEntryDTO) {
-    const lessons = optionFor(entry)?.lessons ?? []
+    const option = optionFor(entry)
+    const lessons = entry.id === initialDraft.value?.id && !option?.course_id ? [] : option?.lessons ?? []
     if (entry.lesson_id && !lessons.some(lesson => lesson.id === entry.lesson_id)) {
         return [...lessons, {
             id: entry.lesson_id,
@@ -253,6 +272,14 @@ function progressEnd(entry: ReportLessonEntryDTO) {
 }
 
 function updateEntry(entryId: string, patch: Partial<ReportLessonEntryDTO>) {
+    if (entryId === initialDraft.value?.id) {
+        const next = { ...initialDraft.value, ...patch }
+        if (next.course_id && next.lesson_id) {
+            emit('update:entries', [...props.entries, next])
+            if (!props.primaryEntryId) emit('update:primaryEntryId', next.id)
+        } else initialDraft.value = next
+        return
+    }
     emit('update:entries', props.entries.map(entry => entry.id === entryId ? { ...entry, ...patch } : entry))
 }
 
@@ -285,23 +312,34 @@ function changeLesson(entry: ReportLessonEntryDTO, lessonId: string) {
 function changeProgress(entry: ReportLessonEntryDTO, edge: 'start' | 'end', letter: string) {
     const start = edge === 'start' ? letter : progressStart(entry)
     const end = edge === 'end' ? letter : progressEnd(entry)
-    updateEntry(entry.id, { progress_letter: start && end ? `${start}-${end}` : start || end || null })
+    updateEntry(entry.id, { progress_letter: composeProgressLetter(start, end) || null })
 }
 
 function addEntry() {
+    const enrollmentId = props.defaultEnrollmentId || enrollmentOptions.value[0]?.id || ''
+    const option = enrollmentOptions.value.find(item => item.id === enrollmentId)
     const entry: ReportLessonEntryDTO = {
         id: createLessonEntryId(),
-        enrollment_id: props.defaultEnrollmentId || enrollmentOptions.value[0]?.id || '',
+        enrollment_id: enrollmentId,
+        course_id: option?.course_id || undefined,
+        course_name: option?.course_name,
         lesson_id: null,
         is_completed: false,
         progress_letter: null,
     }
-    emit('update:entries', [...props.entries, entry])
-    if (!props.primaryEntryId) emit('update:primaryEntryId', entry.id)
-    announcement.value = t('report.editor.lesson_entries.added', { index: props.entries.length + 1 })
+    const existing = initialDraft.value ? [initialDraft.value, ...props.entries] : props.entries
+    emit('update:entries', [...existing, entry])
+    if (!props.primaryEntryId) emit('update:primaryEntryId', existing[0]?.id ?? entry.id)
+    announcement.value = t('report.editor.lesson_entries.added', { index: existing.length + 1 })
 }
 
 function removeEntry(entryId: string) {
+    if (entryId === initialDraft.value?.id) {
+        draftDismissed.value = true
+        initialDraft.value = null
+        return
+    }
+    if (props.entries.length === 1) draftDismissed.value = true
     const index = props.entries.findIndex(entry => entry.id === entryId)
     const next = props.entries.filter(entry => entry.id !== entryId)
     emit('update:entries', next)

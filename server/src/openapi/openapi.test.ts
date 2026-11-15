@@ -1,3 +1,6 @@
+import { PGlite } from '@electric-sql/pglite'
+import { uuid_ossp } from '@electric-sql/pglite/contrib/uuid_ossp'
+import { readdirSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { permissionForResource } from '../auth/authorization.js'
 import { buildOpenApi } from './openapi.js'
@@ -424,8 +427,14 @@ describe('generated API contract', () => {
     const spec = buildOpenApi() as { components: { schemas: Record<string, any> } }
     const progressLetter = spec.components.schemas.ReportUpdateMutation.properties.progress_letter
     const progressSchemas = progressLetter.anyOf ?? [progressLetter]
-    expect(progressSchemas).toEqual(expect.arrayContaining([expect.objectContaining({ pattern: '^[A-Z](-[A-Z])?$' })]))
-    expect(spec.components.schemas.ReportCreateMutation.additionalProperties).toBe(false)
+    expect(progressSchemas).toEqual(expect.arrayContaining([expect.objectContaining({ pattern: '^(?:[A-Z](?:-[A-Z])?|-[A-Z])$' })]))
+    const [standard, makeup] = spec.components.schemas.ReportCreateMutation.anyOf
+    expect(standard.additionalProperties).toBe(false)
+    expect(makeup).toMatchObject({
+      additionalProperties: false,
+      required: ['makeup', 'enrollment_id', 'class_occurrence_id'],
+      properties: { makeup: { const: true } },
+    })
   })
 
   it('keeps specialized mutation schemas sourced from runtime validators', () => {
@@ -453,4 +462,32 @@ describe('generated API contract', () => {
     expect(teacherDeleteParameters.some((parameter: any) => parameter.name === 'effective_from')).toBe(true)
     expect(spec.paths['/api/enrollment-transfers/single-lesson']?.post?.requestBody?.content?.['application/json']?.schema?.$ref).toBe('#/components/schemas/SingleLessonTransferMutation')
   })
+})
+
+describe('deployed permission catalog', () => {
+  it('contains every permission declared by an API operation', async () => {
+    const db = new PGlite({ extensions: { uuid_ossp } })
+    try {
+      const migrations = new URL('../../../supabase/migrations/', import.meta.url)
+      const execute = (file: URL) => db.exec(readFileSync(file, 'utf8').replace(/^\uFEFF/, '').replace(/^\\.*$/gm, ''))
+      await execute(new URL('../../../supabase/tests/postgres_bootstrap.sql', import.meta.url))
+      for (const name of readdirSync(migrations).filter(name => name.endsWith('.sql')).sort()) {
+        await execute(new URL(name, migrations))
+      }
+      const { rows } = await db.query<{ key: string }>('SELECT key FROM public.permissions')
+      const catalog = new Set(rows.map(row => row.key))
+      const missing: string[] = []
+      for (const [path, methods] of Object.entries(buildOpenApi().paths)) {
+        for (const [method, operation] of Object.entries(methods as Record<string, Record<string, unknown>>)) {
+          const declarations = JSON.stringify([operation['x-permission'], operation['x-permissions'], operation['x-required-permissions']])
+          for (const key of declarations.match(/\b(?:teaching|system|reports)(?:\.[a-z_]+){2,}\b/g) ?? []) {
+            if (!catalog.has(key)) missing.push(method + ' ' + path + ' ' + key)
+          }
+        }
+      }
+      expect(missing).toEqual([])
+    } finally {
+      await db.close()
+    }
+  }, 30000)
 })

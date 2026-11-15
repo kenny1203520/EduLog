@@ -1,4 +1,7 @@
 {
+    "progress_summary_unavailable": "Progress summaries are temporarily unavailable.",
+    "report_completion_unavailable": "Report completion markers are temporarily unavailable.",
+    "occurrence_reports_unavailable": "Some reports are unavailable. Retry to load or create missing reports.",
     "copy": {
         "session_delete_success": "Class session deleted successfully",
         "unknown_room": "Unknown classroom",
@@ -136,6 +139,7 @@
     "room": "Classroom",
     "class_info": "Class Information",
     "copy_attendance": "Copy Attendance",
+    "copy_attendance_waiting": "Attendance can be copied after the roster and reports load.",
     "copy_template_settings": "Attendance Copy Style",
     "copy_template_title": "Attendance Copy Template",
     "copy_template_hint": "Use double-curly variable syntax (for example: session_name) to customize output. If not configured, system default template is used.",
@@ -300,6 +304,7 @@
     "add_student_success": "Class report created. You can edit it now.",
     "add_student_failed": "Failed to create make-up report",
     "add_student_retry_error": "Could not create the report. Your selections are saved here; check your connection and try again.",
+    "add_student_permission_denied": "You do not have permission to add this enrollment to the selected lesson.",
     "add_student_load_failed": "Failed to load enrollment candidates",
     "add_student_required_fields": "Please select student, course, and date",
     "add_student_enrollment_not_found": "Selected student course was not found",
@@ -407,5 +412,10 @@
         "joined": "Students joining by make-up or transfer",
         "joined_makeup": "{count} joining for a make-up",
         "joined_transfer": "{count} transferring in"
-    }
+    },
+    "teacher_attendance_pending": "Pending",
+    "teacher_roster_failed": "Could not load the teacher roster.",
+    "session_sync_failed": "The class was saved. Its lessons could not be synchronized.",
+    "retry_occurrence_data": "Retry",
+    "teacher_leave_failed": "Could not check teacher leave."
 }

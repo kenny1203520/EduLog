@@ -5,7 +5,6 @@ import { useToast } from 'vue-toastification'
 import { PageApiService } from '@/services/api/PageApiService'
 import { SessionService } from '@/services/session/SessionService'
 import { PermissionPolicyService } from '@/services/rbac/PermissionPolicyService'
-import { TeacherService } from '@/services/teacher/TeacherService'
 import { parseClassSessionDate } from '@/services/session/ClassSessionInvalidation'
 import { shouldApplyCommittedReport } from '@/services/report/CommittedReportState'
 import type { OccurrenceLessonTransfer } from '@/services/enrollment/EnrollmentTransferQueryService'
@@ -82,6 +81,9 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
     const isQuickAttendanceExpanded = ref(true)
     const isOccurrenceLoading = ref(false)
     const occurrenceLoadError = ref<string | null>(null)
+    const reportLoadFailed = ref(false)
+    const loadedReportsOccurrenceId = ref<string>()
+    const progressSummaryFailed = ref(false)
     const previousOccurrence = ref<ClassOccurrence | null>(null)
     const nextOccurrence = ref<ClassOccurrence | null>(null)
     const loading = ref(true)
@@ -110,7 +112,7 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
         progressGapCheckFailed,
     } = progress
     const teachers = useOccurrenceTeachers({ sessionId, session, todayOccurrence, isOccurrenceInHoliday })
-    const { sessionTeachers, loadOccurrenceTeachers } = teachers
+    const { loadOccurrenceTeachers } = teachers
 
     // Keep complete roster metrics separate from the workflow filter.
     const rosterLists = computed(() => getRosterEnrollments(
@@ -238,6 +240,7 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
             if (enrollment.id && !nextReportMap.has(enrollment.id)) nextReportMap.set(enrollment.id, null)
         }
         reportMap.value = nextReportMap
+        loadedReportsOccurrenceId.value = occurrenceId
     }
 
     const occurrenceTransfers = ref<OccurrenceLessonTransfer[]>([])
@@ -318,6 +321,12 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
         isOccurrenceLoading.value = true
         occurrenceLoadError.value = null
         todayOccurrence.value = occurrence
+        loadedReportsOccurrenceId.value = undefined
+        reportLoadFailed.value = false
+        progressSummaryFailed.value = false
+        reportLoadRequest++
+        reportMap.value = new Map()
+        progress.clearStudentProgress()
 
         try {
             if (!occurrence?.occurrenceDate) {
@@ -348,19 +357,11 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
             previousOccurrence.value = navigation.previous
             nextOccurrence.value = navigation.next
 
+            isOccurrenceLoading.value = false
             await Promise.all([
-                loadReportsForCurrentOccurrence().catch(error => {
-                    // Placeholder report creation is best-effort. If the scoped
-                    // INSERT policy is not deployed yet, keep the class workspace
-                    // usable and allow existing reports to be opened.
-                    if (isReportAuthorizationError(error)) {
-                        console.warn('Report data provisioning is not authorized; continuing with existing reports.')
-                        return
-                    }
-                    throw error
-                }),
+                retryOccurrenceReports(),
                 loadOccurrenceTeachers(),
-                loadStudentProgressSummaries(enrollments.value, 'replace', occurrence.occurrenceDate),
+                retryProgressSummary(),
                 loadStudentProgressGaps(enrollments.value, occurrence)
             ])
         } catch (error) {
@@ -371,6 +372,33 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
             throw error
         } finally {
             if (loadToken === occurrenceLoadToken) isOccurrenceLoading.value = false
+        }
+    }
+
+    async function retryOccurrenceReports() {
+        const token = occurrenceLoadToken
+        try {
+            await loadReportsForCurrentOccurrence()
+            if (token === occurrenceLoadToken) reportLoadFailed.value = false
+        } catch (error) {
+            if (token !== occurrenceLoadToken) return
+            reportLoadFailed.value = true
+            try { await loadReportsForCurrentOccurrence({ createMissing: false }) }
+            catch (readError) { console.error('Failed to read existing class reports:', readError) }
+        }
+    }
+
+    async function retryProgressSummary() {
+        const occurrence = todayOccurrence.value
+        if (!occurrence) return
+        const token = occurrenceLoadToken
+        try {
+            await loadStudentProgressSummaries(enrollments.value, 'replace', occurrence.occurrenceDate)
+            if (token === occurrenceLoadToken) progressSummaryFailed.value = false
+        } catch (error) {
+            if (token !== occurrenceLoadToken) return
+            progressSummaryFailed.value = true
+            console.error('Failed to load class progress summary:', error)
         }
     }
 
@@ -494,12 +522,19 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
     })
 
     const attendanceCounts = computed(() => countRosterAttendance(allRosterEnrollments.value, reportMap.value))
+    const attendanceCopyReady = computed(() => {
+        const occurrenceId = todayOccurrence.value?.id
+        return Boolean(occurrenceId && loadedReportsOccurrenceId.value === occurrenceId &&
+            !loading.value && !isOccurrenceLoading.value && !occurrenceLoadError.value &&
+            allRosterEnrollments.value.every(enrollment => enrollment.id && reportMap.value.has(enrollment.id)))
+    })
     const occupiedRosterCount = computed(() => attendanceCounts.value.present + attendanceCounts.value.pending)
 
     async function loadData() {
         try {
             loading.value = true
             occurrenceLoadError.value = null
+            loadedReportsOccurrenceId.value = undefined
             reportMap.value = new Map()
             progress.studentProgressSummaries.value = {}
 
@@ -509,11 +544,7 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
             const allEnrollments = workspace.enrollments.map(enrollment => new Enrollment(enrollment))
             enrollments.value = allEnrollments
             workspaceRosterDate = typeof rawSession.roster_date === 'string' ? rawSession.roster_date : null
-            const [teacherAssignments, canManageAttendance] = await Promise.all([
-                TeacherService.getSessionTeachers(sessionId),
-                PermissionPolicyService.canUpdateOccurrence(sessionId)
-            ])
-            sessionTeachers.value = teacherAssignments
+            const canManageAttendance = await PermissionPolicyService.canManageSessionTeachers(sessionId)
             teachers.canManageTeacherAttendance.value = canManageAttendance
             teachers.allTeachersList.value = workspace.teachers
 
@@ -538,7 +569,9 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
             if (initialOccurrence?.occurrenceDate) {
                 selectedDateKey.value = DateUtils.formatLocalDate(initialOccurrence.occurrenceDate)
             }
-            await setCurrentOccurrence(initialOccurrence)
+            const initialLoad = setCurrentOccurrence(initialOccurrence)
+            loading.value = false
+            await initialLoad
             if (initialOccurrence?.occurrenceDate) {
                 selectedDateKey.value = DateUtils.formatLocalDate(initialOccurrence.occurrenceDate)
             } else {
@@ -590,13 +623,11 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
                 const occurrenceDate = todayOccurrence.value.occurrenceDate
                 const date = DateUtils.formatLocalDate(occurrenceDate)
                 if (!options.reportOnly) {
-                    const [assignments, holiday, navigation] = await Promise.all([
-                        TeacherService.getSessionTeachers(sessionId),
+                    const [holiday, navigation] = await Promise.all([
                         HolidayQueryService.isHoliday(date, undefined, sessionId),
                         OccurrenceQueryService.getOccurrenceNavigationState(sessionId, occurrenceDate),
                     ])
                     if (requestId !== realtimeRefreshRequest || todayOccurrence.value?.id !== occurrenceId) return
-                    sessionTeachers.value = assignments
                     isOccurrenceInHoliday.value = holiday
                     previousOccurrence.value = navigation.previous
                     nextOccurrence.value = navigation.next
@@ -808,12 +839,12 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
             todayProgress: today.chapterProgress,
             todayCompletion: today.completionStatus,
             todayTone: today.tone,
-            highestTitle: summary.highestProgressTitle,
-            highestStatus: summary.highestProgressStatus,
-            highestTone: summary.highestProgressTone,
-            latestTitle: summary.latestProgressTitle,
-            latestStatus: summary.latestProgressStatus,
-            latestTone: summary.latestProgressTone,
+            highestTitle: progressSummaryFailed.value ? '—' : summary.highestProgressTitle,
+            highestStatus: progressSummaryFailed.value ? '' : summary.highestProgressStatus,
+            highestTone: progressSummaryFailed.value ? 'empty' : summary.highestProgressTone,
+            latestTitle: progressSummaryFailed.value ? '—' : summary.latestProgressTitle,
+            latestStatus: progressSummaryFailed.value ? '' : summary.latestProgressStatus,
+            latestTone: progressSummaryFailed.value ? 'empty' : summary.latestProgressTone,
             isEditing: selectedEnrollmentId.value === enrollment.id && showSplitView.value,
             reportAvailable: reportMap.value.has(enrollment.id!),
             progressGaps: progress.studentProgressGaps.value[enrollment.id!] || []
@@ -895,6 +926,11 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
         isQuickAttendanceExpanded,
         isOccurrenceLoading,
         occurrenceLoadError,
+        reportLoadFailed,
+        attendanceCopyReady,
+        retryOccurrenceReports,
+        progressSummaryFailed,
+        retryProgressSummary,
         previousOccurrence,
         nextOccurrence,
         loading,

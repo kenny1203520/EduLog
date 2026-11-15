@@ -15,6 +15,32 @@ const options = [
 ]
 
 describe('ReportLessonEntriesEditor', () => {
+    it('keeps the initial progress local until a lesson is chosen, preserving an end-only bound', async () => {
+        const wrapper = mount(ReportLessonEntriesEditor, {
+            props: { entries: [], primaryEntryId: null, editorId: 'blank', defaultEnrollmentId: 'enrollment-a', options },
+            global: { mocks: { $t: (key: string) => key } },
+        })
+        const [course, lesson, start, end] = wrapper.findAll('select')
+        expect((course!.element as HTMLSelectElement).value).toBe('enrollment-a')
+        await end!.setValue('D')
+        expect((start!.element as HTMLSelectElement).value).toBe('')
+        expect((end!.element as HTMLSelectElement).value).toBe('D')
+        expect(wrapper.emitted('update:entries')).toBeUndefined()
+        await lesson!.setValue('lesson-a')
+        expect(wrapper.emitted('update:entries')?.at(-1)?.[0]).toEqual([
+            expect.objectContaining({ enrollment_id: 'enrollment-a', lesson_id: 'lesson-a', progress_letter: '-D' }),
+        ])
+    })
+
+    it('retains the ending bound when the beginning is cleared', async () => {
+        const wrapper = mount(ReportLessonEntriesEditor, {
+            props: { entries: [{ ...entry, course_id: 'course-a', progress_letter: 'A-D' }], primaryEntryId: entry.id, editorId: 'editor-a', defaultEnrollmentId: 'enrollment-a', options },
+            global: { mocks: { $t: (key: string) => key } },
+        })
+        await wrapper.get('#editor-a-entry-entry-a-start').setValue('')
+        expect(wrapper.emitted('update:entries')?.at(-1)?.[0]).toEqual([expect.objectContaining({ progress_letter: '-D' })])
+    })
+
     it('labels course and lesson controls and resets lesson progress when enrollment changes', async () => {
         const progressedEntry = { ...entry, is_completed: true, progress_letter: 'B-C' }
         const wrapper = mount(ReportLessonEntriesEditor, {
@@ -47,7 +73,7 @@ describe('ReportLessonEntriesEditor', () => {
         await wrapper.get('button').trigger('click')
         const added = wrapper.emitted('update:entries')?.at(-1)?.[0] as Array<typeof entry>
         expect(added).toHaveLength(2)
-        expect(added[1]).toMatchObject({ enrollment_id: 'enrollment-a', lesson_id: null, is_completed: false })
+        expect(added[1]).toMatchObject({ enrollment_id: 'enrollment-a', course_id: 'course-a', lesson_id: null, is_completed: false })
 
         await wrapper.setProps({ entries: added })
         expect(wrapper.find('[role="status"]').text()).toContain('report.editor.lesson_entries.select_lesson_required')

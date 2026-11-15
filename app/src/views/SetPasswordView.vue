@@ -41,13 +41,13 @@ async function submit() {
       <form class="mt-6 space-y-4" @submit.prevent="submit">
         <div class="space-y-2">
           <label for="new-password" class="block text-sm font-bold text-gray-700">{{ t('auth.new_password') }}</label>
-          <PasswordInput id="new-password" v-model="password" required autocomplete="new-password" :minlength="8"
+          <PasswordInput id="new-password" v-model="password" required purpose="new" :minlength="8"
             input-class="min-h-11 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 font-medium text-gray-800 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10" />
           <p v-if="tooShort" class="text-xs font-semibold text-amber-700">{{ t('auth.password_min_length') }}</p>
         </div>
         <div class="space-y-2">
           <label for="confirm-password" class="block text-sm font-bold text-gray-700">{{ t('auth.confirm_password') }}</label>
-          <PasswordInput id="confirm-password" v-model="confirm" required autocomplete="new-password" :minlength="8"
+          <PasswordInput id="confirm-password" v-model="confirm" required purpose="new" :minlength="8"
             input-class="min-h-11 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 font-medium text-gray-800 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10" />
           <p v-if="mismatch" class="text-xs font-semibold text-amber-700">{{ t('auth.password_mismatch') }}</p>
         </div>

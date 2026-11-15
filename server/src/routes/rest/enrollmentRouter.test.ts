@@ -3,7 +3,7 @@ import request from 'supertest'
 import { describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resources } from './resources.js'
-import { createEnrollmentRouter } from './enrollmentRouter.js'
+import { createEnrollmentRouter, enrollmentBodySchema, trialReportTargetAfterStartChange } from './enrollmentRouter.js'
 import { errorHandler } from '../../http/errors.js'
 import { expectPriorAttendedReportScope, routeSource } from '../../test/routeSource.js'
 
@@ -41,6 +41,25 @@ describe('enrollment API contract', () => {
   })
 })
 
+
+describe('enrollment report provisioning rules', () => {
+  it('adds one placeholder for a trial enrollment whose reports are all recorded before the start date', () => {
+    expect(trialReportTargetAfterStartChange({ target_count: 1, fixed_before_start_dates: ['2026-11-01'] })).toBe(2)
+    expect(trialReportTargetAfterStartChange({ target_count: 0, fixed_before_start_dates: [] })).toBe(1)
+  })
+
+  it('adds nothing while a blank or later report remains', () => {
+    expect(trialReportTargetAfterStartChange({ target_count: 2, fixed_before_start_dates: ['2026-11-01'] })).toBeNull()
+    expect(trialReportTargetAfterStartChange({ target_count: 1, fixed_before_start_dates: [] })).toBeNull()
+  })
+
+  it('accepts a regular lesson count of at least one when a trial becomes regular', () => {
+    expect(enrollmentBodySchema.safeParse({ status: 'regular', target_regular_reports: 11 }).success).toBe(true)
+    expect(enrollmentBodySchema.safeParse({ status: 'regular', target_regular_reports: 0 }).success).toBe(false)
+    const source = readFileSync(new URL('./enrollmentRouter.ts', import.meta.url), 'utf8')
+    expect(source).toContain('targetCount: (recorded.fixed_count ?? 0) + input.target_regular_reports')
+  })
+})
 
 describe('enrollment history access route', () => {
   const user = '00000000-0000-4000-8000-000000000001'
@@ -89,7 +108,7 @@ describe('enrollment report-progress context contract', () => {
     expect(source).toContain('range(offset, offset + pageSize - 1)')
     expect(source).toContain("orderByRelation(builder, 'class_occurrences', 'occurrence_date', true).order('id', { ascending: true })")
     expect(source).toContain("req.adminDb.from('occurrence_reports').select(linkedReportFields)")
-    expect(source).toContain(".contains('lesson_entries', [{ enrollment_id: enrollmentId, course_id: targetEnrollment.course_id }])")
+    expect(source).toContain(".contains('lesson_entries', JSON.stringify([{ enrollment_id: enrollmentId, course_id: targetEnrollment.course_id }]))")
     expect(source).toContain(".eq('enrollments.student_id', targetEnrollment.student_id)")
     expect(source).toContain(".eq('class_occurrences.class_sessions.teaching_id', teachingId)")
     expect(source).toContain('latest_prior_report: latestPriorReport')
@@ -185,7 +204,7 @@ describe('enrollment report-progress context contract', () => {
       'class_occurrences.class_sessions.teaching_id': teachingB,
       enrollment_id: enrollmentB,
     })
-    expect(adminReportQueries[0]?.filters.lesson_entries).toEqual([{ enrollment_id: enrollmentB, course_id: courseB }])
+    expect(adminReportQueries[0]?.filters.lesson_entries).toBe(JSON.stringify([{ enrollment_id: enrollmentB, course_id: courseB }]))
     expect(adminReportQueries[0]?.columns).not.toMatch(/contact_notes|class_notes/)
   })
 })
@@ -196,7 +215,7 @@ describe('linked lesson report history contract', () => {
     const handler = source.slice(source.indexOf('async function linkedLessonReportHistory'), source.indexOf('/** Course lessons in order'))
     expect(source).toContain("router.get('/enrollments/:id/linked-lesson-report-history'")
     expect(handler).toContain("permission(req, 'teaching.reports.list', targetEnrollment.class_session_id)")
-    expect(handler).toContain(".contains('lesson_entries', [{ enrollment_id: enrollmentId }])")
+    expect(handler).toContain(".contains('lesson_entries', JSON.stringify([{ enrollment_id: enrollmentId }]))")
     expect(handler).toContain(".neq('enrollment_id', enrollmentId)")
     expect(handler).toContain(".eq('enrollments.student_id', targetEnrollment.student_id)")
     expect(handler).toContain("entry.course_id !== targetEnrollment.course_id")
@@ -209,7 +228,7 @@ describe('linked lesson report history contract', () => {
     const source = readFileSync(new URL('./enrollmentRouter.ts', import.meta.url), 'utf8')
     expect(source).toContain('async function hasCrossEnrollmentReportReferences')
     expect(source).toContain("'ENROLLMENT_HAS_LINKED_REPORT_PROGRESS'")
-    expect(source).toContain("contains('lesson_entries', [{ enrollment_id: enrollmentId }])")
+    expect(source).toContain("contains('lesson_entries', JSON.stringify([{ enrollment_id: enrollmentId }]))")
     expect(source).toContain(".eq('enrollment_id', enrollmentId).range(0, 9999)")
   })
 })

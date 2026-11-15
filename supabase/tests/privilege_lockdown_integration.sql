@@ -3,7 +3,7 @@
 -- when a new function would be callable without an explicit GRANT.
 --
 -- Adding an authenticated RPC: GRANT EXECUTE to authenticated in its migration
--- and add its signature to the list below (and to 1000167 for older chains).
+-- and add its signature to the list below. Keep released migrations intact.
 
 DO $$
 DECLARE
@@ -24,16 +24,22 @@ DECLARE
     'public.can_access_student(uuid,text)',
     'public.can_access_teacher(uuid,text)',
     'public.cancel_single_lesson_transfer(uuid)',
+    'public.check_class_holiday(uuid,date,uuid)',
+    'public.can_create_makeup_report(uuid,uuid)',
     'public.can_create_occurrence_report(uuid,uuid)',
     'public.can_manage_editor_rbac()',
     'public.can_mutate_occurrence_report(uuid,text)',
     'public.can_teaching_resource_action_any_scope(text,text)',
     'public.can_teaching_resource_action(text,text)',
     'public.can_teaching_scope_action(text,text,uuid,uuid)',
+    'public.create_classroom_with_details(jsonb)',
+    'public.create_makeup_report(uuid,uuid)',
     'public.current_rbac_policy_epoch()',
     'public.current_user_teacher_id()',
+    'public.end_class_session_teacher_assignments(uuid,uuid,date)',
     'public.enrollment_history_access(text,jsonb)',
     'public.get_classrooms_overview(integer,integer,text,text,integer,integer,uuid)',
+    'public.get_class_report_completion(uuid,date,date)',
     'public.get_class_session_occupancy(uuid,date,date)',
     'public.get_class_session_roster_flags(uuid,date,date)',
     'public.get_class_session_workspace(uuid)',
@@ -66,6 +72,7 @@ DECLARE
     'public.has_teaching_permission_any_scope(uuid,text)',
     'public.has_teaching_permission(uuid,text,uuid,uuid,uuid)',
     'public.prepare_repeatable_single_lesson_transfer(uuid,uuid,uuid)',
+    'public.provision_class_reports(uuid)',
     'public.provision_occurrence_reports(uuid)',
     'public.rbac_can_manage_domain(text,uuid)',
     'public.rbac_can_grant_role(uuid,text,uuid)',
@@ -95,6 +102,7 @@ DECLARE
     'public.resolve_user_permission(uuid,text,uuid,uuid,date)',
     'public.save_class_session_with_schedule(jsonb,jsonb,uuid)',
     'public.save_report_collab_snapshot(uuid,text,integer)',
+    'public.set_occurrence_teacher_attendance(uuid,jsonb)',
     'public.set_system_user_status(uuid,text,text,bigint)',
     'public.set_teacher_archived(uuid,boolean)',
     'public.sync_enrollment_reports(uuid,integer,date,boolean)',

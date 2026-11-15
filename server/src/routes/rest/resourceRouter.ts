@@ -6,6 +6,7 @@ import { genericOperationsOf, listQuerySchema, resources, type ResourceDefinitio
 import { authorizeCollection, authorizeResource, permissionForResource } from '../../auth/authorization.js'
 import { setAuditContext } from '../../http/context.js'
 import { applyListOrder } from '../../services/relationOrder.js'
+import { authorizeCopyTemplateScope } from './copyTemplateRouter.js'
 
 const mutationMethods = ['POST', 'PATCH', 'DELETE']
 const serviceOnlyViews = new Set(['users', 'teachers'])
@@ -55,6 +56,14 @@ function validateBody(def: ResourceDefinition, body: Record<string, unknown>, ac
   const schema = action === 'create' ? def.createSchema : def.updateSchema
   if (!schema) return body
   return schema.parse(body)
+}
+
+function authorizeTemplateMutation(req: Request, body: Record<string, unknown>) {
+  return authorizeCopyTemplateScope(req, {
+    templateType: body.template_type,
+    scopeType: body.scope_type,
+    scopeEntityId: body.scope_entity_id,
+  })
 }
 
 function queryValue(req: Request, key: string) { const value = req.query[key]; return typeof value === 'string' ? value : undefined }
@@ -276,10 +285,12 @@ export async function item(req: Request, res: Response, def: ResourceDefinition)
     // Re-resolve authorization from the persisted row plus the validated
     // mutation.  A writable foreign key can otherwise move an item into a
     // different teaching/classroom/session scope after the old row passed.
-    await authorizeResource(req, def, permissionForResource(def, 'update'), id, {
+    const updatedRow = {
       ...(existing.data as unknown as Record<string, unknown>),
       ...mutationBody,
-    })
+    }
+    await authorizeResource(req, def, permissionForResource(def, 'update'), id, updatedRow)
+    if (def.route === 'copy-templates') await authorizeTemplateMutation(req, updatedRow)
   }
   const isMutation = mutationMethods.includes(req.method)
   if (isMutation) {
@@ -338,6 +349,7 @@ export async function collection(req: Request, res: Response, def: ResourceDefin
   // that will be persisted.  Passing parsedBody here allowed compatibility or
   // future non-persisted fields to influence scope resolution.
   await authorizeCollection(req, def, permissionForResource(def, action), {}, body)
+  if (def.route === 'copy-templates') await authorizeTemplateMutation(req, body)
   const replay = await idempotency(req, req.method === 'POST' ? 201 : 200, null)
   if (replay) return res.status(replay.status).json(replay.body)
   // Creating a student with personal data writes the same fields that
@@ -371,11 +383,13 @@ export async function collection(req: Request, res: Response, def: ResourceDefin
     return res.status(201).json(envelope)
   }
   const userOwnedTables = new Set(['user_preferences', 'user_entity_visibility_preferences', 'copy_templates'])
-   let insertBody = userOwnedTables.has(def.table) ? { ...body, user_id: req.user!.id } : body
+  const insertBody = userOwnedTables.has(def.table) ? { ...body, user_id: req.user!.id } : body
    // teaching_id on teaching records is a legacy constant: the database
    // trigger normalize_global_teaching_row overwrites any value sent here.
   const itemFields = def.itemFields ?? def.fields
-  const result = req.method === 'POST' ? await req.db!.from(def.table).insert(insertBody).select(itemFields.join(', ')).single() : await req.db!.from(def.table).update(body).select(itemFields.join(', ')).maybeSingle()
+  const result = def.route === 'classrooms'
+    ? await req.db!.rpc('create_classroom_with_details', { p_room: body })
+    : await req.db!.from(def.table).insert(insertBody).select(itemFields.join(', ')).single()
   if (result.error) throw mapDatabaseError(result.error)
   const createdId = result.data && typeof result.data === 'object' && typeof (result.data as Record<string, unknown>).id === 'string' ? (result.data as Record<string, unknown>).id as string : null
   if (createdId) setAuditContext(req, { resourceId: createdId })

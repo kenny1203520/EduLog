@@ -1,4 +1,7 @@
 {
+    "progress_summary_unavailable": "暫時無法載入進度摘要。",
+    "report_completion_unavailable": "暫時無法載入報告完成標記。",
+    "occurrence_reports_unavailable": "部分報告暫時無法使用。請重試載入或建立缺少的報告。",
     "copy": {
         "session_delete_success": "課堂已刪除",
         "unknown_room": "未知教室",
@@ -136,6 +139,7 @@
     "room": "教室",
     "class_info": "班級資訊",
     "copy_attendance": "複製點名資訊",
+    "copy_attendance_waiting": "名單與報告載入後即可複製點名資訊。",
     "copy_template_settings": "點名樣式設定",
     "copy_template_title": "點名資訊複製樣式",
     "copy_template_hint": "可用雙大括號變數語法（例如 session_name）自定義輸出文字，未設定時會使用系統預設樣式。",
@@ -300,6 +304,7 @@
     "add_student_success": "已建立本次課堂報告，可立即編輯",
     "add_student_failed": "新增補課報告失敗",
     "add_student_retry_error": "建立失敗，您的選擇仍保留。請檢查網路後重試。",
+    "add_student_permission_denied": "您沒有權限將這筆報名加入選定課次。",
     "add_student_load_failed": "載入可選課程失敗",
     "add_student_required_fields": "請先選擇學生、課程與加入日期",
     "add_student_enrollment_not_found": "找不到所選擇的學生課程",
@@ -407,5 +412,10 @@
         "joined": "調課或轉入的學生",
         "joined_makeup": "{count} 位調課進來",
         "joined_transfer": "{count} 位轉班生效"
-    }
+    },
+    "teacher_attendance_pending": "\u5f85\u767b\u8a18",
+    "teacher_roster_failed": "\u7121\u6cd5\u8f09\u5165\u6559\u5e2b\u540d\u55ae\u3002",
+    "session_sync_failed": "\u73ed\u7d1a\u5df2\u5132\u5b58\uff0c\u4f46\u8ab2\u6b21\u540c\u6b65\u5931\u6557\u3002",
+    "retry_occurrence_data": "\u91cd\u8a66",
+    "teacher_leave_failed": "無法查詢教師請假狀態。"
 }

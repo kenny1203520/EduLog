@@ -123,13 +123,13 @@ export async function requireAuthorizationRpcDecision(
 async function teachingPermission(req: Request, permission: string, teachingId: string | null) {
   setAuditContext(req, { domain: 'teaching', permission, scopeType: 'system' })
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
-  const { data, error } = await req.db.rpc('has_api_permission', {
+  const decision = req.db.rpc('has_api_permission', {
     p_user_id: req.user.id,
     p_permission_key: permission,
     p_classroom_id: null,
     p_class_session_id: null,
   })
-  requireAuthorizationDecision(req, { data, error }, {
+  await requireAuthorizationRpcDecision(req, decision, {
     permission,
     stage: 'global_teaching_permission',
     teachingId,
@@ -153,13 +153,13 @@ async function apiPermission(req: Request, permission: string, classroomId: stri
     scopeType: classroomId ? 'classroom' : sessionId ? 'class_session' : null,
   })
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
-  const { data, error } = await req.db.rpc('has_api_permission', {
+  const decision = req.db.rpc('has_api_permission', {
     p_user_id: req.user.id,
     p_permission_key: permission,
     p_classroom_id: classroomId,
     p_class_session_id: sessionId,
   })
-  requireAuthorizationDecision(req, { data, error }, {
+  await requireAuthorizationRpcDecision(req, decision, {
     permission,
     stage: 'api_permission',
     scopeId: classroomId ?? sessionId,
@@ -288,6 +288,7 @@ export async function authorizeResource(
   if (scope === 'self') return selfPermission(req, row)
   if (scope === 'platform') return apiPermission(req, permission, null, null)
   if (scope === 'course') {
+    if (def.route === 'lessons' && isReadAction(permission)) return anyScopeTeachingPermission(req, permission)
     if (!req.db) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
     const courseId = rowId(row, 'course_id') ?? id
     if (!courseId) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
@@ -369,6 +370,7 @@ export async function authorizeCollection(req: Request, def: ResourceDefinition,
     return typeof candidate === 'string' ? candidate : null
   }
   if (def.scope === 'course') {
+    if (def.route === 'lessons' && isReadAction(permission)) return anyScopeTeachingPermission(req, permission)
     const courseId = value('course_id')
     if (courseId) return coursePermission(req, permission, courseId)
     const teachingId = value('teaching_id')

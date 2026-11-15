@@ -13,6 +13,7 @@ import { formatClassSessionOption } from '@/utils/sessionSchedule'
 import { SessionEligibilityPolicy } from '@/models/SessionEligibilityPolicy'
 import { EnrollmentQueryService } from '@/services/enrollment/EnrollmentQueryService'
 import { EnrollmentCommandService } from '@/services/enrollment/EnrollmentCommandService'
+import { ReportQueryService } from '@/services/report/ReportQueryService'
 
 const props = defineProps<{
     isOpen: boolean
@@ -34,14 +35,18 @@ const selectedClassroomId = ref('')
 const activateTrialForm = ref({
     class_session_id: '',
     effective_date: DateUtils.todayString(preferences.timeZone),
-    target_total_reports: 1
+    regular_reports: 1
 })
 
 const classrooms = ref<any[]>([])
 const sessions = ref<any[]>([])
 const currentEnrollment = ref<any | null>(null)
+const attendedTrialCount = ref(0)
 
-const defaultReportCount = computed(() => Math.max(1, currentEnrollment.value?.lessonCount || 1))
+const courseLessonCount = computed(() => Math.max(1, currentEnrollment.value?.lessonCount || 1))
+// Trial lessons the student attended count toward the course, so the regular
+// lessons default to the rest of it.
+const defaultReportCount = computed(() => Math.max(1, courseLessonCount.value - attendedTrialCount.value))
 
 const eligibleSessions = computed(() => {
     if (!currentEnrollment.value?.courseId) return []
@@ -75,13 +80,19 @@ function formatSessionOptionLabel(session: any): string {
 
 async function fetchCurrentEnrollment() {
     currentEnrollment.value = null
+    attendedTrialCount.value = 0
     if (!props.studentId || !props.fromEnrollmentId) return
 
     try {
         isLoadingEnrollment.value = true
-        const enrollments = await EnrollmentQueryService.getByStudentId(props.studentId)
+        const [enrollments, reports] = await Promise.all([
+            EnrollmentQueryService.getByStudentId(props.studentId),
+            // Without the reports the default falls back to the full course length.
+            ReportQueryService.getAllReportsByEnrollment(props.fromEnrollmentId).catch((e) => { console.error(e); return [] })
+        ])
         currentEnrollment.value = enrollments.find((enrollment: any) => enrollment.id === props.fromEnrollmentId) || null
-        activateTrialForm.value.target_total_reports = defaultReportCount.value
+        attendedTrialCount.value = reports.filter(report => report.attendanceStatus === 'present').length
+        activateTrialForm.value.regular_reports = defaultReportCount.value
     } catch (e) {
         console.error(e)
     } finally {
@@ -116,7 +127,7 @@ watch(() => props.isOpen, async (val) => {
         activateTrialForm.value = {
             class_session_id: '',
             effective_date: DateUtils.todayString(preferences.timeZone),
-            target_total_reports: 1
+            regular_reports: 1
         }
         await Promise.all([fetchClassrooms(), fetchSessions(), fetchCurrentEnrollment()])
         const originalClassroomId = currentEnrollment.value?.classroomId || ''
@@ -158,7 +169,7 @@ async function submitActivateTrial() {
             start_date: activateTrialForm.value.effective_date,
             time_zone: preferences.timeZone
         }, {
-            targetTotalReports: Math.max(1, Math.floor(Number(activateTrialForm.value.target_total_reports) || 1))
+            targetRegularReports: Math.min(200, Math.max(1, Math.floor(Number(activateTrialForm.value.regular_reports) || 1)))
         })
 
         toast.success(t('common.success'))
@@ -236,12 +247,12 @@ async function submitActivateTrial() {
 
                     <div class="space-y-2">
                         <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1" for="edulog-activatetrialmodal-61-4132">{{
-                            $t('student.activate_trial_modal.target_total_reports') }}</label>
-                        <input type="number" min="1" step="1" v-model.number="activateTrialForm.target_total_reports"
-                            :disabled="isLoadingEnrollment"
+                            $t('student.activate_trial_modal.regular_reports') }}</label>
+                        <input type="number" min="1" max="200" step="1" inputmode="numeric" v-model.number="activateTrialForm.regular_reports"
+                            :disabled="isLoadingEnrollment" aria-describedby="edulog-activatetrialmodal-61-4132-hint"
                             class="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-3 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-700 shadow-sm disabled:opacity-60" id="edulog-activatetrialmodal-61-4132">
-                        <p class="text-xs font-bold text-gray-400 ml-1">
-                            {{ $t('student.activate_trial_modal.target_total_reports_hint', defaultReportCount, { named: { count: defaultReportCount } }) }}
+                        <p id="edulog-activatetrialmodal-61-4132-hint" class="text-xs font-bold text-gray-600 ml-1 leading-relaxed">
+                            {{ $t('student.activate_trial_modal.regular_reports_hint', { total: courseLessonCount, attended: attendedTrialCount, count: defaultReportCount }) }}
                         </p>
                     </div>
                 </div>

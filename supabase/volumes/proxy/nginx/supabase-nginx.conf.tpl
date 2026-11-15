@@ -129,6 +129,19 @@ server {
 
     location = /api/auth/bridge/callback {
         access_log off;
+        error_log /dev/null emerg;
+        proxy_pass ${EDULOG_PROXY_UPSTREAM_URL};
+    }
+
+    location = /api/auth/oauth/callback {
+        access_log off;
+        error_log /dev/null emerg;
+        proxy_pass ${EDULOG_PROXY_UPSTREAM_URL};
+    }
+
+    location = /api/auth/identities/callback {
+        access_log off;
+        error_log /dev/null emerg;
         proxy_pass ${EDULOG_PROXY_UPSTREAM_URL};
     }
 

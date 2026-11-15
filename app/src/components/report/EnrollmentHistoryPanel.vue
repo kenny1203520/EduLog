@@ -1,7 +1,10 @@
 <template>
   <section class="history-panel" aria-label="來源歷史教學紀錄">
     <header><div><h2>來源歷史教學紀錄</h2><p>已保存於報名。未綁定課次的紀錄不計入出席或未填報告。</p></div><button type="button" :disabled="loading" @click="load()">重新讀取</button></header>
-    <p role="status" aria-live="polite">{{ message }}</p>
+    <p role="status" aria-live="polite"><template v-if="message">
+      {{ $t(message.i18nKey, message.i18nParams ?? {}) }}
+      <span v-if="'requestId' in message && message.requestId">{{ $t('errors.request_reference', { id: message.requestId }) }}</span>
+    </template></p>
     <div class="history-layout" :aria-busy="loading">
       <div class="history-list"><button v-for="row in rows" :key="row.id" type="button" :aria-pressed="selected?.id===row.id" @click="choose(row)"><strong>{{ row.report_date }} · {{ row.student_name || row.course_name }}</strong><span>{{ row.course_name }} · {{ row.identity_status==='verified'?'原站報告已驗證':'只有教學證據，身份不足' }}</span></button><button v-if="cursor" :disabled="loading" @click="load(true)">載入更多歷史</button></div>
       <article v-if="selected" class="history-detail">

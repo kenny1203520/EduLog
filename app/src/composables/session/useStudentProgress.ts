@@ -152,6 +152,7 @@ export function useStudentProgress(source: StudentProgressSource) {
         studentProgressSummaries.value = {}
         studentProgressGaps.value = {}
         progressGapRequestGeneration++
+        progressSummaryRequestGeneration++
         isLoadingProgressGaps.value = false
         progressGapCheckFailed.value = false
     }

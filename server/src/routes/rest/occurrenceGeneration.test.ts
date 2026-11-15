@@ -8,7 +8,7 @@ describe('occurrence generation API contract', () => {
     expect(source).toContain("teaching.occurrences.create")
     expect(source).toContain('skip_existing_dates')
     expect(source).toContain("onConflict: 'class_session_id,occurrence_date'")
-    expect(source).toContain('teacher_attendance: previous?.teacher_attendance')
+    expect(source).not.toContain('teacher_attendance: previous?.teacher_attendance')
     expect(source).toContain('idempotency(req')
   })
 })

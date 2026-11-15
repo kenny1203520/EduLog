@@ -38,6 +38,19 @@ describe('database error taxonomy', () => {
     expect(mapDatabaseError({ code: 'P0001', message: 'internal SQL details' }).message).toBe('The request violates a business rule')
   })
 
+  it('logs the database code of an unmapped failure without sending it to the client', () => {
+    const error = mapDatabaseError({ code: 'PGRST100', message: 'secret parse details' })
+    expect(error).toMatchObject({ status: 500, code: 'DATABASE_ERROR', databaseErrorCode: 'PGRST100' })
+    expect(mapDatabaseError({ code: 'bad code;', message: '' }).databaseErrorCode).toBe('UNKNOWN')
+    const logged: unknown[] = []
+    let body: any
+    const response = { setHeader: () => undefined, status: () => response, json: (value: unknown) => { body = value } } as any
+    const request = { method: 'GET', query: {}, requestId: 'request-1', traceId: 'trace-1', log: { error: (fields: unknown) => logged.push(fields) } } as any
+    sendError(request, response, error)
+    expect(logged).toEqual([expect.objectContaining({ code: 'DATABASE_ERROR', database_error_code: 'PGRST100' })])
+    expect(JSON.stringify(body)).not.toContain('PGRST100')
+  })
+
   it('maps GET schema failures to the query error contract', () => {
     const status = { value: 0 }
     const response = { status: (value: number) => { status.value = value; return response }, json: (body: unknown) => body } as any

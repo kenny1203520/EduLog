@@ -83,6 +83,26 @@ SELECT set_config('request.jwt.claim.role', 'authenticated', true);
 -- Session-only teacher (class roster grant in session one).
 SELECT set_config('request.jwt.claim.sub', '15800000-0000-4000-8000-000000000002', true);
 DO $$
+DECLARE s uuid := '15800000-0000-4000-8000-0000000000e1';
+BEGIN
+  IF (SELECT total FROM public.get_class_report_completion(s, CURRENT_DATE - 7, CURRENT_DATE)) <> 1 THEN
+    RAISE EXCEPTION 'class-scoped completion should count the existing report';
+  END IF;
+  IF NOT public.check_class_holiday(s, CURRENT_DATE + 10) THEN
+    RAISE EXCEPTION 'class-scoped teacher should see the platform holiday flag';
+  END IF;
+  IF (SELECT count(*) FROM public.provision_class_reports('15800000-0000-4000-8000-000000000011')) <> 1
+    OR EXISTS (SELECT 1 FROM public.provision_class_reports('15800000-0000-4000-8000-000000000011') WHERE provisioned) THEN
+    RAISE EXCEPTION 'repeat provisioning must retain the roster and not duplicate existing reports';
+  END IF;
+  BEGIN
+    PERFORM public.get_class_report_completion('15800000-0000-4000-8000-0000000000e2', CURRENT_DATE - 7, CURRENT_DATE);
+    RAISE EXCEPTION 'out-of-scope report completion was allowed';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END;
+$$;
+DO $$
 DECLARE v jsonb; v_ids uuid[];
 BEGIN
   IF NOT public.has_active_teaching_role(auth.uid()) THEN
@@ -216,6 +236,90 @@ BEGIN
   END IF;
 END;
 $$;
+
+-- Exercise same-row creation and per-teacher attendance with the shipped
+-- teacher grants. Earlier CI fixtures may temporarily grant role management.
+RESET ROLE;
+DELETE FROM public.role_permission_policies policy
+USING public.roles role, public.permissions permission
+WHERE policy.role_id = role.id AND policy.permission_id = permission.id
+  AND role.code = 'teacher' AND role.domain = 'teaching' AND permission.key = 'teaching.roles.manage';
+UPDATE public.user_role_assignments SET role_id = (
+  SELECT id FROM public.roles WHERE domain = 'teaching' AND code = 'teaching_owner' AND is_builtin
+) WHERE user_id = '15800000-0000-4000-8000-000000000007';
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE
+  room jsonb;
+  session_id uuid;
+BEGIN
+  room := public.create_classroom_with_details('{"name":"Scope created room"}');
+  session_id := public.save_class_session_with_schedule(
+    jsonb_build_object('name','Scope created session','classroom_id',room->>'id','start_date',CURRENT_DATE),
+    '[{"schedule_kind":"weekly","day_of_week":1,"start_time":"13:00","end_time":"14:00"}]'
+  );
+  IF NOT EXISTS (SELECT 1 FROM public.class_session_schedule_rules WHERE class_session_id = session_id)
+     OR NOT EXISTS (SELECT 1 FROM public.class_sessions WHERE id = session_id AND start_time = '13:00') THEN
+    RAISE EXCEPTION 'Created session must be readable with its schedule';
+  END IF;
+END $$;
+
+SELECT set_config('request.jwt.claim.sub', '15800000-0000-4000-8000-000000000002', true);
+DO $$
+DECLARE
+  occurrence_id uuid := '15800000-0000-4000-8000-000000000011';
+  result jsonb;
+BEGIN
+  result := public.set_occurrence_teacher_attendance(occurrence_id, '{"15800000-0000-4000-8000-0000000000f2":true}');
+  IF result->>'15800000-0000-4000-8000-0000000000f2' IS DISTINCT FROM 'true' THEN
+    RAISE EXCEPTION 'Teacher cannot register own attendance';
+  END IF;
+  BEGIN
+    PERFORM public.set_occurrence_teacher_attendance(occurrence_id, '{"15800000-0000-4000-8000-0000000000f5":true}');
+    RAISE EXCEPTION 'Teacher can register attendance on behalf of a coworker';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END $$;
+
+-- Trial enrollments (1000176): a report can be added by hand in the trial
+-- enrollment's own class from its start date, without joining the roster.
+RESET ROLE;
+SELECT set_config('request.jwt.claim.role', 'service_role', true);
+SELECT set_config('request.jwt.claim.sub', '', true);
+INSERT INTO public.students(id, name) VALUES ('15800000-0000-4000-8000-0000000000a3', 'Scope Trial Student');
+INSERT INTO public.enrollments(id, student_id, course_id, classroom_id, class_session_id, status, start_date, lesson_number) VALUES
+  ('15800000-0000-4000-8000-0000000000b3', '15800000-0000-4000-8000-0000000000a3', '15800000-0000-4000-8000-0000000000d1',
+   '15800000-0000-4000-8000-0000000000c1', '15800000-0000-4000-8000-0000000000e1', 'trial', CURRENT_DATE - 1, 1);
+INSERT INTO public.class_occurrences(id, class_session_id, occurrence_date, status, is_conducted) VALUES
+  ('15800000-0000-4000-8000-000000000013', '15800000-0000-4000-8000-0000000000e1', CURRENT_DATE - 8, 'completed', true);
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.role', 'authenticated', true);
+
+SELECT set_config('request.jwt.claim.sub', '15800000-0000-4000-8000-000000000002', true);
+DO $$
+BEGIN
+  IF NOT public.can_create_occurrence_report('15800000-0000-4000-8000-0000000000b3', '15800000-0000-4000-8000-000000000011') THEN
+    RAISE EXCEPTION 'session teacher must add a report for a trial enrollment in its own class';
+  END IF;
+  IF public.can_create_occurrence_report('15800000-0000-4000-8000-0000000000b3', '15800000-0000-4000-8000-000000000013') THEN
+    RAISE EXCEPTION 'trial report must not be added before the enrollment start date';
+  END IF;
+  IF public.can_create_occurrence_report('15800000-0000-4000-8000-0000000000b3', '15800000-0000-4000-8000-000000000012') THEN
+    RAISE EXCEPTION 'trial report must not be added in another class';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.get_effective_occurrence_enrollment_ids('15800000-0000-4000-8000-000000000011') roster
+             WHERE roster.enrollment_id = '15800000-0000-4000-8000-0000000000b3') THEN
+    RAISE EXCEPTION 'trial enrollment without a report must stay off the roster';
+  END IF;
+END $$;
+
+SELECT set_config('request.jwt.claim.sub', '15800000-0000-4000-8000-000000000003', true);
+DO $$
+BEGIN
+  IF public.can_create_occurrence_report('15800000-0000-4000-8000-0000000000b3', '15800000-0000-4000-8000-000000000011') THEN
+    RAISE EXCEPTION 'trial report creation must follow the class scope';
+  END IF;
+END $$;
 
 RESET ROLE;
 ROLLBACK;
