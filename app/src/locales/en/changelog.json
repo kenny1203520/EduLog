@@ -4,13 +4,16 @@
             "version": "2.0.0-alpha.9",
             "date": "2026-11-15",
             "changes": {
+                "added": ["Support Authentik sign-in and account linking through GoTrue custom OIDC."],
                 "fixed": [
                     "Restore classroom and class creation for authorized teaching owners.",
                     "Show teacher assignments by lesson date and preserve attendance across retries, schedule changes, leave and closures.",
                     "Preserve multi-lesson report progress and allow eligible trial reports to be added by hand.",
+                    "Use the primary course and lesson for report reference and course copy, and preserve end-only progress.",
+                    "Restore attendance copy and personal templates using the selected occurrence time and roster.",
                     "Translate inline classroom and account security messages and preserve password autofill."
                 ],
-                "deployment": ["Apply pending migrations through 1000176 before deploying the matching images."]
+                "deployment": ["Apply pending migrations through 1000177 before deploying the matching images."]
             }
         },
         {
