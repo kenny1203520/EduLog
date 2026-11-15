@@ -84,6 +84,33 @@ describe('OAuth sign-in', () => {
     expect(response.body.data.providers).toEqual(['github', 'google'])
   })
 
+  it('discovers enabled custom providers on private GoTrue and starts PKCE for their exact identifier', async () => {
+    const customConfig = testConfig({ GOTRUE_INTERNAL_URL: 'http://auth:9999', AUTH_CUSTOM_OAUTH_DISCOVERY_ENABLED: 'true' })
+    const fetchMock = stubGoTrue({
+      '/auth/v1/settings': () => json({ external: { google: true } }),
+      '/admin/custom-providers': () => json({ providers: [
+        { identifier: 'custom:authentik', enabled: true, client_id: 'internal-client-id' },
+        { identifier: 'custom:inactive', enabled: false },
+        { identifier: 'custom:bad/name', enabled: true },
+      ] }),
+      '/authorize': () => new Response(null, { status: 302, headers: { location: 'https://sso.example.test/application/o/authorize/' } }),
+    })
+    const { instance } = app({}, undefined, customConfig)
+    const list = await request(instance).get('/api/auth/providers')
+    expect(list.body.data).toEqual({ providers: ['custom:authentik', 'google'] })
+    const admin = fetchMock.mock.calls.find(([url]) => new URL(String(url)).pathname === '/admin/custom-providers')
+    expect(String(admin?.[0])).toBe('http://auth:9999/admin/custom-providers')
+    expect(admin?.[1]).toMatchObject({ redirect: 'error', headers: { authorization: `Bearer ${customConfig.SUPABASE_SERVICE_ROLE_KEY}` } })
+    const redirect = await request(instance).get('/api/auth/oauth/custom%3Aauthentik')
+    expect(redirect.headers.location).toBe('https://sso.example.test/application/o/authorize/')
+    const authorize = fetchMock.mock.calls.find(([url]) => new URL(String(url)).pathname === '/authorize')
+    const params = new URL(String(authorize?.[0])).searchParams
+    expect(params.get('provider')).toBe('custom:authentik')
+    expect(params.get('code_challenge_method')).toBe('s256')
+    const disabled = await request(instance).get('/api/auth/oauth/custom%3Ainactive')
+    expect(disabled.headers.location).toBe('/login?error=oauth')
+  })
+
   it('distinguishes upstream failure from a valid empty provider list', async () => {
     stubGoTrue({ '/auth/v1/settings': () => json({}, 500) })
     const response = await request(app({}).instance).get('/api/auth/providers')
@@ -109,25 +136,32 @@ describe('OAuth sign-in', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('binds a manual-link callback to its initiating account without replacing the session', async () => {
+  it.each(['github', 'custom:authentik'])('binds a %s manual-link callback to its initiating account without replacing the session', async (provider) => {
     const state = crypto.randomUUID()
     const user = crypto.randomUUID()
-    const appConfig = testConfig({ AUTH_MANUAL_LINKING_ENABLED: 'true', GOTRUE_INTERNAL_URL: 'http://auth:9999' })
+    const appConfig = testConfig({
+      AUTH_MANUAL_LINKING_ENABLED: 'true',
+      AUTH_CUSTOM_OAUTH_DISCOVERY_ENABLED: provider.startsWith('custom:') ? 'true' : 'false',
+      GOTRUE_INTERNAL_URL: 'http://auth:9999',
+    })
     const fixture = app({ [user]: 'active' }, undefined, appConfig)
-    const flow = [{ state, user_id: user, provider: 'github' }]
+    const flow = [{ state, user_id: user, provider }]
     fixture.rpc.mockImplementation(async name => ({ data: name === 'get_oauth_link_flow' ? flow : null, error: null }) as never)
     const callback = new URL('/api/auth/identities/callback?code=final-code', appConfig.EDULOG_WEB_BASE_URL)
     const upstream = stubGoTrue({
       '/auth/v1/settings': () => json({ external: { github: true } }),
-      '/user/identities/authorize': () => json({ url: `https://github.com/login/oauth/authorize?state=${state}` }),
+      '/admin/custom-providers': () => json({ providers: [{ identifier: 'custom:authentik', enabled: true }] }),
+      '/user/identities/authorize': () => json({ url: `https://sso.example.test/authorize?state=${state}` }),
       '/callback': () => new Response(null, { status: 302, headers: { location: callback.href } }),
       '/auth/v1/token?grant_type=pkce': () => json(session(user)),
     })
     const browser = request.agent(fixture.instance)
     const credentials = `edulog_access=token-${user}; edulog_csrf=test-csrf`
     const started = await browser.post('/api/auth/me/identities/link').set('Cookie', credentials)
-      .set('X-CSRF-Token', 'test-csrf').send({ provider: 'github' })
+      .set('X-CSRF-Token', 'test-csrf').send({ provider })
     expect(started.status).toBe(200)
+    const authorize = upstream.mock.calls.find(([url]) => new URL(String(url)).pathname === '/user/identities/authorize')
+    expect(new URL(String(authorize?.[0])).searchParams.get('provider')).toBe(provider)
     const bridged = await browser.get('/api/auth/bridge/callback').set('Cookie', credentials).query({ state, code: 'test-code' })
     expect(bridged.headers.location).toBe(callback.href)
     const done = await browser.get(callback.pathname + callback.search).set('Cookie', credentials)

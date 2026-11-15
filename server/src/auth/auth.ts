@@ -6,7 +6,7 @@ import { ApiError, sendError } from '../http/errors.js'
 import { assertUserActive, clearAccessTokenValidation, createAuthenticatedUserClient, createUserClient, refresh, safeUser, signIn, validateAccessToken, verifyCurrentPassword, type SupabaseClients } from '../infra/supabase.js'
 import type { ApiConfig } from '../config/config.js'
 import { measureRequestPhase, setAuditContext } from '../http/context.js'
-import { createPkcePair, enabledOAuthProviders, exchangeAuthCode, isValidProviderName, requestPasswordRecovery, startOAuthAuthorization, verifyEmailLink, type EmailLinkType, type GoTrueSession } from './gotrue.js'
+import { createPkcePair, enabledOAuthProviders, exchangeAuthCode, isValidProviderName, OAUTH_PROVIDER_MAX_LENGTH, requestPasswordRecovery, startOAuthAuthorization, verifyEmailLink, type EmailLinkType, type GoTrueSession } from './gotrue.js'
 import { deleteIdentity, readIdentityUser, startIdentityLink } from './gotrue.js'
 import { clearIdentityFlow, identityCallback, identityReturn, readIdentityFlow, setIdentityFlow } from './identityFlow.js'
 import { createMailer, notifyPendingAccount, type Mailer } from '../mail/mailer.js'
@@ -162,7 +162,7 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
   })
   router.post('/me/identities/link', activeAccount, rateLimit(oauthRateLimitOptions), async (req, res) => {
     requireIdentityManagement()
-    const { provider } = z.object({ provider: z.string().max(41) }).strict().parse(req.body)
+    const { provider } = z.object({ provider: z.string().max(OAUTH_PROVIDER_MAX_LENGTH) }).strict().parse(req.body)
     if (!isValidProviderName(provider) || !(await providers()).includes(provider)) throw new ApiError(422, 'OAUTH_PROVIDER_DISABLED', 'The provider is unavailable')
     if (!req.cookies?.[accessCookie]) throw new ApiError(401, 'AUTH_REQUIRED', 'A browser session is required')
     const { verifier, challenge } = createPkcePair()
