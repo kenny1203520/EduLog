@@ -5,7 +5,7 @@
             <div class="absolute inset-0 bg-black/40 backdrop-blur-sm pointer-events-auto cursor-pointer transition-opacity duration-300"
                 @click="$emit('close')"></div>
 
-            <div
+            <div ref="drawer" role="dialog" aria-modal="true" :aria-labelledby="headingId"
                 class="absolute inset-y-0 right-0 z-[130] w-full sm:w-[600px] bg-gray-50/98 backdrop-blur-xl shadow-[-20px_0_60px_rgba(0,0,0,0.15)] flex flex-col pointer-events-auto transition-transform duration-500 cubic-bezier(0.4, 0, 0.2, 1) animate-in slide-in-from-right ring-1 ring-black/5">
 
                 <!-- Header Section (Fixed at top) -->
@@ -22,7 +22,7 @@
                                 </svg>
                             </div>
                             <div>
-                                <h2
+                                <h2 :id="headingId"
                                     class="font-black text-gray-900 text-lg sm:text-xl tracking-tight leading-none mb-1 sm:mb-1.5">
                                     {{ $t('report.reference_panel.title') }}
                                 </h2>
@@ -34,7 +34,7 @@
                                 </div>
                             </div>
                         </div>
-                        <button @click="$emit('close')"
+                        <button ref="closeButton" type="button" @click="$emit('close')"
                             class="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-all shrink-0 active:scale-90 group"
                             :aria-label="$t('common.close')">
                             <svg xmlns="http://www.w3.org/2000/svg"
@@ -48,7 +48,7 @@
 
                     <!-- Tabs Bar -->
                     <div class="flex px-4 sm:px-6 gap-6 sm:gap-8 overflow-x-auto no-scrollbar">
-                        <button @click="switchTab('peer')"
+                        <button type="button" :aria-pressed="activeTab === 'peer'" @click="switchTab('peer')"
                             class="relative py-3 sm:py-4 text-xs sm:text-sm font-black transition-all whitespace-nowrap group"
                             :class="activeTab === 'peer' ? 'text-indigo-600' : 'text-gray-400 hover:text-gray-600'">
                             {{ $t('report.reference_panel.peer_reports') }}
@@ -56,7 +56,7 @@
                                 class="absolute bottom-0 left-0 right-0 h-0.5 sm:h-1 bg-indigo-600 rounded-t-full shadow-[0_-2px_10px_rgba(79,70,229,0.3)]">
                             </div>
                         </button>
-                        <button @click="switchTab('history')"
+                        <button type="button" :aria-pressed="activeTab === 'history'" @click="switchTab('history')"
                             class="relative py-3 sm:py-4 text-xs sm:text-sm font-black transition-all whitespace-nowrap group"
                             :class="activeTab === 'history' ? 'text-indigo-600' : 'text-gray-400 hover:text-gray-600'">
                             {{ $t('report.reference_panel.student_history') }}
@@ -72,7 +72,7 @@
                     class="px-4 py-3 sm:px-6 sm:py-4 bg-white/40 border-b border-indigo-50/50 space-y-3 sm:space-y-4 backdrop-blur-sm relative z-40">
                     <!-- Search -->
                     <div class="relative group">
-                        <input v-model="searchQuery" type="text"
+                        <input v-model="searchQuery" type="text" maxlength="200"
                             :placeholder="$t('report.reference_panel.search_placeholder')"
                             class="w-full pl-10 pr-4 py-2.5 sm:pl-12 sm:py-3.5 bg-white border border-gray-100 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-medium focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 shadow-sm transition-all placeholder:text-gray-300"
                             @keyup.enter="refreshData"  :aria-label="$t('report.reference_panel.search_placeholder')"/>
@@ -82,6 +82,19 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
                                 d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                         </svg>
+                    </div>
+
+                    <div v-if="activeTab === 'peer' && lessonChoices?.length">
+                        <label v-if="lessonChoices.length > 1" :for="selectorId" class="mb-1 block text-sm font-medium text-gray-700">
+                            {{ $t('report.reference_panel.lesson_selector') }}
+                        </label>
+                        <select v-if="lessonChoices.length > 1" :id="selectorId" v-model="selectedEntryId"
+                            class="min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3 text-gray-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600">
+                            <option v-for="choice in lessonChoices" :key="choice.entryId" :value="choice.entryId">
+                                {{ formatChoice(choice) }}
+                            </option>
+                        </select>
+                        <p v-else class="text-sm font-medium text-gray-700">{{ formatChoice(lessonChoices[0]!) }}</p>
                     </div>
 
                     <!-- Contextual Filters & Sort -->
@@ -110,7 +123,7 @@
                 <!-- Content List -->
                 <div
                     class="flex-1 overflow-y-auto overscroll-y-contain p-4 sm:p-6 space-y-6 sm:space-y-8 scroll-smooth no-scrollbar">
-                    <div v-if="loading" class="flex flex-col items-center justify-center py-20 sm:py-32 gap-5">
+                    <div v-if="loading" role="status" class="flex flex-col items-center justify-center py-20 sm:py-32 gap-5">
                         <div class="relative">
                             <div class="w-12 h-12 sm:w-14 sm:h-14 rounded-full border-4 border-indigo-50 animate-pulse">
                             </div>
@@ -123,7 +136,7 @@
                                 $t('common.loading') }}</span>
                     </div>
 
-                    <div v-else-if="loadError"
+                    <div v-else-if="loadError" role="alert"
                         class="flex flex-col items-center justify-center py-20 sm:py-32 gap-4 text-center bg-red-50/60 rounded-[2rem] sm:rounded-[2.5rem] border-2 border-dashed border-red-200">
                         <p class="text-xs sm:text-sm font-bold text-red-700">{{ loadError }}</p>
                         <button type="button" @click="refreshData"
@@ -140,7 +153,7 @@
                                 d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                         <p class="text-xs sm:text-sm font-bold tracking-tight">{{
-                            $t('report.reference_panel.no_results') }}</p>
+                            $t(activeTab === 'peer' && !activeLessonId ? 'report.reference_panel.select_lesson' : 'report.reference_panel.no_results') }}</p>
                     </div>
 
                     <div v-else v-for="report in reports" :key="reportCardKey(report)"
@@ -166,7 +179,7 @@
                                             {{ formatDate(report) }}
                                         </span>
                                     </div>
-                                    <span v-if="report.is_completed"
+                                    <span v-if="referenceCompleted(report)"
                                         class="text-[9px] sm:text-[10px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-600 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full ring-1 ring-emerald-100/50">
                                         {{ $t('report.completed') }}
                                     </span>
@@ -368,7 +381,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick, useId } from 'vue'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { ClassroomService } from '@/services/classroom/ClassroomService'
 import { AggregateService } from '@/services/api/AggregateService'
@@ -410,9 +423,11 @@ const pageSizeOptions = [
     { label: '50', value: 50 }
 ]
 
+type ReferenceChoice = { entryId: string; lessonId: string; courseName: string; sequence?: number; title?: string }
 const props = defineProps<{
     show: boolean
-    lessonId?: string
+    lessonChoices?: ReferenceChoice[]
+    primaryEntryId?: string | null
     studentId?: string
     enrollmentId?: string
     currentReportId?: string
@@ -426,6 +441,24 @@ const props = defineProps<{
 const emit = defineEmits(['close', 'copy'])
 
 const activeTab = ref<'peer' | 'history'>('peer')
+const drawer = ref<HTMLElement | null>(null)
+const closeButton = ref<HTMLButtonElement | null>(null)
+const headingId = useId()
+const selectorId = useId()
+let opener: HTMLElement | null = null
+const selectedEntryId = ref('')
+const activeLessonId = computed(() => props.lessonChoices?.find(choice => choice.entryId === selectedEntryId.value)?.lessonId)
+function defaultEntryId() {
+    return props.lessonChoices?.find(choice => choice.entryId === props.primaryEntryId)?.entryId
+        ?? props.lessonChoices?.[0]?.entryId ?? ''
+}
+function formatChoice(choice: ReferenceChoice) {
+    const lesson = choice.sequence == null
+        ? choice.title || t('report.editor.lesson_label')
+        : t('report.editor.progress_check.lesson', { sequence: choice.sequence, title: choice.title || '' })
+    const label = `${choice.courseName || t('common.unknown_course')} · ${lesson}`
+    return choice.entryId === props.primaryEntryId ? `${label} · ${t('report.editor.lesson_entries.primary')}` : label
+}
 const searchQuery = ref('')
 const loading = ref(false)
 const loadError = ref<string | null>(null)
@@ -492,26 +525,58 @@ onUnmounted(() => {
     window.removeEventListener('keydown', handleKeyDown)
 })
 
-function handleKeyDown(e: KeyboardEvent) {
-    if (e.key === 'Escape' && props.show) {
+function handleKeyDown(event: KeyboardEvent) {
+    if (!props.show) return
+    if (event.key === 'Escape') {
         emit('close')
+        return
+    }
+    if (event.key !== 'Tab' || !drawer.value) return
+    const controls = Array.from(drawer.value.querySelectorAll<HTMLElement>(
+        'button:not(:disabled), input:not(:disabled), select:not(:disabled), a[href], [tabindex="0"]',
+    )).filter(control => control.getClientRects().length)
+    const first = controls[0]
+    const last = controls.at(-1)
+    if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last?.focus()
+    } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first?.focus()
     }
 }
 
 let refreshRequestId = 0
-watch(() => [props.show, props.focusedReportId] as const, ([isOpen, reportId]) => {
-    if (!isOpen) return
-    if (reportId) activeTab.value = 'history'
-    void refreshData()
+watch(() => [props.show, props.focusedReportId] as const, async ([isOpen, reportId], previous) => {
+    if (!isOpen) {
+        refreshRequestId++
+        opener?.focus()
+        opener = null
+        return
+    }
+    if (!previous?.[0]) opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    activeTab.value = reportId ? 'history' : 'peer'
+    selectedEntryId.value = defaultEntryId()
+    currentPage.value = 1
+    await nextTick()
+    if (props.show) closeButton.value?.focus()
+}, { immediate: true })
+
+watch(() => props.lessonChoices, () => {
+    if (!props.lessonChoices?.some(choice => choice.entryId === selectedEntryId.value)) selectedEntryId.value = defaultEntryId()
 })
+
+watch(() => [props.show, activeTab.value, activeLessonId.value, props.focusedReportId] as const, ([open]) => {
+    if (!open) return
+    currentPage.value = 1
+    void refreshData()
+}, { immediate: true, flush: 'post' })
 
 // Tab handling
 function switchTab(tab: 'peer' | 'history') {
     if (activeTab.value === tab) return
     activeTab.value = tab
     currentPage.value = 1
-    // Don't clear search query, but we reset filtering?
-    void refreshData()
 }
 
 async function loadFilterOptions() {
@@ -540,11 +605,6 @@ async function loadFilterOptions() {
 async function refreshData() {
     if (!props.show) return
     const requestId = ++refreshRequestId
-
-    // Auto-switch to history if no lessonId but studentId is present
-    if (!props.lessonId && props.studentId && activeTab.value === 'peer') {
-        activeTab.value = 'history'
-    }
 
     loading.value = true
     loadError.value = null
@@ -581,13 +641,13 @@ async function refreshData() {
         let linkedCount = 0
         let linkedRows: any[] = []
         if (activeTab.value === 'peer') {
-            if (!props.lessonId) {
+            if (!activeLessonId.value) {
                 reports.value = []
                 totalCount.value = 0
                 loading.value = false
                 return
             }
-            res = await ReportQueryService.getReportsByLesson(props.lessonId, {
+            res = await ReportQueryService.getReportsByLesson(activeLessonId.value, {
                 ...commonParams,
                 classroomId: filterClassroom.value,
                 sessionId: filterSession.value
@@ -688,17 +748,29 @@ function formatDate(report: any) {
 }
 
 function getReportProgress(report: any) {
-    if (report.progress_letter) return report.progress_letter
+    const format = (value: string | null | undefined) => value?.startsWith('-')
+        ? t('report.editor.progress_to', { end: value.slice(1) }) : value || ''
+    if (activeTab.value === 'peer' && report.lesson_entries?.length) {
+        return [...new Set<string>(report.lesson_entries.map((entry: { progress_letter?: string }) => format(entry.progress_letter)).filter(Boolean))].join(' · ')
+    }
+    if (report.progress_letter) return format(report.progress_letter)
     if (report.progress_start && report.progress_end) {
         return `${report.progress_start}-${report.progress_end}`
     }
     return report.progress_start || report.progress_end || ''
 }
 
+function referenceCompleted(report: any) {
+    if (activeTab.value === 'peer' && report.lesson_entries?.length) {
+        return report.lesson_entries.every((entry: { is_completed: boolean }) => entry.is_completed)
+    }
+    return report.is_completed
+}
+
 function formatHeader(report: any) {
     if (activeTab.value === 'peer') {
         const s = report.enrollments?.students
-        return s.name || t('common.unknown_student')
+        return s?.name || t('common.unknown_student')
     } else {
         const course = report.enrollments?.courses
         const lesson = report.lessons

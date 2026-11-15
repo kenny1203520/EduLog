@@ -71,7 +71,9 @@
     "report_id": "Report ID",
     "reference_panel": {
         "title": "Report Reference",
-        "peer_reports": "Peer Samples",
+        "peer_reports": "Same Lesson References",
+        "lesson_selector": "Lesson to compare",
+        "select_lesson": "Select a lesson in the report to see references.",
         "student_history": "Student History",
         "search_placeholder": "Search content...",
         "no_results": "No relevant reports found.",
@@ -169,6 +171,7 @@
         "apply_template_confirm": "Applying this template will replace the current content, contact notes, and class notes. Continue?",
         "course_folder": "Course Folder",
         "copy_course_info": "Copy Course Info",
+        "copy_course_select_lesson": "Select a lesson in the primary progress entry to copy course information.",
         "copy_course_template_settings": "Course Copy Style",
         "copy_course_template_title": "Course Copy Template",
         "copy_course_template_hint": "Use double-curly variable syntax (for example: {'{{'}lesson_title{'}}'}) to customize output. Saved template becomes your default style.",

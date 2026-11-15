@@ -64,6 +64,8 @@ export function buildMakeupStudentOptions(t: Translate, candidates: Enrollment[]
 
 /** Maps a failed make-up submit to the inline message shown in the modal. */
 export function makeupSubmitErrorKey(error: any): string {
+    if (error?.status === 403) return 'classroom.add_student_permission_denied'
+    if (error?.code === 'RESOURCE_CONFLICT') return 'classroom.add_student_duplicate_report'
     if (error?.message?.includes('Invalid date format')) return 'classroom.add_student_invalid_date'
     if (error?.message?.includes('DUPLICATE_OCCURRENCE_REPORT')) return 'classroom.add_student_duplicate_report'
     if (error?.message?.includes('MAKEUP_DATE_NOT_CLASS_DAY')) return 'classroom.add_student_not_class_day'

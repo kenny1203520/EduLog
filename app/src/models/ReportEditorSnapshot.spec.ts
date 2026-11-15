@@ -33,7 +33,7 @@ describe('report editor snapshot rules', () => {
 
     it('composes progress ranges', () => {
         expect(composeProgressLetter('A', 'C')).toBe('A-C')
-        expect(composeProgressLetter('', 'C')).toBe('C')
+        expect(composeProgressLetter('', 'C')).toBe('-C')
         expect(composeProgressLetter(undefined, undefined)).toBe('')
     })
 

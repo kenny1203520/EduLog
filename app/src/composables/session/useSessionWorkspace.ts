@@ -82,6 +82,7 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
     const isOccurrenceLoading = ref(false)
     const occurrenceLoadError = ref<string | null>(null)
     const reportLoadFailed = ref(false)
+    const loadedReportsOccurrenceId = ref<string>()
     const progressSummaryFailed = ref(false)
     const previousOccurrence = ref<ClassOccurrence | null>(null)
     const nextOccurrence = ref<ClassOccurrence | null>(null)
@@ -239,6 +240,7 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
             if (enrollment.id && !nextReportMap.has(enrollment.id)) nextReportMap.set(enrollment.id, null)
         }
         reportMap.value = nextReportMap
+        loadedReportsOccurrenceId.value = occurrenceId
     }
 
     const occurrenceTransfers = ref<OccurrenceLessonTransfer[]>([])
@@ -319,6 +321,7 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
         isOccurrenceLoading.value = true
         occurrenceLoadError.value = null
         todayOccurrence.value = occurrence
+        loadedReportsOccurrenceId.value = undefined
         reportLoadFailed.value = false
         progressSummaryFailed.value = false
         reportLoadRequest++
@@ -519,12 +522,19 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
     })
 
     const attendanceCounts = computed(() => countRosterAttendance(allRosterEnrollments.value, reportMap.value))
+    const attendanceCopyReady = computed(() => {
+        const occurrenceId = todayOccurrence.value?.id
+        return Boolean(occurrenceId && loadedReportsOccurrenceId.value === occurrenceId &&
+            !loading.value && !isOccurrenceLoading.value && !occurrenceLoadError.value &&
+            allRosterEnrollments.value.every(enrollment => enrollment.id && reportMap.value.has(enrollment.id)))
+    })
     const occupiedRosterCount = computed(() => attendanceCounts.value.present + attendanceCounts.value.pending)
 
     async function loadData() {
         try {
             loading.value = true
             occurrenceLoadError.value = null
+            loadedReportsOccurrenceId.value = undefined
             reportMap.value = new Map()
             progress.studentProgressSummaries.value = {}
 
@@ -917,6 +927,7 @@ export function useSessionWorkspace(quickReportEditorRef: Readonly<Ref<ReportEdi
         isOccurrenceLoading,
         occurrenceLoadError,
         reportLoadFailed,
+        attendanceCopyReady,
         retryOccurrenceReports,
         progressSummaryFailed,
         retryProgressSummary,

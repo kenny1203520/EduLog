@@ -71,7 +71,9 @@
     "report_id": "報告編號",
     "reference_panel": {
         "title": "報告參考查詢",
-        "peer_reports": "同課次參考",
+        "peer_reports": "同教材單元參考",
+        "lesson_selector": "參考教材單元",
+        "select_lesson": "請先在報告中選擇教材單元。",
         "student_history": "學生歷史紀錄",
         "search_placeholder": "搜尋內容...",
         "no_results": "找不到相關報告。",
@@ -169,6 +171,7 @@
         "apply_template_confirm": "套用範本將取代目前的報告內容（包含聯絡欄與紀錄），確定要繼續嗎？",
         "course_folder": "課程資料夾",
         "copy_course_info": "複製課程資訊",
+        "copy_course_select_lesson": "請先在主要進度選擇教材單元，再複製課程資訊。",
         "copy_course_template_settings": "課程資訊樣式設定",
         "copy_course_template_title": "課程資訊複製樣式",
         "copy_course_template_hint": "可用雙大括號變數語法（例如 {'{{'}lesson_title{'}}'}）自定義輸出文字，儲存後會成為你的預設樣式。",
