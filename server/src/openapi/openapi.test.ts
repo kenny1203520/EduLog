@@ -428,7 +428,13 @@ describe('generated API contract', () => {
     const progressLetter = spec.components.schemas.ReportUpdateMutation.properties.progress_letter
     const progressSchemas = progressLetter.anyOf ?? [progressLetter]
     expect(progressSchemas).toEqual(expect.arrayContaining([expect.objectContaining({ pattern: '^(?:[A-Z](?:-[A-Z])?|-[A-Z])$' })]))
-    expect(spec.components.schemas.ReportCreateMutation.additionalProperties).toBe(false)
+    const [standard, makeup] = spec.components.schemas.ReportCreateMutation.anyOf
+    expect(standard.additionalProperties).toBe(false)
+    expect(makeup).toMatchObject({
+      additionalProperties: false,
+      required: ['makeup', 'enrollment_id', 'class_occurrence_id'],
+      properties: { makeup: { const: true } },
+    })
   })
 
   it('keeps specialized mutation schemas sourced from runtime validators', () => {

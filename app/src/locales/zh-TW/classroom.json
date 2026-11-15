@@ -304,6 +304,7 @@
     "add_student_success": "已建立本次課堂報告，可立即編輯",
     "add_student_failed": "新增補課報告失敗",
     "add_student_retry_error": "建立失敗，您的選擇仍保留。請檢查網路後重試。",
+    "add_student_permission_denied": "您沒有權限將這筆報名加入選定課次。",
     "add_student_load_failed": "載入可選課程失敗",
     "add_student_required_fields": "請先選擇學生、課程與加入日期",
     "add_student_enrollment_not_found": "找不到所選擇的學生課程",
