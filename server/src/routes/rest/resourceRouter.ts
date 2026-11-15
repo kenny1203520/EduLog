@@ -371,11 +371,13 @@ export async function collection(req: Request, res: Response, def: ResourceDefin
     return res.status(201).json(envelope)
   }
   const userOwnedTables = new Set(['user_preferences', 'user_entity_visibility_preferences', 'copy_templates'])
-   let insertBody = userOwnedTables.has(def.table) ? { ...body, user_id: req.user!.id } : body
+  const insertBody = userOwnedTables.has(def.table) ? { ...body, user_id: req.user!.id } : body
    // teaching_id on teaching records is a legacy constant: the database
    // trigger normalize_global_teaching_row overwrites any value sent here.
   const itemFields = def.itemFields ?? def.fields
-  const result = req.method === 'POST' ? await req.db!.from(def.table).insert(insertBody).select(itemFields.join(', ')).single() : await req.db!.from(def.table).update(body).select(itemFields.join(', ')).maybeSingle()
+  const result = def.route === 'classrooms'
+    ? await req.db!.rpc('create_classroom_with_details', { p_room: body })
+    : await req.db!.from(def.table).insert(insertBody).select(itemFields.join(', ')).single()
   if (result.error) throw mapDatabaseError(result.error)
   const createdId = result.data && typeof result.data === 'object' && typeof (result.data as Record<string, unknown>).id === 'string' ? (result.data as Record<string, unknown>).id as string : null
   if (createdId) setAuditContext(req, { resourceId: createdId })

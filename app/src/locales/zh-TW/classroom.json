@@ -410,5 +410,10 @@
         "joined": "調課或轉入的學生",
         "joined_makeup": "{count} 位調課進來",
         "joined_transfer": "{count} 位轉班生效"
-    }
+    },
+    "teacher_attendance_pending": "\u5f85\u767b\u8a18",
+    "teacher_roster_failed": "\u7121\u6cd5\u8f09\u5165\u6559\u5e2b\u540d\u55ae\u3002",
+    "session_sync_failed": "\u73ed\u7d1a\u5df2\u5132\u5b58\uff0c\u4f46\u8ab2\u6b21\u540c\u6b65\u5931\u6557\u3002",
+    "retry_occurrence_data": "\u91cd\u8a66",
+    "teacher_leave_failed": "無法查詢教師請假狀態。"
 }

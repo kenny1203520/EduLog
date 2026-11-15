@@ -68,5 +68,6 @@
         "validation_failed": "請依欄位提示修正後再送出。",
         "rate_limited": "請等待約一分鐘後再試。",
         "service_unavailable": "請稍候幾分鐘再試；若持續發生，請聯絡支援人員。"
-    }
+    },
+    "request_reference": "\u8acb\u6c42\u7de8\u865f\uff1a{id}"
 }

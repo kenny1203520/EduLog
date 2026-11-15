@@ -667,7 +667,7 @@ watch(() => [loading.value, selectedReport.value?.id] as const, async ([isLoadin
 function sourceFillStatus(hintKey: 'hint' | 'hint_short') {
     const state = sourceFill.state.value, result = sourceFill.result.value
     if (state === 'sending') return t('report.source_fill.sending')
-    if (state === 'failed') return t('report.source_fill.failed', { reason: sourceFill.reason.value })
+    if (state === 'failed') return t('report.source_fill.failed')
     if (state !== 'sent') return t(`report.source_fill.${hintKey}`)
     if (result?.review) return t('report.source_fill.sent_review')
     if (!result?.applied && !result?.skipped) return t('report.source_fill.sent_same')

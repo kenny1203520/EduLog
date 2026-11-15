@@ -95,5 +95,5 @@ export SMOKE_DATE="${dates%|*}" SMOKE_HOLIDAY="${dates#*|}"
 for pair in 7:owner 2:teacher 5:assistant 4:outsider; do
   actor="15800000-0000-4000-8000-00000000000${pair%:*}"
   # The origin is confined to this private test network and uses synthetic credentials.
-  docker exec -i -e SMOKE_API_ORIGIN=http://frontend:4173 -e SMOKE_DATE -e SMOKE_HOLIDAY -e ACTOR="${pair#*:}" -e TOKEN="$(token authenticated "$actor")" "$network-api" node --input-type=module - < scripts/release/class-smoke.mjs
+  docker exec -i -e SMOKE_DATE -e SMOKE_HOLIDAY -e ACTOR="${pair#*:}" -e TOKEN="$(token authenticated "$actor")" "$network-api" node --input-type=module - < scripts/release/class-smoke.mjs
 done

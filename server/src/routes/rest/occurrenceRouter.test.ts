@@ -28,7 +28,7 @@ describe('occurrence API contract', () => {
     const source = readFileSync(new URL('./occurrenceRouter.ts', import.meta.url), 'utf8')
     expect(source).toContain("p_permission_key: `teaching.occurrences.${action}`")
     expect(source).toContain('HOLIDAY_OCCURRENCE')
-    expect(source).toContain('TEACHER_ON_LEAVE')
+    expect(source).toContain('set_occurrence_teacher_attendance')
     expect(source).toContain('idempotency(req')
   })
 })

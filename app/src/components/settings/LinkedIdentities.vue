@@ -65,7 +65,9 @@ onMounted(load)
                     </form>
                 </li>
             </ul>
-            <div v-if="data.manual_linking" class="flex flex-wrap gap-2">
+            <p v-if="!data.manual_linking" class="text-sm">{{ $t('auth.identity_linking_disabled') }}</p>
+            <p v-else-if="!data.providers.length" class="text-sm">{{ $t('auth.identity_providers_empty') }}</p>
+            <div v-else class="flex flex-wrap gap-2">
                 <button v-for="provider in data.providers" :key="provider" type="button" :disabled="busy" class="rounded-lg border px-3 py-2 font-semibold text-emerald-800 hover:bg-emerald-50 focus-visible:ring-2" @click="link(provider)">
                     {{ $t('auth.link_provider', { provider: providerLabel(provider) }) }}
                 </button>

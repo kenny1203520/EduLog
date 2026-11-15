@@ -401,7 +401,7 @@
         "sent_skipped": "Filled {count} fields on the left; {skipped} need choosing there. Check them, then submit the form.",
         "sent_same": "The form on the left already matches this report.",
         "sent_review": "This report is for another student or date; confirm the fields on the left before they are filled.",
-        "failed": "Couldn't send to the teaching site ({reason}). Make sure the report on the left is still open, then try again.",
+        "failed": "Couldn't send to the teaching site. Make sure the report on the left is still open, then try again.",
         "date_missing": "This student has no lesson on {date}; showing the nearest one instead.",
         "hint_short": "Saves, then sends back to the teaching site on the left"
     },
@@ -410,5 +410,13 @@
         "next": "Next lesson",
         "calendar": "Choose another date",
         "koding_check": "Homework check"
+    },
+    "history": {
+        "loading": "Loading teaching history\u2026",
+        "loaded": "Loaded {count} historical reports.",
+        "choose_occurrence": "Review the eligible lesson. Binding preserves the original enrollment.",
+        "no_candidates": "No eligible lessons are available. The saved history is retained.",
+        "bound": "The historical report was linked to the lesson.",
+        "preview": "Review the differences and confirm the binding."
     }
 }

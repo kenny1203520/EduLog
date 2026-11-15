@@ -68,5 +68,6 @@
         "validation_failed": "Fix the highlighted fields and submit again.",
         "rate_limited": "Wait about a minute and try again.",
         "service_unavailable": "Try again in a few minutes. If it keeps happening, contact support."
-    }
+    },
+    "request_reference": "Request ID: {id}"
 }

@@ -4,7 +4,6 @@ import { useToast } from 'vue-toastification'
 import { TeacherService } from '@/services/teacher/TeacherService'
 import type { SessionTeacherAssignmentDTO } from '@/services/teacher/TeacherService'
 import type { TeacherOverviewDTO } from '@/services/api/PageApiService'
-import { isTeacherPresentForScope } from '@/services/report/TeacherAttendanceScope'
 import { useFeedback } from '@/composables/useFeedback'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { getEffectiveTeacherAssignments } from '@/utils/effectiveTeacherAssignments'
@@ -18,6 +17,7 @@ export interface TeacherAttendanceRow {
     teacher: OccurrenceTeacher
     onLeave: boolean
     present: boolean
+    pending?: boolean
     canEdit: boolean
 }
 
@@ -51,6 +51,9 @@ export function useOccurrenceTeachers(source: OccurrenceTeachersSource) {
 
     const sessionTeachers = ref<SessionTeacherAssignmentDTO[]>([])
     const canManageTeacherAttendance = ref(false)
+    const teacherRosterFailed = ref(false)
+    const teacherLeaveFailed = ref(false)
+    let rosterRequest = 0
     const teacherLeaveById = ref<Record<string, boolean>>({})
     const occurrenceTeachers = ref<OccurrenceTeacher[]>([])
     const allTeachersList = ref<TeacherOverviewDTO[]>([])
@@ -71,14 +74,14 @@ export function useOccurrenceTeachers(source: OccurrenceTeachersSource) {
         return Boolean(teacherId && teacherLeaveById.value[teacherId])
     }
 
-    function isTeacherPresent(teacherId: string | undefined, userId: string | null | undefined): boolean {
-        if (!teacherId || !todayOccurrence.value?.teacherAttendance) return false
-        return isTeacherPresentForScope({
-            teacherId,
-            teacherUserId: userId,
-            occurrenceTeacherIds: occurrenceTeachers.value.map(teacher => teacher.id).filter((id): id is string => Boolean(id)),
-            teacherAttendance: todayOccurrence.value.teacherAttendance
-        })
+    function attendanceValue(teacherId?: string, userId?: string | null): boolean | undefined {
+        if (!teacherId) return undefined
+        const values = todayOccurrence.value?.teacherAttendance ?? {}
+        return values[teacherId] ?? (userId ? values[userId] : undefined)
+    }
+
+    function isTeacherPresent(teacherId?: string, userId?: string | null): boolean {
+        return attendanceValue(teacherId, userId) === true
     }
 
     function canEditTeacherAttendance(teacher: TeacherOverviewDTO): boolean {
@@ -89,12 +92,14 @@ export function useOccurrenceTeachers(source: OccurrenceTeachersSource) {
         let present = 0
         let absent = 0
         let onLeave = 0
+        let pending = 0
         for (const teacher of occurrenceTeachers.value) {
             if (teacher.id && teacherLeaveById.value[teacher.id]) onLeave++
             else if (isTeacherPresent(teacher.id, teacher.user_id)) present++
-            else absent++
+            else if (attendanceValue(teacher.id, teacher.user_id) === false) absent++
+            else pending++
         }
-        return { present, absent, onLeave }
+        return { present, absent, onLeave, ...(pending ? { pending } : {}) }
     })
 
     const teacherAttendanceRows = computed<TeacherAttendanceRow[]>(() => occurrenceTeachers.value.map(teacher => ({
@@ -102,6 +107,7 @@ export function useOccurrenceTeachers(source: OccurrenceTeachersSource) {
         onLeave: isTeacherOnLeave(teacher.id),
         present: isTeacherPresent(teacher.id, teacher.user_id),
         canEdit: canEditTeacherAttendance(teacher),
+        pending: attendanceValue(teacher.id, teacher.user_id) === undefined,
     })))
 
     function clearOccurrenceTeachers() {
@@ -115,60 +121,66 @@ export function useOccurrenceTeachers(source: OccurrenceTeachersSource) {
             clearOccurrenceTeachers()
             return
         }
-        teacherLeaveById.value = {}
-
-        // Attendance roster is always derived from the effective teaching assignments.
-        // Keep the attendance status map on the occurrence, but never persist a second roster.
-        const dateStr = DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate)
-        const assignmentsByTeacher = getEffectiveTeacherAssignments(sessionTeachers.value, dateStr)
-        selectedTeacherIds.value = new Set(assignmentsByTeacher.map(assignment => assignment.id).filter((id): id is string => Boolean(id)))
-        occurrenceTeachers.value = assignmentsByTeacher.map(assignment => ({
-            ...assignment,
-            role: assignment.role
-        }))
+        const request = ++rosterRequest
         const occurrence = todayOccurrence.value
-        const leaveEntries = await Promise.all(assignmentsByTeacher
+        const dateStr = DateUtils.formatLocalDate(occurrence.occurrenceDate)
+        teacherRosterFailed.value = false
+        teacherLeaveFailed.value = false
+        try {
+            const assignments = await TeacherService.getSessionTeachers(sessionId, dateStr)
+            if (request !== rosterRequest || todayOccurrence.value?.id !== occurrence.id) return
+            sessionTeachers.value = assignments
+        } catch {
+            if (request === rosterRequest && todayOccurrence.value?.id === occurrence.id) {
+                clearOccurrenceTeachers()
+                teacherRosterFailed.value = true
+            }
+            return
+        }
+        const assignmentsByTeacher = getEffectiveTeacherAssignments(sessionTeachers.value, dateStr)
+        selectedTeacherIds.value = new Set(assignmentsByTeacher.flatMap(assignment => assignment.id ? [assignment.id] : []))
+        occurrenceTeachers.value = assignmentsByTeacher
+        teacherLeaveById.value = {}
+        const leaveResults = await Promise.allSettled(assignmentsByTeacher
             .filter(assignment => assignment.id)
             .map(async assignment => [assignment.id!, await HolidayQueryService.isTeacherOnLeave(
                 dateStr,
                 assignment.id!,
                 session.value?.classroom_id,
                 sessionId
-            ).catch(error => {
-                console.error('Failed to check teacher leave:', error)
-                return false
-            })] as const))
-        if (todayOccurrence.value?.id !== occurrence.id) return
-        teacherLeaveById.value = Object.fromEntries(leaveEntries)
+            )] as const))
+        if (request !== rosterRequest || todayOccurrence.value?.id !== occurrence.id) return
+        teacherLeaveFailed.value = leaveResults.some(result => result.status === 'rejected')
+        teacherLeaveById.value = Object.fromEntries(leaveResults.flatMap(result =>
+            result.status === 'fulfilled' ? [result.value] : []
+        ))
     }
 
-    async function toggleTeacherAttendance(teacherId: string | undefined, event: any) {
+    async function toggleTeacherAttendance(teacherId: string | undefined, isPresent: boolean) {
         if (!todayOccurrence.value || !teacherId) return
-        const isPresent = event.target.checked
+        const occurrenceId = todayOccurrence.value.id
 
         // Guard: check if occurrence is in a holiday period
         if (isOccurrenceInHoliday.value && isPresent) {
-            event.target.checked = false
             errorKey('report.error.cannot_set_teacher_present_during_holiday')
             return
         }
 
         try {
-            const existing = todayOccurrence.value.teacherAttendance || {}
-            const updatedAttendance = { ...existing, [teacherId]: isPresent }
-
-            const updated = await OccurrenceCommandService.updateOccurrence(todayOccurrence.value.id, {
-                teacher_attendance: updatedAttendance
+            const updated = await OccurrenceCommandService.updateOccurrence(occurrenceId, {
+                teacher_attendance: { [teacherId]: isPresent }
             })
-
-            todayOccurrence.value.teacherAttendance = updated.teacherAttendance || updatedAttendance
+            if (todayOccurrence.value?.id === occurrenceId) {
+                todayOccurrence.value.teacherAttendance = {
+                    ...todayOccurrence.value.teacherAttendance,
+                    [teacherId]: updated.teacherAttendance?.[teacherId] ?? isPresent,
+                }
+            }
         } catch (e: any) {
             console.error('Failed to update teacher attendance:', e)
-            event.target.checked = !isPresent
-            const msg = e.message || ''
-            if (msg.includes('while the teacher is on leave')) {
+            if (e.code === 'TEACHER_ON_LEAVE') {
                 errorKey('report.error.cannot_set_teacher_present_during_leave')
-            } else if (msg.includes('Cannot set teacher attendance to present')) {
+            } else if (e.code === 'HOLIDAY_OCCURRENCE') {
                 errorKey('report.error.cannot_set_teacher_present_during_holiday')
             } else {
                 errorKey('common.save_error')
@@ -195,7 +207,6 @@ export function useOccurrenceTeachers(source: OccurrenceTeachersSource) {
 
             // Update the source-of-truth assignment only; attendance roster is derived from this plan.
             await TeacherService.assignTeacherForDate(sessionId, teacher.id, dateStr)
-            sessionTeachers.value = await TeacherService.getSessionTeachers(sessionId)
             await loadOccurrenceTeachers()
 
             toast.success(t('common.save_success'))
@@ -213,7 +224,6 @@ export function useOccurrenceTeachers(source: OccurrenceTeachersSource) {
         try {
             isSavingTeachers.value = true
             await TeacherService.removeTeacherAssignment(sessionId, teacherId, effectiveFrom)
-            sessionTeachers.value = await TeacherService.getSessionTeachers(sessionId)
             await loadOccurrenceTeachers()
 
             toast.success(t('common.save_success'))
@@ -227,6 +237,8 @@ export function useOccurrenceTeachers(source: OccurrenceTeachersSource) {
 
     return {
         sessionTeachers,
+        teacherRosterFailed,
+        teacherLeaveFailed,
         canManageTeacherAttendance,
         allTeachersList,
         occurrenceTeachers,
