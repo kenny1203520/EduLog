@@ -129,6 +129,11 @@ jobs:
         run: npm test --prefix app -- --run
       - name: Build frontend
         run: npm run build --prefix app
+      - name: Test class and report clipboard in Chromium and WebKit
+        run: |
+          npm ci --ignore-scripts
+          ./node_modules/.bin/playwright install --with-deps chromium webkit
+          node scripts/release/copy-clipboard-browser.mjs
       - name: Verify Nginx API precedence and SPA fallback
         shell: bash
         run: |

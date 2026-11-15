@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict'
+import { once } from 'node:events'
+import { createServer } from 'node:http'
 import { fileURLToPath } from 'node:url'
 import { chromium, webkit } from 'playwright'
 import { expect } from '@playwright/test'
-import { createServer } from '../../app/node_modules/vite/dist/node/index.js'
+import { build } from '../../app/node_modules/vite/dist/node/index.js'
+import vue from '../../app/node_modules/@vitejs/plugin-vue/dist/index.mjs'
 
 const fixture = `
 import { createApp, h, ref } from 'vue'
@@ -68,17 +71,41 @@ createApp({
 
 const root = fileURLToPath(new URL('../../app/', import.meta.url))
 const fixtureId = fileURLToPath(new URL('../../app/clipboard-fixture.js', import.meta.url)).replaceAll('\\', '/')
-const server = await createServer({
+const bundle = await build({
   root,
-  server: { host: '127.0.0.1', port: 0, hmr: false, ws: false },
-  plugins: [{
+  configFile: false,
+  logLevel: 'error',
+  resolve: { alias: { '@': fileURLToPath(new URL('../../app/src', import.meta.url)) } },
+  define: { __APP_VERSION__: JSON.stringify('clipboard-fixture') },
+  build: { write: false, rollupOptions: { input: fixtureId } },
+  plugins: [vue(), {
     name: 'clipboard-browser-fixture',
     enforce: 'pre',
-    resolveId: id => id === '/clipboard-fixture.js' ? fixtureId : undefined,
+    resolveId: id => id === fixtureId ? fixtureId : undefined,
     load: id => id === fixtureId ? fixture : undefined,
   }],
 })
-await server.listen()
+const assets = new Map(bundle.output.map(asset => [`/${asset.fileName}`, asset]))
+const entry = bundle.output.find(asset => asset.type === 'chunk' && asset.isEntry)
+assert.ok(entry)
+const server = createServer((req, res) => {
+  const path = new URL(req.url, 'http://localhost').pathname
+  if (path === '/') {
+    res.writeHead(200, { 'content-type': 'text/html' })
+    res.end(`<!doctype html><div id="app"></div><script type="module" src="/${entry.fileName}"></script>`)
+    return
+  }
+  const asset = assets.get(path)
+  if (!asset) {
+    res.writeHead(404).end()
+    return
+  }
+  res.writeHead(200, { 'content-type': asset.type === 'chunk' ? 'text/javascript' : 'text/css' })
+  res.end(asset.type === 'chunk' ? asset.code : asset.source)
+})
+server.listen(0, '127.0.0.1')
+await once(server, 'listening')
+const address = `http://127.0.0.1:${server.address().port}/`
 
 async function check(browserType) {
   const browser = await browserType.launch()
@@ -104,14 +131,10 @@ async function check(browserType) {
       }] : []
       await route.fulfill({ json: { data, meta: {} } })
     })
-    const address = server.resolvedUrls.local[0]
     if (browserType === chromium) {
       await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(address).origin })
     }
-    await page.route(new URL('/clipboard-test', address).href, route => route.fulfill({
-      contentType: 'text/html', body: '<div id="app"></div><script type="module" src="/clipboard-fixture.js"></script>',
-    }))
-    await page.goto(new URL('/clipboard-test', address).href)
+    await page.goto(address)
     const attendance = page.getByRole('button', { name: 'Copy Attendance' })
     const course = page.getByRole('button', { name: 'Copy Course Info' })
     const target = page.getByRole('textbox', { name: 'Paste target', exact: true })
@@ -163,5 +186,5 @@ try {
     if (!requested.length || requested.includes(browserType.name())) await check(browserType)
   }
 } finally {
-  await server.close()
+  await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
 }
