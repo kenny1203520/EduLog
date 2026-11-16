@@ -338,11 +338,14 @@ async function check(browserType) {
     await manual.waitFor()
     assert.equal(await manual.inputValue(), multiple)
 
+    await page.clock.install()
     await page.getByRole('button', { name: 'Open legacy report' }).click()
     const legacy = page.getByRole('region', { name: 'Legacy report' })
     const [legacyCourse, legacyLesson, start, end] = await legacy.locator('fieldset select').all()
     await expect(legacyCourse).toHaveValue('host')
     await expect(legacyLesson).toHaveValue('l1')
+    // The report session suppresses autosave during its 50 ms hydration window.
+    await page.clock.runFor(60)
     await end.selectOption('D')
     await expect(legacy.getByText('Save failed', { exact: true })).toBeVisible()
     const legacySaved = page.waitForResponse(response => new URL(response.url()).pathname === '/api/reports/legacy' &&
