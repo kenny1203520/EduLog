@@ -27,8 +27,8 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.edulog_reject_external_oauth() FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.edulog_reject_external_oauth() TO anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.edulog_reject_external_oauth() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.edulog_reject_external_oauth() TO authenticated, service_role;
 ALTER ROLE authenticator SET pgrst.db_pre_request = 'public.edulog_reject_external_oauth';
 NOTIFY pgrst, 'reload config';
 
