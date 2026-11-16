@@ -779,6 +779,14 @@ html[data-edulog-ui="on"] .edulog-popover-menu[popover]:not(:popover-open) { dis
 /* With the EduLog navigation mounted, the provider navbar and class switcher stay hidden at every width (one navigation, never two). */
 html[data-edulog-ui="on"] #page-body > .sidebar:has(.edulog-nav) :is(#nav-teacher,[data-edulog-replaced]) { display:none !important; }
 /* 「剩餘課堂」 renewal list: the unfilled list's rows, a compact filter row and segmented renewal buttons. */
+html[data-edulog-ui="on"] [data-edulog-renew-pagination] .pagination { display:flex; flex-wrap:wrap; gap:6px; margin:12px 0; padding:0; list-style:none; }
+html[data-edulog-ui="on"] [data-edulog-renew-pagination] .page-item .page-link {
+  display:inline-flex; align-items:center; justify-content:center; min-width:44px; min-height:44px; margin:0; padding:6px 10px;
+  border:1px solid var(--edulog-border-strong); border-radius:var(--edulog-radius-sm);
+  background:var(--edulog-surface); color:var(--edulog-primary);
+}
+html[data-edulog-ui="on"] [data-edulog-renew-pagination] .page-item.active .page-link { background:var(--edulog-primary-soft); color:var(--edulog-primary); border-color:var(--edulog-primary); font-weight:700; }
+html[data-edulog-ui="on"] [data-edulog-renew-pagination] .page-item.disabled .page-link { color:var(--edulog-text-muted); }
 html[data-edulog-ui="on"] [data-edulog-renew-filter] { display:flex; flex-wrap:wrap; align-items:flex-end; gap:12px 20px; margin:0 0 16px; padding:12px 16px; border:1px solid var(--edulog-border); border-radius:var(--edulog-radius); background:var(--edulog-surface); }
 html[data-edulog-ui="on"] [data-edulog-renew-filter] .form-group { display:flex; flex-direction:column; gap:4px; margin:0; }
 html[data-edulog-ui="on"] [data-edulog-renew-filter] :is(.col-sm-2,.col-sm-3,.col-sm-10,.offset-sm-2) { flex:none; width:auto; max-width:none; margin:0; padding:0; }

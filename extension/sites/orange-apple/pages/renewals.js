@@ -13,7 +13,16 @@
     const section = scope.add(element('section')); section.className = 'edulog-unfilled-list edulog-renewal-list'
     section.setAttribute('aria-label', tx('剩餘課堂'))
     anchor.before(section)
-    if (items.length) mark(anchor, 'data-edulog-cards', 'on')
+    const pagination = anchor.querySelector('nav .pagination')
+    const pager = pagination?.closest('nav')
+    if (pager) {
+      mark(pager, 'data-edulog-renew-pagination')
+      if (!pager.hasAttribute('aria-label') && !pager.hasAttribute('aria-labelledby')) {
+        mark(pager, 'aria-label', tx('剩餘課堂'))
+      }
+      const current = pagination.querySelector('.page-item.active > .page-link')
+      if (current && !pagination.querySelector('[aria-current="page"]')) mark(current, 'aria-current', 'page')
+    }
     const summary = element('p'); summary.className = 'edulog-unfilled-summary'
     const notice = element('p'); notice.className = 'edulog-renewal-notice'; notice.setAttribute('role', 'status'); notice.setAttribute('aria-live', 'polite'); notice.hidden = true
     const body = element('div')
@@ -84,7 +93,9 @@
     function render() {
       const byGroup = RENEW_GROUPS.map(([code, label, tone]) => [code, label, tone, items.filter(item => item.renew === code).sort((a, b) => (a.remaining ?? Infinity) - (b.remaining ?? Infinity))]).filter(group => group[3].length)
       const low = items.filter(item => item.remaining !== null && item.remaining <= 2 && item.renew !== 'not-renew').length
-      summary.textContent = tx('未續班 {pending} · 已續班 {renewed} · 不續班 {stopped}', { pending: items.filter(i => i.renew === 'pending').length, renewed: items.filter(i => i.renew === 'renewed').length, stopped: items.filter(i => i.renew === 'not-renew').length }) + (low ? tx(' · 剩餘 2 堂以下 {count} 位', { count: low }) : '')
+      const pageCount = tx('本頁找到 {count} 位學生。', { count: items.length })
+      const statusTotals = tx('未續班 {pending} · 已續班 {renewed} · 不續班 {stopped}', { pending: items.filter(i => i.renew === 'pending').length, renewed: items.filter(i => i.renew === 'renewed').length, stopped: items.filter(i => i.renew === 'not-renew').length })
+      summary.textContent = `${pageCount} ${statusTotals}` + (low ? tx(' · 剩餘 2 堂以下 {count} 位', { count: low }) : '')
       summary.hidden = !items.length
       if (!items.length) {
         const empty = element('div'); empty.className = 'edulog-unfilled-empty'
@@ -108,6 +119,7 @@
       }))
     }
     render()
+    if (items.length) mark(table, 'data-edulog-cards', 'on')
     return render
   }
   // Devise sign-in and password pages as one centred card. The native form, its fields and its

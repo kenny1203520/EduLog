@@ -1,5 +1,6 @@
 import test from 'node:test'
 import { siteFiles } from '../site-files.mjs'
+import { renewalPage, renewalPagePath } from '../renewal-pages.mjs'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { JSDOM } from '../../../app/node_modules/jsdom/lib/api.js'
@@ -9,10 +10,11 @@ import { JSDOM } from '../../../app/node_modules/jsdom/lib/api.js'
 // renewal menu (whose own click handler never binds).
 const read = name => readFileSync(new URL(name, import.meta.url), 'utf8')
 const SCRIPTS = [...siteFiles('lexicon', 'model', 'renewals', 'workflows'), 'sites/orange-apple/core/adapter.js']
-function page({ locale = 'zh-TW', fetch, confirm = () => true } = {}) {
+function page({ locale = 'zh-TW', fetch, confirm = () => true, number } = {}) {
   let html = read('../fixtures/renewals.html')
+  if (number !== undefined) html = renewalPage(html, number)
   if (locale !== 'zh-TW') html = html.replace('btn btn-sm btn-primary me-1 mb-1" href="/locale?locale=zh-TW"', 'btn btn-sm btn-outline-secondary me-1 mb-1" href="/locale?locale=zh-TW"').replace(`btn-outline-secondary me-1 mb-1" href="/locale?locale=${locale}"`, `btn-primary me-1 mb-1" href="/locale?locale=${locale}"`).replace(`btn-outline-secondary mb-1" href="/locale?locale=${locale}"`, `btn-primary mb-1" href="/locale?locale=${locale}"`)
-  const dom = new JSDOM(html, { url: 'https://corp.orangeapple.co/dt_admissions', runScripts: 'outside-only', pretendToBeVisual: true })
+  const dom = new JSDOM(html, { url: 'https://corp.orangeapple.co' + renewalPagePath(number ?? 1), runScripts: 'outside-only', pretendToBeVisual: true })
   const w = dom.window, calls = []
   w.confirm = message => { calls.push(['confirm', message]); return confirm(message) }
   w.fetch = async (url, init) => { calls.push(['fetch', url, init]); return fetch ? fetch(url, init) : { ok: true, status: 200 } }
@@ -42,7 +44,7 @@ test('the renewal table is read by its headers and badge colours', () => {
 test('rows are grouped 未續班 → 已續班 → 不續班, fewest lessons left first, with 不續班 folded', () => {
   const { doc, result } = page()
   assert.ok(result)
-  assert.equal(doc.querySelector('#dt-admissions').getAttribute('data-edulog-cards'), 'on')
+  assert.equal(doc.querySelector('#dt-admissions table').getAttribute('data-edulog-cards'), 'on')
   assert.ok(doc.querySelector('form[data-edulog-renew-filter]'))
   assert.deepEqual(groups(doc), [
     { label: '未續班', open: true, names: ['學生丁', '學生丙'] },
@@ -51,7 +53,38 @@ test('rows are grouped 未續班 → 已續班 → 不續班, fewest lessons lef
   ])
   assert.equal(row(doc, '學生乙').dataset.bar, 'danger')
   assert.equal(row(doc, '學生丁').dataset.bar, 'warn')
-  assert.match(doc.querySelector('.edulog-renewal-list .edulog-unfilled-summary').textContent, /未續班 2 · 已續班 2 · 不續班 1 · 剩餘 2 堂以下 3 位/)
+  assert.match(doc.querySelector('.edulog-renewal-list .edulog-unfilled-summary').textContent, /本頁找到 5 位學生。 未續班 2 · 已續班 2 · 不續班 1 · 剩餘 2 堂以下 3 位/)
+})
+
+test('leaves the native paginator outside the hidden table and restores its original attributes', () => {
+  for (const number of [1, 2, 4]) {
+    const { doc, result, calls } = page({ number })
+    const nav = doc.querySelector('#dt-admissions nav')
+    assert.equal(nav.closest('[data-edulog-cards]'), null)
+    assert.equal(nav.getAttribute('aria-label'), '剩餘課堂')
+    assert.equal(nav.querySelector('[aria-current="page"]').textContent, String(number))
+    assert.equal(Boolean(nav.querySelector('[rel="prev"]')), number > 1)
+    assert.equal(Boolean(nav.querySelector('[rel="next"]')), number < 4)
+    for (const link of nav.querySelectorAll('a')) {
+      const query = new URL(link.href).searchParams
+      assert.equal(query.get('city_id'), '')
+      assert.equal(query.get('remaining_lte'), '20')
+    }
+    assert.equal(doc.querySelectorAll('.edulog-renewal-row').length, 1)
+    assert.deepEqual(calls, [])
+    result.restore()
+    assert.equal(nav.getAttribute('aria-label'), null)
+    assert.equal(nav.querySelector('[aria-current]'), null)
+    assert.equal(doc.querySelector('#dt-admissions table').hasAttribute('data-edulog-cards'), false)
+  }
+})
+
+test('single-page and empty results do not invent pagination', () => {
+  assert.equal(page().doc.querySelector('[data-edulog-renew-pagination]'), null)
+  const { doc } = page({ number: 0 })
+  assert.equal(doc.querySelector('[data-edulog-renew-pagination]'), null)
+  assert.ok(doc.querySelector('.edulog-unfilled-empty'))
+  assert.equal(doc.querySelector('#dt-admissions table').hasAttribute('data-edulog-cards'), false)
 })
 
 test('contact details stay hidden until asked for', () => {
