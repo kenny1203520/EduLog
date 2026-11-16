@@ -13,6 +13,8 @@ on:
       - '.env.example'
       - 'supabase/.env.example'
       - 'scripts/check-env-example.mjs'
+      - 'scripts/auth-gotrue-*-smoke.mjs'
+      - 'scripts/auth-gotrue-smoke.*'
       - 'supabase/docker-compose.*.yml'
       - 'supabase/volumes/proxy/caddy/**'
       - 'supabase/volumes/api/envoy/**'
@@ -35,6 +37,8 @@ on:
       - '.env.example'
       - 'supabase/.env.example'
       - 'scripts/check-env-example.mjs'
+      - 'scripts/auth-gotrue-*-smoke.mjs'
+      - 'scripts/auth-gotrue-smoke.*'
       - 'supabase/docker-compose.*.yml'
       - 'supabase/volumes/proxy/caddy/**'
       - 'supabase/volumes/api/envoy/**'
@@ -76,6 +80,8 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
+      - name: Verify GoTrue providers, TOTP and OIDC on pinned image
+        run: bash scripts/auth-gotrue-smoke.sh
       - name: Test tag release automation
         run: node --test scripts/release/release.test.mjs scripts/lib/env.test.mjs
       - name: Check .env.example matches the Compose files

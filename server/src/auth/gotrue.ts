@@ -8,7 +8,7 @@ import { ApiError } from '../http/errors.js'
  * process memory between requests.
  */
 
-export type GoTrueSession = { access_token: string; refresh_token: string; expires_in?: number; user?: { id: string; email?: string | null } }
+export type GoTrueSession = { access_token: string; refresh_token: string; expires_in?: number; user?: { id: string; email?: string | null; factors?: Array<{ status: string }> } }
 export type EmailLinkType = 'invite' | 'recovery' | 'email_change' | 'signup' | 'email'
 
 type GoTrueConfig = Pick<ApiConfig, 'SUPABASE_URL' | 'SUPABASE_ANON_KEY' | 'GOTRUE_INTERNAL_URL' | 'NODE_ENV'>
@@ -45,46 +45,115 @@ async function call<T>(config: GoTrueConfig, path: string, init: RequestInit = {
   return (response.status === 204 ? null : await response.json()) as T
 }
 
-let providerCache: { config: ProviderDiscoveryConfig; at: number; providers: string[] } | null = null
-const PROVIDER_CACHE_MS = 60_000
+export type GoTrueSettings = {
+  external: Record<string, unknown>
+  sms_provider?: string
+  saml_enabled?: boolean
+  passkeys_enabled?: boolean
+}
 
-async function enabledCustomProviders(config: ProviderDiscoveryConfig): Promise<string[]> {
-  if (!config.AUTH_CUSTOM_OAUTH_DISCOVERY_ENABLED) return []
+async function readSettings(config: GoTrueConfig) {
+  const settings = await call<GoTrueSettings>(config, '/settings')
+  if (!settings?.external || typeof settings.external !== 'object' || Array.isArray(settings.external)) {
+    throw new Error('INVALID_GOTRUE_SETTINGS')
+  }
+  return settings
+}
+
+type CustomProviders = { providers: string[]; labels: Record<string, string>; available: boolean }
+
+async function readCustomProviders(config: ProviderDiscoveryConfig): Promise<CustomProviders> {
+  if (!config.AUTH_CUSTOM_OAUTH_DISCOVERY_ENABLED) return { providers: [], labels: {}, available: false }
   if (!config.GOTRUE_INTERNAL_URL) throw new Error('GOTRUE_INTERNAL_URL_REQUIRED')
   const response = await fetch(oauthAuthUrl(config, '/admin/custom-providers'), {
     headers: { authorization: `Bearer ${config.SUPABASE_SERVICE_ROLE_KEY}`, accept: 'application/json' },
     signal: AbortSignal.timeout(10_000),
     redirect: 'error',
   })
+  if (response.status === 404 || response.status === 501) {
+    await response.body?.cancel()
+    return { providers: [], labels: {}, available: false }
+  }
   if (!response.ok) throw new Error('GOTRUE_CUSTOM_PROVIDERS_UNAVAILABLE')
-  const payload = await response.json() as { providers?: Array<{ identifier?: unknown; enabled?: unknown }> }
+  const payload = await response.json() as { providers?: Array<{ identifier?: unknown; enabled?: unknown; name?: unknown }> }
   if (!Array.isArray(payload?.providers)) throw new Error('INVALID_GOTRUE_CUSTOM_PROVIDERS')
-  return payload.providers.flatMap(item => item?.enabled === true && typeof item.identifier === 'string'
-    && CUSTOM_PROVIDER_PATTERN.test(item.identifier) ? [item.identifier] : [])
+  const providers: string[] = []
+  const labels: Record<string, string> = {}
+  for (const item of payload.providers) {
+    if (item?.enabled !== true || typeof item.identifier !== 'string' || !CUSTOM_PROVIDER_PATTERN.test(item.identifier)) continue
+    providers.push(item.identifier)
+    if (typeof item.name === 'string' && item.name.trim()) labels[item.identifier] = item.name.trim().slice(0, 100)
+  }
+  return { available: true, providers, labels }
 }
 
-/** Expose provider identifiers only. Custom discovery uses the private GoTrue admin API. */
-export async function enabledOAuthProviders(config: ProviderDiscoveryConfig, now = Date.now()): Promise<string[]> {
-  if (providerCache?.config === config && now - providerCache.at < PROVIDER_CACHE_MS) return providerCache.providers
-  try {
-    const [settings, custom] = await Promise.all([
-      call<{ external?: Record<string, unknown> }>(config, '/settings'),
-      enabledCustomProviders(config),
-    ])
-    if (!settings?.external || typeof settings.external !== 'object' || Array.isArray(settings.external)) throw new Error('INVALID_GOTRUE_SETTINGS')
-    const builtin = Object.entries(settings.external)
-      .filter(([name, enabled]) => enabled === true && !NON_OAUTH.has(name) && PROVIDER_PATTERN.test(name))
-      .map(([name]) => name)
-    const providers = [...new Set([...builtin, ...custom])].sort((a, b) => a.localeCompare(b))
-    providerCache = { config, at: now, providers }
-    return providers
-  } catch {
-    // Never cache a failure: the next page load tries again.
-    throw new ApiError(503, 'OAUTH_PROVIDERS_UNAVAILABLE', 'Third-party sign-in options are temporarily unavailable', undefined, 1)
+async function readSamlProviders(config: ProviderDiscoveryConfig) {
+  if (!config.GOTRUE_INTERNAL_URL) return false
+  const response = await fetch(oauthAuthUrl(config, '/admin/sso/providers'), {
+    headers: { authorization: `Bearer ${config.SUPABASE_SERVICE_ROLE_KEY}`, accept: 'application/json' },
+    signal: AbortSignal.timeout(10_000),
+    redirect: 'error',
+  })
+  if (!response.ok) throw new Error('GOTRUE_SAML_PROVIDERS_UNAVAILABLE')
+  const payload = await response.json() as { items?: Array<{ disabled?: boolean; domains?: unknown[] }> }
+  if (!Array.isArray(payload.items)) throw new Error('INVALID_GOTRUE_SAML_PROVIDERS')
+  return payload.items.some(item => item.disabled !== true && Array.isArray(item.domains) && item.domains.length > 0)
+}
+
+const PROVIDER_CACHE_MS = 60_000
+
+function cacheSuccessfulRead<T>(read: (config: ProviderDiscoveryConfig) => Promise<T>) {
+  let entries = new WeakMap<ProviderDiscoveryConfig, { at: number; value: Promise<T> }>()
+  return {
+    get(config: ProviderDiscoveryConfig, now: number) {
+      const cached = entries.get(config)
+      if (cached && now - cached.at < PROVIDER_CACHE_MS) return cached.value
+      const value = read(config).catch(error => {
+        if (entries.get(config)?.value === value) entries.delete(config)
+        throw error
+      })
+      entries.set(config, { at: now, value })
+      return value
+    },
+    reset() { entries = new WeakMap() },
   }
 }
 
-export function resetProviderCache() { providerCache = null }
+const settingsRead = cacheSuccessfulRead(readSettings)
+const customProvidersRead = cacheSuccessfulRead(readCustomProviders)
+const samlProvidersRead = cacheSuccessfulRead(readSamlProviders)
+
+export function hasSamlProvider(config: ProviderDiscoveryConfig, now = Date.now()) {
+  return samlProvidersRead.get(config, now)
+}
+
+/** Credentials and provider metadata stay inside GoTrue. */
+export async function discoverAuthProviders(config: ProviderDiscoveryConfig, now = Date.now()) {
+  const [settingsResult, customResult] = await Promise.allSettled([
+    settingsRead.get(config, now), customProvidersRead.get(config, now),
+  ])
+  const settings = settingsResult.status === 'fulfilled' ? settingsResult.value : undefined
+  const custom = customResult.status === 'fulfilled' ? customResult.value : undefined
+  const builtin = Object.entries(settings?.external ?? {})
+    .filter(([name, enabled]) => enabled === true && !NON_OAUTH.has(name) && PROVIDER_PATTERN.test(name))
+    .map(([name]) => name)
+  const providers = [...new Set([...builtin, ...(custom?.providers ?? [])])].sort((a, b) => a.localeCompare(b))
+  return { settings, custom, providers }
+}
+
+export async function enabledOAuthProviders(config: ProviderDiscoveryConfig, now = Date.now()): Promise<string[]> {
+  const { settings, custom, providers } = await discoverAuthProviders(config, now)
+  if (!settings && !custom?.available) {
+    throw new ApiError(503, 'OAUTH_PROVIDERS_UNAVAILABLE', 'Third-party sign-in options are temporarily unavailable', undefined, 1)
+  }
+  return providers
+}
+
+export function resetProviderCache() {
+  settingsRead.reset()
+  customProvidersRead.reset()
+  samlProvidersRead.reset()
+}
 
 export function isValidProviderName(provider: string) {
   return CUSTOM_PROVIDER_PATTERN.test(provider) || (PROVIDER_PATTERN.test(provider) && !NON_OAUTH.has(provider))

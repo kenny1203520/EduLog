@@ -1,5 +1,5 @@
 import crypto from 'node:crypto'
-import { createRemoteJWKSet, decodeProtectedHeader, jwtVerify } from 'jose'
+import { createRemoteJWKSet, decodeJwt, decodeProtectedHeader, jwtVerify } from 'jose'
 import { createClient, type Session, type SupabaseClient, type User } from '@supabase/supabase-js'
 import type { ApiConfig } from '../config/config.js'
 
@@ -157,6 +157,11 @@ export async function validateAccessToken(
   accessToken: string,
   config?: TokenVerificationConfig,
 ): Promise<User> {
+  // Decoding here can only reject a token. Signature, expiry and user checks
+  // below still decide whether any remaining token is accepted.
+  let externalClient = false
+  try { externalClient = Object.hasOwn(decodeJwt(accessToken), 'client_id') } catch { /* handled by normal validation */ }
+  if (externalClient) throw new Error('AUTH_INVALID')
   const verifiedSubject = await verifyAccessTokenLocally(accessToken, config)
   const key = tokenCacheKey(accessToken)
   const now = Date.now()

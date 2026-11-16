@@ -11,6 +11,8 @@ import TeachingRolePermissionsPanel from '@/components/settings/TeachingRolePerm
 import PlatformTeachingRoleAssignmentsPanel from '@/components/settings/PlatformTeachingRoleAssignmentsPanel.vue'
 import AuditLogPanel from '@/components/settings/AuditLogPanel.vue'
 import AiAdminPanel from '@/components/settings/ai/AiAdminPanel.vue'
+import LoginProviders from '@/components/settings/LoginProviders.vue'
+import OutboundOAuthClients from '@/components/settings/OutboundOAuthClients.vue'
 import IncompleteReportNotificationSettings from '@/components/settings/IncompleteReportNotificationSettings.vue'
 import DashboardScheduleVisibilitySettings from '@/components/settings/DashboardScheduleVisibilitySettings.vue'
 import AccountApprovalPanel from '@/components/settings/AccountApprovalPanel.vue'
@@ -24,9 +26,9 @@ import { DateUtils } from '@/utils/dateUtils'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 
 type Assignment = { id: string; user_id: string; role_id: string; roles?: { code?: string; name?: string }; effective_from?: string; effective_to?: string | null }
-type SystemSection = 'permissions' | 'teaching_permissions' | 'assignments' | 'teaching_assignments' | 'users' | 'account_approval' | 'notifications' | 'dashboard_schedule' | 'audit' | 'ai'
+type SystemSection = 'permissions' | 'teaching_permissions' | 'assignments' | 'teaching_assignments' | 'users' | 'account_approval' | 'notifications' | 'dashboard_schedule' | 'audit' | 'ai' | 'login_providers' | 'oauth_clients'
 
-const ALL_SECTIONS: readonly SystemSection[] = ['permissions', 'teaching_permissions', 'assignments', 'teaching_assignments', 'users', 'account_approval', 'notifications', 'dashboard_schedule', 'audit', 'ai']
+const ALL_SECTIONS: readonly SystemSection[] = ['permissions', 'teaching_permissions', 'assignments', 'teaching_assignments', 'users', 'account_approval', 'notifications', 'dashboard_schedule', 'audit', 'ai', 'login_providers', 'oauth_clients']
 
 /** Settings overview capability flags; absent means "show every section" (older API). */
 const props = defineProps<{ sections?: Record<string, Record<string, boolean>> }>()
@@ -63,6 +65,8 @@ const visibleSections = computed<SystemSection[]>(() => {
         dashboard_schedule: teaching.roles === true,
         audit: owner || system.audit_read === true,
         ai: system.ai_manage === true || system.ai_logs_view_all === true,
+        login_providers: system.auth_providers_manage === true,
+        oauth_clients: system.auth_oauth_clients_manage === true,
     }
     return ALL_SECTIONS.filter(section => allowed[section])
 })
@@ -345,5 +349,7 @@ watch(assignmentPageSize, () => { assignmentPage.value = 1; void loadAssignments
 
         <AuditLogPanel v-if="activeSection === 'audit'" />
         <AiAdminPanel v-if="activeSection === 'ai'" />
+        <LoginProviders v-if="activeSection === 'login_providers'" />
+        <OutboundOAuthClients v-if="activeSection === 'oauth_clients'" />
     </section>
 </template>

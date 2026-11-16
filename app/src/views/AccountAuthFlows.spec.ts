@@ -5,7 +5,6 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import i18n from '@/i18n'
 
 const service = vi.hoisted(() => ({
-    oauthProviders: vi.fn(),
     requestPasswordReset: vi.fn(),
     setPassword: vi.fn(),
     login: vi.fn(),
@@ -13,6 +12,12 @@ const service = vi.hoisted(() => ({
     getSession: vi.fn(),
 }))
 vi.mock('@/services/auth/AuthService', () => ({ authService: service }))
+const capabilities = vi.hoisted(() => vi.fn())
+vi.mock('@/services/auth/AdditionalAuthService', () => ({ additionalAuth: { capabilities } }))
+
+function signInOptions(providers: string[], unavailable: string[] = []) {
+    return { providers, methods: { password: true }, mfa: {}, unavailable }
+}
 vi.mock('/pwa-192x192.png', () => ({ default: '/pwa-192x192.png' }))
 
 const approvals = vi.hoisted(() => ({
@@ -49,7 +54,7 @@ beforeEach(() => {
 
 describe('LoginView sign-in options', () => {
     it('offers each provider GoTrue enabled as a link to the API, plus password reset', async () => {
-        service.oauthProviders.mockResolvedValue(['github', 'google'])
+        capabilities.mockResolvedValue(signInOptions(['github', 'google']))
         const router = testRouter()
         await router.isReady()
         const wrapper = mount(LoginView, { global: { plugins: [i18n, router] } })
@@ -62,7 +67,7 @@ describe('LoginView sign-in options', () => {
     })
 
     it('shows no provider section when none is enabled, and explains a failed OAuth return', async () => {
-        service.oauthProviders.mockResolvedValue([])
+        capabilities.mockResolvedValue(signInOptions([]))
         const router = testRouter('/login?error=oauth')
         await router.isReady()
         const wrapper = mount(LoginView, { global: { plugins: [i18n, router] } })
@@ -71,20 +76,22 @@ describe('LoginView sign-in options', () => {
         expect(wrapper.text()).toContain('第三方登入未完成')
     })
 
-    it('keeps password sign-in available and reloads only OAuth providers after an outage', async () => {
-        service.oauthProviders.mockRejectedValueOnce(new Error('upstream unavailable')).mockResolvedValueOnce(['google'])
+    it('keeps password and built-in sign-in available during a custom-provider outage', async () => {
+        capabilities.mockResolvedValueOnce(signInOptions(['github'], ['customProviders'])).mockResolvedValueOnce(signInOptions(['github', 'google']))
         const router = testRouter()
         await router.isReady()
         const wrapper = mount(LoginView, { global: { plugins: [i18n, router] } })
         await flushPromises()
         expect(wrapper.find('input[type="password"]').exists()).toBe(true)
+        expect(wrapper.get('[data-testid="oauth-providers"] a').attributes('href')).toBe('/api/auth/oauth/github')
         expect(wrapper.get('[role="status"]').text()).toContain('暫時無法載入')
         const retry = wrapper.findAll('button').find(button => button.text() === '重試載入登入選項')
         expect(retry).toBeDefined()
         await retry!.trigger('click')
         await flushPromises()
-        expect(wrapper.get('[data-testid="oauth-providers"] a').attributes('href')).toBe('/api/auth/oauth/google')
-        expect(service.oauthProviders).toHaveBeenCalledTimes(2)
+        expect(wrapper.findAll('[data-testid="oauth-providers"] a').map(link => link.attributes('href')))
+            .toEqual(['/api/auth/oauth/github', '/api/auth/oauth/google'])
+        expect(capabilities).toHaveBeenCalledTimes(2)
     })
 })
 
