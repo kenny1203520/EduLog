@@ -139,6 +139,24 @@ const attendancePath = `/occurrences/${occurrence}`
 const firstTeacher = '15800000-0000-4000-8000-0000000000f2'
 const secondTeacher = '15800000-0000-4000-8000-0000000000f5'
 if (actor === 'teacher') {
+  const legacy = (await call(`/reports/${legacyReport}`)).data
+  assert.deepEqual(legacy.lesson_entries, [])
+  const options = (await call(`/reports/${legacyReport}/lesson-entry-options`)).data.enrollments
+  const ownCourse = options.find(option => option.id === enrollment)
+  assert.equal(ownCourse?.course_id, course)
+  assert.ok(ownCourse.lessons.some(lesson => lesson.id === legacy.lesson_id))
+  const legacyEntry = {
+    id: '15800000-0000-4000-8000-0000000000a6', enrollment_id: enrollment, course_id: ownCourse.course_id,
+    lesson_id: legacy.lesson_id, is_completed: false, progress_letter: '-D',
+  }
+  await call(`/reports/${legacyReport}`, [200], 'class-smoke-save-legacy-progress', {
+    expected_version: legacy.version, lesson_entries: [legacyEntry], primary_lesson_entry_id: legacyEntry.id,
+  }, 'PATCH')
+  const reopened = (await call(`/reports/${legacyReport}`)).data
+  assert.equal(reopened.progress_letter, '-D')
+  assert.equal(reopened.lesson_entries[0].course_id, course)
+  assert.equal(reopened.lesson_entries[0].progress_letter, '-D')
+
   await call(attendancePath, [403], 'class-smoke-attendance-denied', { teacher_attendance: { [secondTeacher]: true } }, 'PATCH')
   const present = { teacher_attendance: { [firstTeacher]: true } }
   await call(attendancePath, [400], undefined, present, 'PATCH')

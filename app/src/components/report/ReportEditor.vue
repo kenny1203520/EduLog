@@ -173,7 +173,7 @@
                     :default-enrollment-id="props.enrollmentId || ''"
                     :default-course-name="props.courseDisplayName || props.courseName"
                     :default-lessons="props.availableLessons"
-                    :options="lessonEntryOptions"
+                    :options="currentLessonEntryOptions"
                     :options-loading="lessonEntryOptionsLoading"
                     :options-error="lessonEntryOptionsError"
                     :disabled="props.disabled"
@@ -659,9 +659,15 @@ onMounted(() => {
     void loadTemplates()
 })
 
+const lessonEntryOptions = ref<LessonEntryOption[]>([])
+const lessonEntryOptionsReportId = ref<string>()
+const currentLessonEntryOptions = computed(() => lessonEntryOptionsReportId.value === props.reportId
+    ? lessonEntryOptions.value
+    : [])
 const session = useReportEditorSession(props, emit as ReportEditorEmit, {
     editors: { content: contentEditorRef, contactNotes: contactNotesEditorRef, classNotes: classNotesEditorRef },
     openConfirm,
+    lessonEntryOptions: () => currentLessonEntryOptions.value,
 })
 const {
     preferences, effectiveCollaborationEnabled,
@@ -678,13 +684,9 @@ const {
     handleCopyContent, aiInsertFlash, handleAiInsert, handleAiReplace, flushBeforeAi,
 } = session
 
-const lessonEntryOptions = ref<LessonEntryOption[]>([])
-const lessonEntryOptionsReportId = ref<string>()
 const referenceLessonChoices = computed(() => lessonEntries.value.flatMap(entry => {
     if (!entry.lesson_id) return []
-    const enrollment = lessonEntryOptionsReportId.value === props.reportId
-        ? lessonEntryOptions.value.find(option => option.id === entry.enrollment_id)
-        : undefined
+    const enrollment = currentLessonEntryOptions.value.find(option => option.id === entry.enrollment_id)
     const isHostEnrollment = entry.enrollment_id === props.enrollmentId
     const lessons = enrollment?.lessons ?? (isHostEnrollment ? props.availableLessons : [])
     const lesson = lessons.find(item => item.id === entry.lesson_id)

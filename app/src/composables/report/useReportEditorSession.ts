@@ -24,6 +24,8 @@ import {
     normalizeLessonEntries,
     normalizeReportRating,
     normalizeSystemManagedReason,
+    reportLessonEntriesEqual,
+    resolveLessonEntryCourseId,
     type AttendanceStatus
 } from '@/models/ReportEditorSnapshot'
 import { isBrowserOffline, isNetworkError } from '@/utils/networkErrors'
@@ -33,6 +35,7 @@ import { normalizeAbsenceReasonCode } from '@/utils/absenceReason'
 import type { RenderedReportTemplate } from '@/composables/report/useReportTemplateManager'
 import type { ReportEditorEmit, ResolvedReportEditorProps } from '@/components/report/reportEditorContract'
 import { ReportCommandService } from '@/services/report/ReportCommandService'
+import type { LessonEntryOption } from '@/services/report/ReportQueryService'
 
 type EditorRef = Readonly<Ref<TextEditorHandle | null>>
 
@@ -40,6 +43,7 @@ interface ReportEditorSessionOptions {
     /** The three text editors the template renders (rich/collaborative or plain). */
     editors: { content: EditorRef; contactNotes: EditorRef; classNotes: EditorRef }
     openConfirm: (title: string, message: string, action: () => Promise<void>, isDangerous?: boolean) => void
+    lessonEntryOptions?: () => LessonEntryOption[]
 }
 
 /**
@@ -679,11 +683,13 @@ export function useReportEditorSession(
         return attendanceStatus.value === 'absent' && !absenceReason.value && !isSystemManagedAbsence.value
     })
 
-    const canSave = computed(() => {
-        // A lesson entry must identify the enrollment, course, and lesson before
-        // it can be sent to the lifecycle API.
-        return lessonEntries.value.every(entry => Boolean(entry.enrollment_id && entry.course_id && entry.lesson_id))
-    })
+    function canSaveLessonEntries(entries: ReportLessonEntryDTO[] | undefined, primaryId: string | null | undefined) {
+        const saved = savedReportSnapshot.value
+        if (primaryId === saved.primaryLessonEntryId && reportLessonEntriesEqual(entries, saved.lessonEntries)) return true
+        const available = options.lessonEntryOptions?.() ?? []
+        return (entries ?? []).every(entry => Boolean(entry.enrollment_id && entry.lesson_id && resolveLessonEntryCourseId(entry, available)))
+    }
+    const canSave = computed(() => canSaveLessonEntries(lessonEntries.value, primaryLessonEntryId.value))
     function snapshotToLocalReport(snapshot: ReportDraftSnapshot, reportVersion = version.value): OccurrenceReportDTO {
         return {
             id: props.reportId,
@@ -736,17 +742,25 @@ export function useReportEditorSession(
         saveOnBlur: computed(() => preferences.editorSettings.autoSave.saveOnBlur),
         saveOnSwitch: computed(() => preferences.editorSettings.autoSave.saveOnSwitch),
         saveOnUnmount: computed(() => preferences.editorSettings.autoSave.saveOnUnmount),
-        onSave: async (snapshot) => {
+        onSave: async (queuedSnapshot) => {
             editorNotifier.notify({ code: 'save-started', level: 'info', message: t('report.saving'), toast: false })
             if (!props.reportId) {
                 return { success: false, message: 'No report ID provided', messageKey: 'report.no_report_selected' }
             }
 
-            if (!canSave.value) {
-                return { success: false, message: t('report.editor.required_field_error') }
+            if (!canSaveLessonEntries(queuedSnapshot.lessonEntries, queuedSnapshot.primaryLessonEntryId)) {
+                return { success: false, message: t('report.editor.required_field_error'), messageKey: 'report.editor.required_field_error' }
             }
 
             try {
+                const available = options.lessonEntryOptions?.() ?? []
+                const snapshot = {
+                    ...queuedSnapshot,
+                    lessonEntries: queuedSnapshot.lessonEntries?.map(entry => ({
+                        ...entry,
+                        course_id: resolveLessonEntryCourseId(entry, available),
+                    })),
+                }
                 const { keys, payload } = buildDirtyPayload(snapshot)
                 const isAttendanceOnly = keys.length > 0 && keys.every(key => key === 'attendanceStatus' || key === 'absenceReason')
 
@@ -1234,6 +1248,10 @@ export function useReportEditorSession(
     watch([lessonEntries, primaryLessonEntryId], () => {
         if (buildDirtyPayload(buildCurrentSnapshot()).keys.length > 0) handleInput()
     }, { deep: true })
+
+    watch(() => options.lessonEntryOptions?.(), () => {
+        if (hasUnsavedChanges.value && canSave.value && saveError.value) handleInput()
+    })
 
     function handleTextEditorChange(
         field: 'content' | 'contactNotes' | 'classNotes',

@@ -15,6 +15,26 @@ const options = [
 ]
 
 describe('ReportLessonEntriesEditor', () => {
+    it('recognizes a selected legacy lesson once its enrollment options load', async () => {
+        const wrapper = mount(ReportLessonEntriesEditor, {
+            props: {
+                entries: [entry], primaryEntryId: entry.id, editorId: 'legacy', defaultEnrollmentId: 'enrollment-a',
+                defaultCourseName: 'Course A', defaultLessons: options[0]!.lessons,
+            },
+            global: { mocks: { $t: (key: string) => key } },
+        })
+        const lesson = wrapper.get<HTMLSelectElement>('#legacy-entry-entry-a-lesson')
+        expect(lesson.element.value).toBe('lesson-a')
+        expect(lesson.attributes('aria-invalid')).toBe('true')
+
+        await wrapper.setProps({ options })
+
+        expect(lesson.element.value).toBe('lesson-a')
+        expect(lesson.attributes('aria-invalid')).toBe('false')
+        expect(lesson.attributes('aria-describedby')).toBeUndefined()
+        expect(wrapper.emitted('update:entries')).toBeUndefined()
+    })
+
     it('keeps the initial progress local until a lesson is chosen, preserving an end-only bound', async () => {
         const wrapper = mount(ReportLessonEntriesEditor, {
             props: { entries: [], primaryEntryId: null, editorId: 'blank', defaultEnrollmentId: 'enrollment-a', options },

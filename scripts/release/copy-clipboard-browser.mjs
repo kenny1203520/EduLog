@@ -40,6 +40,7 @@ createApp({
       course_name: 'Science', lesson_sequence: 7, lesson_title: 'Orbits', is_completed: false,
     }
     const rosterUpdated = ref(false)
+    const legacyEditorOpen = ref(false)
     const makeup = useMakeupEnrollment({
       sessionId: 'class', todayOccurrence, selectedDateKey: ref('2026-11-01'),
       refreshRosterForDate: async () => { rosterUpdated.value = true },
@@ -90,6 +91,15 @@ createApp({
         availableLessons: [{ id: 'l1', sequence: 1, title: 'Numbers' }],
         initialPrimaryLessonEntryId: 'primary', initialLessonEntries: [progress],
       }),
+      h('button', { onClick: () => { legacyEditorOpen.value = true } }, 'Open legacy report'),
+      legacyEditorOpen.value ? h('section', { 'aria-label': 'Legacy report' }, [
+        h(ReportEditor, {
+          reportId: 'legacy', enrollmentId: 'host', classOccurrenceId: 'first', courseName: 'Math',
+          collaborationEnabled: false, autoSaveEnabled: true, debounceMs: 500,
+          availableLessons: [{ id: 'l1', sequence: 1, title: 'Numbers' }],
+          initialLessonId: 'l1', initialVersion: 4,
+        }),
+      ]) : null,
       h('textarea', { 'aria-label': 'Paste target' }),
       h('div', { contenteditable: 'true', 'aria-label': 'Rich paste target' }),
     ])
@@ -167,12 +177,27 @@ async function check(browserType) {
       if (response.status() >= 400 && !pathname.endsWith('/report-progress-context')) console.error(response.status(), pathname)
     })
     let progressRequests = 0
+    let releaseLegacyOptions
+    const legacyOptionsReady = new Promise(resolve => { releaseLegacyOptions = resolve })
     const candidate = { id: 'outside-enrollment', student_id: 'outside-student', students: { name: 'Make-up learner' },
       courses: { display_name: 'Outside course' }, class_session_id: 'source-class', status: 'regular', start_date: '2026-01-01' }
     await page.route(url => url.pathname.startsWith('/api/'), async route => {
       const req = route.request()
       const url = new URL(req.url())
       const path = url.pathname
+      if (path === '/api/reports/legacy/lesson-entry-options') {
+        await legacyOptionsReady
+        await route.fulfill({ json: { data: { enrollments: [{
+          id: 'host', course_id: 'math', course_name: 'Math',
+          lessons: [{ id: 'l1', sequence: 1, title: 'Numbers' }],
+        }] }, meta: {} } })
+        return
+      }
+      if (path === '/api/reports/legacy' && req.method() === 'PATCH') {
+        await route.fulfill({ json: { data: { id: 'legacy', enrollment_id: 'host', class_occurrence_id: 'first',
+          lesson_id: 'l1', attendance_status: 'pending', ...req.postDataJSON(), version: 5 }, meta: {} } })
+        return
+      }
       if (path.endsWith('/report-progress-context')) {
         if (++progressRequests === 1) {
           await route.fulfill({ status: 500, json: { error: { code: 'DATABASE_ERROR', message: 'Error fixture' } } })
@@ -295,7 +320,27 @@ async function check(browserType) {
     const manual = page.getByRole('textbox', { name: 'Could not write to the clipboard. Copy this text manually.' })
     await manual.waitFor()
     assert.equal(await manual.inputValue(), 'Science Orbits')
-    console.log(`${browserType.name()}: progress retry, make-up submission, and attendance/course clipboard passed`)
+
+    await page.getByRole('button', { name: 'Open legacy report' }).click()
+    const legacy = page.getByRole('region', { name: 'Legacy report' })
+    const [legacyCourse, legacyLesson, start, end] = await legacy.locator('fieldset select').all()
+    await expect(legacyCourse).toHaveValue('host')
+    await expect(legacyLesson).toHaveValue('l1')
+    await end.selectOption('D')
+    await expect(legacy.getByText('Save failed', { exact: true })).toBeVisible()
+    const legacySaved = page.waitForResponse(response => new URL(response.url()).pathname === '/api/reports/legacy' &&
+      response.request().method() === 'PATCH')
+    releaseLegacyOptions()
+    const saved = await legacySaved
+    assert.equal(saved.status(), 200)
+    assert.equal(saved.request().postDataJSON().expected_version, 4)
+    const [entry] = saved.request().postDataJSON().lesson_entries
+    assert.deepEqual([entry.enrollment_id, entry.course_id, entry.lesson_id, entry.progress_letter], ['host', 'math', 'l1', '-D'])
+    await expect(legacyLesson).toHaveAttribute('aria-invalid', 'false')
+    await expect(start).toHaveValue('')
+    await expect(end).toHaveValue('D')
+    await expect(legacy.getByText('Save failed', { exact: true })).toBeHidden()
+    console.log(`${browserType.name()}: legacy autosave, progress retry, make-up submission, and attendance/course clipboard passed`)
   } finally {
     await browser.close()
   }
