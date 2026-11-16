@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import { createHmac, randomUUID } from 'node:crypto'
+import { readyGoTrueFixture } from './auth-gotrue-fixture.mjs'
 
-const base = new URL(process.env.AUTH_SMOKE_TEST_URL || 'http://127.0.0.1:9999')
+const base = await readyGoTrueFixture()
 const secret = process.env.AUTH_SMOKE_TEST_JWT_SECRET
-assert.ok(['127.0.0.1', 'localhost', '[::1]'].includes(base.hostname), 'Use an isolated loopback GoTrue fixture')
 assert.ok(secret, 'AUTH_SMOKE_TEST_JWT_SECRET must match the disposable fixture')
 const encode = data => Buffer.from(JSON.stringify(data)).toString('base64url')
 const data = [encode({ alg: 'HS256', typ: 'JWT' }), encode({

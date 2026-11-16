@@ -27,21 +27,12 @@ start_auth() {
     -e "GOTRUE_JWT_SECRET=$fixture_secret" -e GOTRUE_JWT_ADMIN_ROLES=service_role \
     -e GOTRUE_EXTERNAL_EMAIL_ENABLED=true -e GOTRUE_MAILER_AUTOCONFIRM=true \
     "$@" supabase/gotrue:v2.197.0 >/dev/null
-  auth_url="http://$(docker port "$fixture-auth" 9999)"
-  node --input-type=module - "$auth_url" <<'JS'
-import { setTimeout } from 'node:timers/promises'
-const health = new URL('/health', process.argv[2])
-for (let attempt = 0; attempt < 30; attempt += 1) {
-  const response = await fetch(health, { signal: AbortSignal.timeout(2_000) }).catch(() => undefined)
-  if (response?.ok) process.exit(0)
-  await setTimeout(1_000)
-}
-throw new Error('GoTrue did not become ready')
-JS
+  auth_address=$(docker port "$fixture-auth" 9999)
+  fixture_port="${auth_address##*:}"
 }
 
 start_auth
-AUTH_SMOKE_TEST_URL="$auth_url" AUTH_SMOKE_TEST_JWT_SECRET="$fixture_secret" \
+AUTH_SMOKE_TEST_PORT="$fixture_port" AUTH_SMOKE_TEST_JWT_SECRET="$fixture_secret" \
   node "$(dirname "$0")/auth-gotrue-smoke.mjs"
 
 docker rm -f "$fixture-auth" >/dev/null
@@ -53,5 +44,5 @@ JS
 )
 GOTRUE_JWT_KEYS="[$fixture_jwk]" start_auth -e GOTRUE_JWT_KEYS \
   -e GOTRUE_OAUTH_SERVER_ENABLED=true -e GOTRUE_OAUTH_SERVER_AUTHORIZATION_PATH=/oauth/consent
-AUTH_SMOKE_TEST_URL="$auth_url" AUTH_SMOKE_TEST_ADMIN_JWK="$fixture_jwk" \
+AUTH_SMOKE_TEST_PORT="$fixture_port" AUTH_SMOKE_TEST_ADMIN_JWK="$fixture_jwk" \
   node "$(dirname "$0")/auth-gotrue-outbound-smoke.mjs"

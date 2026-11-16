@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import { createHash, createPrivateKey, randomBytes, randomUUID, sign } from 'node:crypto'
+import { readyGoTrueFixture } from './auth-gotrue-fixture.mjs'
 
-const auth = new URL(process.env.AUTH_SMOKE_TEST_URL || 'http://127.0.0.1:9999')
+const auth = await readyGoTrueFixture()
 const privateJwk = JSON.parse(process.env.AUTH_SMOKE_TEST_ADMIN_JWK || 'null')
-assert.ok(['127.0.0.1', 'localhost', '[::1]'].includes(auth.hostname), 'Use an isolated loopback GoTrue fixture')
 assert.ok(privateJwk?.d && privateJwk.alg === 'ES256', 'An isolated fixture administrator JWK is required')
 
 function encode(value) { return Buffer.from(JSON.stringify(value)).toString('base64url') }
