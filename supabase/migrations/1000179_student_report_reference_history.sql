@@ -1,5 +1,5 @@
 -- One row per report, with redaction before search, counting and pagination.
-CREATE FUNCTION public.get_student_report_reference_history(
+CREATE OR REPLACE FUNCTION public.get_student_report_reference_history(
   p_student_id uuid, p_course_id uuid, p_exclude_report_id uuid, p_search text,
   p_descending boolean, p_limit integer, p_offset integer, p_report_id uuid
 ) RETURNS jsonb
