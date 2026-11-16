@@ -1876,8 +1876,11 @@ globalThis.edulogUi?.registerPhrases({
   "{name} 的續班狀態": [
    "{name}'s renewal"
   ],
-  "未續班 {pending} · 已續班 {renewed} · 不續班 {stopped}": [
-   "Pending {pending} · Renewed {renewed} · Not renewing {stopped}"
+  "本頁：未續班 {pending} · 已續班 {renewed} · 不續班 {stopped}": [
+   "This page: Pending {pending} · Renewed {renewed} · Not renewing {stopped}"
+  ],
+  "剩餘課堂分頁": [
+   "Remaining lessons pagination"
   ],
   " · 剩餘 2 堂以下 {count} 位": [
    " · {count} with ≤2 left"
