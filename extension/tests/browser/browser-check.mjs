@@ -45,6 +45,22 @@ async function englishShell(page, browserName, name, width) {
   await page.screenshot({ path: join(output, `${browserName}-en-${name}-fab-panel-${width}.png`) })
   console.log(`${browserName} en ${name} ${width}: passed`)
 }
+const disconnectedContentScripts = ['shared/runtime-bridge.js', 'shared/ui-core.js', 'shared/ui-messages.js',
+  'shared/ui-phrases.js', ...siteFiles('lexicon', 'model', 'navigation', 'renewals', 'workflows'),
+  'sites/orange-apple/core/adapter.js', 'content/bootstrap.js', 'shared/connection-ui.js',
+  'shared/integration-ui.js', 'content/content.js']
+
+function installDisconnectedBridge() {
+  window.chrome = {
+    runtime: {
+      sendMessage: async data => data.type === 'get-edulog-integration-status'
+        ? { status: 'disconnected' }
+        : { enabled: data.enabled ?? true },
+      onMessage: { addListener() {} },
+    },
+  }
+}
+
 async function checkRenewalPagination(browser) {
   const page = await browser.newPage({ viewport: { width: 360, height: 900 } })
   const fixture = read('../fixtures/renewals.html')
@@ -59,13 +75,9 @@ async function checkRenewalPagination(browser) {
     const body = renewalPage(fixture, Number(url.searchParams.get('page') || 1))
     return route.fulfill({ contentType: 'text/html', body: body.replace('</head>', `<style>${nativeCss}</style><style>${css}</style></head>`) })
   })
-  const scripts = ['shared/runtime-bridge.js', 'shared/ui-core.js', 'shared/ui-messages.js', 'shared/ui-phrases.js',
-    ...siteFiles('lexicon', 'model', 'navigation', 'renewals', 'workflows'), 'sites/orange-apple/core/adapter.js',
-    'content/bootstrap.js', 'shared/connection-ui.js', 'shared/integration-ui.js', 'content/content.js']
-  const runtime = `window.chrome = { runtime: { sendMessage: async data => data.type === 'get-edulog-integration-status'
-    ? { status: 'disconnected' } : ({ enabled: data.enabled ?? true }), onMessage: { addListener() {} } } };`
   await page.addInitScript({ content: `document.addEventListener('DOMContentLoaded', () => {
-    ${runtime}\n${scripts.map(file => read(`../../${file}`)).join('\n;\n')}
+    (${installDisconnectedBridge})();
+    ${disconnectedContentScripts.map(file => read(`../../${file}`)).join('\n;\n')}
   }, { once: true });` })
   try {
     const pager = page.locator('#dt-admissions nav')
@@ -170,8 +182,8 @@ for (const [browserName, launchOptions] of executables) {
       const fixture = read(`../fixtures/${name}.html`).replace('</head>', `<style>${nativeCss}</style><style>${css}</style></head>`)
       await page.route('**/*', route => route.request().isNavigationRequest() ? route.fulfill({ contentType: 'text/html', body: fixture }) : route.abort())
       await page.goto(`https://corp.orangeapple.co${path}`)
-      await page.evaluate(() => { window.chrome = { runtime: { sendMessage: async data => data.type === 'get-edulog-integration-status' ? { status: 'disconnected' } : ({ enabled: data.enabled ?? true }), onMessage: { addListener() {} } } } })
-      for (const file of ['shared/runtime-bridge.js', 'shared/ui-core.js', 'shared/ui-messages.js', 'shared/ui-phrases.js', ...siteFiles('lexicon', 'model', 'navigation', 'renewals', 'workflows'), 'sites/orange-apple/core/adapter.js', 'content/bootstrap.js', 'shared/connection-ui.js', 'shared/integration-ui.js', 'content/content.js']) await page.addScriptTag({ content: read(`../../${file}`) })
+      await page.evaluate(installDisconnectedBridge)
+      for (const file of disconnectedContentScripts) await page.addScriptTag({ content: read(`../../${file}`) })
       await page.locator('html[data-edulog-ui=on]').waitFor()
       if (locale) await page.evaluate(code => globalThis.edulogUi.setLocale(code), locale)
       const card = page.locator(name === 'sign-in' ? '.edulog-signin' : '.edulog-renewal-list')

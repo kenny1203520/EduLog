@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0-alpha.10] - 2026-11-16
+
+### Fixed
+- Fix cross-course progress reads and restore saving on older reports.
+- Keep report and occurrence IDs paired when switching lessons, and show complete visible student history.
+- Copy all selected lesson progress entries in primary-first order and restore the Quick Edit and Homework Check cursors.
+- Keep the native Remaining Lessons pagination visible in the extension theme.
+- Serve the frontend entry and service worker without caching so browsers can pick up fixes.
+
+### Deployment
+- Apply migration 1000179 before updating the API and frontend. Purge stale frontend entry and service worker cache entries.
+
 ## [2.0.0-alpha.9] - 2026-11-16
 
 ### Added

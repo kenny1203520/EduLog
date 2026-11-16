@@ -53,7 +53,7 @@ test('rows are grouped 未續班 → 已續班 → 不續班, fewest lessons lef
   ])
   assert.equal(row(doc, '學生乙').dataset.bar, 'danger')
   assert.equal(row(doc, '學生丁').dataset.bar, 'warn')
-  assert.match(doc.querySelector('.edulog-renewal-list .edulog-unfilled-summary').textContent, /本頁：未續班 2 · 已續班 2 · 不續班 1 · 剩餘 2 堂以下 3 位/)
+  assert.match(doc.querySelector('.edulog-renewal-list .edulog-unfilled-summary').textContent, /本頁找到 5 位學生。 未續班 2 · 已續班 2 · 不續班 1 · 剩餘 2 堂以下 3 位/)
 })
 
 test('leaves the native paginator outside the hidden table and restores its original attributes', () => {
@@ -61,7 +61,7 @@ test('leaves the native paginator outside the hidden table and restores its orig
     const { doc, result, calls } = page({ number })
     const nav = doc.querySelector('#dt-admissions nav')
     assert.equal(nav.closest('[data-edulog-cards]'), null)
-    assert.equal(nav.getAttribute('aria-label'), '剩餘課堂分頁')
+    assert.equal(nav.getAttribute('aria-label'), '剩餘課堂')
     assert.equal(nav.querySelector('[aria-current="page"]').textContent, String(number))
     assert.equal(Boolean(nav.querySelector('[rel="prev"]')), number > 1)
     assert.equal(Boolean(nav.querySelector('[rel="next"]')), number < 4)
