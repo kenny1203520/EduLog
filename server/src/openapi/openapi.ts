@@ -151,6 +151,20 @@ export function buildOpenApi() {
     if (operations.has('delete')) itemPath.delete = { ...base, operationId: `${name}_delete`, ...(permission('delete') ? { 'x-permission': permission('delete') } : {}), 'x-writable-fields': [], parameters: [{ $ref: '#/components/parameters/ResourceId' }, { $ref: '#/components/parameters/IdempotencyKey' }] }
     if (Object.keys(itemPath).length) paths[item] = itemPath
   }
+  paths['/api/students/{id}/report-reference-history'] = {
+    get: {
+      operationId: 'student_report_reference_history', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.reports.list',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+        ...['course_id', 'exclude_report_id', 'report_id'].map(name => ({ name, in: 'query', schema: { type: 'string', format: 'uuid' } })),
+        { name: 'search', in: 'query', schema: { type: 'string', maxLength: 200 } },
+        { name: 'sort', in: 'query', schema: { type: 'string', enum: ['occurrence_date', '-occurrence_date'], default: '-occurrence_date' } },
+        { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 10 } },
+        { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 1000000, default: 0 } },
+      ],
+      responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses },
+    },
+  }
   paths['/api/students/{id}/credentials'] = {
     get: {
       operationId: 'students_get_sensitive_credentials',

@@ -71,7 +71,7 @@ interface CourseCopyTemplateSource {
         courseName: string
         courseDisplayName: string
         lesson: Pick<Lesson, 'sequence' | 'title'>
-    } | null
+    }[]
     reportKey: () => string | undefined
 }
 
@@ -116,7 +116,7 @@ export function useCourseCopyTemplate(source: CourseCopyTemplateSource) {
     }
 
     const courseTemplateVariables = computed(() => {
-        const selection = source.selection()
+        const selection = source.selection()[0]
         const lesson = selection?.lesson
         const courseName = selection?.courseName || ''
         const courseDisplayName = selection?.courseDisplayName || ''
@@ -167,7 +167,7 @@ export function useCourseCopyTemplate(source: CourseCopyTemplateSource) {
     })
 
     const courseTemplatePreviewText = computed(() => {
-        const selection = source.selection()
+        const selection = source.selection()[0]
         const context = buildCourseCopyContext(
             selection?.courseName || '',
             selection?.courseDisplayName || '',
@@ -181,15 +181,15 @@ export function useCourseCopyTemplate(source: CourseCopyTemplateSource) {
 
     async function copyCourseInfo() {
         const selection = source.selection()
-        if (!selection || !source.reportKey() || clipboard.loading.value) return
+        if (!selection.length || !source.reportKey() || clipboard.loading.value) return
 
-        const context = buildCourseCopyContext(
-            selection.courseName,
-            selection.courseDisplayName,
-            selection.lesson,
+        const contexts = selection.map(item => buildCourseCopyContext(
+            item.courseName,
+            item.courseDisplayName,
+            item.lesson,
             t('report.lesson_label')
-        )
-        if (await clipboard.copy(context.values, context.formatters)) {
+        ))
+        if (await clipboard.copyAll(contexts)) {
             justCopiedCourse.value = true
             clearTimeout(copiedTimer)
             copiedTimer = setTimeout(() => { justCopiedCourse.value = false }, 2000)

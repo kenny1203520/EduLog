@@ -71,11 +71,14 @@
                 <div
                     class="px-4 py-3 sm:px-6 sm:py-4 bg-white/40 border-b border-indigo-50/50 space-y-3 sm:space-y-4 backdrop-blur-sm relative z-40">
                     <!-- Search -->
-                    <div class="relative group">
-                        <input v-model="searchQuery" type="text" maxlength="200"
+                    <button v-if="activeTab === 'history' && focusedHistoryId" type="button"
+                        class="cursor-pointer rounded-lg px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50 focus-visible:outline-2"
+                        @click="viewAllHistory">{{ $t('report.reference_panel.view_all_history') }}</button>
+                    <div v-else class="relative group">
+                        <input ref="searchInput" v-model="searchQuery" type="text" maxlength="200"
                             :placeholder="$t('report.reference_panel.search_placeholder')"
                             class="w-full pl-10 pr-4 py-2.5 sm:pl-12 sm:py-3.5 bg-white border border-gray-100 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-medium focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 shadow-sm transition-all placeholder:text-gray-300"
-                            @keyup.enter="refreshData"  :aria-label="$t('report.reference_panel.search_placeholder')"/>
+                            @keyup.enter="applyFilters"  :aria-label="$t('report.reference_panel.search_placeholder')"/>
                         <svg xmlns="http://www.w3.org/2000/svg"
                             class="h-4 w-4 sm:h-5 sm:w-5 text-gray-300 absolute left-3.5 sm:left-4.5 top-3 sm:top-4 transition-colors group-focus-within:text-indigo-600"
                             fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -98,7 +101,7 @@
                     </div>
 
                     <!-- Contextual Filters & Sort -->
-                    <div class="flex flex-wrap gap-2 sm:gap-3">
+                    <div v-if="activeTab === 'peer' || !focusedHistoryId" class="flex flex-wrap gap-2 sm:gap-3">
                         <template v-if="activeTab === 'peer'">
                             <BaseDropdown v-model="filterClassroom" :options="classroomOptions"
                                 :placeholder="$t('report.reference_panel.filter_by_classroom')" theme="indigo"
@@ -106,17 +109,17 @@
 
                             <BaseDropdown v-model="filterSession" :options="sessionOptions"
                                 :placeholder="$t('report.reference_panel.filter_by_session')" theme="indigo"
-                                class="flex-1 min-w-[140px]" @change="refreshData" />
+                                class="flex-1 min-w-[140px]" @change="applyFilters" />
                         </template>
 
                         <template v-else>
                             <BaseDropdown v-model="filterCourse" :options="courseOptions"
                                 :placeholder="$t('report.reference_panel.filter_by_course')" theme="indigo"
-                                class="flex-1 min-w-[140px]" @change="refreshData" />
+                                class="flex-1 min-w-[140px]" @change="applyFilters" />
                         </template>
 
                         <BaseDropdown v-model="sortBy" :options="sortOptions" theme="indigo" align="auto"
-                            class="flex-1 min-w-[120px]" menuWidthClass="w-48" @change="refreshData" />
+                            class="flex-1 min-w-[120px]" menuWidthClass="w-48" @change="applyFilters" />
                     </div>
                 </div>
 
@@ -156,7 +159,7 @@
                             $t(activeTab === 'peer' && !activeLessonId ? 'report.reference_panel.select_lesson' : 'report.reference_panel.no_results') }}</p>
                     </div>
 
-                    <div v-else v-for="report in reports" :key="reportCardKey(report)"
+                    <div v-else v-for="report in reports" :key="report.id"
                         class="group bg-white rounded-[1.5rem] sm:rounded-[2rem] border border-gray-100 shadow-sm hover:shadow-2xl hover:shadow-indigo-500/10 hover:border-indigo-100 transition-all duration-500 overflow-hidden">
                         <!-- Card Header Section -->
                         <div
@@ -179,7 +182,10 @@
                                             {{ formatDate(report) }}
                                         </span>
                                     </div>
-                                    <span v-if="referenceCompleted(report)"
+                                    <span v-if="activeTab === 'history'" class="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
+                                        {{ $t(report.attendance_status === 'present' ? 'report.editor.present' : report.attendance_status === 'absent' ? 'report.editor.absent' : 'report.editor.pending_attendance') }}
+                                    </span>
+                                    <span v-else-if="referenceCompleted(report)"
                                         class="text-[9px] sm:text-[10px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-600 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full ring-1 ring-emerald-100/50">
                                         {{ $t('report.completed') }}
                                     </span>
@@ -187,16 +193,16 @@
                                         class="text-[9px] sm:text-[10px] font-black uppercase tracking-widest bg-rose-50 text-rose-600 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full ring-1 ring-rose-100/50">
                                         {{ $t('report.incomplete') }}
                                     </span>
-                                    <span v-if="getReportProgress(report)"
+                                    <span v-if="activeTab === 'peer' && getReportProgress(report)"
                                         class="text-[9px] sm:text-[10px] font-black uppercase tracking-widest bg-indigo-50 text-indigo-700 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full ring-1 ring-indigo-100/50">
                                         {{ getReportProgress(report) }}
                                     </span>
                                 </div>
                             </div>
-                            <button @click="copyContent(report.content)"
-                                class="shrink-0 w-full sm:w-auto px-5 py-2.5 sm:px-6 sm:py-3 bg-gray-900 text-white rounded-[1rem] sm:rounded-[1.25rem] text-[10px] sm:text-[11px] font-black shadow-lg sm:shadow-xl shadow-gray-200 hover:bg-indigo-600 hover:shadow-indigo-200 transition-all active:scale-95 flex items-center justify-center gap-2"
+                            <button type="button" :disabled="!report.content?.trim()" @click="copyContent(report.content)"
+                                class="shrink-0 enabled:cursor-pointer disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 w-full sm:w-auto px-5 py-2.5 sm:px-6 sm:py-3 bg-gray-900 text-white rounded-[1rem] sm:rounded-[1.25rem] text-[10px] sm:text-[11px] font-black shadow-lg sm:shadow-xl shadow-gray-200 hover:bg-indigo-600 hover:shadow-indigo-200 transition-all active:scale-95 flex items-center justify-center gap-2"
                                 :title="$t('report.reference_panel.copy_content')">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 sm:h-4 sm:w-4" fill="none"
+                                <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 sm:h-4 sm:w-4" fill="none"
                                     viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
                                         d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -205,11 +211,27 @@
                             </button>
                         </div>
 
+                        <ul v-if="activeTab === 'history' && report.lesson_entries?.length"
+                            class="divide-y divide-gray-100 px-5 sm:px-7">
+                            <li v-for="entry in report.lesson_entries" :key="entry.id || entry.lesson_id"
+                                class="flex flex-wrap items-baseline gap-x-2 gap-y-1 py-2 text-sm text-gray-700">
+                                <span class="font-medium break-words">{{ entry.course_name }} · {{ $t('report.editor.progress_check.lesson', { sequence: entry.lesson_sequence, title: entry.lesson_title }) }}</span>
+                                <span v-if="entry.id && entry.id === report.primary_lesson_entry_id">{{ $t('report.editor.lesson_entries.primary_label') }}</span>
+                                <span v-if="entry.progress_letter">{{ formatProgress(entry.progress_letter) }}</span>
+                                <span>{{ $t(entry.is_completed ? 'report.completed' : 'report.incomplete') }}</span>
+                            </li>
+                        </ul>
+                        <p v-else-if="activeTab === 'history' && (report.progress_letter || report.is_completed)"
+                            class="flex flex-wrap gap-2 px-5 py-2 text-sm text-gray-700 sm:px-7">
+                            <span v-if="report.progress_letter">{{ formatProgress(report.progress_letter) }}</span>
+                            <span>{{ $t(report.is_completed ? 'report.completed' : 'report.incomplete') }}</span>
+                        </p>
+
                         <!-- Notes Sections (Conditional) -->
                         <div v-if="!report.is_linked_lesson_entry"
                             class="px-5 py-3 sm:px-7 sm:py-5 bg-gray-50/40 border-b border-gray-100/60 space-y-3 sm:space-y-4">
                             <!-- Contact Notes -->
-                            <div v-if="report.contact_notes"
+                            <div v-if="report.contact_notes || report.contact_notes_document"
                                 class="flex flex-col gap-1.5 sm:gap-2 relative group/note transition-all duration-300"
                                 :class="shouldShowToggle(report.contact_notes, 'notes') ? (isExpanded(report.id, 'contact') ? 'pb-7 sm:pb-8' : 'pb-5 sm:pb-6') : ''">
                                 <div class="flex gap-3 sm:gap-4">
@@ -247,7 +269,7 @@
                             </div>
 
                             <!-- Class Notes -->
-                            <div v-if="report.class_notes"
+                            <div v-if="report.class_notes || report.class_notes_document"
                                 class="flex flex-col gap-1.5 sm:gap-2 relative group/note transition-all duration-300"
                                 :class="shouldShowToggle(report.class_notes, 'notes') ? (isExpanded(report.id, 'class') ? 'pb-7 sm:pb-8' : 'pb-5 sm:pb-6') : ''">
                                 <div class="flex gap-3 sm:gap-4">
@@ -342,7 +364,7 @@
 
                     <div v-if="totalCount > pageSize"
                         class="flex items-center justify-between bg-white rounded-xl sm:rounded-[1.5rem] p-1 sm:p-1.5 border border-indigo-50 shadow-sm">
-                        <button @click="prevPage" :disabled="currentPage === 1 || loading"
+                        <button type="button" :aria-label="$t('common.previous')" @click="prevPage" :disabled="currentPage === 1 || loading"
                             class="p-2 sm:p-3 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg sm:rounded-2xl disabled:opacity-30 disabled:hover:bg-transparent transition-all active:scale-90">
                             <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
@@ -355,7 +377,7 @@
                                     currentPage }}</span> <span class="text-gray-300 mx-0.5 sm:mx-1">/</span> {{ totalPages
                                 }}
                         </div>
-                        <button @click="nextPage" :disabled="currentPage === totalPages || loading"
+                        <button type="button" :aria-label="$t('common.next')" @click="nextPage" :disabled="currentPage === totalPages || loading"
                             class="p-2 sm:p-3 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg sm:rounded-2xl disabled:opacity-30 disabled:hover:bg-transparent transition-all active:scale-90">
                             <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
@@ -429,20 +451,17 @@ const props = defineProps<{
     lessonChoices?: ReferenceChoice[]
     primaryEntryId?: string | null
     studentId?: string
-    enrollmentId?: string
     currentReportId?: string
     focusedReportId?: string
-    focusedLessonSequence?: number
-    focusedLessonTitle?: string
-    focusedCourseName?: string
-    focusedStudentName?: string
 }>()
 
 const emit = defineEmits(['close', 'copy'])
 
 const activeTab = ref<'peer' | 'history'>('peer')
+const focusedHistoryId = ref<string>()
 const drawer = ref<HTMLElement | null>(null)
 const closeButton = ref<HTMLButtonElement | null>(null)
+const searchInput = ref<HTMLInputElement | null>(null)
 const headingId = useId()
 const selectorId = useId()
 let opener: HTMLElement | null = null
@@ -457,7 +476,7 @@ function formatChoice(choice: ReferenceChoice) {
         ? choice.title || t('report.editor.lesson_label')
         : t('report.editor.progress_check.lesson', { sequence: choice.sequence, title: choice.title || '' })
     const label = `${choice.courseName || t('common.unknown_course')} · ${lesson}`
-    return choice.entryId === props.primaryEntryId ? `${label} · ${t('report.editor.lesson_entries.primary')}` : label
+    return choice.entryId === props.primaryEntryId ? `${label} · ${t('report.editor.lesson_entries.primary_label')}` : label
 }
 const searchQuery = ref('')
 const loading = ref(false)
@@ -466,8 +485,6 @@ const loadError = ref<string | null>(null)
 // Data State
 const reports = ref<any[]>([])
 const totalCount = ref(0)
-const regularReportCount = ref(0)
-const linkedReportCount = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(10)
 
@@ -504,11 +521,7 @@ const classrooms = ref<any[]>([])
 const allSessions = ref<any[]>([])
 const courses = ref<any[]>([])
 
-const totalPages = computed(() => Math.max(
-    Math.ceil(regularReportCount.value / pageSize.value),
-    Math.ceil(linkedReportCount.value / pageSize.value),
-    1
-))
+const totalPages = computed(() => Math.max(1, Math.ceil(totalCount.value / pageSize.value)))
 
 const filteredSessions = computed(() => {
     if (!filterClassroom.value) return allSessions.value
@@ -555,6 +568,7 @@ watch(() => [props.show, props.focusedReportId] as const, async ([isOpen, report
         return
     }
     if (!previous?.[0]) opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    focusedHistoryId.value = reportId
     activeTab.value = reportId ? 'history' : 'peer'
     selectedEntryId.value = defaultEntryId()
     currentPage.value = 1
@@ -566,7 +580,7 @@ watch(() => props.lessonChoices, () => {
     if (!props.lessonChoices?.some(choice => choice.entryId === selectedEntryId.value)) selectedEntryId.value = defaultEntryId()
 })
 
-watch(() => [props.show, activeTab.value, activeLessonId.value, props.focusedReportId] as const, ([open]) => {
+watch(() => [props.show, activeTab.value, activeLessonId.value, focusedHistoryId.value, props.studentId, props.currentReportId] as const, ([open]) => {
     if (!open) return
     currentPage.value = 1
     void refreshData()
@@ -577,6 +591,12 @@ function switchTab(tab: 'peer' | 'history') {
     if (activeTab.value === tab) return
     activeTab.value = tab
     currentPage.value = 1
+}
+
+async function viewAllHistory() {
+    focusedHistoryId.value = undefined
+    await nextTick()
+    searchInput.value?.focus()
 }
 
 async function loadFilterOptions() {
@@ -610,102 +630,33 @@ async function refreshData() {
     loadError.value = null
     reports.value = []
     totalCount.value = 0
-    regularReportCount.value = 0
-    linkedReportCount.value = 0
     try {
-        if (activeTab.value === 'history' && props.focusedReportId) {
-            const report = await ReportQueryService.getReportById(props.focusedReportId)
-            if (requestId !== refreshRequestId) return
-            const dto = report.toDTO()
-            reports.value = [{
-                ...dto,
-                updated_at: dto.updated_at,
-                class_occurrences: { occurrence_date: dto.occurrence_date },
-                lessons: { sequence: props.focusedLessonSequence, title: props.focusedLessonTitle },
-                enrollments: { courses: { display_name: props.focusedCourseName }, students: { name: props.focusedStudentName } }
-            }]
-            regularReportCount.value = 1
-            totalCount.value = 1
-            return
-        }
         const commonParams = {
             excludeReportId: props.currentReportId,
             page: currentPage.value,
             pageSize: pageSize.value,
             sortBy: sortBy.value,
-            search: searchQuery.value.trim() || undefined
+            search: searchQuery.value.trim() || undefined,
         }
-
-        let res
-        let regularCount = 0
-        let linkedCount = 0
-        let linkedRows: any[] = []
-        if (activeTab.value === 'peer') {
-            if (!activeLessonId.value) {
-                reports.value = []
-                totalCount.value = 0
-                loading.value = false
-                return
-            }
-            res = await ReportQueryService.getReportsByLesson(activeLessonId.value, {
-                ...commonParams,
-                classroomId: filterClassroom.value,
-                sessionId: filterSession.value
-            })
-            regularCount = res.count
-        } else {
-            if (!props.studentId) {
-                reports.value = []
-                totalCount.value = 0
-                loading.value = false
-                return
-            }
-            const [studentHistory, linkedHistory] = await Promise.all([
-                ReportQueryService.getReportsByStudent(props.studentId, {
-                    ...commonParams,
-                    courseId: filterCourse.value
-                }),
-                props.enrollmentId
-                    ? ReportQueryService.getLinkedLessonReportHistory(props.enrollmentId, {
-                        limit: pageSize.value,
-                        offset: (currentPage.value - 1) * pageSize.value,
-                        search: commonParams.search,
-                        courseId: filterCourse.value || undefined,
-                        sort: sortBy.value === 'asc' ? 'occurrence_date' : '-occurrence_date',
-                    })
-                    : Promise.resolve({ data: [], count: 0 }),
-            ])
-            res = studentHistory
-            regularCount = studentHistory.count
-            linkedCount = linkedHistory.count
-            linkedRows = linkedHistory.data.map(row => ({
-                ...row,
-                enrollment_id: props.enrollmentId,
-                is_linked_lesson_entry: true,
-                lessons: row.lessons || { sequence: row.lesson_sequence, title: row.lesson_title },
-                class_occurrences: row.class_occurrences || { occurrence_date: row.occurrence_date },
-                enrollments: row.enrollments || { courses: { display_name: row.course_name } },
+        const res = activeTab.value === 'peer'
+            ? (activeLessonId.value && await ReportQueryService.getReportsByLesson(activeLessonId.value, {
+                ...commonParams, classroomId: filterClassroom.value, sessionId: filterSession.value,
             }))
-        }
-        if (requestId === refreshRequestId) {
-            regularReportCount.value = regularCount
-            linkedReportCount.value = linkedCount
-            if (linkedRows.length) {
-                const linkedParentIds = new Set(linkedRows.map(row => row.id))
-                reports.value = [
-                    ...res.data.filter((report: any) => !linkedParentIds.has(report.id)),
-                    ...linkedRows,
-                ]
-            } else reports.value = res.data
-            totalCount.value = regularCount + linkedCount
+            : (props.studentId && await ReportQueryService.getStudentReferenceHistory(props.studentId, {
+                ...commonParams,
+                ...(focusedHistoryId.value
+                    ? { reportId: focusedHistoryId.value, search: undefined }
+                    : { courseId: filterCourse.value || undefined }),
+            }))
+        if (requestId === refreshRequestId && res) {
+            reports.value = res.data
+            totalCount.value = res.count
         }
     } catch (e) {
         if (requestId !== refreshRequestId) return
         console.error('Failed to load reports:', e)
         reports.value = []
         totalCount.value = 0
-        regularReportCount.value = 0
-        linkedReportCount.value = 0
         loadError.value = t('report.reference_panel.load_error')
         reportError(e)
     } finally {
@@ -714,7 +665,12 @@ async function refreshData() {
 }
 
 function handleClassroomChange() {
-    filterSession.value = '' // Reset session filter when classroom changes
+    filterSession.value = ''
+    applyFilters()
+}
+
+function applyFilters() {
+    currentPage.value = 1
     void refreshData()
 }
 
@@ -747,13 +703,15 @@ function formatDate(report: any) {
     return date ? date.toLocaleDateString(locale.value) : '-'
 }
 
+function formatProgress(value: string | null | undefined) {
+    return value?.startsWith('-') ? t('report.editor.progress_to', { end: value.slice(1) }) : value || ''
+}
+
 function getReportProgress(report: any) {
-    const format = (value: string | null | undefined) => value?.startsWith('-')
-        ? t('report.editor.progress_to', { end: value.slice(1) }) : value || ''
     if (activeTab.value === 'peer' && report.lesson_entries?.length) {
-        return [...new Set<string>(report.lesson_entries.map((entry: { progress_letter?: string }) => format(entry.progress_letter)).filter(Boolean))].join(' · ')
+        return [...new Set<string>(report.lesson_entries.map((entry: { progress_letter?: string }) => formatProgress(entry.progress_letter)).filter(Boolean))].join(' · ')
     }
-    if (report.progress_letter) return format(report.progress_letter)
+    if (report.progress_letter) return formatProgress(report.progress_letter)
     if (report.progress_start && report.progress_end) {
         return `${report.progress_start}-${report.progress_end}`
     }
@@ -772,6 +730,7 @@ function formatHeader(report: any) {
         const s = report.enrollments?.students
         return s?.name || t('common.unknown_student')
     } else {
+        if (report.lesson_entries?.length) return report.course_name || report.lesson_entries[0].course_name
         const course = report.enrollments?.courses
         const lesson = report.lessons
 
@@ -787,12 +746,6 @@ function formatHeader(report: any) {
             : report.lesson_title ? `#${report.lesson_sequence} ${report.lesson_title}` : ''
         return `${courseName} ${lessonInfo}`.trim()
     }
-}
-
-function reportCardKey(report: any) {
-    return report.is_linked_lesson_entry
-        ? `${report.id}:${report.enrollment_id}:${report.lesson_id}`
-        : report.id
 }
 
 function copyContent(content: string) {

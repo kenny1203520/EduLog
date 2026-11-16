@@ -60,6 +60,7 @@ DECLARE
     'public.get_rbac_capabilities(uuid)',
     'public.get_single_lesson_transfer_history(uuid)',
     'public.get_student_profile_page(uuid)',
+    'public.get_student_report_reference_history(uuid,uuid,uuid,text,boolean,integer,integer,uuid)',
     'public.get_student_sensitive_details(uuid)',
     'public.get_students_overview(integer,integer,text,text)',
     'public.get_teacher_assignments(uuid)',

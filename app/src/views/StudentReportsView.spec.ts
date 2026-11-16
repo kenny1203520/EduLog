@@ -3,13 +3,17 @@ import { resolve } from 'node:path'
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import StudentReportsView from './StudentReportsView.vue'
+import { ClassOccurrence } from '@/models/ClassOccurrence'
+import { ReportQueryService } from '@/services/report/ReportQueryService'
+import { OccurrenceReport } from '@/models/OccurrenceReport'
 
 const source = readFileSync(resolve(process.cwd(), 'src/views/StudentReportsView.vue'), 'utf8')
 const panel = vi.hoisted(() => ({ value: false }))
+const route = vi.hoisted(() => ({ params: {} as { enrollmentId?: string }, query: {} }))
 vi.mock('@/composables/useExtensionPanel', () => ({ inExtensionPanel: () => panel.value, extensionPanelOrigin: () => null }))
 
 vi.mock('vue-router', () => ({
-    useRoute: () => ({ params: {}, query: {} }),
+    useRoute: () => route,
     useRouter: () => ({ back: vi.fn() })
 }))
 
@@ -22,6 +26,7 @@ vi.mock('vue-i18n', () => ({
     }),
     useI18n: () => ({
         locale: { value: 'en' },
+        te: () => false,
         t: (key: string) => key
     })
 }))
@@ -45,6 +50,63 @@ vi.mock('@/stores/usePreferencesStore', () => ({
 }))
 
 describe('StudentReportsView scheduled report filter', () => {
+    it('keeps report identity paired through late responses and cancellation', async () => {
+        const wrapper = mount(StudentReportsView, {
+            global: {
+                mocks: { $t: (key: string) => key },
+                stubs: {
+                    OccurrenceCalendar: true, ConfirmModal: true, EnrollmentHistoryPanel: true,
+                    ReportEditor: {
+                        name: 'ReportEditor', template: '<div />', props: ['enrollmentId', 'classOccurrenceId', 'reportId'],
+                        methods: { saveNow: async () => true },
+                    },
+                },
+            },
+        })
+        await flushPromises()
+        const makeOccurrence = (id: string) => new ClassOccurrence({
+            id, class_session_id: 'session', occurrence_date: '2026-11-01', status: 'scheduled',
+        })
+        const a = makeOccurrence('a')
+        const b = makeOccurrence('b')
+        const c = makeOccurrence('c')
+        const report = (id: string) => new OccurrenceReport({ id: `report-${id}`, enrollment_id: 'enrollment',
+            class_occurrence_id: id, version: 1 })
+        const delayed = Promise.withResolvers<OccurrenceReport>()
+        const load = vi.spyOn(ReportQueryService, 'getReport')
+            .mockResolvedValueOnce(report('a')).mockReturnValueOnce(delayed.promise).mockResolvedValueOnce(report('a'))
+        try {
+            route.params.enrollmentId = 'enrollment'
+            wrapper.vm.$.setupState.allReports = [{ class_occurrence_id: 'a' }, { class_occurrence_id: 'b' }]
+            const calendar = wrapper.getComponent({ name: 'OccurrenceCalendar' })
+            calendar.vm.$emit('select-occurrence', a)
+            await flushPromises()
+            const identity = () => {
+                const editor = wrapper.getComponent({ name: 'ReportEditor' })
+                return [editor.props('enrollmentId'), editor.props('classOccurrenceId'), editor.props('reportId')]
+            }
+            expect(identity()).toEqual(['enrollment', 'a', 'report-a'])
+            calendar.vm.$emit('select-occurrence', b)
+            await flushPromises()
+            expect(identity()).toEqual(['enrollment', 'a', 'report-a'])
+            calendar.vm.$emit('select-occurrence', a)
+            await flushPromises()
+            delayed.resolve(report('b'))
+            await flushPromises()
+            expect(identity()).toEqual(['enrollment', 'a', 'report-a'])
+            calendar.vm.$emit('select-occurrence', c)
+            await flushPromises()
+            expect(identity()).toEqual(['enrollment', 'a', 'report-a'])
+            wrapper.findAllComponents({ name: 'ConfirmModal' }).find(modal => modal.props('isOpen'))!.vm.$emit('close')
+            await flushPromises()
+            expect(identity()).toEqual(['enrollment', 'a', 'report-a'])
+        } finally {
+            delete route.params.enrollmentId
+            load.mockRestore()
+            wrapper.unmount()
+        }
+    })
+
     it('is enabled by default and can be toggled off and on', async () => {
         const wrapper = mount(StudentReportsView, {
             global: {
