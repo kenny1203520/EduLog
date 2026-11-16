@@ -167,7 +167,7 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ReportLessonEntryDTO } from '@/models/OccurrenceReport'
-import { composeProgressLetter, createLessonEntryId } from '@/models/ReportEditorSnapshot'
+import { composeProgressLetter, createLessonEntryId, resolveLessonEntryCourseId } from '@/models/ReportEditorSnapshot'
 import type { LessonEntryOption } from '@/services/report/ReportQueryService'
 
 const props = withDefaults(defineProps<{
@@ -247,7 +247,7 @@ function courseName(entry: ReportLessonEntryDTO) {
 
 function isEntryIncomplete(entry: ReportLessonEntryDTO) {
     if (entry.id === initialDraft.value?.id) return false
-    return !entry.enrollment_id || !entry.course_id || !entry.lesson_id
+    return !entry.enrollment_id || !entry.lesson_id || !resolveLessonEntryCourseId(entry, props.options)
 }
 
 function lessonsFor(entry: ReportLessonEntryDTO) {
@@ -302,7 +302,7 @@ function changeLesson(entry: ReportLessonEntryDTO, lessonId: string) {
     const option = optionFor(entry)
     updateEntry(entry.id, {
         lesson_id: lessonId || null,
-        course_id: option?.course_id,
+        course_id: option?.course_id || entry.course_id,
         course_name: option?.course_name,
         lesson_sequence: lesson?.sequence,
         lesson_title: lesson?.title,

@@ -53,6 +53,17 @@ export function normalizeLessonEntries(
     return { entries: normalized, primaryLessonEntryId: primary?.id ?? null }
 }
 
+/** Older rows may identify the enrollment and lesson without storing the course. */
+export function resolveLessonEntryCourseId(
+    entry: ReportLessonEntryDTO,
+    options: ReadonlyArray<{ id: string; course_id: string; lessons: ReadonlyArray<{ id: string }> }>
+): string | undefined {
+    if (entry.course_id) return entry.course_id
+    if (!entry.enrollment_id || !entry.lesson_id) return undefined
+    return options.find(option => option.id === entry.enrollment_id
+        && option.lessons.some(lesson => lesson.id === entry.lesson_id))?.course_id || undefined
+}
+
 /** Compares saved lesson data while ignoring display-only course/lesson labels. */
 export function reportLessonEntriesEqual(left: ReportLessonEntryDTO[] | undefined, right: ReportLessonEntryDTO[] | undefined): boolean {
     const project = (entries: ReportLessonEntryDTO[] | undefined) => (entries ?? []).map(entry => ({

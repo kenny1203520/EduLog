@@ -71,6 +71,12 @@ Supabase uses more aliases for its own services. For example, `SERVICE_ROLE_KEY`
 - "Which environment" is spelled per runtime: `NODE_ENV` (API) and Vite's `MODE`/`PROD` (frontend build).
 - Without an origin allowlist, the API allows only the local Vite dev server (`localhost:5173`) outside production and **refuses to start** in production.
 
+## Frontend cache on deployment
+
+- Serve the SPA HTML and `/sw.js` with `Cache-Control: no-store`. The bundled frontend does this for the root and for routes that fall back to `/index.html`. Keep the year-long immutable cache for fingerprinted files under `/assets/`.
+- With Cloudflare, bypass edge caching for `/sw.js`, `/index.html`, and SPA navigation URLs. After updating the frontend and API together, purge the previously cached Service Worker and HTML URLs. Verify the public response carries `Cache-Control: no-store` and Cloudflare does not report a cache hit for these URLs.
+- In an open class or report tab, save pending edits before accepting the app update or reloading. In the updated class page, the one-off make-up form submits `makeup: true` to `POST /api/reports`. The deployed database must have migration `1000178`.
+
 ## API (`server/src/config/config.ts`)
 
 | Variable | Required | Default | Notes |

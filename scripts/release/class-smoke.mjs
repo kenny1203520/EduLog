@@ -11,6 +11,7 @@ const firstLesson = '15800000-0000-4000-8000-0000000000a9'
 const referenceLesson = '15800000-0000-4000-8000-0000000000aa'
 const sourceReport = '15800000-0000-4000-8000-000000000021'
 const legacyReport = '15800000-0000-4000-8000-000000000025'
+const linkedReport = '15800000-0000-4000-8000-000000000026'
 const otherEnrollment = '15800000-0000-4000-8000-0000000000b2'
 const makeupOccurrence = '15800000-0000-4000-8000-000000000019'
 const references = `/reports/reference?lesson_id=${referenceLesson}`
@@ -40,6 +41,8 @@ async function call(path, expected = [200], postKey, payload, method = postKey ?
   return body
 }
 const workspace = `/pages/class-sessions/${session}/workspace?occurrence_date=${date}`
+const progressContext = (enrollmentId, reportId) =>
+  `/enrollments/${enrollmentId}/report-progress-context?occurrence_id=${occurrence}&report_id=${reportId}`
 if (actor === 'makeup-teacher') {
   const payload = { makeup: true, enrollment_id: otherEnrollment, class_occurrence_id: occurrence }
   const created = await call('/reports', [201], 'class-smoke-scoped-makeup', payload)
@@ -57,6 +60,7 @@ if (actor === 'outsider') {
   const denied = await call(references, [200, 403, 404])
   if (denied.data) assert.deepEqual(denied.data, [])
   await call(classTemplate, [403, 404], undefined, { template_text: 'Outside this class' }, 'PUT')
+  await call(progressContext(enrollment, sourceReport), [403, 404])
 } else {
   const page = (await call(workspace)).data
   assert.equal(page.session.id, session)
@@ -107,6 +111,18 @@ if (actor === 'owner') {
   await call(`/class-sessions/${created.id}/occurrences/sync`, [200], 'class-smoke-sync-session', { scope: 'all' })
 }
 if (actor === 'owner' || actor === 'teacher') {
+  const context = (await call(progressContext(enrollment, sourceReport))).data
+  assert.deepEqual(context.reports.map(report => [report.id, report.lesson_id, report.progress_letter]), [
+    [legacyReport, referenceLesson, 'B'],
+    [linkedReport, firstLesson, '-D'],
+  ])
+  assert.equal(context.latest_prior_report.shared_content, 'Cross-course progress')
+  assert.equal(context.latest_prior_report.can_open_report, false)
+  const currentReports = (await call(`/reports?class_occurrence_id=${occurrence}&enrollment_id=${second}`)).data
+  assert.equal(currentReports.length, 1)
+  const empty = (await call(progressContext(second, currentReports[0].id))).data
+  assert.deepEqual(empty.reports, [])
+  assert.equal(empty.latest_prior_report, null)
   const page = await call(`${references}&class_session_id=${session}&search=Reference&limit=1`)
   assert.equal(page.meta.total, 2)
   assert.equal(page.data[0].id, sourceReport)
@@ -123,6 +139,24 @@ const attendancePath = `/occurrences/${occurrence}`
 const firstTeacher = '15800000-0000-4000-8000-0000000000f2'
 const secondTeacher = '15800000-0000-4000-8000-0000000000f5'
 if (actor === 'teacher') {
+  const legacy = (await call(`/reports/${legacyReport}`)).data
+  assert.deepEqual(legacy.lesson_entries, [])
+  const options = (await call(`/reports/${legacyReport}/lesson-entry-options`)).data.enrollments
+  const ownCourse = options.find(option => option.id === enrollment)
+  assert.equal(ownCourse?.course_id, course)
+  assert.ok(ownCourse.lessons.some(lesson => lesson.id === legacy.lesson_id))
+  const legacyEntry = {
+    id: '15800000-0000-4000-8000-0000000000a6', enrollment_id: enrollment, course_id: ownCourse.course_id,
+    lesson_id: legacy.lesson_id, is_completed: false, progress_letter: '-D',
+  }
+  await call(`/reports/${legacyReport}`, [200], 'class-smoke-save-legacy-progress', {
+    expected_version: legacy.version, lesson_entries: [legacyEntry], primary_lesson_entry_id: legacyEntry.id,
+  }, 'PATCH')
+  const reopened = (await call(`/reports/${legacyReport}`)).data
+  assert.equal(reopened.progress_letter, '-D')
+  assert.equal(reopened.lesson_entries[0].course_id, course)
+  assert.equal(reopened.lesson_entries[0].progress_letter, '-D')
+
   await call(attendancePath, [403], 'class-smoke-attendance-denied', { teacher_attendance: { [secondTeacher]: true } }, 'PATCH')
   const present = { teacher_attendance: { [firstTeacher]: true } }
   await call(attendancePath, [400], undefined, present, 'PATCH')

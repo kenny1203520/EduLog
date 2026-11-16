@@ -36,6 +36,7 @@ vi.mock('vue-toastification', () => ({ useToast: () => ({ success: vi.fn(), info
 
 import { useReportEditorSession } from './useReportEditorSession'
 import type { ResolvedReportEditorProps } from '@/components/report/reportEditorContract'
+import type { LessonEntryOption } from '@/services/report/ReportQueryService'
 
 function makeProps(overrides: Partial<ResolvedReportEditorProps> = {}) {
     return reactive({
@@ -85,10 +86,11 @@ describe('report editor session', () => {
         vi.useRealTimers()
     })
 
-    async function setup(overrides: Partial<ResolvedReportEditorProps> = {}) {
+    async function setup(overrides: Partial<ResolvedReportEditorProps> = {}, lessonEntryOptions?: () => LessonEntryOption[]) {
         const session = scope.run(() => useReportEditorSession(makeProps(overrides), emit, {
             editors: { content: ref(null), contactNotes: ref(null), classNotes: ref(null) },
             openConfirm: vi.fn(),
+            lessonEntryOptions,
         }))!
         // The editor ignores input for 50ms while it takes its props.
         await vi.advanceTimersByTimeAsync(60)
@@ -126,6 +128,50 @@ describe('report editor session', () => {
         session.lessonEntries.value[0] = { ...session.lessonEntries.value[0]!, course_id: 'course', lesson_id: 'lesson' }
         await nextTick()
         expect(session.canSave.value).toBe(true)
+    })
+
+    it('autosaves a legacy progress edit once the matching course and lesson load', async () => {
+        const options = ref<LessonEntryOption[]>([])
+        const session = await setup({ autoSaveEnabled: true, initialLessonEntries: [], initialPrimaryLessonEntryId: null }, () => options.value)
+        const [legacyEntry] = session.lessonEntries.value
+        reports.saveReport.mockResolvedValue(saved({
+            lesson_entries: [{ ...legacyEntry!, course_id: 'course', progress_letter: '-D' }],
+            primary_lesson_entry_id: legacyEntry!.id,
+            progress_letter: '-D',
+        }))
+        session.lessonEntries.value = [{ ...legacyEntry!, progress_letter: '-D' }]
+        await vi.advanceTimersByTimeAsync(2100)
+        expect(session.saveErrorMessage.value).toBe('report.editor.required_field_error')
+        expect(reports.saveReport).not.toHaveBeenCalled()
+
+        const lesson = { id: 'lesson', sequence: 1, title: 'Lesson' }
+        options.value = [
+            { id: 'another-enrollment', course_id: 'other-course', course_name: 'Other', lessons: [lesson] },
+            { id: 'enrollment', course_id: 'wrong-course', course_name: 'Wrong', lessons: [] },
+        ]
+        await vi.advanceTimersByTimeAsync(2100)
+        expect(session.canSave.value).toBe(false)
+        expect(reports.saveReport).not.toHaveBeenCalled()
+
+        options.value = [{ id: 'enrollment', course_id: 'course', course_name: 'Course', lessons: [lesson] }]
+        await vi.advanceTimersByTimeAsync(2100)
+        expect(session.canSave.value).toBe(true)
+        expect(reports.saveReport).toHaveBeenCalledExactlyOnceWith('report', 4, 'teacher', expect.objectContaining({
+            lessonEntries: [expect.objectContaining({ id: legacyEntry!.id, course_id: 'course', lesson_id: 'lesson', progress_letter: '-D' })],
+        }))
+        expect(session.version.value).toBe(5)
+    })
+
+    it('saves unrelated changes without rewriting unresolved legacy progress', async () => {
+        const session = await setup({ initialLessonEntries: [], initialPrimaryLessonEntryId: null })
+        reports.saveReport.mockResolvedValue(saved({ lesson_entries: [], primary_lesson_entry_id: null, content: 'New comment' }))
+        session.handleTextEditorChange('content', {
+            content: createTextEditorContent('New comment'), source: 'local', value: 'New comment',
+        })
+        await nextTick()
+        await expect(session.saveNow()).resolves.toBe(true)
+        expect(reports.saveReport.mock.calls[0]?.[3]).toMatchObject({ content: 'New comment' })
+        expect(reports.saveReport.mock.calls[0]?.[3]).not.toHaveProperty('lessonEntries')
     })
 
     it('saves comments on a blank report without creating an incomplete lesson entry', async () => {
