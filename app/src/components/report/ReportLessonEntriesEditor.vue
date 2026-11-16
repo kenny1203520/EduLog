@@ -147,7 +147,7 @@
                         class="h-4 w-4 accent-emerald-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700"
                         @change="$emit('update:primaryEntryId', entry.id)"
                     >
-                    <span>{{ $t('report.editor.lesson_entries.primary') }}</span>
+                    <span>{{ $t(entry.id === primaryEntryId ? 'report.editor.lesson_entries.primary_label' : 'report.editor.lesson_entries.primary') }}</span>
                 </label>
                 <button
                     type="button"

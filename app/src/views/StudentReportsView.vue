@@ -474,7 +474,7 @@
                     <!-- Report Editor -->
                     <ReportEditor ref="reportEditorRef" :key="selectedReport.id" :report-id="selectedReport.id"
                         :initial-version="selectedReport.version" :loading="reportLoading" :show-manual-save="!panel" :compact="panel"
-                        :enrollment-id="enrollmentInfo?.id" :class-occurrence-id="selectedOccurrence.id"
+                        :enrollment-id="selectedReport.enrollmentId" :class-occurrence-id="selectedReport.classOccurrenceId"
                         :title="$t('report.report_for_date', { date: formatOccurrenceDateTime(selectedOccurrence) })"
                         :course-name="enrollmentInfo?.courseName || undefined"
                         :course-stage="enrollmentInfo?.courseStage || undefined"
@@ -697,11 +697,7 @@ const showCreateConfirm = ref(false)
 const isCreatingReport = ref(false)
 const pendingOccurrence = ref<ClassOccurrence | null>(null)
 const showKodingCheckModal = ref(false)
-const pendingSelectionState = ref<{
-    occurrence: ClassOccurrence | null
-    report: OccurrenceReport | null
-    scrollY: number
-} | null>(null)
+let reportSelectionRequest = 0
 
 const missingTransferredOccurrenceIds = computed(() => new Set(
     effectiveTransferTargets.value
@@ -719,23 +715,14 @@ function clearReportSubscription() {}
 function subscribeToReport(_reportId: string | null) {
     clearReportSubscription()
 }
-async function restorePendingSelection() {
-    const snapshot = pendingSelectionState.value
-    pendingSelectionState.value = null
+function handleCancelCreate() {
     pendingOccurrence.value = null
     showCreateConfirm.value = false
-
-    if (!snapshot) return
-
-    selectedOccurrence.value = snapshot.occurrence
-    selectedReport.value = snapshot.report
-    await nextTick()
-    window.scrollTo({ top: snapshot.scrollY, behavior: 'auto' })
-    subscribeToReport(snapshot.report?.id ?? null)
 }
 
 async function handleConfirmCreate() {
-    if (!pendingOccurrence.value) return
+    const occurrence = pendingOccurrence.value
+    if (!occurrence?.id || isCreatingReport.value) return
 
     // Resume creation flow
     const enrollmentId = route.params.enrollmentId as string
@@ -743,22 +730,25 @@ async function handleConfirmCreate() {
 
     try {
         isCreatingReport.value = true
-        const report = await ReportCommandService.createReport(enrollmentId, pendingOccurrence.value.id!)
+        const report = await ReportCommandService.createReport(enrollmentId, occurrence.id)
+        if (pendingOccurrence.value?.id !== occurrence.id || route.params.enrollmentId !== enrollmentId) return
+        if (report.enrollmentId !== enrollmentId || report.classOccurrenceId !== occurrence.id) throw new Error('Report selection mismatch')
+        selectedOccurrence.value = occurrence
         selectedReport.value = report
 
         if (report) {
             const newReportDetail = {
                 ...report,
-                class_occurrence_id: pendingOccurrence.value.id,
+                class_occurrence_id: occurrence.id,
                 class_occurrence: {
-                    ...pendingOccurrence.value
+                    ...occurrence
                 }
             }
             allReports.value.push(newReportDetail as any)
         }
-        pendingSelectionState.value = null
         pendingOccurrence.value = null
         showCreateConfirm.value = false
+        subscribeToReport(report.id ?? null)
     } catch (e) {
         console.error('Failed to create report', e)
         reportError(e, 'report.create_error')
@@ -1151,6 +1141,8 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+    reportSelectionRequest++
+    handleCancelCreate()
 })
 
 // Methods
@@ -1438,63 +1430,54 @@ async function selectOccurrence(
     occurrence: ClassOccurrence,
     options: { allowCreatePrompt?: boolean } = {}
 ) {
-    const saveSucceeded = await reportEditorRef.value?.saveNow({ reason: 'switch' })
-    if (saveSucceeded === false) return
-
-    const previousSelectionState = {
-        occurrence: selectedOccurrence.value,
-        report: selectedReport.value,
-        scrollY: window.scrollY
-    }
-
-    clearReportSubscription()
-
-    selectedOccurrence.value = occurrence
+    const enrollmentId = route.params.enrollmentId
+    if (typeof enrollmentId !== 'string' || !occurrence.id) return
+    const request = ++reportSelectionRequest
+    const isCurrent = () => request === reportSelectionRequest && route.params.enrollmentId === enrollmentId
     try {
+        const saveSucceeded = await reportEditorRef.value?.saveNow({ reason: 'switch' })
+        if (!isCurrent() || saveSucceeded === false) return
         reportLoading.value = true
+        pendingOccurrence.value = null
+        showCreateConfirm.value = false
         const allowCreatePrompt = options.allowCreatePrompt ?? true
         // Get or create report for this occurrence
-        const enrollmentId = route.params.enrollmentId as string
-        if (!enrollmentId || !occurrence.id) return
-
         // Check if report was already there or if it's new (via presence in allReports)
         const hasExistingReport = allReports.value.some(r => r.class_occurrence_id === occurrence.id)
 
         // Create explicit Create method for manual creation
         if (!hasExistingReport && allowCreatePrompt && isMissingTransferredOccurrence(occurrence.id)) {
+            selectedOccurrence.value = occurrence
             selectedReport.value = null
-            pendingSelectionState.value = null
+            subscribeToReport(null)
             return
         }
 
         if (!hasExistingReport && allowCreatePrompt) {
             // Store pending occurrence and show modal
             pendingOccurrence.value = occurrence
-            pendingSelectionState.value = previousSelectionState
             showCreateConfirm.value = true
             return
         } else if (hasExistingReport) {
             // Just fetch existing
             const report = await ReportQueryService.getReport(enrollmentId, occurrence.id)
+            if (!isCurrent()) return
+            if (report && (report.enrollmentId !== enrollmentId || report.classOccurrenceId !== occurrence.id)) throw new Error('Report selection mismatch')
+            selectedOccurrence.value = occurrence
             selectedReport.value = report
         } else {
+            selectedOccurrence.value = occurrence
             selectedReport.value = null
         }
 
         const currentReportId = selectedReport.value?.id
-        pendingSelectionState.value = null
-
         subscribeToReport(currentReportId ?? null)
 
     } catch (error) {
-        console.error('Failed to load report:', error)
+        if (isCurrent()) reportError(error, 'report.list_load_error')
     } finally {
-        reportLoading.value = false
+        if (isCurrent()) reportLoading.value = false
     }
-}
-
-async function handleCancelCreate() {
-    await restorePendingSelection()
 }
 
 function handleSaveSuccess(updatedReport: OccurrenceReportDTO) {

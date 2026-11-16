@@ -4,6 +4,7 @@ import { apiResourceClient } from '@/services/api/ApiResourceClient'
 import { PageApiService } from '@/services/api/PageApiService'
 import { type OrderedLesson } from '@/utils/courseProgressGaps'
 import type { RichTextDocumentV1 } from '@/components/text-editor/types'
+import { createTextEditorContent } from '@/components/text-editor/content'
 
 export interface LessonEntryOption {
     id: string
@@ -29,6 +30,33 @@ export interface LinkedLessonReportHistoryRow {
     lessons?: { sequence?: number; title?: string } | Array<{ sequence?: number; title?: string }> | null
     class_occurrences?: { occurrence_date?: string } | Array<{ occurrence_date?: string }> | null
     enrollments?: { courses?: { display_name?: string; subject?: string } } | Array<{ courses?: { display_name?: string; subject?: string } }> | null
+}
+
+export interface StudentReferenceReport {
+    id: string
+    occurrence_date: string
+    attendance_status: 'pending' | 'present' | 'absent'
+    content: string | null
+    content_document: RichTextDocumentV1 | null
+    contact_notes: string | null
+    contact_notes_document: RichTextDocumentV1 | null
+    class_notes: string | null
+    class_notes_document: RichTextDocumentV1 | null
+    primary_lesson_entry_id: string | null
+    progress_letter: string | null
+    is_completed: boolean | null
+    is_linked_lesson_entry: boolean
+    course_name: string | null
+    lesson_entries: Array<{
+        id: string | null
+        course_id: string
+        course_name: string
+        lesson_id: string
+        lesson_title: string
+        lesson_sequence: number
+        progress_letter: string | null
+        is_completed: boolean
+    }>
 }
 
 export const REPORT_EDITOR_COLUMNS = 'id, enrollment_id, class_occurrence_id, lesson_id, is_completed, progress_letter, lesson_entries, primary_lesson_entry_id, attendance_status, absence_reason, class_participation, classroom_behavior, contact_notes, contact_notes_document, class_notes, class_notes_document, content, content_document, external_link, version, last_edited_by, last_edited_at, created_at, updated_at'
@@ -109,32 +137,6 @@ export class ReportQueryService {
         params.set('report_id', reportId)
         const response = await apiV1Client.get<any>(`/enrollments/${encodeURIComponent(enrollmentId)}/report-progress-context?${params}`)
         return response.data
-    }
-
-    private static getOccurrenceSortKey(report: any): string {
-        const occurrence = Array.isArray(report?.class_occurrences)
-            ? report.class_occurrences[0]
-            : report?.class_occurrences
-        const date = occurrence?.occurrence_date || ''
-        const time = occurrence?.actual_start_time || occurrence?.original_start_time || '00:00:00'
-
-        return `${date}T${time}`
-    }
-
-    private static sortByOccurrenceDateTime<T extends any[]>(reports: T, sortBy: 'asc' | 'desc'): T {
-        const direction = sortBy === 'asc' ? 1 : -1
-        return [...reports].sort((a, b) => {
-            const aKey = this.getOccurrenceSortKey(a)
-            const bKey = this.getOccurrenceSortKey(b)
-
-            if (aKey === bKey) {
-                const aUpdated = a?.updated_at || ''
-                const bUpdated = b?.updated_at || ''
-                return aUpdated.localeCompare(bUpdated) * direction
-            }
-
-            return aKey.localeCompare(bKey) * direction
-        }) as T
     }
 
     static async getReport(
@@ -298,40 +300,37 @@ export class ReportQueryService {
         return { data: response.data || [], count: Number(response.meta?.total || 0) }
     }
 
-    static async getReportsByStudent(
+    static async getStudentReferenceHistory(
         studentId: string,
         params: {
-            excludeReportId?: string,
-            page?: number,
-            pageSize?: number,
-            courseId?: string,
-            sortBy?: 'asc' | 'desc',
+            excludeReportId?: string
+            reportId?: string
+            page: number
+            pageSize: number
+            courseId?: string
+            sortBy: 'asc' | 'desc'
             search?: string
-        } = {}
-    ): Promise<{ data: any[], count: number }> {
-        const { page = 1, pageSize = 10, excludeReportId, courseId, sortBy = 'desc', search } = params
-
-        const enrollmentResponse = await apiResourceClient.list<{ id: string }>('enrollments', {
-            filters: [{ field: 'student_id', operator: 'eq', value: studentId }],
-            perPage: 100
+        }
+    ) {
+        const query = new URLSearchParams({
+            limit: String(params.pageSize),
+            offset: String((params.page - 1) * params.pageSize),
+            sort: params.sortBy === 'asc' ? 'occurrence_date' : '-occurrence_date',
         })
-        const enrollmentIds = (enrollmentResponse.data || []).map((row) => row.id)
-        if (!enrollmentIds.length) return { data: [], count: 0 }
-        const filters: Array<{ field: string; operator: 'eq' | 'neq' | 'in' | 'ilike'; value: unknown }> = [
-            { field: 'enrollment_id', operator: 'in', value: enrollmentIds },
-            { field: 'content', operator: 'neq', value: '' },
-        ]
-        if (excludeReportId) filters.push({ field: 'id', operator: 'neq', value: excludeReportId })
-        if (courseId) filters.push({ field: 'enrollments.course_id', operator: 'eq', value: courseId })
-        if (search) filters.push({ field: 'content', operator: 'ilike', value: `%${search}%` })
-        const response = await apiResourceClient.list<any>('reports', {
-            page,
-            perPage: pageSize,
-            sort: `${sortBy === 'asc' ? '' : '-'}class_occurrences(occurrence_date)`,
-            filters
-        })
-        return { data: this.sortByOccurrenceDateTime(response.data || [], sortBy), count: Number(response.meta?.total || 0) }
+        if (params.excludeReportId) query.set('exclude_report_id', params.excludeReportId)
+        if (params.reportId) query.set('report_id', params.reportId)
+        if (params.courseId) query.set('course_id', params.courseId)
+        if (params.search) query.set('search', params.search)
+        const response = await apiV1Client.get<StudentReferenceReport[]>(`/students/${encodeURIComponent(studentId)}/report-reference-history?${query}`)
+        const displayText = (text: string | null, document: RichTextDocumentV1 | null) =>
+            text?.trim() || !document ? text : createTextEditorContent(document).plainText
+        const data = (response.data ?? []).map(report => ({
+            ...report,
+            content: displayText(report.content, report.content_document),
+            contact_notes: displayText(report.contact_notes, report.contact_notes_document),
+            class_notes: displayText(report.class_notes, report.class_notes_document),
+        }))
+        return { data, count: Number(response.meta?.total || 0) }
     }
 
 }
-

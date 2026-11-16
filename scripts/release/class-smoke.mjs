@@ -15,6 +15,7 @@ const linkedReport = '15800000-0000-4000-8000-000000000026'
 const otherEnrollment = '15800000-0000-4000-8000-0000000000b2'
 const makeupOccurrence = '15800000-0000-4000-8000-000000000019'
 const references = `/reports/reference?lesson_id=${referenceLesson}`
+const studentHistory = '/students/15800000-0000-4000-8000-0000000000a1/report-reference-history'
 async function call(path, expected = [200], postKey, payload, method = postKey ? "POST" : "GET") {
   const bodyText = payload === undefined ? undefined : JSON.stringify(payload)
   const response = await new Promise((resolve, reject) => {
@@ -55,6 +56,9 @@ if (actor === 'makeup-teacher') {
 const completion = `/class-sessions/${session}/report-completion?from=${date}&to=${date}`
 const classTemplate = `/copy-templates/attendance_copy/class_session/${session}`
 if (actor === 'outsider') {
+  const hidden = await call(studentHistory)
+  assert.equal(hidden.meta.total, 0)
+  assert.deepEqual(hidden.data, [])
   await call(workspace, [403, 404])
   await call(completion, [403, 404])
   const denied = await call(references, [200, 403, 404])
@@ -134,6 +138,27 @@ if (actor === 'owner' || actor === 'teacher') {
   assert.equal(nextPage.data[0].progress_letter, 'B')
   assert.deepEqual(nextPage.data[0].lesson_entries, [])
   assert.equal((await call(`${references}&exclude_report_id=${sourceReport}`)).meta.total, 1)
+  const first = await call(`${studentHistory}?exclude_report_id=${sourceReport}&course_id=${course}&limit=1`)
+  const next = await call(`${studentHistory}?exclude_report_id=${sourceReport}&course_id=${course}&limit=1&offset=1`)
+  assert.equal(first.data[0].id, linkedReport)
+  assert.equal(next.data[0].id, legacyReport)
+  assert.equal(first.meta.total, next.meta.total)
+  assert.equal(next.data[0].lesson_entries[0].lesson_id, referenceLesson)
+  const multi = (await call(`${studentHistory}?report_id=${sourceReport}`)).data
+  assert.equal(multi.length, 1)
+  assert.equal(multi[0].lesson_entries.length, 2)
+  const notes = await call(`${studentHistory}?search=History%20notes%20only`)
+  assert.equal(notes.meta.total, 1)
+  assert.equal(notes.data[0].class_notes_document.doc.content[0].content[0].text, 'History notes only')
+  const absent = (await call(`${studentHistory}?report_id=15800000-0000-4000-8000-000000000028`)).data
+  assert.equal(absent[0].attendance_status, 'absent')
+  if (actor === 'teacher') {
+    assert.equal(first.data[0].class_notes, null)
+    assert.deepEqual(first.data[0].lesson_entries.map(entry => entry.course_id), [course])
+    assert.equal((await call(`${studentHistory}?search=private-source-history-note`)).meta.total, 0)
+    assert.equal((await call(`${studentHistory}?search=Private%20source%20lesson`)).meta.total, 0)
+  }
+  await call(progressContext(enrollment, legacyReport), [404])
 }
 const attendancePath = `/occurrences/${occurrence}`
 const firstTeacher = '15800000-0000-4000-8000-0000000000f2'

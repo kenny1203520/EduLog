@@ -40,6 +40,7 @@ createApp({
       course_name: 'Science', lesson_sequence: 7, lesson_title: 'Orbits', is_completed: false,
     }
     const rosterUpdated = ref(false)
+    const multiProgress = ref(false)
     const legacyEditorOpen = ref(false)
     const makeup = useMakeupEnrollment({
       sessionId: 'class', todayOccurrence, selectedDateKey: ref('2026-11-01'),
@@ -85,11 +86,18 @@ createApp({
         reportMap.value = new Map()
         ready.value = true
       } }, 'Finish loading'),
+      h('button', { onClick: () => { multiProgress.value = true } }, 'Show multiple progress entries'),
       h(ReportEditor, {
+        key: multiProgress.value ? 'multi' : 'single',
         disabled: true, autoSaveEnabled: false, collaborationEnabled: false,
         reportId: 'report', enrollmentId: 'host', classOccurrenceId: 'first', courseName: 'Math',
         availableLessons: [{ id: 'l1', sequence: 1, title: 'Numbers' }],
-        initialPrimaryLessonEntryId: 'primary', initialLessonEntries: [progress],
+        initialPrimaryLessonEntryId: 'primary', initialLessonEntries: multiProgress.value ? [
+          { ...progress, id: 'secondary', lesson_id: 'l8', lesson_sequence: 8, lesson_title: 'Gravity' },
+          progress,
+          { ...progress, id: 'third', enrollment_id: 'host', course_id: 'math', lesson_id: 'l1' },
+          { id: 'draft', enrollment_id: 'host', lesson_id: null, is_completed: false },
+        ] : [progress],
       }),
       h('button', { onClick: () => { legacyEditorOpen.value = true } }, 'Open legacy report'),
       legacyEditorOpen.value ? h('section', { 'aria-label': 'Legacy report' }, [
@@ -310,6 +318,15 @@ async function check(browserType) {
     })
     await richTarget.press(shortcut)
     assert.match(await richTarget.getAttribute('data-pasted-html') ?? '', /<(?:strong|b)[\s>]/i)
+    await page.getByRole('button', { name: 'Show multiple progress entries' }).click()
+    await course.click()
+    const multiple = 'Science Orbits\n\nScience Gravity\n\nMath Numbers'
+    await paste(multiple)
+    await richTarget.press(shortcut)
+    const html = await richTarget.getAttribute('data-pasted-html') ?? ''
+    for (const lesson of ['Orbits', 'Gravity', 'Numbers']) {
+      assert.match(html, new RegExp('<(?:strong|b)[^>]*>[^<]*' + lesson))
+    }
     await page.evaluate(() => {
       Object.defineProperty(navigator, 'clipboard', {
         value: { write: async () => { throw new Error('denied') }, writeText: async () => { throw new Error('denied') } },
@@ -319,7 +336,7 @@ async function check(browserType) {
     await course.click()
     const manual = page.getByRole('textbox', { name: 'Could not write to the clipboard. Copy this text manually.' })
     await manual.waitFor()
-    assert.equal(await manual.inputValue(), 'Science Orbits')
+    assert.equal(await manual.inputValue(), multiple)
 
     await page.getByRole('button', { name: 'Open legacy report' }).click()
     const legacy = page.getByRole('region', { name: 'Legacy report' })

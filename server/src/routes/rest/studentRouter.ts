@@ -4,6 +4,7 @@ import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { setAuditContext } from '../../http/context.js'
 import { requireAuthorizationDecision } from '../../auth/authorization.js'
+import { envelope, uuid } from './domainAccess.js'
 
 function wrap(handler: (req: Request, res: Response) => Promise<unknown>) {
   return (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res)).catch(next)
@@ -59,9 +60,32 @@ async function credentials(req: Request, res: Response) {
   return res.json(body)
 }
 
+async function reportReferenceHistory(req: Request, res: Response) {
+  if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
+  const id = uuid.parse(req.params.id)
+  const { course_id, exclude_report_id, report_id, search, sort, limit, offset } = z.object({
+    course_id: uuid.optional(),
+    exclude_report_id: uuid.optional(),
+    report_id: uuid.optional(),
+    search: z.string().trim().max(200).optional(),
+    sort: z.enum(['occurrence_date', '-occurrence_date']).default('-occurrence_date'),
+    limit: z.coerce.number().int().min(1).max(100).default(10),
+    offset: z.coerce.number().int().min(0).max(1000000).default(0),
+  }).strict().parse(req.query)
+  setAuditContext(req, { domain: 'teaching', resource: 'reports', action: 'list',
+    permission: 'teaching.reports.list', scopeId: id, scopeType: 'student' })
+  const result = await req.db.rpc('get_student_report_reference_history', {
+    p_student_id: id, p_course_id: course_id ?? null, p_exclude_report_id: exclude_report_id ?? null,
+    p_search: search ?? null, p_descending: sort === '-occurrence_date', p_limit: limit, p_offset: offset, p_report_id: report_id ?? null,
+  })
+  if (result.error) throw mapDatabaseError(result.error)
+  return res.json(envelope(req, result.data.data, { total: result.data.total, limit, offset, sort }))
+}
+
 export function createStudentRouter() {
   const router = Router()
   router.get('/students/:id/credentials', wrap(credentials))
+  router.get('/students/:id/report-reference-history', wrap(reportReferenceHistory))
   router.delete('/students/:id', wrap(remove))
   return router
 }

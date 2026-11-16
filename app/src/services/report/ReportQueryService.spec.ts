@@ -19,6 +19,24 @@ beforeEach(() => {
     vi.clearAllMocks()
 })
 
+it('requests a single history page and retains text from document-only reports', async () => {
+    apiV1GetMock.mockResolvedValueOnce({ data: [{
+        id: 'report-a', content: null,
+        content_document: {
+            schemaVersion: 1, doc: { type: 'doc', content: [
+                { type: 'paragraph', content: [{ type: 'text', text: 'Historical body' }] },
+            ] },
+        },
+    }], meta: { total: 21 } })
+    const history = await ReportQueryService.getStudentReferenceHistory('student-a', {
+        page: 3, pageSize: 10, sortBy: 'asc', excludeReportId: 'current', courseId: 'course-a', search: 'lesson name',
+    })
+    expect(apiV1GetMock).toHaveBeenCalledExactlyOnceWith(
+        '/students/student-a/report-reference-history?limit=10&offset=20&sort=occurrence_date&exclude_report_id=current&course_id=course-a&search=lesson+name',
+    )
+    expect(history).toMatchObject({ count: 21, data: [{ content: 'Historical body' }] })
+})
+
 describe('ReportQueryService.getProgressSummaryReportsByEnrollments', () => {
     it('groups reports by enrollment_id in one request instead of one per enrollment', async () => {
         apiV1GetMock.mockResolvedValueOnce({ data: [

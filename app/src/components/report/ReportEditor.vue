@@ -129,9 +129,9 @@
                             {{ $t('report.editor.lesson_label') }}
                         </label>
                         <button type="button" @click="copyCourseInfo"
-                            :disabled="!primaryCourseCopySelection || courseCopyLoading || props.loading"
+                            :disabled="!courseCopySelections.length || courseCopyLoading || props.loading"
                             class="min-h-6 min-w-6 p-1 text-gray-400 hover:text-indigo-600 transition-colors disabled:opacity-50"
-                            :title="$t(primaryCourseCopySelection ? 'report.editor.copy_course_info' : 'report.editor.copy_course_select_lesson')"
+                            :title="$t(courseCopySelections.length ? 'report.editor.copy_course_info' : 'report.editor.copy_course_select_lesson')"
                             :aria-label="$t('report.editor.copy_course_info')">
                             <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" class="h-4 w-4" fill="none"
                                 viewBox="0 0 24 24" stroke="currentColor">
@@ -483,10 +483,8 @@
         </div>
 
         <ReportReferencePanel :show="showReferencePanel" :lesson-choices="referenceLessonChoices" :primary-entry-id="primaryLessonEntryId"
-            :student-id="props.initialStudentId" :enrollment-id="props.enrollmentId" :current-report-id="props.reportId" @close="closeReferencePanel"
-            :focused-report-id="focusedProgressReport?.id" :focused-lesson-sequence="focusedProgressReport?.lesson.sequence"
-            :focused-lesson-title="focusedProgressReport?.lesson.title" :focused-course-name="props.courseDisplayName || props.courseName"
-            :focused-student-name="props.initialStudentName"
+            :student-id="props.initialStudentId" :current-report-id="props.reportId" @close="closeReferencePanel"
+            :focused-report-id="focusedProgressReport?.id"
             @copy="handleCopyContent" />
 
         <AiReportPanel :show="showAiPanel" :report-id="props.reportId"
@@ -702,14 +700,16 @@ const referenceLessonChoices = computed(() => lessonEntries.value.flatMap(entry 
         title: lesson?.title || entry.lesson_title,
     }]
 }))
-const primaryCourseCopySelection = computed(() => {
-    const primary = referenceLessonChoices.value.find(choice => choice.entryId === primaryLessonEntryId.value)
-    if (!primary || primary.sequence == null || !primary.title || !primary.courseName) return null
-    return {
-        courseName: primary.templateCourseName,
-        courseDisplayName: primary.templateCourseDisplayName,
-        lesson: { sequence: primary.sequence, title: primary.title },
-    }
+const courseCopySelections = computed(() => {
+    const isPrimary = (choice: { entryId: string }) => choice.entryId === primaryLessonEntryId.value
+    const choices = referenceLessonChoices.value
+    return [...choices.filter(isPrimary), ...choices.filter(choice => !isPrimary(choice))].flatMap(choice =>
+        choice.sequence == null || !choice.title || !choice.courseName ? [] : [{
+            courseName: choice.templateCourseName,
+            courseDisplayName: choice.templateCourseDisplayName,
+            lesson: { sequence: choice.sequence, title: choice.title },
+        }]
+    )
 })
 const lessonEntryOptionsLoading = ref(false)
 const lessonEntryOptionsError = ref('')
@@ -765,7 +765,7 @@ const {
     courseTemplatePreviewText, copyCourseInfo, openCourseCopyTemplateModal, loadSelectedCourseTemplate,
     saveCourseCopyTemplate,
 } = useCourseCopyTemplate({
-    selection: () => primaryCourseCopySelection.value,
+    selection: () => courseCopySelections.value,
     reportKey: () => props.loading ? undefined : props.reportId || props.enrollmentId,
 })
 
