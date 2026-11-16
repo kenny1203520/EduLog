@@ -41,6 +41,15 @@ for attempt in {1..30}; do
   sleep 2
 done
 docker exec "$frontend" wget -q -O /dev/null http://127.0.0.1:4173/
+for path in / /index.html /dashboard/classrooms /sw.js; do
+  headers="$(docker exec "$frontend" wget -S -O /dev/null "http://127.0.0.1:4173$path" 2>&1)"
+  grep -qi 'Cache-Control: no-store' <<<"$headers"
+  grep -qi 'X-Content-Type-Options: nosniff' <<<"$headers"
+done
+asset="$(docker exec "$frontend" sh -c 'find /usr/share/nginx/html/assets -name "index-*.js" -print -quit')"
+test -n "$asset"
+headers="$(docker exec "$frontend" wget -S -O /dev/null "http://127.0.0.1:4173/assets/${asset##*/}" 2>&1)"
+grep -qi 'Cache-Control: public, max-age=31536000, immutable' <<<"$headers"
 docker exec "$frontend" wget -q -O - http://127.0.0.1:4173/api/healthz | grep -q '"status":"ok"'
 version="$(node -p "require('./app/package.json').version")"
 docker exec "$frontend" grep -r -q "$version" /usr/share/nginx/html/assets

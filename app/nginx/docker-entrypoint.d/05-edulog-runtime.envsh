@@ -182,6 +182,18 @@ common_locations() {
     include $headers_include;
   }
 
+  location = /sw.js {
+    try_files \$uri =404;
+    add_header Cache-Control "no-store" always;
+    include $headers_include;
+  }
+
+  location = /index.html {
+    try_files \$uri =404;
+    add_header Cache-Control "no-store" always;
+    include $headers_include;
+  }
+
 $(api_location)
 
   location / {

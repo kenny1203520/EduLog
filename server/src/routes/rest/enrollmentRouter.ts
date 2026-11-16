@@ -307,7 +307,7 @@ async function enrollmentReportProgressContext(req: Request, res: Response) {
   const linkedReports: Array<Record<string, any>> = []
   const teachingId = typeof course.data?.teaching_id === 'string' ? course.data.teaching_id : null
   if (teachingId && targetEnrollment.student_id) {
-    const linkedReportFields = 'id,enrollment_id,lesson_entries,attendance_status,content,content_document,class_occurrences!inner(occurrence_date,class_sessions!inner(teaching_id)),enrollments!inner(student_id)'
+    const linkedReportFields = 'id,enrollment_id,lesson_entries,attendance_status,content,content_document,class_occurrences!inner(occurrence_date,actual_start_time,original_start_time,class_sessions!inner(teaching_id)),enrollments!inner(student_id)'
     for (let offset = 0; ; offset += pageSize) {
       let builder = req.adminDb.from('occurrence_reports').select(linkedReportFields)
         .contains('lesson_entries', JSON.stringify([{ enrollment_id: enrollmentId, course_id: targetEnrollment.course_id }]))
