@@ -35,11 +35,11 @@ describe('course copy template', () => {
         })
         afterEach(() => scope.stop())
         const setup = () => scope.run(() => useCourseCopyTemplate({
-            selection: () => ({
+            selection: () => [{
                 courseName: 'Python',
                 courseDisplayName: 'Level 1',
                 lesson: { sequence: 2, title: 'Loops' },
-            }),
+            }],
             reportKey: () => 'report',
         }))!
 

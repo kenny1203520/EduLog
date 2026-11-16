@@ -70,6 +70,24 @@ describe('report progress context', () => {
         expect(progress.progressSummary.value).toBe('report.editor.progress_check.load_error')
     })
 
+    it('restores the previous report and gaps after a failed load is retried', async () => {
+        reports.getEnrollmentReportProgressContext.mockRejectedValueOnce(new Error('DATABASE_ERROR'))
+            .mockResolvedValueOnce({
+                reports: [{ lesson_id: 'l1' }],
+                latest_prior_report: { id: 'linked', lesson_id: 'l1', progress_letter: '-D', can_open_report: false },
+            })
+        const progress = setup()
+        await vi.waitFor(() => expect(progress.progressContextError.value).toBe(true))
+        expect(progress.previousProgressReport.value).toBeNull()
+        expect(progress.progressGaps.value).toEqual([])
+
+        await progress.loadProgressContext()
+        expect(progress.progressContextError.value).toBe(false)
+        expect(progress.previousProgressReport.value?.report.progress_letter).toBe('-D')
+        expect(progress.progressGaps.value.map(lesson => lesson.id)).toEqual(['l2'])
+        expect(progress.focusPreviousProgressReport()).toBe(false)
+    })
+
     it('does nothing without a report', async () => {
         reportId.value = undefined
         const progress = setup()

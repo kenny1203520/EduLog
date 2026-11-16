@@ -35,12 +35,30 @@ UPDATE public.user_role_assignments SET role_id = (SELECT id FROM public.roles W
 WHERE user_id = '15800000-0000-4000-8000-000000000007';
 INSERT INTO public.lessons(id,course_id,title,sequence) VALUES
  ('15800000-0000-4000-8000-0000000000a9','15800000-0000-4000-8000-0000000000d1','Smoke unit',1),
- ('15800000-0000-4000-8000-0000000000aa','15800000-0000-4000-8000-0000000000d1','Reference unit',2);
+ ('15800000-0000-4000-8000-0000000000aa','15800000-0000-4000-8000-0000000000d1','Reference unit',2),
+ ('15800000-0000-4000-8000-0000000000ac','15800000-0000-4000-8000-0000000000d2','Private source lesson',1);
 INSERT INTO public.class_occurrences(id,class_session_id,occurrence_date,status,is_conducted) VALUES
  ('15800000-0000-4000-8000-000000000019','15800000-0000-4000-8000-0000000000e1',CURRENT_DATE-3,'completed',true);
 INSERT INTO public.occurrence_reports(id,enrollment_id,class_occurrence_id,lesson_id,progress_letter,content,attendance_status)
 VALUES ('15800000-0000-4000-8000-000000000025','15800000-0000-4000-8000-0000000000b1',
  '15800000-0000-4000-8000-000000000019','15800000-0000-4000-8000-0000000000aa','B','Legacy reference content','present');
+INSERT INTO public.enrollments(id,student_id,course_id,classroom_id,class_session_id,status,start_date,lesson_number)
+VALUES ('15800000-0000-4000-8000-0000000000b5','15800000-0000-4000-8000-0000000000a1','15800000-0000-4000-8000-0000000000d2',
+ '15800000-0000-4000-8000-0000000000c2','15800000-0000-4000-8000-0000000000e2','regular',CURRENT_DATE-30,1);
+INSERT INTO public.class_occurrences(id,class_session_id,occurrence_date,status,is_conducted,original_start_time,actual_start_time)
+VALUES ('15800000-0000-4000-8000-00000000001a','15800000-0000-4000-8000-0000000000e2',CURRENT_DATE-2,'completed',true,'11:00','11:30');
+INSERT INTO public.occurrence_reports(id,enrollment_id,class_occurrence_id,lesson_entries,content,attendance_status,class_notes)
+VALUES ('15800000-0000-4000-8000-000000000026','15800000-0000-4000-8000-0000000000b5','15800000-0000-4000-8000-00000000001a',
+ '[{"id":"15800000-0000-4000-8000-0000000000ab","enrollment_id":"15800000-0000-4000-8000-0000000000b1","course_id":"15800000-0000-4000-8000-0000000000d1","lesson_id":"15800000-0000-4000-8000-0000000000a9","is_completed":false,"progress_letter":"-D"},
+   {"id":"15800000-0000-4000-8000-0000000000ad","enrollment_id":"15800000-0000-4000-8000-0000000000b5","course_id":"15800000-0000-4000-8000-0000000000d2","lesson_id":"15800000-0000-4000-8000-0000000000ac","is_completed":true,"progress_letter":"A-Z"}]',
+ 'Cross-course progress', 'present', 'private-source-history-note');
+INSERT INTO public.class_occurrences(id,class_session_id,occurrence_date,status,is_conducted) VALUES
+ ('15800000-0000-4000-8000-00000000001b','15800000-0000-4000-8000-0000000000e1',CURRENT_DATE-6,'completed',true),
+ ('15800000-0000-4000-8000-00000000001c','15800000-0000-4000-8000-0000000000e1',CURRENT_DATE-5,'completed',true);
+INSERT INTO public.occurrence_reports(id,enrollment_id,class_occurrence_id,attendance_status,class_notes_document)
+VALUES ('15800000-0000-4000-8000-000000000027','15800000-0000-4000-8000-0000000000b1','15800000-0000-4000-8000-00000000001b','pending',
+       '{"schemaVersion":1,"doc":{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"History notes only"}]}]}}'),
+       ('15800000-0000-4000-8000-000000000028','15800000-0000-4000-8000-0000000000b1','15800000-0000-4000-8000-00000000001c','absent',NULL);
 INSERT INTO public.students(id,name) VALUES ('15800000-0000-4000-8000-0000000000a3','Scope Student Three');
 INSERT INTO public.enrollments(id,student_id,course_id,classroom_id,class_session_id,status,start_date,lesson_number)
 VALUES ('15800000-0000-4000-8000-0000000000b3','15800000-0000-4000-8000-0000000000a3','15800000-0000-4000-8000-0000000000d1',

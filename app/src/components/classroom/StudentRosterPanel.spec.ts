@@ -105,6 +105,17 @@ describe('StudentRosterPanel', () => {
         expect(wrapper.emitted('koding-check')).toEqual([['enrollment-1']])
     })
 
+    it('gives quick edit and homework check pointer and keyboard focus styles in both layouts', () => {
+        const actions = mountPanel().findAll('button').filter(button =>
+            ['classroom.quick_edit', 'classroom.koding_check'].includes(button.text()))
+        expect(actions).toHaveLength(4)
+        for (const action of actions) {
+            expect(action.classes()).toContain('enabled:cursor-pointer')
+            expect(action.classes()).toContain('focus-visible:outline-2')
+            if (action.text() === 'classroom.quick_edit') expect(action.classes()).toContain('disabled:cursor-not-allowed')
+        }
+    })
+
     it('keeps trial enrollments visible while disabling unavailable report actions', async () => {
         const wrapper = mountPanel({ items: [{ ...item, enrollmentTone: 'trial', reportAvailable: false }] })
         const card = wrapper.get('.roster-cards [data-enrollment-id="enrollment-1"]')

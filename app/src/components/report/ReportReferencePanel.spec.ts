@@ -7,10 +7,8 @@ const services = vi.hoisted(() => ({
     getAllClassroomsOverview: vi.fn().mockResolvedValue({ classrooms: [] }),
     getAllClassrooms: vi.fn().mockResolvedValue({ data: [] }),
     getAllClassSessionOptions: vi.fn().mockResolvedValue({ data: [] }),
-    getReportsByStudent: vi.fn(),
+    getStudentReferenceHistory: vi.fn(),
     getReportsByLesson: vi.fn(),
-    getLinkedLessonReportHistory: vi.fn(),
-    getReportById: vi.fn(),
     reportError: vi.fn(),
 }))
 
@@ -25,10 +23,8 @@ vi.mock('@/services/api/AggregateService', () => ({ AggregateService: { getAllCl
 vi.mock('@/services/session/SessionService', () => ({ SessionService: { getAllClassSessionOptions: services.getAllClassSessionOptions } }))
 vi.mock('@/services/report/ReportQueryService', () => ({
     ReportQueryService: {
-        getReportsByStudent: services.getReportsByStudent,
+        getStudentReferenceHistory: services.getStudentReferenceHistory,
         getReportsByLesson: services.getReportsByLesson,
-        getLinkedLessonReportHistory: services.getLinkedLessonReportHistory,
-        getReportById: services.getReportById,
     },
 }))
 
@@ -57,71 +53,43 @@ describe('ReportReferencePanel linked lesson history', () => {
         wrapper.unmount()
     })
 
-    it('shows only the safe linked projection when its parent report is also in student history', async () => {
-        services.getReportsByStudent.mockResolvedValue({
+    it('shows all visible lesson entries together and can return from a focused report', async () => {
+        services.getStudentReferenceHistory.mockResolvedValue({
             count: 1,
             data: [{
-                id: 'shared-report', content: 'Private report body', contact_notes: 'Private contact note', class_notes: 'Private class note',
-                class_occurrences: { occurrence_date: '2026-11-11' },
+                id: 'shared-report', occurrence_date: '2026-11-11', attendance_status: 'present',
+                is_linked_lesson_entry: true, contact_notes: 'Must remain hidden', content: '',
+                lesson_entries: [
+                    { id: 'a', course_name: 'Course A', lesson_id: 'a', progress_letter: 'C-D', is_completed: true },
+                    { id: 'b', course_name: 'Course B', lesson_id: 'b', progress_letter: 'A-B', is_completed: false },
+                ],
             }],
         })
-        services.getLinkedLessonReportHistory.mockResolvedValue({
-            count: 1,
-            data: [{
-                id: 'shared-report', class_occurrence_id: 'occurrence-a', lesson_id: 'lesson-b', course_id: 'course-b',
-                course_name: 'Course B', lesson_sequence: 2, lesson_title: 'Lesson B2', progress_letter: 'C-D', is_completed: false,
-                attendance_status: 'present', content: 'Shared comment for course B', content_document: null,
-                occurrence_date: '2026-11-11', contact_notes: 'Must remain hidden', class_notes: 'Must remain hidden too',
-            }],
-        })
-
         const wrapper = mount(ReportReferencePanel, {
-            props: { show: false, studentId: 'student-b', enrollmentId: 'enrollment-b' },
-            global: {
-                mocks: { $t: (key: string) => key },
-                stubs: {
-                    Teleport: true,
-                    BaseDropdown: true,
-                    RichTextViewer: { props: ['content'], template: '<div class="rich-text">{{ content }}</div>' },
-                },
-            },
-        })
-        await flushPromises()
-        await wrapper.setProps({ show: true })
-        await flushPromises()
-
-        await wrapper.findAll('button').find(button => button.text() === 'report.reference_panel.student_history')!.trigger('click')
-        await flushPromises()
-
-        expect(services.getLinkedLessonReportHistory).toHaveBeenCalledWith('enrollment-b', expect.objectContaining({
-            limit: 10, offset: 0, sort: '-occurrence_date',
-        }))
-        expect(wrapper.text()).toContain('Course B #2 Lesson B2')
-        expect(wrapper.text()).toContain('Shared comment for course B')
-        expect(wrapper.text()).not.toContain('Private report body')
-        expect(wrapper.text()).not.toContain('Private contact note')
-        expect(wrapper.text()).not.toContain('Private class note')
-        expect(wrapper.text()).not.toContain('Must remain hidden')
-        expect(wrapper.find('a').exists()).toBe(false)
-    })
-
-    it('passes the search into the linked-history query', async () => {
-        services.getReportsByStudent.mockResolvedValue({ count: 0, data: [] })
-        services.getLinkedLessonReportHistory.mockResolvedValue({ count: 0, data: [] })
-        const wrapper = mount(ReportReferencePanel, {
-            props: { show: true, studentId: 'student-b', enrollmentId: 'enrollment-b' },
+            props: { show: true, studentId: 'student-b', currentReportId: 'editing', focusedReportId: 'shared-report' },
             global: {
                 mocks: { $t: (key: string) => key },
                 stubs: { Teleport: true, BaseDropdown: true, RichTextViewer: true },
             },
         })
         await flushPromises()
-        await wrapper.findAll('button').find(button => button.text() === 'report.reference_panel.student_history')!.trigger('click')
+        expect(services.getStudentReferenceHistory).toHaveBeenLastCalledWith('student-b', expect.objectContaining({
+            reportId: 'shared-report', excludeReportId: 'editing', page: 1, pageSize: 10,
+        }))
+        expect(wrapper.findAll('li')).toHaveLength(2)
+        expect(wrapper.text()).toContain('Course A')
+        expect(wrapper.text()).toContain('Course B')
+        expect(wrapper.text()).toContain('C-D')
+        expect(wrapper.text()).not.toContain('Must remain hidden')
+        expect(wrapper.get('button[title="report.reference_panel.copy_content"]').attributes('disabled')).toBeDefined()
+
+        await wrapper.findAll('button').find(button => button.text() === 'report.reference_panel.view_all_history')!.trigger('click')
         await flushPromises()
+        expect(services.getStudentReferenceHistory.mock.lastCall?.[1]).not.toHaveProperty('reportId')
         await wrapper.get('input[type="text"]').setValue('  make up  ')
         await wrapper.get('input[type="text"]').trigger('keyup.enter')
         await flushPromises()
-
-        expect(services.getLinkedLessonReportHistory).toHaveBeenLastCalledWith('enrollment-b', expect.objectContaining({ search: 'make up' }))
+        expect(services.getStudentReferenceHistory).toHaveBeenLastCalledWith('student-b', expect.objectContaining({ search: 'make up' }))
+        wrapper.unmount()
     })
 })

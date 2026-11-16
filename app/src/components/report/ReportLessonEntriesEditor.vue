@@ -147,7 +147,7 @@
                         class="h-4 w-4 accent-emerald-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700"
                         @change="$emit('update:primaryEntryId', entry.id)"
                     >
-                    <span>{{ $t('report.editor.lesson_entries.primary') }}</span>
+                    <span>{{ $t(entry.id === primaryEntryId ? 'report.editor.lesson_entries.primary_label' : 'report.editor.lesson_entries.primary') }}</span>
                 </label>
                 <button
                     type="button"
@@ -167,7 +167,7 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ReportLessonEntryDTO } from '@/models/OccurrenceReport'
-import { composeProgressLetter, createLessonEntryId } from '@/models/ReportEditorSnapshot'
+import { composeProgressLetter, createLessonEntryId, resolveLessonEntryCourseId } from '@/models/ReportEditorSnapshot'
 import type { LessonEntryOption } from '@/services/report/ReportQueryService'
 
 const props = withDefaults(defineProps<{
@@ -247,7 +247,7 @@ function courseName(entry: ReportLessonEntryDTO) {
 
 function isEntryIncomplete(entry: ReportLessonEntryDTO) {
     if (entry.id === initialDraft.value?.id) return false
-    return !entry.enrollment_id || !entry.course_id || !entry.lesson_id
+    return !entry.enrollment_id || !entry.lesson_id || !resolveLessonEntryCourseId(entry, props.options)
 }
 
 function lessonsFor(entry: ReportLessonEntryDTO) {
@@ -302,7 +302,7 @@ function changeLesson(entry: ReportLessonEntryDTO, lessonId: string) {
     const option = optionFor(entry)
     updateEntry(entry.id, {
         lesson_id: lessonId || null,
-        course_id: option?.course_id,
+        course_id: option?.course_id || entry.course_id,
         course_name: option?.course_name,
         lesson_sequence: lesson?.sequence,
         lesson_title: lesson?.title,
