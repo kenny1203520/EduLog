@@ -22,17 +22,22 @@ docker exec "$fixture-db" psql -U postgres -v ON_ERROR_STOP=1 \
 start_auth() {
   docker run -d --name "$fixture-auth" --network "$fixture" -p 127.0.0.1::9999 \
     -e API_EXTERNAL_URL=http://localhost:9999 -e GOTRUE_SITE_URL=http://localhost:5173 \
-    -e GOTRUE_API_HOST=0.0.0.0 -e PORT=9999 -e GOTRUE_DB_DRIVER=postgres \
+    -e GOTRUE_JWT_ISSUER=http://localhost:9999 -e GOTRUE_API_HOST=0.0.0.0 -e PORT=9999 -e GOTRUE_DB_DRIVER=postgres \
     -e "GOTRUE_DB_DATABASE_URL=postgres://postgres:$fixture_secret@$fixture-db:5432/postgres?sslmode=disable" \
     -e "GOTRUE_JWT_SECRET=$fixture_secret" -e GOTRUE_JWT_ADMIN_ROLES=service_role \
     -e GOTRUE_EXTERNAL_EMAIL_ENABLED=true -e GOTRUE_MAILER_AUTOCONFIRM=true \
     "$@" supabase/gotrue:v2.197.0 >/dev/null
   auth_url="http://$(docker port "$fixture-auth" 9999)"
-  for ((attempt=0; attempt<30; attempt++)); do
-    if curl --silent --fail "$auth_url/health" >/dev/null; then break; fi
-    sleep 1
-  done
-  curl --silent --fail "$auth_url/health" >/dev/null
+  node --input-type=module - "$auth_url" <<'JS'
+import { setTimeout } from 'node:timers/promises'
+const health = new URL('/health', process.argv[2])
+for (let attempt = 0; attempt < 30; attempt += 1) {
+  const response = await fetch(health, { signal: AbortSignal.timeout(2_000) }).catch(() => undefined)
+  if (response?.ok) process.exit(0)
+  await setTimeout(1_000)
+}
+throw new Error('GoTrue did not become ready')
+JS
 }
 
 start_auth

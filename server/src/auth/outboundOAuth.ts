@@ -1,4 +1,5 @@
 import { Router, type Request, type RequestHandler } from 'express'
+import { rateLimit } from 'express-rate-limit'
 import { z } from 'zod'
 import type { ApiConfig } from '../config/config.js'
 import { ApiError } from '../http/errors.js'
@@ -84,6 +85,7 @@ async function requireManagement(req: Request) {
 
 export function createOutboundOAuthRouter(config: ApiConfig, activeAccount: RequestHandler) {
   const router = Router()
+  const limitOptions = { windowMs: 60_000, limit: config.API_RATE_LIMIT_PER_MINUTE, standardHeaders: true, legacyHeaders: false }
   router.use((_req, res, next) => {
     res.set('Cache-Control', 'private, no-store')
     if (!config.AUTH_OUTBOUND_OAUTH_ENABLED) return next(new ApiError(404, 'OAUTH_SERVER_DISABLED', 'OAuth is not enabled'))
@@ -97,7 +99,7 @@ export function createOutboundOAuthRouter(config: ApiConfig, activeAccount: Requ
       z.object({ clients: z.array(clientSummary) }), config.SUPABASE_SERVICE_ROLE_KEY)
     sendData(req, res, data)
   })
-  router.post('/clients', async (req, res) => {
+  router.post('/clients', rateLimit(limitOptions), async (req, res) => {
     await requireManagement(req)
     requireRecentProviderAdminAuthentication(req)
     const data = await callGoTrue(config, '/admin/oauth/clients', clientRegistration,
@@ -108,7 +110,7 @@ export function createOutboundOAuthRouter(config: ApiConfig, activeAccount: Requ
     setAuditContext(req, { domain: 'system', resource: 'oauth_clients', action: 'create', resourceId: data.client_id })
     sendCreated(req, res, data)
   })
-  router.delete('/clients/:id', async (req, res) => {
+  router.delete('/clients/:id', rateLimit(limitOptions), async (req, res) => {
     await requireManagement(req)
     requireRecentProviderAdminAuthentication(req)
     const id = input(uuid, req.params.id)

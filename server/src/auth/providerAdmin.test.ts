@@ -1,4 +1,3 @@
-import cookieParser from 'cookie-parser'
 import express from 'express'
 import { SignJWT } from 'jose'
 import pino from 'pino'
@@ -43,7 +42,11 @@ async function harness(options: { permitted?: boolean; enabled?: boolean; authen
     AUTH_PROVIDER_ALLOWED_ORIGINS: origin,
   })
   const app = express()
-  app.use(cookieParser(), express.json(), requestContext(pino({ level: 'silent' })))
+  app.use(express.json(), requestContext(pino({ level: 'silent' })))
+  app.use((req, _res, next) => {
+    req.cookies = { edulog_access: req.header('x-fixture-token'), edulog_csrf: 'provider-csrf' }
+    next()
+  })
   const adminClient = {
     auth: { getUser: async () => ({ data: { user: { id: userId } }, error: null }) },
     from: () => ({
@@ -94,7 +97,7 @@ async function harness(options: { permitted?: boolean; enabled?: boolean; authen
   const socket = request(app)
   const prefix = '/api/auth/provider-admin'
   function session(req: ReturnType<typeof socket.get>, csrf = true) {
-    req.set('Cookie', ['edulog_access=' + token, 'edulog_csrf=provider-csrf'])
+    req.set('x-fixture-token', token)
     if (csrf) req.set('x-csrf-token', 'provider-csrf')
     return req
   }

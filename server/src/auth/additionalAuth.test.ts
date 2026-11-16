@@ -1,5 +1,4 @@
 import express, { Router } from 'express'
-import cookieParser from 'cookie-parser'
 import pino from 'pino'
 import request from 'supertest'
 import { SignJWT } from 'jose'
@@ -19,7 +18,6 @@ const config = testConfig({
 function testApp() {
   const app = express()
   const router = Router()
-  app.use(cookieParser())
   app.use(express.json())
   app.use(requestContext(pino({ level: 'silent' })))
   const sendSession = vi.fn(async () => 'active' as const)
@@ -27,10 +25,10 @@ function testApp() {
     config,
     activeAccount: (_req, _res, next) => next(),
     challengeAccount: (req, _res, next) => {
-      req.accessToken = req.cookies?.edulog_access
+      req.accessToken = req.header('x-fixture-token')
+      req.cookies = { edulog_access: req.accessToken }
       next()
     },
-    rateLimiter: (_req, _res, next) => next(),
     sendSession,
   })
   app.use('/api/auth', router)
@@ -91,7 +89,7 @@ describe('additional auth routes', () => {
     vi.stubGlobal('fetch', fetchMock)
     const { app } = testApp()
     const response = await request(app).post(`/api/auth/me/factors/${enrollmentId}/challenge`)
-      .set('Cookie', `edulog_access=${await tokenFor('aal1')}`).send({})
+      .set('x-fixture-token', await tokenFor('aal1')).send({})
     expect(response.status).toBe(403)
     expect(response.body.error.code).toBe('MFA_REQUIRED')
     expect(fetchMock.mock.calls.map(([url]) => new URL(url).pathname)).not.toContain(`/factors/${enrollmentId}/challenge`)

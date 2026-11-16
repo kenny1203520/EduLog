@@ -5,7 +5,7 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_roles, unnest(rolconfig) AS config
     WHERE rolname = 'authenticator'
-      AND config = 'pgrst.db_pre_request=public.edulog_reject_external_oauth'
+      AND config = 'pgrst.db_pre_request=edulog_auth.reject_external_oauth'
   ) THEN
     RAISE EXCEPTION 'PostgREST query guard is missing';
   END IF;
@@ -26,7 +26,7 @@ SELECT set_config('request.jwt.claims', '{"role":"authenticated"}', true);
 
 DO $$
 BEGIN
-  PERFORM public.edulog_reject_external_oauth();
+  PERFORM edulog_auth.reject_external_oauth();
   IF NOT EXISTS (SELECT FROM storage.objects)
      OR NOT EXISTS (SELECT FROM storage.buckets)
      OR NOT EXISTS (SELECT FROM realtime.messages) THEN
@@ -40,7 +40,7 @@ SELECT set_config('request.jwt.claims', '{"role":"authenticated","client_id":"2d
 DO $$
 BEGIN
   BEGIN
-    PERFORM public.edulog_reject_external_oauth();
+    PERFORM edulog_auth.reject_external_oauth();
     RAISE EXCEPTION 'External token passed PostgREST pre-request guard';
   EXCEPTION WHEN insufficient_privilege THEN
     NULL;

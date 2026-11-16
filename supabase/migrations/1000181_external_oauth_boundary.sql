@@ -13,7 +13,11 @@ JOIN public.permissions ON permissions.key = 'system.auth.oauth_clients.manage'
 WHERE roles.is_builtin AND roles.domain = 'system' AND roles.code = 'system_owner'
 ON CONFLICT DO NOTHING;
 
-CREATE FUNCTION public.edulog_reject_external_oauth()
+CREATE SCHEMA edulog_auth;
+REVOKE ALL ON SCHEMA edulog_auth FROM PUBLIC, anon;
+GRANT USAGE ON SCHEMA edulog_auth TO authenticated, service_role;
+
+CREATE FUNCTION edulog_auth.reject_external_oauth()
 RETURNS void
 LANGUAGE plpgsql
 STABLE
@@ -27,9 +31,9 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.edulog_reject_external_oauth() FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.edulog_reject_external_oauth() TO authenticated, service_role;
-ALTER ROLE authenticator SET pgrst.db_pre_request = 'public.edulog_reject_external_oauth';
+REVOKE ALL ON FUNCTION edulog_auth.reject_external_oauth() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION edulog_auth.reject_external_oauth() TO authenticated, service_role;
+ALTER ROLE authenticator SET pgrst.db_pre_request = 'edulog_auth.reject_external_oauth';
 NOTIFY pgrst, 'reload config';
 
 -- RPCs (including SECURITY DEFINER) and GraphQL pass through the pre-request

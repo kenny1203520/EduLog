@@ -73,15 +73,16 @@ try {
   const external = await request('/oauth/token', exchange)
   const jwt = value => JSON.parse(Buffer.from(value.split('.')[1], 'base64url').toString())
   assert.equal(jwt(external.id_token).sub, user.id)
+  assert.equal(jwt(external.id_token).iss, settings.issuer)
   assert.equal(jwt(external.access_token).client_id, client.client_id)
   assert.equal((await request('/oauth/userinfo', { token: external.access_token })).sub, user.id)
   if (process.env.AUTH_SMOKE_TEST_POSTGREST_URL) {
     const postgrest = new URL(process.env.AUTH_SMOKE_TEST_POSTGREST_URL)
     assert.ok(['127.0.0.1', 'localhost', '[::1]'].includes(postgrest.hostname))
-    const resource = new URL('/rpc/edulog_reject_external_oauth', postgrest)
+    const resource = new URL('/', postgrest)
     const call = accessToken => fetch(resource, {
-      method: 'POST', headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
-      body: '{}', signal: AbortSignal.timeout(10_000),
+      headers: { Authorization: 'Bearer ' + accessToken },
+      signal: AbortSignal.timeout(10_000),
     })
     const firstPartyResponse = await call(token)
     assert.ok(firstPartyResponse.ok, 'First-party token may invoke PostgREST (' + firstPartyResponse.status + '): ' + (firstPartyResponse.ok ? '' : await firstPartyResponse.text()))

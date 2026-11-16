@@ -1,4 +1,5 @@
 import { urlencoded, type Request, type RequestHandler, type Response, type Router } from 'express'
+import { rateLimit } from 'express-rate-limit'
 import { decodeJwt } from 'jose'
 import { z } from 'zod'
 import type { ApiConfig } from '../config/config.js'
@@ -74,20 +75,20 @@ type AuthRouteOptions = {
   config: ApiConfig
   activeAccount: RequestHandler
   challengeAccount: RequestHandler
-  rateLimiter: RequestHandler
   sendSession(req: Request, res: Response, session: GoTrueSession): Promise<'active' | 'pending'>
 }
 
-export function registerAdditionalAuthRoutes(router: Router, { config, activeAccount, challengeAccount, rateLimiter, sendSession }: AuthRouteOptions) {
+export function registerAdditionalAuthRoutes(router: Router, { config, activeAccount, challengeAccount, sendSession }: AuthRouteOptions) {
   const callback = new URL(callbackPath, config.EDULOG_WEB_BASE_URL)
-  const cookie = { httpOnly: true, sameSite: 'lax' as const, secure: config.COOKIE_SECURE, path: callbackPath }
+  const cookie = { sameSite: 'lax' as const, path: callbackPath }
+  const limitOptions = { windowMs: 60_000, limit: config.API_RATE_LIMIT_PER_MINUTE, standardHeaders: true, legacyHeaders: false }
   const result = (req: Request, res: Response, data: unknown) => res.set('Cache-Control', 'no-store')
     .json({ data, meta: {}, request_id: req.requestId, trace_id: req.traceId })
   const startFlow = (res: Response, rawReturnTo: unknown) => {
     const { verifier, challenge } = createPkcePair()
-    res.cookie(verifierCookie, verifier, { ...cookie, maxAge: 10 * 60 * 1000 })
+    res.cookie(verifierCookie, verifier, { ...cookie, httpOnly: true, secure: true, maxAge: 10 * 60 * 1000 })
     const returnTo = outboundConsentReturn(rawReturnTo)
-    if (returnTo) res.cookie(returnCookie, returnTo, { ...cookie, maxAge: 10 * 60 * 1000 })
+    if (returnTo) res.cookie(returnCookie, returnTo, { ...cookie, httpOnly: true, secure: true, maxAge: 10 * 60 * 1000 })
     else res.clearCookie(returnCookie, cookie)
     return { code_challenge: challenge, code_challenge_method: 's256' }
   }
@@ -124,7 +125,7 @@ export function registerAdditionalAuthRoutes(router: Router, { config, activeAcc
       : Boolean(state.external?.email && config.AUTH_MAIL_DELIVERY_ENABLED && (method === 'email' ? config.AUTH_EMAIL_OTP_ENABLED : config.AUTH_MAGIC_LINK_ENABLED)))
   }
 
-  router.post('/session/otp', rateLimiter, async (req, res) => {
+  router.post('/session/otp', rateLimit(limitOptions), async (req, res) => {
     const input = destination.parse(req.body)
     await checkOtpMethod(input.method)
     const isLink = input.method === 'magicLink'
@@ -141,7 +142,7 @@ export function registerAdditionalAuthRoutes(router: Router, { config, activeAcc
     return result(req, res, { sent: true })
   })
 
-  router.post('/session/otp/verify', rateLimiter, async (req, res) => {
+  router.post('/session/otp/verify', rateLimit(limitOptions), async (req, res) => {
     const input = otpVerification.parse(req.body)
     await checkOtpMethod(input.method)
     const body = input.method === 'email' ? { email: input.email, type: 'email', token: input.code } : { phone: input.phone, type: 'sms', token: input.code }
@@ -149,7 +150,7 @@ export function registerAdditionalAuthRoutes(router: Router, { config, activeAcc
     return result(req, res, { redirect: await activateSession(req, res, session) })
   })
 
-  router.post('/session/sso', rateLimiter, async (req, res) => {
+  router.post('/session/sso', rateLimit(limitOptions), async (req, res) => {
     const { domain, return_to } = z.object({
       domain: z.string().trim().max(253).regex(/^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i),
       return_to: z.string().max(256).optional(),
@@ -162,7 +163,7 @@ export function registerAdditionalAuthRoutes(router: Router, { config, activeAcc
     return result(req, res, { url })
   })
 
-  router.get('/sso/saml/metadata', rateLimiter, async (_req, res) => {
+  router.get('/sso/saml/metadata', rateLimit(limitOptions), async (_req, res) => {
     requireEnabled((await settings()).saml_enabled)
     const upstream = await fetch(authEndpoint(config, '/sso/saml/metadata'), {
       redirect: 'error', signal: AbortSignal.timeout(10_000),
@@ -171,7 +172,7 @@ export function registerAdditionalAuthRoutes(router: Router, { config, activeAcc
     return res.type('application/samlmetadata+xml').send(await upstream.text())
   })
 
-  router.post('/sso/saml/acs', rateLimiter, urlencoded({ extended: false, limit: '256kb' }), async (req, res) => {
+  router.post('/sso/saml/acs', rateLimit(limitOptions), urlencoded({ extended: false, limit: '256kb' }), async (req, res) => {
     res.set({ 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' })
     requireEnabled((await settings()).saml_enabled)
     const { SAMLResponse, RelayState } = z.object({ SAMLResponse: z.string().min(1).max(256 * 1024), RelayState: z.string().min(1).max(512) }).parse(req.body)
@@ -189,7 +190,7 @@ export function registerAdditionalAuthRoutes(router: Router, { config, activeAcc
     return res.redirect(303, destination.href)
   })
 
-  router.get('/session/callback', rateLimiter, async (req, res) => {
+  router.get('/session/callback', rateLimit(limitOptions), async (req, res) => {
     res.set({ 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' })
     const verifier = req.cookies?.[verifierCookie]
     const returnTo = outboundConsentReturn(req.cookies?.[returnCookie])
@@ -208,17 +209,17 @@ export function registerAdditionalAuthRoutes(router: Router, { config, activeAcc
     }
   })
 
-  router.post('/session/passkey/options', rateLimiter, async (req, res) => {
+  router.post('/session/passkey/options', rateLimit(limitOptions), async (req, res) => {
     requireEnabled((await settings()).passkeys_enabled)
     return result(req, res, await requestAuth(config, '/passkeys/authentication/options', { body: {} }))
   })
-  router.post('/session/passkey/verify', rateLimiter, async (req, res) => {
+  router.post('/session/passkey/verify', rateLimit(limitOptions), async (req, res) => {
     requireEnabled((await settings()).passkeys_enabled)
     const session = await requestAuth<GoTrueSession>(config, '/passkeys/authentication/verify', { body: passkeyVerification.parse(req.body) })
     return result(req, res, { redirect: await activateSession(req, res, session) })
   })
 
-  router.get('/me/factors', rateLimiter, challengeAccount, async (req, res) => {
+  router.get('/me/factors', rateLimit(limitOptions), challengeAccount, async (req, res) => {
     const token = browserToken(req)
     const factors = await getFactors(config, token)
     return result(req, res, factors.map(factor => ({
@@ -226,12 +227,12 @@ export function registerAdditionalAuthRoutes(router: Router, { config, activeAcc
       can_verify: factor.factor_type === 'recovery_code' ? config.AUTH_MFA_RECOVERY_CODES_ENABLED : verifyEnabled[factor.factor_type],
     })))
   })
-  router.post('/me/factors', rateLimiter, activeAccount, async (req, res) => {
+  router.post('/me/factors', rateLimit(limitOptions), activeAccount, async (req, res) => {
     const body = z.object({ factor_type: factorType, friendly_name: z.string().trim().min(1).max(120).optional(), phone: phoneInput.optional() }).strict().parse(req.body)
     requireEnabled(enrollEnabled[body.factor_type] && verifyEnabled[body.factor_type])
     return result(req, res, await requestAuth(config, '/factors', { body, token: browserToken(req) }))
   })
-  router.delete('/me/factors/:id', rateLimiter, activeAccount, async (req, res) => {
+  router.delete('/me/factors/:id', rateLimit(limitOptions), activeAccount, async (req, res) => {
     const id = z.uuid().parse(req.params.id)
     return result(req, res, await requestAuth(config, `/factors/${id}`, { method: 'DELETE', token: browserToken(req) }))
   })
@@ -240,7 +241,7 @@ export function registerAdditionalAuthRoutes(router: Router, { config, activeAcc
     const bodySchema = action === '/challenge' ? z.object({}).strict()
       : z.object({ challenge_id: z.uuid(), code: z.string().regex(/^\d{4,10}$/).optional(),
         webauthn: z.object({ type: z.enum(['create', 'request']), credential_response: webauthnCredential }).strict().optional() }).strict()
-    router.post(`/me/factors/:id${action}`, rateLimiter, challengeAccount, async (req, res) => {
+    router.post(`/me/factors/:id${action}`, rateLimit(limitOptions), challengeAccount, async (req, res) => {
       const id = z.uuid().parse(req.params.id)
       const token = browserToken(req)
       const factors = await getFactors(config, token)
@@ -263,32 +264,32 @@ export function registerAdditionalAuthRoutes(router: Router, { config, activeAcc
     ['post', '/me/recovery-codes/regenerate', `${recoveryPath}/regenerate`],
     ['delete', '/me/recovery-codes', recoveryPath],
   ] as const) {
-    router[method](route, rateLimiter, activeAccount, async (req, res) => {
+    router[method](route, rateLimit(limitOptions), activeAccount, async (req, res) => {
       requireEnabled(config.AUTH_MFA_RECOVERY_CODES_ENABLED)
       const token = browserToken(req)
       return result(req, res, await requestAuth(config, path, method === 'get' ? { token }
         : method === 'delete' ? { token, method: 'DELETE' } : { token, body: {} }))
     })
   }
-  router.post('/me/recovery-codes/verify', rateLimiter, challengeAccount, async (req, res) => {
+  router.post('/me/recovery-codes/verify', rateLimit(limitOptions), challengeAccount, async (req, res) => {
     requireEnabled(config.AUTH_MFA_RECOVERY_CODES_ENABLED)
     const body = z.object({ code: z.string().trim().min(1).max(128) }).strict().parse(req.body)
     const session = await requestAuth<GoTrueSession>(config, `${recoveryPath}/verify`, { token: browserToken(req), body })
     return result(req, res, { redirect: await activateSession(req, res, session) })
   })
 
-  router.get('/me/passkeys', rateLimiter, activeAccount, async (req, res) => {
+  router.get('/me/passkeys', rateLimit(limitOptions), activeAccount, async (req, res) => {
     requireEnabled((await settings()).passkeys_enabled)
     return result(req, res, await requestAuth(config, '/passkeys', { token: browserToken(req) }))
   })
   for (const action of ['options', 'verify'] as const) {
-    router.post(`/me/passkeys/registration/${action}`, rateLimiter, activeAccount, async (req, res) => {
+    router.post(`/me/passkeys/registration/${action}`, rateLimit(limitOptions), activeAccount, async (req, res) => {
       requireEnabled((await settings()).passkeys_enabled)
       const body = action === 'options' ? {} : passkeyVerification.parse(req.body)
       return result(req, res, await requestAuth(config, `/passkeys/registration/${action}`, { token: browserToken(req), body }))
     })
   }
-  router.delete('/me/passkeys/:id', rateLimiter, activeAccount, async (req, res) => {
+  router.delete('/me/passkeys/:id', rateLimit(limitOptions), activeAccount, async (req, res) => {
     requireEnabled((await settings()).passkeys_enabled)
     const id = z.uuid().parse(req.params.id)
     return result(req, res, await requestAuth(config, `/passkeys/${id}`, { token: browserToken(req), method: 'DELETE' }))

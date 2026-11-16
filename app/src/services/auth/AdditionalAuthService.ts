@@ -36,7 +36,7 @@ function decode(value: string) {
 }
 function encode(value: ArrayBuffer) {
   return btoa(Array.from(new Uint8Array(value), byte => String.fromCharCode(byte)).join(''))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+    .replace(/\+/g, '-').replace(/\//g, '_').replaceAll('=', '')
 }
 function credentialDescriptor(item: PublicKeyCredentialDescriptorJSON): PublicKeyCredentialDescriptor {
   return { id: decode(item.id), type: 'public-key' }

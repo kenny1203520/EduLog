@@ -152,17 +152,16 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
   router.get('/providers', async (req, res) => {
     res.json({ data: { providers: await providers() }, meta: {}, request_id: req.requestId, trace_id: req.traceId })
   })
-  router.get('/capabilities', async (req, res) => {
+  router.get('/capabilities', rateLimit(oauthRateLimitOptions), async (req, res) => {
     res.setHeader('Cache-Control', 'no-store')
     res.json({ data: await authCapabilities(config), meta: {}, request_id: req.requestId, trace_id: req.traceId })
   })
   const activeAccount = requireAuth(clients, config)
-  router.use('/outbound', createOutboundOAuthRouter(config, activeAccount))
+  router.use('/outbound', rateLimit(oauthRateLimitOptions), createOutboundOAuthRouter(config, activeAccount))
   registerAdditionalAuthRoutes(router, {
     config,
     activeAccount,
     challengeAccount: requireAuth(clients, config, { allowPending: true, allowLowerAssurance: true }),
-    rateLimiter: rateLimit(oauthRateLimitOptions),
     sendSession: startSession,
   })
   const identityResult = (req: Request, res: Response, data: unknown) => {

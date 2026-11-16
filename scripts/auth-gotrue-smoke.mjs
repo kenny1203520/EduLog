@@ -29,7 +29,7 @@ function authenticatorCode(secret) {
     assert.ok(digits.includes(digit))
     return digits.indexOf(digit).toString(2).padStart(5, '0')
   }).join('')
-  const key = Buffer.from(bits.match(/.{8}/g).map(byte => parseInt(byte, 2)))
+  const key = Buffer.from(bits.match(/.{8}/g).map(byte => Number.parseInt(byte, 2)))
   const counter = Buffer.alloc(8)
   counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30_000)))
   const hash = createHmac('sha1', key).update(counter).digest()

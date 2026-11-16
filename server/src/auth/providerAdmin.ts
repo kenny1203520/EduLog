@@ -1,5 +1,6 @@
 import { Router, type Request } from 'express'
 import { decodeJwt } from 'jose'
+import { rateLimit } from 'express-rate-limit'
 import { z } from 'zod'
 import type { ApiConfig } from '../config/config.js'
 import { setAuditContext } from '../http/context.js'
@@ -8,7 +9,7 @@ import { sendData } from '../http/response.js'
 import type { SupabaseClients } from '../infra/supabase.js'
 import { requireAuth } from './auth.js'
 import { requireAuthorizationRpcDecision } from './authorization.js'
-import { isValidProviderName, resetProviderCache } from './gotrue.js'
+import { isValidProviderName, resetProviderCache, withoutTrailingSlashes } from './gotrue.js'
 
 export const AUTH_PROVIDERS_MANAGE = 'system.auth.providers.manage'
 const resource = 'auth-providers'
@@ -100,7 +101,7 @@ function providerUrl(value: string, allowedOrigins: readonly string[]): URL {
 async function validateOidc(issuer: string | null | undefined, discovery: string | null | undefined, allowedOrigins: readonly string[]) {
   if (!issuer && !discovery) throw new ApiError(422, 'AUTH_PROVIDER_URL_INVALID', 'Enter an issuer or discovery URL')
   if (issuer) providerUrl(issuer, allowedOrigins)
-  const discoveryUrl = providerUrl(discovery ?? issuer!.replace(/\/+$/, '') + '/.well-known/openid-configuration', allowedOrigins)
+  const discoveryUrl = providerUrl(discovery ?? withoutTrailingSlashes(issuer!) + '/.well-known/openid-configuration', allowedOrigins)
   let metadata: z.infer<typeof discoveryDocument>
   try {
     const response = await fetch(discoveryUrl, {
@@ -134,7 +135,7 @@ const unavailable = () => new ApiError(503, 'AUTH_PROVIDER_ADMIN_UNAVAILABLE', '
 async function callProviderAdmin<T>(config: ApiConfig, path: string, schema: z.ZodType<T>, init: RequestInit = {}): Promise<T> {
   let response: globalThis.Response
   try {
-    response = await fetch(config.GOTRUE_INTERNAL_URL!.replace(/\/+$/, '') + customProviderPath + path, {
+    response = await fetch(withoutTrailingSlashes(config.GOTRUE_INTERNAL_URL!) + customProviderPath + path, {
       ...init,
       redirect: 'error',
       signal: AbortSignal.timeout(10_000),
@@ -160,7 +161,7 @@ async function callProviderAdmin<T>(config: ApiConfig, path: string, schema: z.Z
 
 async function builtInProviders(config: ApiConfig) {
   try {
-    const response = await fetch(config.SUPABASE_URL.replace(/\/+$/, '') + '/auth/v1/settings', {
+    const response = await fetch(withoutTrailingSlashes(config.SUPABASE_URL) + '/auth/v1/settings', {
       headers: { apikey: config.SUPABASE_ANON_KEY },
       redirect: 'error',
       signal: AbortSignal.timeout(5000),
@@ -177,11 +178,12 @@ async function builtInProviders(config: ApiConfig) {
 
 export function createProviderAdminRouter(clients: SupabaseClients, config: ApiConfig) {
   const router = Router()
+  const limitOptions = { windowMs: 60_000, limit: config.API_RATE_LIMIT_PER_MINUTE, standardHeaders: true, legacyHeaders: false }
   const allowedOrigins = config.AUTH_PROVIDER_ALLOWED_ORIGINS ?? []
   // Enabling this option asserts that the deployment confines GoTrue egress to
   // the same trusted upstreams. GoTrue separately resolves discovery at login.
   const enabled = Boolean(config.AUTH_PROVIDER_ADMIN_ENABLED && config.GOTRUE_INTERNAL_URL && allowedOrigins.length)
-  router.use(requireAuth(clients, config), async (req, res, next) => {
+  router.use(rateLimit(limitOptions), requireAuth(clients, config), async (req, res, next) => {
     res.setHeader('Cache-Control', 'no-store')
     const decision = req.db!.rpc('has_api_permission', {
       p_user_id: req.user!.id, p_permission_key: AUTH_PROVIDERS_MANAGE, p_classroom_id: null, p_class_session_id: null,
@@ -206,7 +208,7 @@ export function createProviderAdminRouter(clients: SupabaseClients, config: ApiC
     requireRecentProviderAdminAuthentication(req)
   }
 
-  router.post('/', async (req, res) => {
+  router.post('/', rateLimit(limitOptions), async (req, res) => {
     requireWrite(req)
     const input = createSchema.parse(req.body)
     setAuditContext(req, { resource, action: 'create-draft', metadata: { provider: input.identifier } })
@@ -228,7 +230,7 @@ export function createProviderAdminRouter(clients: SupabaseClients, config: ApiC
     return sendData(req, res, draft)
   })
 
-  router.patch('/:identifier', async (req, res) => {
+  router.patch('/:identifier', rateLimit(limitOptions), async (req, res) => {
     requireWrite(req)
     const key = identifier.parse(req.params.identifier)
     const input = updateSchema.parse(req.body)

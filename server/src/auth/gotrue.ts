@@ -20,7 +20,7 @@ const PROVIDER_PATTERN = /^[a-z][a-z0-9_]{1,40}$/
 const CUSTOM_PROVIDER_PATTERN = /^custom:[a-z0-9:-]{2,43}$/
 export const OAUTH_PROVIDER_MAX_LENGTH = 50
 
-function withoutTrailingSlashes(url: string) {
+export function withoutTrailingSlashes(url: string) {
   let end = url.length
   while (end > 0 && url[end - 1] === '/') end--
   return url.slice(0, end)
