@@ -4,23 +4,36 @@
 // for that directory. Allowlist entries must carry a reason and an expiry date;
 // an expired entry fails the run so it gets reviewed again.
 //
-// Usage: node scripts/security/npm-audit.mjs <package-dir>
+// Usage: node scripts/security/npm-audit.mjs <app|server|.>
 
 import { execFileSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
-import { dirname, join, relative, resolve } from 'node:path'
+import { existsSync, readFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const FAIL_LEVELS = new Set(['high', 'critical'])
+// Only these package directories (relative to the repo root) can be audited.
+const AUDITABLE_DIRS = ['app', 'server', '.']
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
-const target = process.argv[2]
-if (!target) {
-  console.error('usage: node scripts/security/npm-audit.mjs <package-dir>')
+const scope = AUDITABLE_DIRS.find((dir) => dir === process.argv[2])
+if (!scope) {
+  console.error(`usage: node scripts/security/npm-audit.mjs <${AUDITABLE_DIRS.join('|')}>`)
   process.exit(2)
 }
-const packageDir = resolve(target)
-const scope = relative(repoRoot, packageDir).replaceAll('\\', '/') || '.'
+const packageDir = join(repoRoot, scope)
+
+// Run npm's CLI through the current Node binary instead of looking `npm` up on
+// PATH or going through a shell.
+const nodeDir = dirname(process.execPath)
+const npmCli = [
+  join(nodeDir, 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+  join(nodeDir, '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+].find((candidate) => existsSync(candidate))
+if (!npmCli) {
+  console.error(`cannot find npm-cli.js next to ${process.execPath}`)
+  process.exit(2)
+}
 
 const allowlist = JSON.parse(readFileSync(join(repoRoot, '.github', 'npm-audit-allowlist.json'), 'utf8'))
 const today = new Date().toISOString().slice(0, 10)
@@ -44,10 +57,9 @@ for (const entry of allowlist.advisories ?? []) {
 
 let raw
 try {
-  raw = execFileSync('npm', ['audit', '--omit=dev', '--json'], {
+  raw = execFileSync(process.execPath, [npmCli, 'audit', '--omit=dev', '--json'], {
     cwd: packageDir,
     encoding: 'utf8',
-    shell: process.platform === 'win32',
     maxBuffer: 64 * 1024 * 1024,
   })
 } catch (error) {
