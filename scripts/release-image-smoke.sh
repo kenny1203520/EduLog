@@ -13,10 +13,13 @@ cleanup() {
 }
 trap cleanup EXIT
 docker network create "$network" >/dev/null
-for image in edulog-release-smoke:frontend edulog-release-smoke:api edulog-release-smoke:presidio; do
+for image in edulog-release-smoke:frontend edulog-release-smoke:presidio; do
   docker run --rm --entrypoint /bin/sh "$image" -ec \
     'test -s /usr/share/licenses/EduLog/LICENSE && test -s /usr/share/licenses/EduLog/NOTICE'
 done
+# The API runtime image has no shell, so it checks the license files with node.
+docker run --rm edulog-release-smoke:api node -e \
+  "const fs=require('node:fs');for(const f of ['LICENSE','NOTICE'])if(!(fs.statSync('/usr/share/licenses/EduLog/'+f).size>0))process.exit(1)"
 docker run -d --name "$api" --network "$network" --network-alias api \
   -e SUPABASE_URL=http://127.0.0.1:54321 \
   -e SUPABASE_ANON_KEY=release-smoke-anon \
@@ -24,6 +27,7 @@ docker run -d --name "$api" --network "$network" --network-alias api \
   -e COOKIE_SECRET=release-smoke-cookie-secret-at-least-32-characters \
   -e API_ALLOWED_ORIGINS=http://localhost:4173 \
   -e EDULOG_WEB_BASE_URL=https://edulog.example.test \
+  -e COOKIE_SECURE=true \
   -e RATE_LIMIT_STORE=supabase edulog-release-smoke:api >/dev/null
 docker run -d --name "$frontend" --network "$network" \
   edulog-release-smoke:frontend >/dev/null
