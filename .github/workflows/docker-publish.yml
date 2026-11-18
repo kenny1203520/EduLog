@@ -206,6 +206,38 @@ jobs:
         shell: bash
         run: bash scripts/release-class-smoke.sh
 
+      # Vulnerability gate: scan the locally loaded images before anything is
+      # pushed. Fails on fixable HIGH/CRITICAL findings.
+      - name: Scan frontend image for vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: edulog-release-smoke:frontend
+          version: v0.70.0
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          format: table
+
+      - name: Scan API image for vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: edulog-release-smoke:api
+          version: v0.70.0
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          format: table
+
+      - name: Scan Presidio analyzer image for vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: edulog-release-smoke:presidio
+          version: v0.70.0
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          format: table
+
       - name: Build and push frontend Docker image
         id: build-and-push-frontend
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
