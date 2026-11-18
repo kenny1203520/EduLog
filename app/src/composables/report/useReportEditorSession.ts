@@ -1427,6 +1427,8 @@ export function useReportEditorSession(
     }
 
     onMounted(() => {
+        // Save before an idle sign-out (see useIdleSignOut's SESSION_EXPIRING_EVENT).
+        window.addEventListener('edulog:session-expiring', flushOnPageHide)
         window.addEventListener('pagehide', flushOnPageHide)
         window.addEventListener('beforeunload', warnBeforeUnload)
         document.addEventListener('visibilitychange', handleVisibilityChange)
@@ -1435,6 +1437,7 @@ export function useReportEditorSession(
     onBeforeUnmount(async () => {
         reportEditorUnmounted = true
         collabEditorGeneration++
+        window.removeEventListener('edulog:session-expiring', flushOnPageHide)
         window.removeEventListener('pagehide', flushOnPageHide)
         window.removeEventListener('beforeunload', warnBeforeUnload)
         document.removeEventListener('visibilitychange', handleVisibilityChange)
