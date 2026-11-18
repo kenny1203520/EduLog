@@ -95,6 +95,43 @@ describe('LoginView sign-in options', () => {
     })
 })
 
+describe('LoginView sign-in errors', () => {
+    async function failLogin(error: unknown, path = '/login') {
+        capabilities.mockResolvedValue(signInOptions([]))
+        service.login.mockResolvedValue({ user: null, session: null, error })
+        const router = testRouter(path)
+        await router.isReady()
+        const wrapper = mount(LoginView, { global: { plugins: [i18n, router] } })
+        await flushPromises()
+        await wrapper.get('input[type="email"]').setValue('teacher@example.test')
+        await wrapper.get('input[type="password"]').setValue('wrong-password')
+        await wrapper.get('form').trigger('submit')
+        await flushPromises()
+        return wrapper
+    }
+
+    it('shows a fixed message for bad credentials, never the server text', async () => {
+        const wrapper = await failLogin(Object.assign(new Error('Authentication is invalid'), { code: 'AUTH_INVALID', status: 401 }))
+        expect(wrapper.text()).toContain(i18n.global.t('auth.error_invalid_credentials'))
+        expect(wrapper.text()).not.toContain('Authentication is invalid')
+    })
+
+    it('falls back to a generic message for unknown failures', async () => {
+        const wrapper = await failLogin(Object.assign(new Error('upstream gotrue exploded: db=10.0.0.5'), { code: 'INTERNAL', status: 500 }))
+        expect(wrapper.text()).toContain(i18n.global.t('auth.error_unexpected'))
+        expect(wrapper.text()).not.toContain('10.0.0.5')
+    })
+
+    it('explains an idle sign-out on return to the login page', async () => {
+        capabilities.mockResolvedValue(signInOptions([]))
+        const router = testRouter('/login?reason=idle')
+        await router.isReady()
+        const wrapper = mount(LoginView, { global: { plugins: [i18n, router] } })
+        await flushPromises()
+        expect(wrapper.text()).toContain(i18n.global.t('auth.idle_signed_out'))
+    })
+})
+
 describe('AccountApprovalPanel', () => {
     const TEACHER = { id: 'role-teacher', code: 'teacher', name: 'Teacher', domain: 'teaching' as const }
     const VIEWER = { id: 'role-viewer', code: 'viewer', name: 'Viewer', domain: 'teaching' as const }
