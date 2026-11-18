@@ -39,8 +39,11 @@ describe('vite security helpers', () => {
     expect(DEFAULT_CSP_HEADER).toContain("default-src 'self'")
     expect(DEFAULT_CSP_HEADER).toContain("script-src 'self'")
     expect(DEFAULT_CSP_HEADER).not.toContain('unsafe-eval')
-    expect(DEFAULT_CSP_HEADER).toContain('http://localhost:*')
-    expect(DEFAULT_CSP_HEADER).toContain('ws://localhost:*')
+    // Same-origin only: no scheme-wide or localhost sources for connections or images.
+    expect(DEFAULT_CSP_HEADER).toContain("connect-src 'self';")
+    expect(DEFAULT_CSP_HEADER).toContain("img-src 'self' data: blob:;")
+    expect(DEFAULT_CSP_HEADER).not.toMatch(/\s(https|wss):[\s;]/)
+    expect(DEFAULT_CSP_HEADER).not.toContain('localhost')
   })
 
   it('lets only exact extension origins frame the app for the extension side panel', () => {

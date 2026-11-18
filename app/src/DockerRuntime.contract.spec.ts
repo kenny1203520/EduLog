@@ -41,6 +41,18 @@ describe('Docker runtime contract', () => {
     expect(shellDefault('DEFAULT_HSTS_HEADER')).toBe(DEFAULT_HSTS_HEADER)
   })
 
+  it('limits connections and images to this origin', () => {
+    const directive = (name: string) => DEFAULT_CSP_HEADER.split('; ').find((part) => part.startsWith(`${name} `))
+    expect(directive('connect-src')).toBe("connect-src 'self'")
+    expect(directive('img-src')).toBe("img-src 'self' data: blob:")
+    for (const overlay of ['docker-compose.caddy.yml', 'docker-compose.nginx.yml']) {
+      const compose = readFileSync(resolve(appRoot, '../supabase', overlay), 'utf8')
+      expect(compose).toContain("img-src 'self' data: blob:;")
+      expect(compose).toContain("connect-src 'self';")
+      expect(compose).not.toMatch(/connect-src[^;]*(https:|wss:)/)
+    }
+  })
+
   it.skipIf(process.platform === 'win32')('accepts the API body-limit syntax for nginx', () => {
     const bootstrap = readFileSync(resolve(appRoot, 'nginx/docker-entrypoint.d/05-edulog-runtime.envsh'), 'utf8')
     const fn = /^nginx_size\(\) \{[\s\S]*?^\}/m.exec(bootstrap)?.[0]
