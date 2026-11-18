@@ -86,6 +86,7 @@ describe('Auth capabilities', () => {
       AUTH_EMAIL_OTP_ENABLED: 'true',
       AUTH_MAGIC_LINK_ENABLED: 'true',
       AUTH_MFA_PHONE_ENROLL_ENABLED: 'true',
+      AUTH_MFA_PHONE_VERIFY_ENABLED: 'true',
     })
     stubGoTrue({
       '/auth/v1/settings': () => json({
@@ -130,6 +131,17 @@ describe('Auth capabilities', () => {
     const response = await request(instance).get('/api/auth/me').set('Cookie', 'edulog_access=token-second-factor')
     expect(response.status).toBe(403)
     expect(response.body.error.code).toBe('MFA_REQUIRED')
+  })
+
+  it('does not offer MFA enrollment when verification is disabled', async () => {
+    const appConfig = testConfig({
+      AUTH_MFA_TOTP_ENROLL_ENABLED: 'true', AUTH_MFA_TOTP_VERIFY_ENABLED: 'false',
+      AUTH_MFA_PHONE_ENROLL_ENABLED: 'true', AUTH_MFA_PHONE_VERIFY_ENABLED: 'false',
+      AUTH_MFA_WEBAUTHN_ENROLL_ENABLED: 'true', AUTH_MFA_WEBAUTHN_VERIFY_ENABLED: 'false',
+    })
+    stubGoTrue({ '/auth/v1/settings': () => json({ external: { email: true }, sms_provider: 'twilio' }) })
+    const response = await request(app({}, undefined, appConfig).instance).get('/api/auth/capabilities')
+    expect(response.body.data.mfa).toMatchObject({ totp: false, phone: false, webauthn: false })
   })
 
   it('keeps built-ins usable when custom discovery is temporarily unavailable', async () => {

@@ -383,10 +383,12 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
       if (!user?.email) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
       setAuditContext(req, { domain: 'system', resource: 'account-security', resourceId: user.id, action: 'email-change-request' })
       const verifiedSession = await verifyCurrentPassword(config, user.email, input.current_password)
-      if (!verifiedSession) {
+      if (!verifiedSession || verifiedSession.user.id !== user.id) {
         throw new ApiError(403, 'CURRENT_PASSWORD_INVALID', 'The current password is incorrect')
       }
-      const authClient = await createAuthenticatedUserClient(config, verifiedSession.access_token, verifiedSession.refresh_token)
+      const refreshToken = req.cookies?.[refreshCookie]
+      if (!req.accessToken || typeof refreshToken !== 'string') throw new ApiError(401, 'AUTH_REQUIRED', 'A browser session is required')
+      const authClient = await createAuthenticatedUserClient(config, req.accessToken, refreshToken)
       const { error } = await authClient.auth.updateUser({ email: input.email })
       if (error) {
         req.log.warn({ auth_error_code: error.code ?? 'UNKNOWN' }, 'auth_email_change_failed')
@@ -404,8 +406,10 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
       if (!user?.email) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
       setAuditContext(req, { domain: 'system', resource: 'account-security', resourceId: user.id, action: 'password-change' })
       const verifiedSession = await verifyCurrentPassword(config, user.email, input.current_password)
-      if (!verifiedSession) throw new ApiError(403, 'CURRENT_PASSWORD_INVALID', 'The current password is incorrect')
-      const authClient = await createAuthenticatedUserClient(config, verifiedSession.access_token, verifiedSession.refresh_token)
+      if (!verifiedSession || verifiedSession.user.id !== user.id) throw new ApiError(403, 'CURRENT_PASSWORD_INVALID', 'The current password is incorrect')
+      const refreshToken = req.cookies?.[refreshCookie]
+      if (!req.accessToken || typeof refreshToken !== 'string') throw new ApiError(401, 'AUTH_REQUIRED', 'A browser session is required')
+      const authClient = await createAuthenticatedUserClient(config, req.accessToken, refreshToken)
       const { error } = await authClient.auth.updateUser({ password: input.new_password, current_password: input.current_password })
       if (error) {
         if (error.code?.includes('reauthentication') || /current password|reauthentication/i.test(error.message)) throw new ApiError(403, 'CURRENT_PASSWORD_INVALID', 'The current password is incorrect')

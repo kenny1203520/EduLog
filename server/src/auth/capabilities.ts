@@ -20,9 +20,9 @@ export async function authCapabilities(config: ApiConfig) {
       passkeys: settings?.passkeys_enabled === true,
     },
     mfa: {
-      totp: config.AUTH_MFA_TOTP_ENROLL_ENABLED,
-      phone: sms && config.AUTH_MFA_PHONE_ENROLL_ENABLED,
-      webauthn: config.AUTH_MFA_WEBAUTHN_ENROLL_ENABLED,
+      totp: config.AUTH_MFA_TOTP_ENROLL_ENABLED && config.AUTH_MFA_TOTP_VERIFY_ENABLED,
+      phone: sms && config.AUTH_MFA_PHONE_ENROLL_ENABLED && config.AUTH_MFA_PHONE_VERIFY_ENABLED,
+      webauthn: config.AUTH_MFA_WEBAUTHN_ENROLL_ENABLED && config.AUTH_MFA_WEBAUTHN_VERIFY_ENABLED,
       recoveryCodes: config.AUTH_MFA_RECOVERY_CODES_ENABLED,
     },
     unavailable: [
