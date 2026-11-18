@@ -13,7 +13,7 @@
         <h4>評語</h4><p class="content">{{ selected.content || '空白' }}</p><h4>聯絡欄</h4><p class="content">{{ selected.contact_notes || '空白' }}</p>
         <h4>教材與進度</h4><p>{{ selected.lesson_name || '教材未確認' }} · {{ selected.progress_letter || '進度未填寫' }}</p><details v-if="selected.class_notes"><summary>教師內部紀錄</summary><p class="content">{{ selected.class_notes }}</p></details>
         <details><summary>允許的來源原文</summary><p v-for="(field,index) in selected.source_fields" :key="index" class="content">{{ field.label }}：{{ field.text || '空白' }}</p></details>
-        <a v-if="selected.external_link" :href="selected.external_link" target="_blank" rel="noopener noreferrer">查看原站報告</a>
+        <a v-if="safeExternalHref(selected.external_link)" :href="safeExternalHref(selected.external_link) || undefined" target="_blank" rel="noopener noreferrer">查看原站報告</a>
         <label v-if="candidates.length">綁定課次<select v-model="occurrence"><option value="">請選擇並核對課次</option><option v-for="item in candidates" :key="item.id" :value="item.id">{{ item.occurrence_date }} · {{ item.class_name }} · {{ item.start_time }}–{{ item.end_time }}</option></select></label>
         <button v-if="candidateCursor" :disabled="loading" @click="choose(selected,true)">載入更多課次</button>
         <label v-if="selected.class_notes" for="edulog-enrollmenthistorypanel-16-2341"><input v-model="includeInternal" type="checkbox">另行允許內部紀錄</label>
@@ -24,6 +24,7 @@
   </section>
 </template>
 <script setup lang="ts">
+import { safeExternalHref } from '@/utils/safeExternalHref'
 import { computed } from 'vue'
 import { useEnrollmentHistory } from '@/composables/useEnrollmentHistory'
 const props=defineProps<{studentId?:string;enrollmentId?:string}>()

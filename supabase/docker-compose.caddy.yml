@@ -10,6 +10,11 @@ services:
     #environment:
     #  KONG_PORT_MAPS: "443:8000,443:8443"
 
+  # The TLS proxy is a second hop in front of the frontend nginx.
+  api:
+    environment:
+      API_TRUST_PROXY_HOPS: ${EDULOG_API_TRUST_PROXY_HOPS_BEHIND_TLS_PROXY:-2}
+
   edulog:
     ports: !reset []
 
