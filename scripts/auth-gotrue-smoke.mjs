@@ -89,6 +89,23 @@ try {
   assert.equal(claims.aal, 'aal2')
   const verifiedUser = await request('/user', { token: verified.access_token })
   assert.ok(verifiedUser.factors.some(item => item.id === factor.id && item.status === 'verified'))
+  const passwordProof = await request('/token?grant_type=password', {
+    method: 'POST', body: { email, password },
+  })
+  const newPassword = randomUUID()
+  await request('/user', {
+    method: 'PUT', token: passwordProof.access_token, expected: 401,
+    body: { password: newPassword, current_password: password },
+  })
+  await request('/user', {
+    method: 'PUT', token: verified.access_token,
+    body: { password: newPassword, current_password: password },
+  })
+  const changed = await request('/token?grant_type=password', {
+    method: 'POST', body: { email, password: newPassword },
+  })
+  assert.equal(changed.user.id, user.id)
+
 } finally {
   await request('/admin/users/' + user.id, { method: 'DELETE', token: admin })
 }

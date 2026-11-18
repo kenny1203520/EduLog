@@ -118,7 +118,7 @@ async function validateOidc(issuer: string | null | undefined, discovery: string
   for (const endpoint of [metadata.issuer, metadata.authorization_endpoint, metadata.token_endpoint, metadata.jwks_uri, metadata.userinfo_endpoint]) {
     if (endpoint) providerUrl(endpoint, allowedOrigins)
   }
-  return { issuer: metadata.issuer, discovery_url: discovery ?? undefined }
+  return { issuer: metadata.issuer, discovery_url: discoveryUrl.href }
 }
 
 function validateOAuth2(endpoints: z.infer<typeof providerEndpoints>, allowedOrigins: readonly string[]) {

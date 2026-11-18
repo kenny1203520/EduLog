@@ -148,6 +148,15 @@ describe('provider administration', () => {
     expect(app.calls).toHaveLength(0)
   })
 
+  it('persists the validated discovery URL when an OIDC draft supplies only an issuer', async () => {
+    const app = await harness()
+    await app.post().send({ ...create, discovery_url: undefined, issuer }).expect(201)
+    expect(app.calls[0]).toMatchObject({
+      method: 'POST',
+      data: { issuer, discovery_url: discoveryUrl, enabled: false, pkce_enabled: true },
+    })
+  })
+
   it.each([
     [{ permitted: false }, true, 'PERMISSION_DENIED'],
     [{ enabled: false }, true, 'AUTH_PROVIDER_ADMIN_DISABLED'],
