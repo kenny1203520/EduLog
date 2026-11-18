@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0-alpha.11] - 2026-11-18
+
+### Added
+- Discover configured GoTrue sign-in methods and manage custom OAuth/OIDC providers as disabled drafts.
+- Add email OTP and magic links, SMS, SAML, passkeys, MFA and recovery codes through EduLog cookie sessions.
+- Add opt-in external OIDC applications with user consent, grant revocation and data access restrictions.
+
+### Fixed
+- Require MFA on Realtime connections and preserve AAL2 sessions when changing email or password.
+- Align MFA enrollment availability with verification settings and persist validated discovery URLs.
+
+### Deployment
+- Apply migrations 1000180 and 1000181 before enabling the new features.
+- Configure provider egress restrictions, callback URLs and delivery credentials as documented.
+- The release owner waived staging acceptance. Real provider and full-stack Storage/Realtime verification remain pending. See the release deployment notes.
+
+
 ## [2.0.0-alpha.10] - 2026-11-16
 
 ### Fixed
