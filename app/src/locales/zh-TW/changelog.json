@@ -1,6 +1,22 @@
 {
     "entries": [
         {
+            "version": "2.0.0-alpha.11",
+            "date": "2026-11-18",
+            "changes": {
+                "added": [
+                    "自動顯示 GoTrue 已啟用的登入方式，並提供自訂 OAuth／OIDC 供應商草稿管理。",
+                    "依設定提供免密碼、SAML、Passkeys、MFA 與對外 OIDC 流程。"
+                ],
+                "fixed": [
+                    "Realtime 驗證 MFA，修改帳號資料時保留已驗證的工作階段。"
+                ],
+                "deployment": [
+                    "先套用 migration 1000180、1000181。本次由發布者決定略過 staging 驗收，啟用選用功能前請參閱發行說明。"
+                ]
+            }
+        },
+        {
             "version": "2.0.0-alpha.10",
             "date": "2026-11-16",
             "changes": {

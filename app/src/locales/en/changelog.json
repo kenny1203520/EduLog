@@ -1,6 +1,22 @@
 {
     "entries": [
         {
+            "version": "2.0.0-alpha.11",
+            "date": "2026-11-18",
+            "changes": {
+                "added": [
+                    "Discover GoTrue sign-in methods and configure custom OAuth/OIDC provider drafts.",
+                    "Add configured passwordless, SAML, passkey, MFA and external OIDC flows."
+                ],
+                "fixed": [
+                    "Enforce MFA on Realtime and preserve the verified session for account changes."
+                ],
+                "deployment": [
+                    "Apply migrations 1000180 and 1000181. Staging acceptance was waived by the release owner; review the release notes before enabling optional features."
+                ]
+            }
+        },
+        {
             "version": "2.0.0-alpha.10",
             "date": "2026-11-16",
             "changes": {
