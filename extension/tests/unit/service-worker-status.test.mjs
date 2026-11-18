@@ -42,3 +42,13 @@ test('verified server capabilities reach the workspace without enabling unsuppor
   assert.equal(malformed.capabilities.student_enrollment_catalog,false)
   assert.equal(malformed.capabilities.enrollment_reconciliation,false)
 })
+
+test('a pending pairing counts only while it is unexpired and carries a confirmation code',async()=>{
+  const future=new Date(Date.now()+60000).toISOString()
+  const withCode=worker();withCode.stored.edulogExtension={origin:'https://edulog.example',pending:{id:'p',expiresAt:future,confirmationCode:'123456'}}
+  assert.equal((await withCode.send(true)).status,'pending')
+  const legacy=worker();legacy.stored.edulogExtension={origin:'https://edulog.example',pending:{id:'p',expiresAt:future}}
+  assert.equal((await legacy.send(true)).status,'pairing-expired')
+  const expired=worker();expired.stored.edulogExtension={origin:'https://edulog.example',pending:{id:'p',expiresAt:'2000-01-01T00:00:00Z',confirmationCode:'123456'}}
+  assert.equal((await expired.send(true)).status,'pairing-expired')
+})
