@@ -14,6 +14,8 @@ import PasswordInput from '@/components/ui/PasswordInput.vue'
 import WebExtensionIntegrations from '@/components/settings/WebExtensionIntegrations.vue'
 import MyAiCredentials from '@/components/settings/ai/MyAiCredentials.vue'
 import LinkedIdentities from '@/components/settings/LinkedIdentities.vue'
+import AccountAuthenticators from '@/components/settings/AccountAuthenticators.vue'
+import OutboundOAuthGrants from '@/components/settings/OutboundOAuthGrants.vue'
 
 const SystemSettingsPanel = defineAsyncComponent(() => import('@/components/settings/SystemSettingsPanel.vue'))
 const route = useRoute()
@@ -108,6 +110,8 @@ onMounted(async () => { await Promise.all([loadOverview(), loadPersonProfile()])
                             </form>
                         </div>
                         <LinkedIdentities />
+                        <AccountAuthenticators />
+                        <OutboundOAuthGrants />
                     </section>
                     <section id="timezone" class="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm"><div class="flex flex-wrap items-center justify-between gap-4"><div><h2 class="text-xl font-black">{{ $t('settings.timezone.title') }}</h2><p class="mt-1 text-sm font-bold text-gray-400">{{ $t('settings.timezone.description') }}</p></div><button class="rounded-xl border border-emerald-200 px-4 py-2 text-sm font-black text-emerald-700" @click="useBrowserTimeZone">{{ $t('settings.timezone.use_browser') }}</button></div><div class="mt-5 rounded-2xl bg-emerald-50 p-5"><p class="text-xs font-black uppercase tracking-widest text-emerald-600">{{ $t('settings.timezone.current') }}</p><p class="mt-1 text-xl font-black text-gray-900">{{ preferences.timeZoneLabel }}</p><p class="text-sm font-bold text-gray-500">{{ preferences.timeZone }}</p></div><div class="mt-5"><TimeZoneSelect :label="$t('common.time_zone')" dense /></div></section>
                     <section id="appearance" class="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm"><h2 class="text-xl font-black">{{ $t('settings.appearance.title') }}</h2><div class="mt-5 flex items-center gap-4"><button class="h-12 w-12 rounded-xl bg-gray-50 text-xl font-black" @click="preferences.adjustGlobalScale(-preferences.STEP)" :aria-label="$t('settings.appearance.decrease_font')">&minus;</button><span class="font-black">{{ preferences.globalFontScale }}%</span><button class="h-12 w-12 rounded-xl bg-gray-50 text-xl font-black" @click="preferences.adjustGlobalScale(preferences.STEP)" :aria-label="$t('settings.appearance.increase_font')">&plus;</button></div><div class="mt-6 border-t border-gray-100 pt-5"><LanguageSwitcher full-width label-on-mobile align="left" /></div></section>

@@ -90,7 +90,7 @@ api_location() {
   }
 
 EOF
-  for callback in oauth/callback identities/callback; do
+  for callback in oauth/callback identities/callback session/callback sso/saml/acs; do
     cat <<EOF
   location = /api/auth/$callback {
     access_log off;

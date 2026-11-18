@@ -72,7 +72,7 @@ VALUES ('15800000-0000-4000-8000-0000000000b4','15800000-0000-4000-8000-00000000
 INSERT INTO public.single_lesson_transfers(enrollment_id,source_occurrence_id,target_occurrence_id)
 VALUES ('15800000-0000-4000-8000-0000000000b4','15800000-0000-4000-8000-000000000012','15800000-0000-4000-8000-000000000011');
 COMMIT;
-CREATE ROLE authenticator LOGIN PASSWORD 'postgres' NOINHERIT;
+ALTER ROLE authenticator LOGIN PASSWORD 'postgres' NOINHERIT;
 GRANT anon, authenticated, service_role TO authenticator;
 SQL
 } | sql >/dev/null

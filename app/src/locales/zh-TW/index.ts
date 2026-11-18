@@ -1,4 +1,5 @@
 import nav from './nav.json'
+import oauthServer from './oauthServer.json'
 import auth from './auth.json'
 import dashboard from './dashboard.json'
 import student from './student.json'
@@ -21,6 +22,7 @@ import aiDeid from './aiDeid.json'
 
 export default {
   nav,
+  oauthServer,
   auth,
   dashboard,
   student,

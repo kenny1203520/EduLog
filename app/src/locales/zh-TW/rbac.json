@@ -13,7 +13,7 @@
 "system_permissions": "系統角色權限",
 "system_title": "系統管理",
 "system_subtitle": "管理系統角色、指派與帳號狀態，所有變更都會經過版本檢查與稽核。",
-"system_sections": { "label": "系統設定分區", "permissions": "系統角色權限", "teaching_permissions": "教學角色權限", "teaching_assignments": "教學角色指派", "notifications": "報告通知設定", "dashboard_schedule": "今日課表顯示範圍", "assignments": "系統角色指派", "users": "使用者狀態", "account_approval": "帳號審核", "audit": "稽核紀錄", "ai": "AI 報告助手" },
+"system_sections": { "login_providers": "登入供應商", "oauth_clients": "對外 OAuth 應用程式", "label": "系統設定分區", "permissions": "系統角色權限", "teaching_permissions": "教學角色權限", "teaching_assignments": "教學角色指派", "notifications": "報告通知設定", "dashboard_schedule": "今日課表顯示範圍", "assignments": "系統角色指派", "users": "使用者狀態", "account_approval": "帳號審核", "audit": "稽核紀錄", "ai": "AI 報告助手" },
 "system_ui": { "role_assignments": "角色指派", "user": "使用者", "select_user": "搜尋並選擇使用者", "user_search": "依姓名或 Email 搜尋使用者", "user_search_hint": "輸入姓名或 Email 即可搜尋使用者。", "no_users_found": "找不到符合條件的使用者，請嘗試其他姓名或 Email。", "search_user_to_view": "先搜尋並選取使用者，再檢視此人的系統角色。", "no_assignments_for_user": "此使用者目前沒有系統角色指派。", "system_role": "系統角色", "select_system_role": "選擇系統角色", "system_role_search": "搜尋系統角色", "assign_role": "指派角色", "effective_from": "生效日", "effective_to": "結束日（選填）", "no_end_date": "無結束日", "assignment_overlap": "此使用者在重疊期間已具有相同的系統角色。", "unknown_user": "無法取得使用者資料", "account_status": "帳號狀態", "status_user": "狀態使用者", "active": "啟用中", "scheduled": "尚未生效", "expired": "已到期", "disabled": "停用", "disable_reason": "停用理由", "last_owner_guard": "最後一位系統擁有者無法被移除、降級或停用。", "remove_assignment_confirm": "確定要移除此系統角色指派嗎？", "assignments_loading": "正在載入 {user} 的角色…", "assignment_load_failed": "無法載入此使用者的系統角色指派。", "retry": "重試", "current_status": "目前狀態", "change_to": "變更為", "disabled_at": "停用日期", "disabled_reason_recorded": "停用原因", "no_disable_reason": "未記錄停用原因。", "pending": "待核准" },
 "audit_title": "稽核紀錄",
 "audit_description": "搜尋並檢視已記錄的系統與教學事件。",
@@ -45,7 +45,7 @@
 "audit_total": "共 {count} 筆事件",
 "audit_domains": { "system": "系統", "teaching": "教學" },
 "audit_outcomes": { "success": "成功", "denied": "拒絕", "failure": "失敗" },
-"audit_actions": { "identity-unlink": "解除登入方式連結", "oauth_connect": "以 OAuth 連結", "approve": "核准", "invite": "邀請", "password-set": "設定密碼", "email-change-request": "申請變更 Email", "password-change": "變更密碼", "apply-check": "套用前檢查", "save": "儲存", "acknowledge": "確認已讀", "test": "測試", "insert": "新增", "replace": "取代", "patch": "編輯", "status": "變更狀態", "correct_occurrence": "更正課次" },
+"audit_actions": { "create-draft": "建立供應商草稿", "enable": "啟用", "disable": "停用", "rotate_secret": "更換供應商密鑰", "revoke": "撤銷", "identity-unlink": "解除登入方式連結", "oauth_connect": "以 OAuth 連結", "approve": "核准", "invite": "邀請", "password-set": "設定密碼", "email-change-request": "申請變更 Email", "password-change": "變更密碼", "apply-check": "套用前檢查", "save": "儲存", "acknowledge": "確認已讀", "test": "測試", "insert": "新增", "replace": "取代", "patch": "編輯", "status": "變更狀態", "correct_occurrence": "更正課次" },
 "audit_resources": { "classroom-role-assignments": "教室角色指派", "account-default-roles": "新帳號預設角色", "account-security": "帳號安全", "ai_credentials": "AI 供應商憑證", "ai_generations": "AI 生成紀錄", "ai_models": "AI 模型", "ai_notice_acknowledgements": "AI 告知確認", "class-session-teachers": "班級教師", "class-sessions": "班級", "effective-role-assignments": "有效角色指派", "enrollment-reports": "註冊報告", "person-profile": "個人資料", "platform-role-assignments": "全平台角色指派", "role-assignment-exclusions": "角色排除", "role-assignments": "角色指派", "role-permissions": "角色權限", "scoped-role-assignments": "教室與班級角色指派", "student-credentials": "學生帳號密碼", "student-suspensions": "學生停課", "teacher-account-link": "教師帳號連結", "teacher-assignments": "授課安排", "user_preferences": "使用者偏好設定" },
 "audit_actor_unknown": "使用者未知或已刪除",
 "audit_value_missing": "未記錄",
@@ -96,6 +96,9 @@
     "select_user": "請先選取使用者，才能檢視、指派、撤銷或排除教學角色。"
   },
   "resources": {
+    "oauth_clients": { "name": "OAuth 應用程式", "description": "已登記可使用 EduLog 登入的外部應用程式" },
+    "oauth_grants": { "name": "OAuth 授權", "description": "EduLog 帳號授予外部應用程式的存取權" },
+    "auth": { "name": "身分驗證", "description": "登入供應商與對外應用程式" }, "auth-providers": { "name": "登入供應商", "description": "GoTrue 自訂登入供應商" },
     "rbac": { "name": "角色與權限政策", "description": "角色存取控制資源與政策" },
     "users": { "name": "使用者", "description": "系統使用者帳號與狀態" },
     "roles": { "name": "角色", "description": "角色定義與繼承關係" },
@@ -125,6 +128,7 @@
     "ai": { "name": "AI 報告助手", "description": "AI 生成學習報告與教學建議、供應商憑證與生成紀錄" }
   },
   "actions": {
+    "providers_manage": { "name": "管理登入供應商", "description": "變更受信任的登入供應商與用戶端密鑰" }, "oauth_clients_manage": { "name": "管理對外 OAuth 應用程式", "description": "登記對外 OAuth 應用程式與回呼網址" },
     "access": { "name": "進入頁面", "description": "開啟頁面；顯示的資料仍依列表與讀取權限的範圍" },
     "list": { "name": "列表", "description": "查看資料集合" },
     "read": { "name": "讀取", "description": "查看單筆資料" },

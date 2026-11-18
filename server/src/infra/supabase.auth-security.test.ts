@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { SignJWT } from 'jose'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 const { createClientMock } = vi.hoisted(() => ({ createClientMock: vi.fn() }))
 vi.mock('@supabase/supabase-js', () => ({ createClient: createClientMock }))
 
-import { createAuthenticatedUserClient, verifyCurrentPassword } from './supabase.js'
+import { createAuthenticatedUserClient, validateAccessToken, verifyCurrentPassword } from './supabase.js'
 
 const config = { SUPABASE_URL: 'https://supabase.example.test', SUPABASE_ANON_KEY: 'anon-key' } as any
 
@@ -39,5 +41,17 @@ describe('self-service authentication helpers', () => {
     expect(createClientMock).toHaveBeenCalledWith(config.SUPABASE_URL, config.SUPABASE_ANON_KEY, {
       auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
     })
+  })
+})
+
+describe('third-party OAuth access token isolation', () => {
+  it('rejects signed OAuth access tokens before contacting GoTrue, even without local token validation configured', async () => {
+    const secret = new TextEncoder().encode('local-test-oauth-access-token-signing-key')
+    const getUser = vi.fn()
+    const client = { auth: { getUser } } as unknown as SupabaseClient
+    const token = await new SignJWT({ client_id: 'eb69dca1-a777-4c58-8798-ab357d68f1c3', role: 'authenticated' })
+      .setProtectedHeader({ alg: 'HS256' }).setAudience('authenticated').setSubject('user-1').setExpirationTime('1h').sign(secret)
+    await expect(validateAccessToken(client, token)).rejects.toThrow('AUTH_INVALID')
+    expect(getUser).not.toHaveBeenCalled()
   })
 })

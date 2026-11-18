@@ -3,22 +3,27 @@ import { describe, expect, it } from 'vitest'
 import { EMAIL_TEMPLATES, isEmailTemplateName } from './emailTemplates.js'
 
 describe('GoTrue email templates', () => {
-  it('provides the four configured transactional flows', () => {
-    expect(Object.keys(EMAIL_TEMPLATES).sort()).toEqual(['confirmation', 'email_change', 'invite', 'recovery'])
+  it('provides the configured transactional and sign-in flows', () => {
+    expect(Object.keys(EMAIL_TEMPLATES).sort()).toEqual(['confirmation', 'email_change', 'invite', 'magic_link', 'recovery'])
     expect(isEmailTemplateName('recovery')).toBe(true)
-    expect(isEmailTemplateName('magic_link')).toBe(false)
+    expect(isEmailTemplateName('magic_link')).toBe(true)
   })
 
-  it.each(Object.entries(EMAIL_TEMPLATES))('%s is a bilingual, single-action email with a copyable fallback URL', (_name, html) => {
+  it.each(Object.entries(EMAIL_TEMPLATES))('%s is a bilingual, single-action email with a copyable fallback URL', (name, html) => {
     expect(html).toContain('<!doctype html>')
     expect(html).toContain('lang="zh-Hant"')
     expect(html).toContain('lang="en"')
     expect(html).toContain('role="presentation"')
     expect(html.match(/<a\b/g) ?? []).toHaveLength(1)
     expect(html).toContain('If the button does not work, copy this URL into your browser:')
-    expect(html).toContain('{{ .SiteURL }}/api/auth/confirm?token_hash={{ .TokenHash }}&amp;type=')
-    expect(html).toContain('{{ .SiteURL }}/api/auth/confirm?token_hash={{ .TokenHash }}&type=')
-    expect(html).not.toContain('{{ .ConfirmationURL }}')
+    if (name === 'magic_link') {
+      expect(html).toContain('{{ .ConfirmationURL }}')
+      expect(html).toContain('{{ .Token }}')
+    } else {
+      expect(html).toContain('{{ .SiteURL }}/api/auth/confirm?token_hash={{ .TokenHash }}&amp;type=')
+      expect(html).toContain('{{ .SiteURL }}/api/auth/confirm?token_hash={{ .TokenHash }}&type=')
+      expect(html).not.toContain('{{ .ConfirmationURL }}')
+    }
     expect(html).not.toMatch(/<img\b|<link\b|https?:\/\/[^"' ]+\.(?:png|jpe?g|gif|woff2?)/i)
   })
 

@@ -7,7 +7,7 @@
  * the one-time token and creates the session in an HttpOnly cookie.
  */
 
-export type EmailTemplateName = 'invite' | 'recovery' | 'email_change' | 'confirmation'
+export type EmailTemplateName = 'invite' | 'recovery' | 'email_change' | 'confirmation' | 'magic_link'
 
 const confirmLink = (type: string) =>
   '{{ .SiteURL }}/api/auth/confirm?token_hash={{ .TokenHash }}&amp;type=' + type
@@ -66,6 +66,19 @@ function layout(
 }
 
 export const EMAIL_TEMPLATES: Record<EmailTemplateName, string> = {
+  magic_link: layout(
+    '登入 EduLog / Sign in to EduLog',
+    '你的 EduLog 登入要求 / Your EduLog sign-in request',
+    '登入 EduLog',
+    '在原本發出登入要求的瀏覽器開啟下方連結。若你選擇使用驗證碼，請輸入 <strong>{{ .Token }}</strong>。',
+    'Sign in to EduLog',
+    'Open the link below in the browser where you requested sign-in. If you chose to use a code, enter <strong>{{ .Token }}</strong>.',
+    '登入',
+    'Sign in',
+    '如果你沒有提出這項要求，請忽略本信。',
+    'If you did not request this sign-in, ignore this email.',
+    '{{ .ConfirmationURL }}',
+  ),
   invite: layout(
     'EduLog 帳號邀請 / Your EduLog account invitation',
     '請設定密碼以啟用你的 EduLog 帳號 / Set a password to activate your EduLog account',

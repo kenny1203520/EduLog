@@ -8,6 +8,10 @@ import type { ApiConfig } from '../config/config.js'
 import { measureRequestPhase, setAuditContext } from '../http/context.js'
 import { createPkcePair, enabledOAuthProviders, exchangeAuthCode, isValidProviderName, OAUTH_PROVIDER_MAX_LENGTH, requestPasswordRecovery, startOAuthAuthorization, verifyEmailLink, type EmailLinkType, type GoTrueSession } from './gotrue.js'
 import { deleteIdentity, readIdentityUser, startIdentityLink } from './gotrue.js'
+import { createOutboundOAuthRouter } from './outboundOAuth.js'
+import { ensureSessionAssurance, registerAdditionalAuthRoutes } from './additionalAuth.js'
+import { outboundConsentReturn } from './authReturn.js'
+import { authCapabilities } from './capabilities.js'
 import { clearIdentityFlow, identityCallback, identityReturn, readIdentityFlow, setIdentityFlow } from './identityFlow.js'
 import { createMailer, notifyPendingAccount, type Mailer } from '../mail/mailer.js'
 
@@ -16,6 +20,7 @@ const refreshCookie = 'edulog_refresh'
 const csrfCookie = 'edulog_csrf'
 /** PKCE verifier between the OAuth redirect and its callback. */
 const oauthCookie = 'edulog_oauth'
+const oauthReturnCookie = 'edulog_oauth_return'
 const oauthCookiePath = '/api/auth/oauth'
 /** Lets a session opened from an invite or reset link set a password without the old one. */
 const setupLinkCookie = 'edulog_setup_link'
@@ -68,13 +73,14 @@ function setSession(res: Response, config: ApiConfig, session: { access_token: s
   res.cookie(csrfCookie, crypto.randomBytes(24).toString('hex'), { ...options, httpOnly: false, maxAge: 30 * 24 * 60 * 60 * 1000 })
 }
 
-export function requireAuth(clients: SupabaseClients, config: ApiConfig, options: { allowPending?: boolean } = {}) {
+export function requireAuth(clients: SupabaseClients, config: ApiConfig, options: { allowPending?: boolean; allowLowerAssurance?: boolean } = {}) {
   return async (req: Request, _res: Response, next: NextFunction) => {
     try {
       const token = req.cookies?.[accessCookie] ?? req.header('authorization')?.replace(/^Bearer\s+/i, '').trim()
       if (!token) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
       const user = await measureRequestPhase(req, 'auth', () => validateAccessToken(clients.adminClient, token, config))
       req.accountStatus = await measureRequestPhase(req, 'account_status', () => assertUserActive(clients.adminClient, user.id, options))
+      if (!options.allowLowerAssurance) await ensureSessionAssurance(config, token, user)
       req.user = user
       req.log = req.log.child({ actor_user_id: user.id })
       req.accessToken = token
@@ -95,6 +101,7 @@ export function requireAuth(clients: SupabaseClients, config: ApiConfig, options
 
 export function csrfProtection(req: Request, _res: Response, next: NextFunction) {
   const method = req.method.toUpperCase()
+  if (method === 'POST' && req.path === '/sso/saml/acs') return next()
   if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) || !req.cookies?.[accessCookie]) return next()
   const expected = req.cookies?.[csrfCookie]
   const received = req.header('x-csrf-token')
@@ -109,7 +116,10 @@ export function csrfProtection(req: Request, _res: Response, next: NextFunction)
 export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, mailer: Mailer = createMailer(config)) {
   const router = Router()
   const oauthCallbackUrl = new URL('/api/auth/oauth/callback', config.EDULOG_WEB_BASE_URL).toString()
-  const clearOAuthCookie = (res: Response) => res.clearCookie(oauthCookie, { path: oauthCookiePath })
+  const clearOAuthCookie = (res: Response) => {
+    res.clearCookie(oauthCookie, { path: oauthCookiePath })
+    res.clearCookie(oauthReturnCookie, { path: oauthCookiePath })
+  }
   const providers = () => enabledOAuthProviders(config)
   // The persistent API limiter is also mounted above this router. Give each
   // OAuth endpoint its own local limiter so a valid start does not consume the
@@ -134,6 +144,7 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
   }
 
   function failureTarget(error: unknown, fallback: string) {
+    if (error instanceof ApiError && error.code === 'MFA_REQUIRED') return '/login?mfa=1'
     return error instanceof Error && error.message === 'AUTH_DISABLED' ? '/account-disabled' : fallback
   }
 
@@ -141,7 +152,18 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
   router.get('/providers', async (req, res) => {
     res.json({ data: { providers: await providers() }, meta: {}, request_id: req.requestId, trace_id: req.traceId })
   })
+  router.get('/capabilities', rateLimit(oauthRateLimitOptions), async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store')
+    res.json({ data: await authCapabilities(config), meta: {}, request_id: req.requestId, trace_id: req.traceId })
+  })
   const activeAccount = requireAuth(clients, config)
+  router.use('/outbound', rateLimit(oauthRateLimitOptions), createOutboundOAuthRouter(config, activeAccount))
+  registerAdditionalAuthRoutes(router, {
+    config,
+    activeAccount,
+    challengeAccount: requireAuth(clients, config, { allowPending: true, allowLowerAssurance: true }),
+    sendSession: startSession,
+  })
   const identityResult = (req: Request, res: Response, data: unknown) => {
     res.setHeader('Cache-Control', 'no-store')
     return res.json({ data, meta: {}, request_id: req.requestId, trace_id: req.traceId })
@@ -218,15 +240,20 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
     res.setHeader('Cache-Control', 'no-store')
     res.setHeader('Referrer-Policy', 'no-referrer')
     const verifier = req.cookies?.[oauthCookie]
+    const returnTo = outboundConsentReturn(req.cookies?.[oauthReturnCookie])
     clearOAuthCookie(res)
     const code = typeof req.query.code === 'string' ? req.query.code : ''
     if (!code || typeof verifier !== 'string' || !verifier) return res.redirect(303, '/login?error=oauth')
     try {
-      const status = await startSession(req, res, await exchangeAuthCode(config, code, verifier))
-      return res.redirect(303, status === 'pending' ? '/account-pending' : '/dashboard')
+      const session = await exchangeAuthCode(config, code, verifier)
+      const status = await startSession(req, res, session)
+      await ensureSessionAssurance(config, session.access_token, session.user)
+      return res.redirect(303, status === 'pending' ? '/account-pending' : returnTo ?? '/dashboard')
     } catch (error) {
       req.log.warn({ event: 'oauth_callback_failed', reason: error instanceof Error ? error.message : 'unknown' }, 'oauth_callback_failed')
-      return res.redirect(303, failureTarget(error, '/login?error=oauth'))
+      const failure = failureTarget(error, '/login?error=oauth')
+      return res.redirect(303, returnTo && failure === '/login?mfa=1'
+        ? `${failure}&redirect=${encodeURIComponent(returnTo)}` : failure)
     }
   })
   router.get('/oauth/:provider', rateLimit(oauthRateLimitOptions), async (req, res) => {
@@ -238,7 +265,11 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
       if (!(await providers()).includes(provider)) return res.redirect(303, '/login?error=oauth')
     } catch { return res.redirect(303, '/login?error=oauth') }
     const { verifier, challenge } = createPkcePair()
-    res.cookie(oauthCookie, verifier, { httpOnly: true, secure: config.COOKIE_SECURE, sameSite: 'lax', path: oauthCookiePath, maxAge: 10 * 60 * 1000 })
+    const oauthFlowCookie = { httpOnly: true, secure: config.COOKIE_SECURE, sameSite: 'lax' as const, path: oauthCookiePath, maxAge: 10 * 60 * 1000 }
+    res.cookie(oauthCookie, verifier, oauthFlowCookie)
+    const returnTo = outboundConsentReturn(req.query.return_to)
+    if (returnTo && config.AUTH_OUTBOUND_OAUTH_ENABLED) res.cookie(oauthReturnCookie, returnTo, oauthFlowCookie)
+    else res.clearCookie(oauthReturnCookie, { path: oauthCookiePath })
     try {
       const authorizeLocation = await startOAuthAuthorization(config, provider, oauthCallbackUrl, challenge)
       return res.redirect(303, authorizeLocation)
@@ -259,13 +290,17 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
       if (type === 'invite' || type === 'recovery') {
         const expiresAt = Date.now() + SETUP_LINK_TTL_MS
         res.cookie(setupLinkCookie, setupLinkToken(config, session.user!.id, expiresAt), { httpOnly: true, secure: config.COOKIE_SECURE, sameSite: 'lax', path: '/api/auth', maxAge: SETUP_LINK_TTL_MS })
+        await ensureSessionAssurance(config, session.access_token, session.user)
         return res.redirect(303, '/auth/set-password')
       }
+      await ensureSessionAssurance(config, session.access_token, session.user)
       if (type === 'email_change') return res.redirect(303, '/dashboard/settings?tab=personal&email_changed=1')
       return res.redirect(303, status === 'pending' ? '/account-pending' : '/dashboard')
     } catch (error) {
       req.log.warn({ event: 'email_link_failed', link_type: type, reason: error instanceof Error ? error.message : 'unknown' }, 'email_link_failed')
-      return res.redirect(303, failureTarget(error, '/login?error=link'))
+      const failure = failureTarget(error, '/login?error=link')
+      return res.redirect(303, failure === '/login?mfa=1' && (type === 'invite' || type === 'recovery')
+        ? '/login?mfa=1&redirect=%2Fauth%2Fset-password' : failure)
     }
   })
   /** Always 204, so the answer never tells whether an account exists. */
@@ -301,6 +336,7 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
       const result = await signIn(config, input.email, input.password)
       const status = await assertUserActive(clients.adminClient, result.user.id, { allowPending: true })
       setSession(res, config, result.session)
+      await ensureSessionAssurance(config, result.session.access_token, result.user)
       if (status === 'pending') void notifyPendingAccount(clients.adminClient, mailer, config.EDULOG_WEB_BASE_URL, result.user.id, req.log)
       res.json({ data: { ...await safeUserWithProfile(clients.adminClient, result.user), account_status: status }, meta: {}, request_id: req.requestId, trace_id: req.traceId })
     } catch (error) {
@@ -315,6 +351,7 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
       const result = await refresh(config, token)
       const status = await assertUserActive(clients.adminClient, result.user.id, { allowPending: true })
       setSession(res, config, result.session)
+      await ensureSessionAssurance(config, result.session.access_token, result.user)
       res.json({ data: { ...await safeUserWithProfile(clients.adminClient, result.user), account_status: status }, meta: {}, request_id: req.requestId, trace_id: req.traceId })
     } catch (error) { next(error instanceof ApiError ? error : new ApiError(401, 'AUTH_INVALID', 'Authentication is invalid')) }
   })
@@ -346,10 +383,12 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
       if (!user?.email) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
       setAuditContext(req, { domain: 'system', resource: 'account-security', resourceId: user.id, action: 'email-change-request' })
       const verifiedSession = await verifyCurrentPassword(config, user.email, input.current_password)
-      if (!verifiedSession) {
+      if (!verifiedSession || verifiedSession.user.id !== user.id) {
         throw new ApiError(403, 'CURRENT_PASSWORD_INVALID', 'The current password is incorrect')
       }
-      const authClient = await createAuthenticatedUserClient(config, verifiedSession.access_token, verifiedSession.refresh_token)
+      const refreshToken = req.cookies?.[refreshCookie]
+      if (!req.accessToken || typeof refreshToken !== 'string') throw new ApiError(401, 'AUTH_REQUIRED', 'A browser session is required')
+      const authClient = await createAuthenticatedUserClient(config, req.accessToken, refreshToken)
       const { error } = await authClient.auth.updateUser({ email: input.email })
       if (error) {
         req.log.warn({ auth_error_code: error.code ?? 'UNKNOWN' }, 'auth_email_change_failed')
@@ -367,8 +406,10 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
       if (!user?.email) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
       setAuditContext(req, { domain: 'system', resource: 'account-security', resourceId: user.id, action: 'password-change' })
       const verifiedSession = await verifyCurrentPassword(config, user.email, input.current_password)
-      if (!verifiedSession) throw new ApiError(403, 'CURRENT_PASSWORD_INVALID', 'The current password is incorrect')
-      const authClient = await createAuthenticatedUserClient(config, verifiedSession.access_token, verifiedSession.refresh_token)
+      if (!verifiedSession || verifiedSession.user.id !== user.id) throw new ApiError(403, 'CURRENT_PASSWORD_INVALID', 'The current password is incorrect')
+      const refreshToken = req.cookies?.[refreshCookie]
+      if (!req.accessToken || typeof refreshToken !== 'string') throw new ApiError(401, 'AUTH_REQUIRED', 'A browser session is required')
+      const authClient = await createAuthenticatedUserClient(config, req.accessToken, refreshToken)
       const { error } = await authClient.auth.updateUser({ password: input.new_password, current_password: input.current_password })
       if (error) {
         if (error.code?.includes('reauthentication') || /current password|reauthentication/i.test(error.message)) throw new ApiError(403, 'CURRENT_PASSWORD_INVALID', 'The current password is incorrect')

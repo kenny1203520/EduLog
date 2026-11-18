@@ -11,6 +11,7 @@ export const useAuthStore = defineStore('auth', () => {
   const session = ref<BffSession | null>(null)
   const loading = ref(true)
   const accountDisabled = ref(false)
+  const mfaRequired = ref(false)
   let initializePromise: Promise<void> | null = null
 
   const isAuthenticated = computed(() => !!user.value)
@@ -18,6 +19,7 @@ export const useAuthStore = defineStore('auth', () => {
   const accountPending = computed(() => user.value?.account_status === 'pending')
 
   function acceptRefreshedUser(nextUser: BffUser) {
+    mfaRequired.value = false
     session.value = { user: nextUser }
     user.value = nextUser
     loading.value = false
@@ -30,6 +32,7 @@ export const useAuthStore = defineStore('auth', () => {
     session.value = null
     loading.value = false
     accountDisabled.value = false
+    mfaRequired.value = false
   }
 
   // Unsaved report drafts hold student data; they must not outlive the
@@ -57,6 +60,7 @@ export const useAuthStore = defineStore('auth', () => {
         session.value = currentSession
         user.value = currentSession?.user ?? null
         accountDisabled.value = (error as { code?: string } | null)?.code === 'ACCOUNT_DISABLED'
+        mfaRequired.value = (error as { code?: string } | null)?.code === 'MFA_REQUIRED'
       } finally {
         loading.value = false
       }
@@ -75,6 +79,7 @@ export const useAuthStore = defineStore('auth', () => {
     if (error) throw error
     if (result.user) {
       accountDisabled.value = false
+      mfaRequired.value = false
       AggregateService.clearCache()
       useCapabilityStore().reset()
       session.value = result.session ?? { user: result.user }
@@ -101,6 +106,7 @@ export const useAuthStore = defineStore('auth', () => {
     clearSession,
     markAccountDisabled,
     accountDisabled,
+    mfaRequired,
     accountPending
   }
 })
