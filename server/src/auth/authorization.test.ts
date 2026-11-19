@@ -127,8 +127,8 @@ describe('resource-aware authorization', () => {
       // Only a class-level grant for `mine`; no platform-wide permission.
       const rpc = vi.fn(async (_name: string, args: { p_class_session_id: string | null }) => ({ data: args.p_class_session_id === mine, error: null }))
       const eq = vi.fn().mockResolvedValue({ data: assignedSessions.map(class_session_id => ({ class_session_id })), error: null })
-      const req = requestWithRpc(rpc) as Request & { db: Record<string, unknown> }
-      req.db.from = vi.fn(() => ({ select: () => ({ eq }) }))
+      const req = requestWithRpc(rpc)
+      ;(req.db as unknown as { from: unknown }).from = vi.fn(() => ({ select: () => ({ eq }) }))
       return req
     }
 
