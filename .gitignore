@@ -12,10 +12,9 @@ ssl/*
 extension/tests/artifacts/
 .claude
 
-# Supabase
-supabase_docker/.env
-supabase_docker/volumes/db/data/
-supabase_docker/volumes/storage/
+# Supabase runtime data (self-hosted volumes)
+supabase/volumes/functions/
+supabase/volumes/storage/
 
 # Editor directories and files
 .idea
