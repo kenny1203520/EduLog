@@ -1,6 +1,23 @@
 {
     "entries": [
         {
+            "version": "2.0.0-alpha.11",
+            "date": "2026-11-19",
+            "changes": {
+                "added": [
+                    "Discover GoTrue sign-in methods and configure custom OAuth/OIDC provider drafts.",
+                    "Add configured passwordless, SAML, passkey, MFA and external OIDC flows."
+                ],
+                "fixed": [
+                    "Enforce MFA on Realtime and preserve the verified session for account changes.",
+                    "Enforce browser session time limits, require a six-digit extension pairing code and harden API and browser security."
+                ],
+                "deployment": [
+                    "Apply migrations through 1000183 before deploying the matching API, frontend and extension. Restart pairing requests created before the upgrade. Review the release notes before enabling optional features."
+                ]
+            }
+        },
+        {
             "version": "2.0.0-alpha.10",
             "date": "2026-11-16",
             "changes": {
