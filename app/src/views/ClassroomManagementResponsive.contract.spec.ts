@@ -37,7 +37,7 @@ describe('ClassroomManagement session card responsive contract', () => {
         const timeZone = card.indexOf("$t('classroom.session_time_zone')")
         const capacity = card.indexOf("$t('classroom.capacity_short')")
         const courses = card.indexOf('session.course_ids?.length')
-        const external = card.indexOf('v-if="session.external_link"')
+        const external = card.indexOf('v-if="safeExternalHref(session.external_link)"')
 
         expect([schedule, classroom, timeZone, capacity, courses, external].every(index => index >= 0)).toBe(true)
         expect(schedule).toBeLessThan(classroom)

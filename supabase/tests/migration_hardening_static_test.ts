@@ -24,3 +24,14 @@ Deno.test('1000045 uses scalar auth initplans for sensitive ownership checks', (
   assertStringIncludes(migration, 'teacher_credentials.teacher_id')
   assertStringIncludes(migration, 'public.can_access_enrollment')
 })
+
+Deno.test('1000182 limits rendered external links to http(s) on every linked table', async () => {
+  const links = await Deno.readTextFile(new URL('../migrations/1000182_external_link_http_scheme_checks.sql', import.meta.url))
+  for (const table of ['students', 'classrooms', 'class_sessions', 'enrollments', 'enrollment_history_reports']) {
+    assertStringIncludes(links, `'${table}'`)
+  }
+  assertStringIncludes(links, '_external_link_http_check')
+  assertStringIncludes(links, "~* ''^https?://[^[:space:]]+$''")
+  assert(!/NOT VALID/i.test(links), 'cleared rows let the new checks be validated')
+  assert(!/\bGRANT\b/i.test(links), 'the check migration grants nothing')
+})

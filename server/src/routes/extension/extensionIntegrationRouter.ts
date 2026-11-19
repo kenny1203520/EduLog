@@ -6,6 +6,7 @@ import type { ApiConfig } from '../../config/config.js'
 import { assertUserActive, type SupabaseClients } from '../../infra/supabase.js'
 import { requireAuth, csrfProtection } from '../../auth/auth.js'
 import { ApiError, mapDatabaseError } from '../../http/errors.js'
+import { authAttemptRateLimit } from '../../http/rateLimit.js'
 import { createExtensionWorkspaceRouter } from './extensionWorkspaceRouter.js'
 
 const installationShape = {
@@ -112,7 +113,7 @@ export function createExtensionIntegrationRouter(clients: SupabaseClients, confi
 
   // Extension begins a PKCE-style pairing. The verifier stays in extension storage;
   // only its challenge is stored on the server.
-  router.post('/pair-requests', wrap(async (req, res) => {
+  router.post('/pair-requests', authAttemptRateLimit(config, admin, 'extension-pair'), wrap(async (req, res) => {
     const origin = req.header('origin')
     if (!allowedExtensionOrigin(config, origin)) throw new ApiError(403, 'EXTENSION_ORIGIN_FORBIDDEN', 'This extension origin is not enabled')
     const input = pairStartBody.parse(req.body)

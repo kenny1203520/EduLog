@@ -45,6 +45,10 @@ export function createApp(config: ApiConfig, clients: SupabaseClients = createSu
   const logger = pino({ level: config.NODE_ENV === 'production' ? 'info' : 'debug', redact: ['req.headers.authorization', 'req.headers.cookie', 'access_token', 'refresh_token', 'password', 'cookie', '*.token', '*.secret', '*.clientSecret', '*.apiKey', '*.serviceRoleKey'] })
   const app = express()
   app.disable('x-powered-by')
+  // req.ip must be the client, not the frontend nginx, or every anonymous
+  // caller shares one rate-limit bucket. Trust only the configured hops so a
+  // client-supplied X-Forwarded-For cannot choose its own address.
+  if (config.API_TRUST_PROXY_HOPS > 0) app.set('trust proxy', config.API_TRUST_PROXY_HOPS)
   app.use(helmet())
   app.use(cookieParser())
   app.use(requestContext(logger))

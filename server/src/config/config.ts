@@ -93,6 +93,14 @@ const ConfigSchema = z.object({
   API_ALLOWED_ORIGINS: originList('API_ALLOWED_ORIGINS', webOrigin),
   API_EXTENSION_ALLOWED_ORIGINS: originList('API_EXTENSION_ALLOWED_ORIGINS', extensionOrigin),
   API_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(120),
+  // Credential and pairing endpoints get a much smaller per-IP and per-email
+  // allowance than the general API limit.
+  API_AUTH_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(10),
+  // Number of reverse proxies in front of the API whose X-Forwarded-For entry
+  // is trusted. The bundled frontend nginx is one hop; an extra TLS proxy
+  // (supabase/docker-compose.caddy.yml or .nginx.yml) makes two. Use 0 only
+  // when clients connect to the API directly.
+  API_TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(1),
   // AES-256-GCM key for AI provider credentials stored in ai_credentials:
   // 32 random bytes, base64 (`openssl rand -base64 32`). Optional so existing
   // deployments boot; AI credential storage stays unavailable until it is set.

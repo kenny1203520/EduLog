@@ -19,8 +19,8 @@
                 </h1>
             </div>
 
-            <div v-if="enrollmentInfo?.externalLink" class="flex items-center">
-                <a :href="enrollmentInfo.externalLink"
+            <div v-if="safeExternalHref(enrollmentInfo?.externalLink)" class="flex items-center">
+                <a :href="safeExternalHref(enrollmentInfo?.externalLink) || undefined"
                     target="_blank"
                     rel="noopener noreferrer"
                     class="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-blue-100 text-blue-600 text-sm font-black uppercase tracking-widest rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-all shadow-sm cursor-pointer active:scale-95">
