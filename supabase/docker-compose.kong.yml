@@ -11,6 +11,13 @@
 # Upstream plans to remove the Kong override in a future release.
 
 services:
+  # The identity-only gateway rules are available on the bundled Envoy gateway.
+  auth:
+    environment:
+      GOTRUE_OAUTH_SERVER_ENABLED: "false"
+  api:
+    environment:
+      AUTH_OUTBOUND_OAUTH_ENABLED: "false"
   api-gw:
     container_name: edulog-kong
     image: kong/kong:3.9.3

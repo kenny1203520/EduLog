@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express'
 import { z } from 'zod'
+import { externalLinkOrEmpty } from './externalLink.js'
 import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { setAuditContext } from '../../http/context.js'
@@ -14,7 +15,7 @@ const mutable = ['student_id', 'course_id', 'classroom_id', 'class_session_id', 
 export const enrollmentBodySchema = z.object({
   student_id: z.string().uuid().optional(), course_id: z.string().uuid().optional(), classroom_id: z.string().uuid().nullable().optional(), class_session_id: z.string().uuid().nullable().optional(),
   status: z.enum(['trial', 'regular', 'dropped', 'completed']).optional(), start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), lesson_number: z.number().int().min(0).nullable().optional(),
-  external_link: z.string().max(2048).nullable().optional(), time_zone: z.string().min(1).max(64).optional(), koding_admission_id: z.string().max(255).nullable().optional(),
+  external_link: externalLinkOrEmpty, time_zone: z.string().min(1).max(64).optional(), koding_admission_id: z.string().max(255).nullable().optional(),
   target_report_count: z.number().int().min(0).max(200).optional(), target_total_reports: z.number().int().min(0).max(200).optional(), target_regular_reports: z.number().int().min(1).max(200).optional(),
 }).strict()
 export const enrollmentCreateSchema = enrollmentBodySchema.required({ student_id: true, course_id: true })

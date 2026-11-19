@@ -3,6 +3,7 @@ import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import type { TransferConflictDisplayContext } from '@/services/enrollment/EnrollmentTransferQueryService'
 import { DateUtils } from '@/utils/dateUtils'
 import { absenceReasonLabel } from '@/utils/absenceReason'
+import { safeExternalHref } from '@/utils/safeExternalHref'
 import type { TransferReportField } from './ReportFieldConflictService'
 
 type Translate = (key: string) => string
@@ -108,8 +109,11 @@ export class TransferReportConflictDisplayService {
             return { kind: 'text', text: progress ? progress.replace('-', ' → ') : empty }
         }
         if (field === 'external_link') {
-            const href = report.external_link?.trim()
-            if (!href) return { kind: 'text', text: empty }
+            const raw = report.external_link?.trim()
+            if (!raw) return { kind: 'text', text: empty }
+            // Only http(s) links become anchors; anything else is shown as text.
+            const href = safeExternalHref(raw)
+            if (!href) return { kind: 'text', text: raw }
             try {
                 const url = new URL(href)
                 const detail = `${url.pathname}${url.search}` === '/' ? '' : `${url.pathname}${url.search}`

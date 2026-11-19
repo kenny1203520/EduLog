@@ -26,6 +26,12 @@ const router = createRouter({
       meta: { title: 'auth.account_disabled_title', description: 'nav.subtitle' }
     },
     {
+      path: '/oauth/consent',
+      name: 'oauth-consent',
+      component: () => import('@/views/OutboundOAuthConsentView.vue'),
+      meta: { requiresAuth: true, title: 'oauthServer.consent_title' }
+    },
+    {
       path: '/account-pending',
       name: 'account-pending',
       component: () => import('@/views/AccountPendingView.vue'),

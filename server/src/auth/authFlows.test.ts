@@ -15,7 +15,7 @@ import { testConfig } from '../test/testConfig.js'
 const config = testConfig({ GOTRUE_INTERNAL_URL: 'http://auth:9999' })
 
 /** A fake service-role client: account statuses per user id and recorded RPC calls. */
-function fakeClients(statuses: Record<string, string>) {
+function fakeClients(statuses: Record<string, string>, factors: Array<{ status: string }> = []) {
   const rpc = vi.fn(async (name: string) => {
     if (name === 'mark_pending_account_notified') return { data: true, error: null }
     if (name === 'list_pending_accounts') return { data: Object.keys(statuses).map((id) => ({ id, email: `${id}@example.test`, provider: 'github' })), error: null }
@@ -35,15 +35,15 @@ function fakeClients(statuses: Record<string, string>) {
       }),
     }),
     auth: {
-      getUser: async (token: string) => ({ data: { user: { id: token.replace('token-', ''), email: 'user@example.test', app_metadata: {}, user_metadata: {} } }, error: null }),
+      getUser: async (token: string) => ({ data: { user: { id: token.replace('token-', ''), email: 'user@example.test', app_metadata: {}, user_metadata: {}, factors } }, error: null }),
       admin: { updateUserById, signOut: async () => ({}) },
     },
   }
   return { clients: { adminClient } as never, rpc, updateUserById }
 }
 
-function app(statuses: Record<string, string>, mailer: Mailer = { enabled: true, send: vi.fn(async () => {}) }, appConfig = config) {
-  const fake = fakeClients(statuses)
+function app(statuses: Record<string, string>, mailer: Mailer = { enabled: true, send: vi.fn(async () => {}) }, appConfig = config, factors: Array<{ status: string }> = []) {
+  const fake = fakeClients(statuses, factors)
   const instance = express()
   instance.use(cookieParser())
   instance.use(express.json())
@@ -76,6 +76,96 @@ const session = (userId: string) => ({
 
 beforeEach(() => { resetProviderCache() })
 afterEach(() => { vi.unstubAllGlobals() })
+
+describe('Auth capabilities', () => {
+  it('only publishes configured methods and excludes private GoTrue fields', async () => {
+    const appConfig = testConfig({
+      GOTRUE_INTERNAL_URL: 'http://auth:9999',
+      AUTH_CUSTOM_OAUTH_DISCOVERY_ENABLED: 'true',
+      AUTH_MAIL_DELIVERY_ENABLED: 'true',
+      AUTH_EMAIL_OTP_ENABLED: 'true',
+      AUTH_MAGIC_LINK_ENABLED: 'true',
+      AUTH_MFA_PHONE_ENROLL_ENABLED: 'true',
+      AUTH_MFA_PHONE_VERIFY_ENABLED: 'true',
+    })
+    stubGoTrue({
+      '/auth/v1/settings': () => json({
+        external: { email: true, phone: true, google: true, anonymous_users: true },
+        sms_provider: 'twilio', saml_enabled: false, passkeys_enabled: true,
+      }),
+      '/admin/custom-providers': () => json({ providers: [
+        { identifier: 'custom:authentik', enabled: true, client_secret: 'private' },
+        { identifier: 'custom:draft', enabled: false },
+      ] }),
+    })
+    const response = await request(app({}, undefined, appConfig).instance).get('/api/auth/capabilities')
+    expect(response.status).toBe(200)
+    expect(response.headers['cache-control']).toBe('no-store')
+    expect(response.body.data).toMatchObject({
+      providers: ['custom:authentik', 'google'],
+      methods: { password: true, emailOtp: true, magicLink: true, sms: true, saml: false, passkeys: true },
+      mfa: { phone: true, recoveryCodes: false },
+      unavailable: [],
+    })
+    expect(response.text).not.toContain('private')
+  })
+
+  it('offers SAML only when GoTrue has a registered, active domain', async () => {
+    let items = [{ disabled: true, domains: ['example.test'] }]
+    stubGoTrue({
+      '/auth/v1/settings': () => json({ external: {}, saml_enabled: true }),
+      '/admin/sso/providers': () => json({ items }),
+    })
+    const { instance } = app({})
+    const first = await request(instance).get('/api/auth/capabilities')
+    expect(first.body.data.methods.saml).toBe(false)
+    items = [{ disabled: false, domains: ['example.test'] }]
+    resetProviderCache()
+    const refreshed = await request(instance).get('/api/auth/capabilities')
+    expect(refreshed.body.data.methods.saml).toBe(true)
+    expect(refreshed.text).not.toContain('example.test')
+  })
+
+  it('requires MFA before an existing session can access its protected profile', async () => {
+    const { instance } = app({ 'second-factor': 'active' }, undefined, undefined, [{ status: 'verified' }])
+    const response = await request(instance).get('/api/auth/me').set('Cookie', 'edulog_access=token-second-factor')
+    expect(response.status).toBe(403)
+    expect(response.body.error.code).toBe('MFA_REQUIRED')
+  })
+
+  it('does not offer MFA enrollment when verification is disabled', async () => {
+    const appConfig = testConfig({
+      AUTH_MFA_TOTP_ENROLL_ENABLED: 'true', AUTH_MFA_TOTP_VERIFY_ENABLED: 'false',
+      AUTH_MFA_PHONE_ENROLL_ENABLED: 'true', AUTH_MFA_PHONE_VERIFY_ENABLED: 'false',
+      AUTH_MFA_WEBAUTHN_ENROLL_ENABLED: 'true', AUTH_MFA_WEBAUTHN_VERIFY_ENABLED: 'false',
+    })
+    stubGoTrue({ '/auth/v1/settings': () => json({ external: { email: true }, sms_provider: 'twilio' }) })
+    const response = await request(app({}, undefined, appConfig).instance).get('/api/auth/capabilities')
+    expect(response.body.data.mfa).toMatchObject({ totp: false, phone: false, webauthn: false })
+  })
+
+  it('keeps built-ins usable when custom discovery is temporarily unavailable', async () => {
+    const appConfig = testConfig({
+      GOTRUE_INTERNAL_URL: 'http://auth:9999',
+      AUTH_CUSTOM_OAUTH_DISCOVERY_ENABLED: 'true',
+    })
+    let customAvailable = false
+    stubGoTrue({
+      '/auth/v1/settings': () => json({ external: { github: true } }),
+      '/admin/custom-providers': () => customAvailable
+        ? json({ providers: [{ identifier: 'custom:authentik', enabled: true }] })
+        : json({}, 500),
+    })
+    const { instance } = app({}, undefined, appConfig)
+    const first = await request(instance).get('/api/auth/capabilities')
+    expect(first.body.data).toMatchObject({ providers: ['github'], unavailable: ['customProviders'] })
+    const compatible = await request(instance).get('/api/auth/providers')
+    expect(compatible.body.data).toEqual({ providers: ['github'] })
+    customAvailable = true
+    const recovered = await request(instance).get('/api/auth/capabilities')
+    expect(recovered.body.data).toMatchObject({ providers: ['custom:authentik', 'github'], unavailable: [] })
+  })
+})
 
 describe('OAuth sign-in', () => {
   it('lists only enabled social providers from GoTrue settings', async () => {

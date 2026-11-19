@@ -5,6 +5,7 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon NOLOGIN; END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN CREATE ROLE service_role NOLOGIN; END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticator') THEN CREATE ROLE authenticator NOINHERIT LOGIN; END IF;
 END;
 $$;
 
@@ -37,9 +38,19 @@ CREATE OR REPLACE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS $$
   SELECT COALESCE(NULLIF(current_setting('request.jwt.claim.role', true), ''),
     NULLIF(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role', current_user);
 $$;
+CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$
+  SELECT NULLIF(current_setting('request.jwt.claims', true), '')::jsonb;
+$$;
+
+CREATE SCHEMA IF NOT EXISTS storage;
+CREATE TABLE IF NOT EXISTS storage.objects (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS storage.buckets (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY);
+ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE storage.buckets ENABLE ROW LEVEL SECURITY;
 
 CREATE SCHEMA IF NOT EXISTS realtime;
 CREATE TABLE IF NOT EXISTS realtime.messages (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY);
+ALTER TABLE realtime.messages ENABLE ROW LEVEL SECURITY;
 CREATE OR REPLACE FUNCTION realtime.topic() RETURNS text LANGUAGE sql STABLE AS $$
   SELECT COALESCE(NULLIF(current_setting('realtime.topic', true), ''), '');
 $$;
@@ -49,7 +60,7 @@ $$;
 CREATE OR REPLACE FUNCTION realtime.send(payload jsonb, event text, topic text, private boolean)
 RETURNS void LANGUAGE sql AS $$ SELECT; $$;
 
-GRANT USAGE ON SCHEMA public, auth, realtime TO anon, authenticated, service_role;
+GRANT USAGE ON SCHEMA public, auth, realtime, storage TO anon, authenticated, service_role;
 
 -- Supabase grants new public objects created by postgres to the API roles by
 -- name. Mirror that here, otherwise a migration that only revokes from PUBLIC

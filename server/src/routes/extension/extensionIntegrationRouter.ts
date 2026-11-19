@@ -6,6 +6,7 @@ import type { ApiConfig } from '../../config/config.js'
 import { assertUserActive, type SupabaseClients } from '../../infra/supabase.js'
 import { requireAuth, csrfProtection } from '../../auth/auth.js'
 import { ApiError, mapDatabaseError } from '../../http/errors.js'
+import { authAttemptRateLimit } from '../../http/rateLimit.js'
 import { createExtensionWorkspaceRouter } from './extensionWorkspaceRouter.js'
 
 const installationShape = {
@@ -20,7 +21,7 @@ export const pairStartBody = z.object({ code_challenge: z.string().regex(/^[a-f0
 )
 export const pairClaimBody = z.object({ code_verifier: z.string().regex(/^[a-f0-9]{64}$/) }).strict()
 export const connectionNameBody = z.object({ device_name: installationShape.device_name }).strict()
-const nameBody = z.object({ device_name: installationShape.device_name.optional() }).strict()
+export const pairApproveBody = z.object({ device_name: installationShape.device_name.optional(), confirmation_code: z.string().regex(/^\d{6}$/) }).strict()
 const tokenFields = 'id,extension_origin,installation_id,device_name,browser_name,platform_name,extension_version,created_at,last_used_at,expires_at,revoked_at'
 const uuid = z.string().uuid()
 
@@ -34,6 +35,15 @@ function envelope(req: Request, data: unknown) {
 
 function hash(value: string) {
   return crypto.createHash('sha256').update(value).digest('hex')
+}
+
+/** Six random digits the user compares between the extension and the approval page. */
+export function createPairingConfirmationCode() {
+  return crypto.randomInt(0, 1_000_000).toString().padStart(6, '0')
+}
+
+function sameCode(expected: unknown, supplied: string) {
+  return typeof expected === 'string' && expected.length === supplied.length && crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(supplied))
 }
 
 function integrationError(error: { message: string; code?: string }) {
@@ -103,13 +113,14 @@ export function createExtensionIntegrationRouter(clients: SupabaseClients, confi
 
   // Extension begins a PKCE-style pairing. The verifier stays in extension storage;
   // only its challenge is stored on the server.
-  router.post('/pair-requests', wrap(async (req, res) => {
+  router.post('/pair-requests', authAttemptRateLimit(config, admin, 'extension-pair'), wrap(async (req, res) => {
     const origin = req.header('origin')
     if (!allowedExtensionOrigin(config, origin)) throw new ApiError(403, 'EXTENSION_ORIGIN_FORBIDDEN', 'This extension origin is not enabled')
     const input = pairStartBody.parse(req.body)
-    const created = await admin.from('web_extension_pairing_requests').insert({ extension_origin: origin, ...input }).select('id,expires_at').single()
+    const confirmationCode = createPairingConfirmationCode()
+    const created = await admin.from('web_extension_pairing_requests').insert({ extension_origin: origin, ...input, confirmation_code: confirmationCode }).select('id,expires_at').single()
     if (created.error) throw mapDatabaseError(created.error)
-    return res.status(201).json(envelope(req, { id: created.data.id, authorize_url: buildExtensionApprovalUrl(config.EDULOG_WEB_BASE_URL, created.data.id), expires_at: created.data.expires_at }))
+    return res.status(201).json(envelope(req, { id: created.data.id, authorize_url: buildExtensionApprovalUrl(config.EDULOG_WEB_BASE_URL, created.data.id), expires_at: created.data.expires_at, confirmation_code: confirmationCode }))
   }))
 
   router.post('/pair-requests/:id/claim', wrap(async (req, res) => {
@@ -124,13 +135,21 @@ export function createExtensionIntegrationRouter(clients: SupabaseClients, confi
     return res.json(envelope(req, { token, token_id: issued.token_id, expires_at: issued.expires_at }))
   }))
 
+  // Approval needs the confirmation code the extension shows, so a pairing link
+  // sent by someone else cannot be approved blindly. A wrong code burns the
+  // request: one guess per request, and the extension must start over.
   router.post('/pair-requests/:id/approve', csrfProtection, requireAuth(clients, config), wrap(async (req, res) => {
     const id = uuid.parse(req.params.id)
-    const input = nameBody.parse(req.body)
-    const selected = await admin.from('web_extension_pairing_requests').select('id,status,expires_at,extension_origin').eq('id', id).maybeSingle()
+    const { confirmation_code: confirmationCode, ...input } = pairApproveBody.parse(req.body)
+    const selected = await admin.from('web_extension_pairing_requests').select('id,status,expires_at,extension_origin,confirmation_code').eq('id', id).maybeSingle()
     if (selected.error) throw mapDatabaseError(selected.error)
     if (!selected.data || selected.data.expires_at <= new Date().toISOString() || selected.data.status !== 'pending') throw new ApiError(404, 'PAIRING_REQUEST_EXPIRED', 'Pairing request was not found or expired')
-    const result = await admin.from('web_extension_pairing_requests').update({ user_id: req.user!.id, status: 'approved', approved_at: new Date().toISOString(), ...input }).eq('id', id).eq('status', 'pending').select('id,extension_origin,expires_at').maybeSingle()
+    if (!sameCode(selected.data.confirmation_code, confirmationCode)) {
+      const revoked = await admin.from('web_extension_pairing_requests').update({ status: 'revoked' }).eq('id', id).eq('status', 'pending')
+      if (revoked.error) throw mapDatabaseError(revoked.error)
+      throw new ApiError(409, 'PAIRING_CODE_MISMATCH', 'The confirmation code does not match; start pairing again from the extension')
+    }
+    const result = await admin.from('web_extension_pairing_requests').update({ user_id: req.user!.id, status: 'approved', approved_at: new Date().toISOString(), ...input }).eq('id', id).eq('status', 'pending').eq('confirmation_code', confirmationCode).select('id,extension_origin,expires_at').maybeSingle()
     if (result.error) throw mapDatabaseError(result.error)
     if (!result.data) throw new ApiError(409, 'PAIRING_ALREADY_APPROVED', 'Pairing request has already been approved')
     return res.json(envelope(req, { approved: true, extension_origin: result.data.extension_origin, expires_at: result.data.expires_at }))
@@ -138,11 +157,12 @@ export function createExtensionIntegrationRouter(clients: SupabaseClients, confi
 
   router.get('/pair-requests/:id/approval', requireAuth(clients, config), wrap(async (req, res) => {
     const id = uuid.parse(req.params.id)
-    const result = await admin.from('web_extension_pairing_requests').select('id,user_id,status,extension_origin,expires_at,installation_id,device_name,browser_name,platform_name,token_id').eq('id', id).maybeSingle()
+    const result = await admin.from('web_extension_pairing_requests').select('id,user_id,status,extension_origin,expires_at,installation_id,device_name,browser_name,platform_name,token_id,confirmation_code').eq('id', id).maybeSingle()
     if (result.error) throw mapDatabaseError(result.error)
     if (!result.data || (result.data.user_id && result.data.user_id !== req.user!.id) || !['pending', 'approved', 'claimed'].includes(result.data.status) || (result.data.status !== 'claimed' && result.data.expires_at <= new Date().toISOString())) throw new ApiError(404, 'PAIRING_REQUEST_EXPIRED', 'Pairing request was not found or expired')
-    const { user_id: _userId, ...approval } = result.data
-    return res.json(envelope(req, approval))
+    const { user_id: _userId, confirmation_code: confirmationCode, ...approval } = result.data
+    // The code is only useful while the request still awaits a decision.
+    return res.json(envelope(req, { ...approval, confirmation_code: approval.status === 'pending' ? confirmationCode ?? null : null }))
   }))
 
   router.get('/tokens', requireAuth(clients, config), wrap(async (req, res) => {

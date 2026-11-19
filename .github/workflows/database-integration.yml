@@ -80,6 +80,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/tests/account_status_enforcement_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/rbac_review_fixes_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/privilege_lockdown_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/external_oauth_boundary_integration.sql
       - name: Reconciliation migrations are rerunnable
         shell: bash
         run: |

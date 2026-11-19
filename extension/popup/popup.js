@@ -114,6 +114,8 @@ function render() {
   clearTimeout(expirationTimer)
   if (state === 'pending' && settings.pending) {
     const expires = new Date(settings.pending.expiresAt)
+    const code = String(settings.pending.confirmationCode || '')
+    ui('pair-code').textContent = `${code.slice(0, 3)} ${code.slice(3)}`
     ui('pending-detail').textContent = `配對有效至 ${expires.toLocaleString()}。核准後請按「完成核准配對」。`
     expirationTimer = setTimeout(() => { connection = { ...connection, status: 'pairing-expired' }; render() }, Math.max(0, expires.getTime() - Date.now()))
   }
@@ -165,9 +167,9 @@ async function startPairing() {
     const body = await response.json().catch(() => null)
     if (!response.ok) throw apiError(body, response)
     const authorizeUrl = browserUrl(body.data.authorize_url)
-    if (typeof body.data.id !== 'string' || !(new Date(body.data.expires_at).getTime() > Date.now())) throw new Error('API 回傳的配對資料無效。')
+    if (typeof body.data.id !== 'string' || !(new Date(body.data.expires_at).getTime() > Date.now()) || !/^\d{6}$/.test(body.data.confirmation_code ?? '')) throw new Error('API 回傳的配對資料無效。')
     const settingsUrl = new URL(authorizeUrl); settingsUrl.searchParams.delete('extension_pair')
-    settings = { ...(old.origin === origin ? old : {}), origin, pending: { id: body.data.id, verifier, expiresAt: body.data.expires_at, authorizeUrl, settingsUrl: settingsUrl.href } }
+    settings = { ...(old.origin === origin ? old : {}), origin, pending: { id: body.data.id, verifier, confirmationCode: body.data.confirmation_code, expiresAt: body.data.expires_at, authorizeUrl, settingsUrl: settingsUrl.href } }
     await writeSettings(settings)
     editing = false; connection = { status: 'pending', origin }
     await bridge.call(() => chrome.tabs.create({ url: authorizeUrl, active: true }))

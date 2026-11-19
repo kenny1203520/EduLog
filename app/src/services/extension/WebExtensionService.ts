@@ -1,7 +1,7 @@
 import { apiV1Client } from '@/services/api/ApiV1Client'
 
 export type ExtensionDevice = { installation_id?: string | null; device_name?: string | null; browser_name?: string | null; platform_name?: string | null }
-export type ExtensionPairApproval = ExtensionDevice & { id: string; status: 'pending' | 'approved' | 'claimed'; extension_origin: string; expires_at: string; token_id?: string | null }
+export type ExtensionPairApproval = ExtensionDevice & { id: string; status: 'pending' | 'approved' | 'claimed'; extension_origin: string; expires_at: string; token_id?: string | null; confirmation_code?: string | null }
 export type ExtensionToken = ExtensionDevice & { id: string; extension_origin: string; created_at: string; last_used_at: string | null; expires_at: string; revoked_at: string | null }
 
 const fresh = (signal?: AbortSignal) => ({ signal, cache: 'no-store' as RequestCache })
@@ -22,8 +22,9 @@ export class WebExtensionService {
         }
     }
 
-    static async approvePair(requestId: string, deviceName: string): Promise<void> {
-        await apiV1Client.post(`/extension/pair-requests/${encodeURIComponent(requestId)}/approve`, { device_name: deviceName })
+    /** Approves a pair request; the confirmation code must be the one the extension shows. */
+    static async approvePair(requestId: string, deviceName: string, confirmationCode: string): Promise<void> {
+        await apiV1Client.post(`/extension/pair-requests/${encodeURIComponent(requestId)}/approve`, { device_name: deviceName, confirmation_code: confirmationCode })
     }
 
     static async renameToken(tokenId: string, deviceName: string): Promise<void> {

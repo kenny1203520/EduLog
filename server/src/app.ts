@@ -8,6 +8,7 @@ import { errorHandler, ApiError } from './http/errors.js'
 import { createSupabaseClients, type SupabaseClients } from './infra/supabase.js'
 import { createAiServices } from './ai/aiServices.js'
 import { createAuthRouter, csrfProtection, requireAuth } from './auth/auth.js'
+import { createProviderAdminRouter } from './auth/providerAdmin.js'
 import { createOAuthBridgeRouter } from './auth/oauthBridge.js'
 import { createResourceRouter } from './routes/rest/resourceRouter.js'
 import { rateLimitMiddleware } from './http/rateLimit.js'
@@ -44,6 +45,10 @@ export function createApp(config: ApiConfig, clients: SupabaseClients = createSu
   const logger = pino({ level: config.NODE_ENV === 'production' ? 'info' : 'debug', redact: ['req.headers.authorization', 'req.headers.cookie', 'access_token', 'refresh_token', 'password', 'cookie', '*.token', '*.secret', '*.clientSecret', '*.apiKey', '*.serviceRoleKey'] })
   const app = express()
   app.disable('x-powered-by')
+  // req.ip must be the client, not the frontend nginx, or every anonymous
+  // caller shares one rate-limit bucket. Trust only the configured hops so a
+  // client-supplied X-Forwarded-For cannot choose its own address.
+  if (config.API_TRUST_PROXY_HOPS > 0) app.set('trust proxy', config.API_TRUST_PROXY_HOPS)
   app.use(helmet())
   app.use(cookieParser())
   app.use(requestContext(logger))
@@ -60,6 +65,7 @@ export function createApp(config: ApiConfig, clients: SupabaseClients = createSu
     // The IdP posts Apple form_post callbacks cross-site. This exact public
     // endpoint is state/PKCE validated and does not enable browser CORS.
     if (req.path === '/api/auth/bridge/callback' && ['GET', 'POST'].includes(req.method)) return next()
+    if (req.path === '/api/auth/sso/saml/acs' && req.method === 'POST') return next()
     const origin = req.header('origin')
     if (origin && !allowedOrigins.includes(origin)) return next(new ApiError(403, 'ORIGIN_FORBIDDEN', 'Origin is not allowed'))
     res.setHeader('Vary', 'Origin')
@@ -77,6 +83,7 @@ export function createApp(config: ApiConfig, clients: SupabaseClients = createSu
     res.type('html').send(EMAIL_TEMPLATES[name])
   })
   app.use('/api/auth/bridge/callback', rateLimitMiddleware(config, clients.adminClient), createOAuthBridgeRouter(config, clients))
+  app.use('/api/auth/provider-admin', csrfProtection, rateLimitMiddleware(config, clients.adminClient), createProviderAdminRouter(clients, config))
   app.use('/api/auth', csrfProtection, rateLimitMiddleware(config, clients.adminClient), createAuthRouter(clients, config))
   app.use('/api/extension', rateLimitMiddleware(config, clients.adminClient), createExtensionIntegrationRouter(clients, config))
   const protectedApi = Router()

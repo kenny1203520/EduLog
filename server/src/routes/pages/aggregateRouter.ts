@@ -486,17 +486,20 @@ async function myCapabilities(req: Request, res: Response) {
 /** Settings navigation and capability summary for the signed-in user. */
 async function settingsOverview(req: Request, res: Response) {
   if (!req.db || !req.adminDb || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
-  const aiPermission = (key: string) => req.db!.rpc('has_api_permission', { p_user_id: req.user!.id, p_permission_key: key, p_classroom_id: null, p_class_session_id: null })
-  const [preferences, capabilities, aiManage, aiLogs] = await Promise.all([
+  const systemPermission = (key: string) => req.db!.rpc('has_api_permission', { p_user_id: req.user!.id, p_permission_key: key, p_classroom_id: null, p_class_session_id: null })
+  const [preferences, capabilities, aiManage, aiLogs, authProvidersManage, oauthClientsManage] = await Promise.all([
     req.db!.from('user_preferences').select('time_zone,editor_settings,created_at,updated_at').eq('user_id', req.user!.id).maybeSingle(),
     req.db!.rpc('get_rbac_capabilities', { p_teaching_id: null }),
-    aiPermission('system.ai.manage'),
-    aiPermission('system.ai.logs.view_all'),
+    systemPermission('system.ai.manage'),
+    systemPermission('system.ai.logs.view_all'),
+    systemPermission('system.auth.providers.manage'),
+    systemPermission('system.auth.oauth_clients.manage'),
   ])
   if (preferences.error) throw mapDatabaseError(preferences.error)
   if (capabilities.error) throw mapDatabaseError(capabilities.error)
   const caps = (capabilities.data ?? {}) as Record<string, unknown>
-  const system: Record<string, unknown> = { ...(caps.system ?? {}) as Record<string, unknown>, ai_manage: aiManage.data === true, ai_logs_view_all: aiLogs.data === true }
+  const system: Record<string, unknown> = { ...(caps.system ?? {}) as Record<string, unknown>, ai_manage: aiManage.data === true, ai_logs_view_all: aiLogs.data === true,
+    auth_providers_manage: authProvidersManage.data === true, auth_oauth_clients_manage: oauthClientsManage.data === true }
   const teaching = (caps.teaching ?? {}) as Record<string, unknown>
   const teachingSections = { roles: Boolean(teaching.roles_manage), permissions: Boolean(teaching.permissions_read) }
   return sendData(req, res, {
@@ -506,7 +509,7 @@ async function settingsOverview(req: Request, res: Response) {
       // Teaching-role managers without a system role still reach the system
       // tab; the panel then shows only the teaching sections.
       system: Boolean(system.users_manage || system.roles_manage || system.assignments_manage || system.permissions_read || system.audit_read || system.is_owner || system.ai_manage || system.ai_logs_view_all
-        || teachingSections.roles || teachingSections.permissions),
+        || system.auth_providers_manage || system.auth_oauth_clients_manage || teachingSections.roles || teachingSections.permissions),
     },
     sections: { teaching: teachingSections, system },
   })

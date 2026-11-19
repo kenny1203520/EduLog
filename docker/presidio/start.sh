@@ -4,4 +4,7 @@
 set -eu
 
 python /app/conf-edulog/configure_languages.py configure "${PRESIDIO_LANGUAGES:-zh,en}"
-exec ./entrypoint.sh "$@"
+# Same command as the upstream entrypoint.sh without the `poetry run` wrapper
+# (Poetry uses no virtualenv in this image and is removed at build time).
+cd /app
+exec gunicorn -w "${WORKERS:-1}" -b "0.0.0.0:${PORT:-3000}" "app:create_app()"

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { safeExternalHref } from '@/utils/safeExternalHref'
 import { useCapabilityStore } from '@/stores/useCapabilityStore'
 import { ref, onMounted, computed, watch } from 'vue'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
@@ -1162,7 +1163,7 @@ function clearTeacherSelection() {
                                         d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                                 </svg>
                             </div>
-                            <a :href="room.external_link" target="_blank" rel="noopener noreferrer"
+                            <a :href="safeExternalHref(room.external_link) || undefined" target="_blank" rel="noopener noreferrer"
                                 class="text-sm font-medium pt-0.5 text-emerald-600 hover:underline break-all">{{
                                     room.external_link }}</a>
                         </div>
@@ -1292,7 +1293,7 @@ function clearTeacherSelection() {
                             </span>
                         </div>
 
-                        <a v-if="session.external_link" :href="session.external_link" target="_blank"
+                        <a v-if="safeExternalHref(session.external_link)" :href="safeExternalHref(session.external_link) || undefined" target="_blank"
                             rel="noopener noreferrer" :title="session.external_link"
                             class="inline-flex max-w-full items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100">
                             <svg class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>

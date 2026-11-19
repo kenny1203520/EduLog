@@ -12,7 +12,9 @@ export const panelKey = tabId => `edulogPanel:${tabId}`
 export function frontendBase(settingsUrl) {
   try {
     const url = new URL(settingsUrl)
-    if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || !url.pathname.endsWith(SETTINGS_SUFFIX)) return null
+    // Plain http is accepted only for a local development server, matching the popup's pairing rule.
+    const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+    if (!(url.protocol === 'https:' || (local && url.protocol === 'http:')) || url.username || url.password || !url.pathname.endsWith(SETTINGS_SUFFIX)) return null
     return url.origin + url.pathname.slice(0, -SETTINGS_SUFFIX.length)
   } catch { return null }
 }

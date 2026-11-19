@@ -5,6 +5,8 @@ import { createHash, randomUUID } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ApiConfig } from '../config/config.js'
 import { assertUserActive, createUserClient, onUserValidationCleared, validateAccessToken } from '../infra/supabase.js'
+import { ensureSessionAssurance } from '../auth/additionalAuth.js'
+import { ApiError } from '../http/errors.js'
 import { monitorRealtimeSocket } from './realtimeHeartbeat.js'
 import { redeemTicket } from './realtimeTicket.js'
 
@@ -142,10 +144,16 @@ export function attachRealtimeProxy(
     let userId: string
     try {
       // A valid token is not enough: a disabled or pending account gets no socket.
-      userId = (await validateAccessToken(adminClient, token, config)).id
+      const user = await validateAccessToken(adminClient, token, config)
+      userId = user.id
+      await ensureSessionAssurance(config, token, user)
       await assertUserActive(adminClient, userId)
       log('realtime_authentication', { channel_kind: channelKind, resource_fingerprint: resourceFingerprint, outcome: 'allowed', duration_ms: Date.now() - authenticationStartedAt })
-    } catch {
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 'MFA_REQUIRED') {
+        log('realtime_upgrade_rejected', { phase: 'authentication', outcome: 'mfa_required' })
+        rejectUpgrade(socket, 403, 'Forbidden'); return
+      }
       log('realtime_upgrade_rejected', { phase: 'authentication', outcome: cookieToken ? 'invalid_cookie' : 'invalid_ticket_token', channel_kind: channelKind, resource_fingerprint: resourceFingerprint, duration_ms: Date.now() - authenticationStartedAt })
       rejectUpgrade(socket, 401, 'Unauthorized'); return
     }

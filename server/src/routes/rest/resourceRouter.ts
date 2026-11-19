@@ -363,7 +363,9 @@ export async function collection(req: Request, res: Response, def: ResourceDefin
       await authorizeCollection(req, def, 'teaching.teachers.update_sensitive', {}, body)
     }
     if (!req.adminDb) throw new ApiError(503, 'PROFILE_SERVICE_UNAVAILABLE', 'The teacher profile service is unavailable')
-    const { user_id, ...profilePatch } = parsedBody
+    // user_id is a compatibility field, not a writable column: it is checked on
+    // its own, and only the validated body reaches the profile write.
+    const user_id = z.string().uuid().nullish().parse(parsedBody.user_id)
     // Linking an account while creating needs what the account-link endpoint needs.
     if (typeof user_id === 'string') {
       await authorizeCollection(req, def, 'teaching.teachers.update_sensitive', {}, body)
@@ -371,7 +373,7 @@ export async function collection(req: Request, res: Response, def: ResourceDefin
     }
     const created = await req.adminDb.rpc('create_teacher_with_profile', {
       p_account_user_id: typeof user_id === 'string' ? user_id : null,
-      p_patch: profilePatch,
+      p_patch: body,
     })
     if (created.error) throw mapDatabaseError(created.error)
     const row = created.data as Record<string, unknown> | null

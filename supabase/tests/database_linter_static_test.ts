@@ -80,3 +80,14 @@ Deno.test('migrations after 1000167 revoke function access from anon, not only P
     }
   }
 })
+
+Deno.test('1000183 locks rbac_policy_epoch writes, adds the pairing code and a private session activity table', async () => {
+  const sql = await readMigration('1000183_security_hardening_p2.sql')
+  assertStringIncludes(sql, 'ALTER TABLE public.rbac_policy_epoch ENABLE ROW LEVEL SECURITY')
+  assert(/REVOKE INSERT, UPDATE, DELETE[\s\S]*ON TABLE public\.rbac_policy_epoch FROM PUBLIC, anon, authenticated/.test(sql), 'authenticated must lose epoch write privileges')
+  assertFalse(/GRANT\s+(ALL|INSERT|UPDATE|DELETE)[^;]*rbac_policy_epoch/i.test(sql), 'no write grant may be restored')
+  assertStringIncludes(sql, "FOR SELECT TO authenticated USING (true)")
+  assertStringIncludes(sql, "confirmation_code ~ '^[0-9]{6}$'")
+  assertStringIncludes(sql, 'ALTER TABLE public.api_session_activity ENABLE ROW LEVEL SECURITY')
+  assertStringIncludes(sql, 'REVOKE ALL ON TABLE public.api_session_activity FROM PUBLIC, anon, authenticated')
+})

@@ -307,6 +307,78 @@ resources:
                                     principals:
                                       - any: true
 
+                      - name: outbound-oauth-authorize-get
+                        match:
+                          path: /auth/v1/oauth/authorize
+                          headers:
+                            - name: ':method'
+                              string_match:
+                                exact: GET
+                        route:
+                          cluster: auth
+                          prefix_rewrite: /oauth/authorize
+                          timeout: 30s
+                        typed_per_filter_config:
+                          envoy.filters.http.rbac:
+                            '@type': type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute
+                            rbac:
+                              rules:
+                                action: ALLOW
+                                policies:
+                                  allow_all:
+                                    permissions:
+                                      - any: true
+                                    principals:
+                                      - any: true
+
+                      - name: outbound-oauth-token-post
+                        match:
+                          path: /auth/v1/oauth/token
+                          headers:
+                            - name: ':method'
+                              string_match:
+                                exact: POST
+                        route:
+                          cluster: auth
+                          prefix_rewrite: /oauth/token
+                          timeout: 30s
+                        typed_per_filter_config:
+                          envoy.filters.http.rbac:
+                            '@type': type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute
+                            rbac:
+                              rules:
+                                action: ALLOW
+                                policies:
+                                  allow_all:
+                                    permissions:
+                                      - any: true
+                                    principals:
+                                      - any: true
+
+                      - name: outbound-oauth-userinfo-get
+                        match:
+                          path: /auth/v1/oauth/userinfo
+                          headers:
+                            - name: ':method'
+                              string_match:
+                                exact: GET
+                        route:
+                          cluster: auth
+                          prefix_rewrite: /oauth/userinfo
+                          timeout: 30s
+                        typed_per_filter_config:
+                          envoy.filters.http.rbac:
+                            '@type': type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute
+                            rbac:
+                              rules:
+                                action: ALLOW
+                                policies:
+                                  allow_all:
+                                    permissions:
+                                      - any: true
+                                    principals:
+                                      - any: true
+
                       - name: auth-v1-protected
                         match:
                           prefix: /auth/v1/
@@ -630,6 +702,70 @@ resources:
                             headers:add("apikey", value)
                             return
                           end
+                        end
+                      end
+
+                # External OAuth access tokens are limited to UserInfo. This
+                # filter only denies requests; GoTrue still verifies bearer tokens.
+                - name: envoy.filters.http.lua
+                  typed_config:
+                    '@type': type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+                    inline_code: |
+                      local alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+                      local values = {}
+                      for index = 1, #alphabet do
+                        values[alphabet:byte(index)] = index - 1
+                      end
+
+                      local function decode_payload(payload)
+                        local bytes = {}
+                        local buffer, bits = 0, 0
+                        for index = 1, #payload do
+                          local value = values[payload:byte(index)]
+                          if value == nil then return "" end
+                          buffer = buffer * 64 + value
+                          bits = bits + 6
+                          if bits >= 8 then
+                            bits = bits - 8
+                            local shift = 2 ^ bits
+                            bytes[#bytes + 1] = string.char(math.floor(buffer / shift))
+                            buffer = buffer % shift
+                          end
+                        end
+                        return table.concat(bytes)
+                      end
+
+                      local function has_client_id(json)
+                        local depth, index = 0, 1
+                        while index <= #json do
+                          local char = json:sub(index, index)
+                          if char == '{' or char == '[' then
+                            depth = depth + 1
+                          elseif char == '}' or char == ']' then
+                            depth = depth - 1
+                          elseif char == '"' then
+                            local start = index + 1
+                            index = start
+                            while index <= #json and json:sub(index, index) ~= '"' do
+                              if json:sub(index, index) == '\\' then index = index + 1 end
+                              index = index + 1
+                            end
+                            if depth == 1 and json:sub(start, index - 1) == "client_id"
+                              and json:sub(index + 1):match("^%s*:") then
+                              return true
+                            end
+                          end
+                          index = index + 1
+                        end
+                        return false
+                      end
+
+                      function envoy_on_request(request_handle)
+                        if request_handle:streamInfo():routeName() ~= "auth-v1-protected" then return end
+                        local authorization = request_handle:headers():get("authorization") or ""
+                        local payload = authorization:match("^[Bb][Ee][Aa][Rr][Ee][Rr]%s+[^.]+%.([^.]+)%.[^%.%s]+%s*$")
+                        if payload and has_client_id(decode_payload(payload)) then
+                          request_handle:respond({ [":status"] = "403", ["content-type"] = "text/plain" }, "OAuth token is limited to UserInfo")
                         end
                       end
 

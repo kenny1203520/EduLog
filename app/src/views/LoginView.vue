@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useRouter } from 'vue-router'
 import { useRoute } from 'vue-router'
@@ -9,6 +9,8 @@ import LanguageSwitcher from '@/components/ui/LanguageSwitcher.vue'
 import PasswordInput from '@/components/ui/PasswordInput.vue'
 import { authService } from '@/services/auth/AuthService'
 import { providerLabel } from '@/utils/oauthProviders'
+import { additionalAuth, type AuthCapabilities } from '@/services/auth/AdditionalAuthService'
+import AdditionalLogin from '@/components/settings/AdditionalLogin.vue'
 
 const { t } = useI18n()
 
@@ -19,10 +21,15 @@ const errorMsg = ref('')
 const providers = ref<string[]>([])
 const providerError = ref(false)
 const providersLoading = ref(false)
+const capabilities = ref<AuthCapabilities>()
 async function loadProviders() {
     providersLoading.value = true
     providerError.value = false
-    try { providers.value = await authService.oauthProviders() }
+    try {
+        capabilities.value = await additionalAuth.capabilities()
+        providers.value = capabilities.value.providers
+        providerError.value = capabilities.value.unavailable.length > 0
+    }
     catch { providerError.value = true }
     finally { providersLoading.value = false }
 }
@@ -34,6 +41,34 @@ function onOffline() { isOnline.value = false }
 const authStore = useAuthStore()
 const router = useRouter()
 const route = useRoute()
+const needsMfa = computed(() => authStore.mfaRequired || route.query.mfa === '1')
+const consentReturn = computed(() => {
+    const target = getSafePostLoginTarget(route.query.redirect, router)
+    return target.startsWith('/oauth/consent?') ? target : undefined
+})
+const displayProvider = (provider: string) => capabilities.value?.providerLabels?.[provider] || providerLabel(provider)
+
+function oauthLoginUrl(provider: string) {
+    const path = `/api/auth/oauth/${encodeURIComponent(provider)}`
+    const target = getSafePostLoginTarget(route.query.redirect, router)
+    return router.resolve(target).name === 'oauth-consent' ? `${path}?${new URLSearchParams({ return_to: target })}` : path
+}
+
+async function acceptLogin(redirect: string) {
+    if (redirect === '/login?mfa=1') {
+        authStore.mfaRequired = true
+        return
+    }
+    await authStore.initialize()
+    const target = redirect === '/account-pending' ? redirect : getSafePostLoginTarget(route.query.redirect, router)
+    await router.replace(target)
+}
+
+async function cancelMfa() {
+    await authService.logout()
+    authStore.clearSession()
+    await router.replace({ path: '/login', query: { redirect: route.query.redirect } })
+}
 
 onMounted(() => {
     window.addEventListener('online', onOnline)
@@ -41,12 +76,28 @@ onMounted(() => {
     // A failed OAuth sign-in or an expired email link comes back here.
     if (route.query.error === 'oauth') errorMsg.value = t('auth.error_oauth')
     else if (route.query.error === 'link') errorMsg.value = t('auth.error_link')
+    else if (route.query.reason === 'idle') errorMsg.value = t('auth.idle_signed_out')
     void loadProviders()
 })
 onUnmounted(() => {
     window.removeEventListener('online', onOnline)
     window.removeEventListener('offline', onOffline)
 })
+
+/**
+ * A fixed, translated message for a failed sign-in. The server's own message
+ * is never shown: it is English, may change, and must not hint at whether an
+ * account exists.
+ */
+function loginErrorMessage(error: unknown): string {
+    const code = (error as { code?: string; status?: number } | null)?.code
+    const status = (error as { status?: number } | null)?.status
+    if (code === 'MFA_REQUIRED') return ''
+    if (code === 'AUTH_INVALID' || status === 401) return t('auth.error_invalid_credentials')
+    if (code === 'ACCOUNT_DISABLED') return t('auth.account_disabled_message')
+    if (code === 'RATE_LIMITED' || status === 429) return t('errors.rate_limited')
+    return t('auth.error_unexpected')
+}
 
 async function handleLogin() {
     loading.value = true
@@ -55,17 +106,9 @@ async function handleLogin() {
     try {
         await authStore.signIn(email.value, password.value)
         await router.replace(getSafePostLoginTarget(route.query.redirect, router))
-    } catch (e: any) {
-        const message = e.message || ''
-        if (message.includes('Invalid login credentials')) {
-            errorMsg.value = t('auth.error_invalid_credentials')
-        } else if (message.includes('Email not confirmed')) {
-            errorMsg.value = t('auth.error_email_not_confirmed')
-        } else if (message.includes('User not found')) {
-            errorMsg.value = t('auth.error_user_not_found')
-        } else {
-            errorMsg.value = message || t('auth.error_unexpected')
-        }
+    } catch (e: unknown) {
+        errorMsg.value = loginErrorMessage(e)
+        if ((e as { code?: string } | null)?.code === 'MFA_REQUIRED') authStore.mfaRequired = true
     } finally {
         loading.value = false
     }
@@ -97,7 +140,7 @@ async function handleLogin() {
             </h1>
             <p class="text-gray-500 mb-10 font-medium italic">{{ $t('auth.welcome_subtitle') }}</p>
 
-            <form @submit.prevent="handleLogin" class="space-y-6 w-full">
+            <form v-if="!needsMfa && capabilities?.methods.password !== false" @submit.prevent="handleLogin" class="space-y-6 w-full">
                 <div class="space-y-2">
                     <label class="block text-[12px] font-black text-emerald-600 uppercase tracking-[0.2em] ml-1" for="edulog-loginview-28-1916">{{
                         $t('auth.email') }}</label>
@@ -157,18 +200,20 @@ async function handleLogin() {
                 </button>
             </form>
 
-            <p role="status" class="mt-4 text-sm text-slate-700">{{ providerError ? $t('auth.providers_unavailable') : '' }}</p>
-            <button v-if="providerError" type="button" :disabled="providersLoading" class="mt-2 rounded-lg px-3 py-2 font-semibold text-emerald-800 focus-visible:ring-2" @click="loadProviders">{{ $t('auth.retry_providers') }}</button>
-            <div v-if="providers.length" class="mt-8 w-full" data-testid="oauth-providers">
+            <AdditionalLogin :methods="capabilities?.methods" :mfa-required="needsMfa" :online="isOnline" :return-to="consentReturn"
+                @verified="acceptLogin" @cancel="cancelMfa" />
+            <p role="status" class="mt-4 text-sm text-slate-700">{{ !needsMfa && providerError ? $t('auth.providers_unavailable') : '' }}</p>
+            <button v-if="!needsMfa && providerError" type="button" :disabled="providersLoading" class="mt-2 rounded-lg px-3 py-2 font-semibold text-emerald-800 focus-visible:ring-2" @click="loadProviders">{{ $t('auth.retry_providers') }}</button>
+            <div v-if="!needsMfa && providers.length" class="mt-8 w-full" data-testid="oauth-providers">
                 <div class="mb-4 flex items-center gap-3 text-xs font-bold text-gray-400" aria-hidden="true">
                     <span class="h-px flex-1 bg-gray-200"></span>{{ $t('auth.or_continue_with') }}<span class="h-px flex-1 bg-gray-200"></span>
                 </div>
                 <div class="grid gap-3">
-                    <a v-for="provider in providers" :key="provider" :href="`/api/auth/oauth/${encodeURIComponent(provider)}`"
+                    <a v-for="provider in providers" :key="provider" :href="oauthLoginUrl(provider)"
                         class="flex min-h-12 w-full items-center justify-center gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-800 transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
                         :aria-disabled="!isOnline || undefined" :class="{ 'pointer-events-none opacity-50': !isOnline }">
-                        <span class="flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-xs font-black text-gray-700" aria-hidden="true">{{ providerLabel(provider).charAt(0) }}</span>
-                        {{ $t('auth.continue_with', { provider: providerLabel(provider) }) }}
+                        <span class="flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-xs font-black text-gray-700" aria-hidden="true">{{ displayProvider(provider).charAt(0) }}</span>
+                        {{ $t('auth.continue_with', { provider: displayProvider(provider) }) }}
                     </a>
                 </div>
             </div>

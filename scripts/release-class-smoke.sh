@@ -72,7 +72,7 @@ VALUES ('15800000-0000-4000-8000-0000000000b4','15800000-0000-4000-8000-00000000
 INSERT INTO public.single_lesson_transfers(enrollment_id,source_occurrence_id,target_occurrence_id)
 VALUES ('15800000-0000-4000-8000-0000000000b4','15800000-0000-4000-8000-000000000012','15800000-0000-4000-8000-000000000011');
 COMMIT;
-CREATE ROLE authenticator LOGIN PASSWORD 'postgres' NOINHERIT;
+ALTER ROLE authenticator LOGIN PASSWORD 'postgres' NOINHERIT;
 GRANT anon, authenticated, service_role TO authenticator;
 SQL
 } | sql >/dev/null
@@ -108,7 +108,7 @@ run api -e SUPABASE_URL=http://gateway:8000 -e SUPABASE_ANON_KEY="$(token anon)"
   -e SUPABASE_SERVICE_ROLE_KEY="$(token service_role)" -e SUPABASE_JWT_SECRET="$secret" \
   -e COOKIE_SECRET=release-smoke-cookie-secret-at-least-32-characters \
   -e EDULOG_WEB_BASE_URL=https://edulog.example.test -e API_ALLOWED_ORIGINS=https://edulog.example.test \
-  -e RATE_LIMIT_STORE=supabase "$api_image"
+  -e COOKIE_SECURE=true -e RATE_LIMIT_STORE=supabase "$api_image"
 run frontend "$frontend_image"
 for attempt in {1..45}; do
   if docker exec "$network-frontend" wget -q -O /dev/null http://127.0.0.1:4173/api/healthz; then break; fi

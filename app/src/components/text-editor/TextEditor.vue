@@ -14,7 +14,7 @@
 import { computed, onBeforeUnmount, ref, toRef, watch } from 'vue'
 import { Editor, EditorContent } from '@tiptap/vue-3'
 import { createTextEditorExtensions, isAllowedEditorUrl } from './extensions'
-import { calculateTextEditorMetrics, contentEquals, createTextEditorContent, richTextToHTML } from './content'
+import { calculateTextEditorMetrics, contentEquals, createTextEditorContent, plainTextToJSON, richTextToHTML } from './content'
 import { useTextEditorAppearance } from './useTextEditorAppearance'
 import TextEditorToolbar from './TextEditorToolbar.vue'
 import {
@@ -154,9 +154,16 @@ function syncExternalContent(value: TextEditorContentInput): void {
     formattingRevision.value++
     emitActivity()
 }
+/**
+ * Inserts plain text as text nodes. A string passed to insertContent would be
+ * parsed as HTML, so text from AI output or elsewhere is never given that chance.
+ */
 function insertText(value: string): void {
     if (effectiveMode.value !== 'edit') return
-    editor.chain().focus().insertContent(normalizeTextContent(value)).run()
+    const text = normalizeTextContent(value)
+    if (!text) return
+    const nodes = text.includes('\n') ? plainTextToJSON(text).content ?? [] : { type: 'text', text }
+    editor.chain().focus().insertContent(nodes).run()
 }
 function insertContent(value: TextEditorContentInput): void {
     if (effectiveMode.value !== 'edit') return

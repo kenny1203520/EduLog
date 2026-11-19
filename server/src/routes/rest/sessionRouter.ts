@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express'
 import { wrap } from './domainAccess.js'
 import { z } from 'zod'
+import { optionalExternalLink } from './externalLink.js'
 import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { setAuditContext } from '../../http/context.js'
@@ -27,7 +28,7 @@ export const sessionSchema = z.object({
   course_ids: z.array(z.string().uuid()).max(100).default([]),
   capacity: z.number().int().min(0).max(100000).default(10),
   lesson_number: z.number().int().min(0).nullable().optional(),
-  external_link: z.url().max(2048).nullable().optional(),
+  external_link: optionalExternalLink,
   start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   time_zone: z.string().min(1).max(64).default('Asia/Taipei'),

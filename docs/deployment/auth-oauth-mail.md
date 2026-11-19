@@ -20,10 +20,12 @@ EduLog signs people in through the API (cookie sessions); the browser never hold
 
 Use GoTrue's custom OIDC provider for Authentik. The built-in Keycloak adapter expects a Keycloak realm and constructs Keycloak-specific endpoint paths.
 
-1. In Authentik, set up a confidential OAuth2/OpenID Provider with the strict redirect URI `${EDULOG_WEB_BASE_URL}/api/auth/bridge/callback`. Keep the standard `openid`, `profile`, and `email` scopes, with accurate email verification.
-2. Use the [GoTrue custom provider admin API](https://supabase.com/docs/guides/self-hosting/self-hosted-custom-oauth-providers) from a trusted host to register an enabled provider. Set `provider_type` to `oidc`, `identifier` to `custom:authentik`, and use the exact `issuer` reported by discovery, including its trailing slash if present. Supply `discovery_url` explicitly and keep PKCE and nonce validation enabled. Use the Authentik client credentials through the deployment's secret management and enable GoTrue database encryption before storing the client secret. Keep the Auth admin service private.
-3. Set `EDULOG_AUTH_CUSTOM_OAUTH_DISCOVERY_ENABLED=true` and recreate `auth` and `api`. The bundled Compose file sets GoTrue's custom callback base to `${EDULOG_WEB_BASE_URL}/api/auth/bridge`. GoTrue appends `/callback`. Keep the EduLog OAuth and identity callback URLs in the GoTrue redirect allowlist, and keep the existing JWT issuer.
-4. Verify `/api/auth/providers` includes `custom:authentik` in staging. Test real sign-in and manual identity linking with a test account before enabling the provider in production.
+1. In Authentik, create a confidential OAuth2/OpenID Provider. Copy the discovery URL and issuer exactly, including any trailing slash. Keep standard scopes `openid`, `profile`, and `email`, and make sure Authentik reports email verification accurately.
+2. Enable database encryption in GoTrue before storing client secrets. Set `EDULOG_AUTH_PROVIDER_ADMIN_ENABLED=true` and list the exact HTTPS origins needed by the providers in `EDULOG_AUTH_PROVIDER_ALLOWED_ORIGINS`. Restrict both EduLog's provider-validation traffic and GoTrue's provider egress to these destinations at the network layer. Include the discovery, authorization, token, userinfo, and JWKS origins when they differ. GoTrue v2.197.0 rejects custom-provider URLs that resolve to private, loopback, or link-local addresses. Use a publicly resolvable HTTPS endpoint for the IdP.
+3. In **System settings → Login providers** as a system owner with a recent sign-in, enter the issuer, discovery URL, client ID and client secret. Copy the displayed bridge callback and register it as a strict redirect URI in Authentik. Save the disabled draft, then activate it when the callback is configured. The first real sign-in verifies the IdP credentials and the full PKCE round trip. Use staging to test this before going live.
+4. Verify `custom:authentik` appears in `/api/auth/capabilities` and sign in with a test account. To support an existing account, enable manual linking below, link Authentik, sign out, then sign in via Authentik and verify the same EduLog account, roles and classes.
+
+The wizard can also configure an OAuth 2.0 provider with explicit authorization, token and userinfo URLs. The [GoTrue admin API](https://supabase.com/docs/guides/self-hosting/self-hosted-custom-oauth-providers) remains available through a trusted private host. The bundled Compose stack automatically discovers enabled custom providers. An existing explicit `EDULOG_AUTH_CUSTOM_OAUTH_DISCOVERY_ENABLED=false` still disables discovery. Administrators who control an IdP can influence which verified email addresses GoTrue trusts. Only register trusted IdPs, and use GoTrue's provider linking domains where identities must be kept separate.
 
 For manual linking in Personal settings → Account security, apply migrations through
 `1000173` after GoTrue has migrated its Auth schema. Set
@@ -32,8 +34,7 @@ For manual linking in Personal settings → Account security, apply migrations t
 `ADDITIONAL_REDIRECT_URLS`, and recreate the containers. Redact query strings on
 both API OAuth callbacks as well as the bridge. Keep HTTPS and secure cookies
 enabled (providers that return a cross-site form POST need the secure flow cookie).
-An empty successful provider list means GoTrue reported no enabled social provider;
-a 503 means EduLog could not retrieve the settings. Verify the effective enabled
+Use `/api/auth/capabilities` to distinguish an empty provider list from partial discovery failure; its `unavailable` list identifies which source to retry. Verify the effective enabled
 provider names and whether credentials are present without printing their values.
 Before rollout, sign in and link with every configured provider on staging, unlink
 with a verified password account, and sign back in with that password. Confirm
@@ -41,6 +42,16 @@ that cancellation preserves the original session and no callback credentials
 appear in access logs.
 
 Accounts with the same verified email are linked by GoTrue.
+
+## SAML, phone and multi-factor authentication
+
+- For SAML set `SAML_ENABLED=true` and provide the SAML signing key as `SAML_PRIVATE_KEY`. Register domains and metadata through the private GoTrue SSO provider API. The bundled stack serves metadata and assertion consumption at `/api/auth/sso/saml/metadata` and `/api/auth/sso/saml/acs`. Use the EduLog metadata URL when configuring the IdP. [Self-hosted SAML SSO](https://supabase.com/docs/guides/self-hosting/self-hosted-saml-sso)
+- For phone sign-in configure `ENABLE_PHONE_SIGNUP`, `SMS_PROVIDER` and the corresponding GoTrue delivery credentials. Phone MFA uses the same delivery configuration and separate `MFA_PHONE_ENROLL_ENABLED` and `MFA_PHONE_VERIFY_ENABLED` flags. TOTP is available by default. Configure an MFA recovery process before disabling factor verification for a deployment with enrolled users. [Phone sign-in and MFA](https://supabase.com/docs/guides/self-hosting/self-hosted-phone-mfa)
+- Passkeys and security-key MFA use the same WebAuthn RP ID and allowed origins. Use the EduLog HTTPS origin. Set `PASSKEY_ENABLED` for passkey sign-in and the `MFA_WEBAUTHN_*_ENABLED` flags for security-key MFA. Set `MFA_RECOVERY_CODES_ENABLED` to enable enrollment and verification of recovery codes. [Self-hosted passkeys](https://supabase.com/docs/guides/self-hosting/self-hosted-passkeys)
+
+## Sign in to external apps with EduLog
+
+Keep `EDULOG_AUTH_OUTBOUND_OAUTH_ENABLED=false` until the candidate has passed the external-token boundary checks with the actual gateway, PostgREST, Storage and Realtime. Use the bundled Envoy gateway and apply all migrations before enabling it. The legacy Kong overlay keeps the OAuth server disabled. Set `SITE_URL` to the EduLog HTTPS origin and configure asymmetric GoTrue JWT signing for OIDC. Use the GoTrue public issuer already configured by the deployment. Keep dynamic client registration disabled. Register each app and its exact HTTPS redirect URI with an authorized system account. Verify consent, rejection, grant revocation and identity-only access with the relying app. SCIM user provisioning awaits a supported GoTrue release. [OAuth 2.1 Server](https://supabase.com/docs/guides/auth/oauth-server)
 
 ## Email
 

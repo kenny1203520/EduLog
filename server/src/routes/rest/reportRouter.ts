@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express'
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
+import { externalLinkOrEmpty } from './externalLink.js'
 import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { initialReportAttendance } from '../../domain/reportSemantics.js'
@@ -27,7 +28,7 @@ export const reportBodySchema = z.object({
   lesson_entries: z.array(reportLessonEntrySchema).max(25).optional(), primary_lesson_entry_id: uuid.nullable().optional(),
   class_participation: z.number().min(0).max(5).nullable().optional(), classroom_behavior: z.number().min(0).max(5).nullable().optional(),
   contact_notes: z.string().max(10000).nullable().optional(), contact_notes_document: z.record(z.string(), z.unknown()).nullable().optional(), class_notes: z.string().max(10000).nullable().optional(), class_notes_document: z.record(z.string(), z.unknown()).nullable().optional(),
-  content: z.string().max(10000).nullable().optional(), content_document: z.record(z.string(), z.unknown()).nullable().optional(), external_link: z.string().max(2048).nullable().optional(),
+  content: z.string().max(10000).nullable().optional(), content_document: z.record(z.string(), z.unknown()).nullable().optional(), external_link: externalLinkOrEmpty,
   expected_version: z.number().int().min(1).optional(),
 }).strict()
 const standardReportCreateSchema = reportBodySchema.omit({ expected_version: true, lesson_entries: true, primary_lesson_entry_id: true }).required({ enrollment_id: true, class_occurrence_id: true })

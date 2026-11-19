@@ -36,6 +36,30 @@ describe('TextEditor', () => {
         expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({ value: 'aXd', source: 'local' })
     })
 
+    it('inserts text literally, never as HTML', async () => {
+        const wrapper = mount(TextEditor, { props: { modelValue: createTextEditorContent(''), toolbarVisible: false } })
+        await nextTick()
+        const handle = wrapper.vm as unknown as TextEditorHandle & { editor: any }
+        handle.insertText('<img src=x onerror="alert(1)"><b>bold</b> <a href="javascript:alert(1)">x</a>')
+        await nextTick()
+        expect(handle.getText()).toBe('<img src=x onerror="alert(1)"><b>bold</b> <a href="javascript:alert(1)">x</a>')
+        expect(handle.getHTML()).not.toContain('<img')
+        expect(handle.getHTML()).not.toContain('<strong>')
+        expect(handle.getHTML()).not.toMatch(/<a\s/)
+        expect(wrapper.element.querySelector('img, a')).toBeNull()
+    })
+
+    it('inserts multi-line text as separate paragraphs of text', async () => {
+        const wrapper = mount(TextEditor, { props: { modelValue: createTextEditorContent(''), toolbarVisible: false } })
+        await nextTick()
+        const handle = wrapper.vm as unknown as TextEditorHandle & { editor: any }
+        handle.insertText('first <i>line</i>\nsecond')
+        await nextTick()
+        expect(handle.getText()).toContain('first <i>line</i>')
+        expect(handle.getText()).toContain('second')
+        expect(handle.getHTML()).not.toContain('<em>')
+    })
+
     it('executes formatting commands and persists document appearance', async () => {
         const wrapper = mount(TextEditor, {
             props: { modelValue: createTextEditorContent('hello'), toolbarVisible: false, preset: 'template' }

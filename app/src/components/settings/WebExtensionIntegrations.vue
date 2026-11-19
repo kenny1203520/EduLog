@@ -10,7 +10,7 @@ const pairRequestId = computed(() => typeof route.query.extension_pair === 'stri
 const pair = ref<PairApproval | null>(null), tokens = ref<ExtensionToken[]>([])
 const loading = ref(true), refreshing = ref(false), busy = ref(false), pairExpired = ref(false)
 const error = ref(''), notice = ref(''), updatedAt = ref(''), now = ref(Date.now())
-const pairName = ref(''), editingId = ref(''), editName = ref('')
+const pairName = ref(''), codeConfirmed = ref(false), editingId = ref(''), editName = ref('')
 const revokeTarget = ref<ExtensionToken | null>(null), dialog = ref<HTMLDialogElement | null>(null)
 const refreshButton = ref<HTMLButtonElement | null>(null)
 const activeTokens = computed(() => tokens.value.filter(token => !token.revoked_at && new Date(token.expires_at).getTime() > now.value))
@@ -39,6 +39,7 @@ async function load(force = false) {
     const previous = pair.value?.id
     pair.value = pairResult
     pairExpired.value = Boolean(requestId && (!pair.value || (pair.value.status !== 'claimed' && new Date(pair.value.expires_at).getTime() <= now.value)))
+    if (pair.value && previous !== pair.value.id) codeConfirmed.value = false
     if (pair.value && previous !== pair.value.id) pairName.value = pair.value.device_name || device(pair.value) || t('settings.extension.default_name')
     if (pair.value?.status === 'claimed' && tokens.value.some(token => token.id === pair.value?.token_id)) {
       notice.value = t('settings.extension.connected_notice'); pair.value = null
@@ -54,12 +55,17 @@ async function approve() {
   if (!pair.value || busy.value) return
   const value = pairName.value.trim()
   if (!value || value.length > 80) { error.value = t('settings.extension.name_required'); return }
+  const code = pair.value.confirmation_code
+  if (!code || !codeConfirmed.value) return
   busy.value = true; error.value = ''
   try {
-    await WebExtensionService.approvePair(pair.value.id, value)
+    await WebExtensionService.approvePair(pair.value.id, value, code)
     pair.value.status = 'approved'; notice.value = t('settings.extension.approved')
     await load(true)
-  } catch { error.value = t('settings.extension.approve_failed') }
+  } catch (cause: any) {
+    if (cause?.code === 'PAIRING_CODE_MISMATCH') { error.value = t('settings.extension.code_mismatch'); pairExpired.value = true }
+    else error.value = t('settings.extension.approve_failed')
+  }
   finally { busy.value = false; schedule() }
 }
 function startRename(token: ExtensionToken) {
@@ -127,12 +133,22 @@ onUnmounted(() => { mounted = false; generation++; controller?.abort(); clearTim
         <h3 id="extension-pair-title" class="font-semibold text-slate-900">{{ t(pair.status === 'pending' ? 'settings.extension.pair_title' : 'settings.extension.waiting_claim') }}</h3>
         <p class="mt-2 text-sm leading-6 text-slate-700">{{ t(pair.status === 'pending' ? 'settings.extension.pair_description' : 'settings.extension.approved') }}</p>
         <p v-if="device(pair)" class="mt-2 text-sm text-slate-700">{{ device(pair) }}</p>
-        <form v-if="pair.status === 'pending'" class="mt-4 space-y-2" @submit.prevent="approve">
+        <template v-if="pair.status === 'pending'">
+        <p class="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" role="note">{{ t('settings.extension.code_warning') }}</p>
+        <div v-if="pair.confirmation_code" class="mt-3">
+          <p class="text-sm font-medium text-slate-900">{{ t('settings.extension.code_label') }}</p>
+          <p class="pair-code" data-testid="pair-confirmation-code" aria-describedby="extension-pair-code-hint">{{ pair.confirmation_code.slice(0, 3) }} {{ pair.confirmation_code.slice(3) }}</p>
+          <p id="extension-pair-code-hint" class="text-xs text-slate-600">{{ t('settings.extension.code_hint') }}</p>
+        </div>
+        <p v-else class="mt-3 text-sm text-red-800" role="alert">{{ t('settings.extension.code_missing') }}</p>
+        <form v-if="pair.confirmation_code" class="mt-4 space-y-2" @submit.prevent="approve">
           <label for="extension-pair-name" class="block text-sm font-medium">{{ t('settings.extension.name') }}</label>
           <input id="extension-pair-name" v-model="pairName" name="device_name" maxlength="80" required :disabled="busy" aria-describedby="extension-pair-name-hint" />
           <p id="extension-pair-name-hint" class="text-xs text-slate-600">{{ t('settings.extension.name_hint') }}</p>
-          <button type="submit" class="primary" :disabled="busy">{{ t(busy ? 'common.processing' : 'settings.extension.approve') }}</button>
+          <label class="code-confirm"><input v-model="codeConfirmed" type="checkbox" name="code_confirmed" :disabled="busy" /> <span>{{ t('settings.extension.code_confirm') }}</span></label>
+          <button type="submit" class="primary" :disabled="busy || !codeConfirmed">{{ t(busy ? 'common.processing' : 'settings.extension.approve') }}</button>
         </form>
+        </template>
         <p class="mt-3 text-xs text-slate-600">{{ t('settings.extension.expires', { date: date(pair.expires_at) }) }}</p>
         <details class="mt-3"><summary>{{ t('settings.extension.extension_info') }}</summary><p class="break-all font-mono text-xs">{{ pair.extension_origin }}</p></details>
       </section>
@@ -181,6 +197,9 @@ onUnmounted(() => { mounted = false; generation++; controller?.abort(); clearTim
 .danger { background:#fff;color:#b91c1c;border:1px solid #fecaca; }.danger:hover { background:#fef2f2; }
 button:disabled { opacity:.6;cursor:wait; }button:focus-visible,input:focus-visible,summary:focus-visible { outline:3px solid #2563eb;outline-offset:3px; }
 input { display:block;width:100%;max-width:480px;min-height:44px;padding:8px 12px;border:1px solid #94a3b8;border-radius:8px;background:#fff;color:#0f172a; }
+input[type=checkbox] { display:inline-block;width:20px;height:20px;min-height:0;padding:0; }
+.code-confirm { display:flex;align-items:center;gap:8px;min-height:44px;font-size:16px; }
+.pair-code { margin:4px 0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:32px;font-weight:700;letter-spacing:.15em;color:#0f172a; }
 summary { min-height:44px;display:list-item;padding:12px 0;cursor:pointer;font-size:14px; }
 dialog { margin:auto;width:min(440px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto;border:1px solid #cbd5e1;border-radius:16px;padding:24px;color:#0f172a; }
 dialog::backdrop { background:rgb(15 23 42 / .5); }

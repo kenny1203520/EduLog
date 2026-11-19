@@ -11,6 +11,7 @@ export const useAuthStore = defineStore('auth', () => {
   const session = ref<BffSession | null>(null)
   const loading = ref(true)
   const accountDisabled = ref(false)
+  const mfaRequired = ref(false)
   let initializePromise: Promise<void> | null = null
 
   const isAuthenticated = computed(() => !!user.value)
@@ -18,6 +19,7 @@ export const useAuthStore = defineStore('auth', () => {
   const accountPending = computed(() => user.value?.account_status === 'pending')
 
   function acceptRefreshedUser(nextUser: BffUser) {
+    mfaRequired.value = false
     session.value = { user: nextUser }
     user.value = nextUser
     loading.value = false
@@ -30,17 +32,18 @@ export const useAuthStore = defineStore('auth', () => {
     session.value = null
     loading.value = false
     accountDisabled.value = false
+    mfaRequired.value = false
   }
 
   // Unsaved report drafts hold student data; they must not outlive the
   // person's session on a shared device. An expired session keeps them so the
   // same teacher can restore after signing in again.
-  function clearLocalDrafts() {
-    void localDraftStore.clearAll().catch((error) => console.warn('Local report drafts could not be cleared', error))
+  async function clearLocalDrafts() {
+    await localDraftStore.clearAll().catch((error) => console.warn('Local report drafts could not be cleared', error))
   }
 
   function markAccountDisabled() {
-    clearLocalDrafts()
+    void clearLocalDrafts()
     clearSession()
     accountDisabled.value = true
   }
@@ -57,6 +60,7 @@ export const useAuthStore = defineStore('auth', () => {
         session.value = currentSession
         user.value = currentSession?.user ?? null
         accountDisabled.value = (error as { code?: string } | null)?.code === 'ACCOUNT_DISABLED'
+        mfaRequired.value = (error as { code?: string } | null)?.code === 'MFA_REQUIRED'
       } finally {
         loading.value = false
       }
@@ -75,6 +79,7 @@ export const useAuthStore = defineStore('auth', () => {
     if (error) throw error
     if (result.user) {
       accountDisabled.value = false
+      mfaRequired.value = false
       AggregateService.clearCache()
       useCapabilityStore().reset()
       session.value = result.session ?? { user: result.user }
@@ -82,11 +87,18 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  /**
+   * Signs out. Local drafts are cleared even when the logout request fails:
+   * the person chose to leave this device, so its drafts must not stay behind.
+   */
   async function signOut() {
-    const { error } = await authService.logout()
-    if (error) throw error
-    clearLocalDrafts()
-    clearSession()
+    try {
+      const { error } = await authService.logout()
+      if (error) throw error
+      clearSession()
+    } finally {
+      await clearLocalDrafts()
+    }
   }
 
   return {
@@ -101,6 +113,7 @@ export const useAuthStore = defineStore('auth', () => {
     clearSession,
     markAccountDisabled,
     accountDisabled,
+    mfaRequired,
     accountPending
   }
 })

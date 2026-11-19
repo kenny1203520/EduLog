@@ -3,6 +3,7 @@ import { once } from 'node:events'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { WebSocket, WebSocketServer } from 'ws'
+import { SignJWT } from 'jose'
 import { testConfig } from '../test/testConfig.js'
 
 const supabaseMocks = vi.hoisted(() => ({
@@ -119,9 +120,9 @@ describe('realtime proxy upgrade-to-join flow', () => {
     return `ws://127.0.0.1:${apiPort}/api/realtime`
   }
 
-  function connect(url: string, parameter: 'class_session' | 'room') {
+  function connect(url: string, parameter: 'class_session' | 'room', accessToken = 'test-access-token') {
     client = new WebSocket(`${url}?${parameter}=${RESOURCE_ID}`, {
-      headers: { Cookie: 'edulog_access=test-access-token', Origin: 'http://localhost:5173' },
+      headers: { Cookie: `edulog_access=${accessToken}`, Origin: 'http://localhost:5173' },
     })
     return client
   }
@@ -150,6 +151,21 @@ describe('realtime proxy upgrade-to-join flow', () => {
       payload: { config: { private: true }, access_token: '' },
     }))
   }
+
+  it('rejects a WebSocket session awaiting MFA and accepts it after step-up', async () => {
+    supabaseMocks.validateAccessToken.mockResolvedValue({ id: 'user-1', factors: [{ status: 'verified' }] })
+    const url = await startProxy()
+    const token = (aal: 'aal1' | 'aal2') => new SignJWT({ aal })
+      .setProtectedHeader({ alg: 'HS256' }).sign(new TextEncoder().encode(COOKIE_SECRET))
+
+    const awaitingMfa = connect(url, 'room', await token('aal1'))
+    expect(await upgradeStatus(awaitingMfa)).toBe(403)
+    awaitingMfa.terminate()
+    expect(upstreamConnections).toBe(0)
+
+    const steppedUp = connect(url, 'room', await token('aal2'))
+    await once(steppedUp, 'open')
+  })
 
   it.each([
     ['class-session', 'class_session', 'realtime:class-session:'],
