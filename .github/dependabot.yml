@@ -33,6 +33,32 @@ updates:
           - minor
           - patch
 
+  # Root tooling (Playwright for the extension browser tests).
+  - package-ecosystem: npm
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+    groups:
+      root-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  # Docker base images for the published release images.
+  - package-ecosystem: docker
+    directories:
+      - /app
+      - /server
+      - /docker/presidio
+    target-branch: develop
+    schedule:
+      interval: weekly
+    groups:
+      docker-base-images:
+        patterns:
+          - '*'
+
   - package-ecosystem: github-actions
     directory: /
     target-branch: develop
