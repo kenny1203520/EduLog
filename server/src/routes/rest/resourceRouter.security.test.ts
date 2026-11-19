@@ -113,4 +113,21 @@ describe('resource creation with sensitive fields', () => {
     await expect(collection(refused.req, refused.res, resources.teachers)).rejects.toThrow('denied')
     expect(refused.adminRpc).not.toHaveBeenCalledWith('create_teacher_with_profile', expect.anything())
   })
+
+  it('writes only the validated body to the new teacher profile', async () => {
+    authorizationMocks.authorizeCollection.mockReset().mockResolvedValue(undefined)
+    authorizationMocks.permissionForResource.mockReturnValue('teaching.teachers.create')
+    const { collection } = await import('./resourceRouter.js')
+    const userId = '00000000-0000-4000-8000-000000000023'
+    const linked = createRequest({ name: 'New Teacher', bio: 'Hello', user_id: userId })
+    await collection(linked.req, linked.res, resources.teachers)
+    const call = linked.adminRpc.mock.calls.find(([name]) => name === 'create_teacher_with_profile') as unknown as [string, { p_account_user_id: string; p_patch: Record<string, unknown> }]
+    expect(call[1].p_account_user_id).toBe(userId)
+    expect(call[1].p_patch).toEqual({ name: 'New Teacher', bio: 'Hello' })
+    expect(call[1].p_patch).not.toHaveProperty('user_id')
+
+    const malformed = createRequest({ name: 'New Teacher', user_id: 'not-a-uuid' })
+    await expect(collection(malformed.req, malformed.res, resources.teachers)).rejects.toThrow()
+    expect(malformed.adminRpc).not.toHaveBeenCalledWith('create_teacher_with_profile', expect.anything())
+  })
 })

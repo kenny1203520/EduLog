@@ -67,9 +67,15 @@ describe('useAuthStore', () => {
     expect(localDraftStore.clearAll).not.toHaveBeenCalled()
   })
 
-  it('keeps drafts when logout fails', async () => {
+  it('still clears drafts when the logout request fails', async () => {
     vi.mocked(authService.logout).mockResolvedValue({ error: new Error('offline') } as never)
     await expect(useAuthStore().signOut()).rejects.toThrow('offline')
-    expect(localDraftStore.clearAll).not.toHaveBeenCalled()
+    expect(localDraftStore.clearAll).toHaveBeenCalledTimes(1)
+  })
+
+  it('still clears drafts when the logout request throws', async () => {
+    vi.mocked(authService.logout).mockRejectedValue(new Error('network down'))
+    await expect(useAuthStore().signOut()).rejects.toThrow('network down')
+    expect(localDraftStore.clearAll).toHaveBeenCalledTimes(1)
   })
 })

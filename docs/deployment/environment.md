@@ -83,14 +83,15 @@ Supabase uses more aliases for its own services. For example, `SERVICE_ROLE_KEY`
 
 | Variable | Required | Default | Notes |
 |---|---|---|---|
-| `NODE_ENV` | | `development` | `production` enforces HTTPS `EDULOG_WEB_BASE_URL`, `RATE_LIMIT_STORE=supabase`, and non-empty `API_ALLOWED_ORIGINS` |
+| `NODE_ENV` | | `development` | `production` enforces HTTPS `EDULOG_WEB_BASE_URL`, `RATE_LIMIT_STORE=supabase`, non-empty `API_ALLOWED_ORIGINS` and `COOKIE_SECURE=true`, and refuses Supabase's demo anon/service-role keys, the example `JWT_SECRET`, and `REALTIME_DB_ENC_KEY=supabaserealtime` when that value reaches the API |
 | `API_PORT` | | `3000` | |
 | `EDULOG_WEB_BASE_URL` | yes | | HTTPS except localhost; no credentials, query or fragment |
 | `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | yes | | |
 | `SUPABASE_JWT_SECRET`, `SUPABASE_JWT_ISSUER` | | | Local token checks for self-hosted Supabase |
 | `SUPABASE_REALTIME_URL` | | `SUPABASE_URL` | |
 | `COOKIE_SECRET` | yes | | at least 32 characters |
-| `COOKIE_SECURE` | | `false` | Compose sets `true` |
+| `COOKIE_SECURE` | | `false` | Compose sets `true`; `false` is refused in production |
+| `REALTIME_DB_ENC_KEY` | | | Optional; only checked, so production refuses the Supabase example value |
 | `RATE_LIMIT_STORE` | | `supabase` | `memory` is refused in production |
 | `API_BODY_LIMIT` | | `1mb` | Express/`bytes` syntax |
 | `API_ALLOWED_ORIGINS` | in production | | exact origins, no wildcards or paths |

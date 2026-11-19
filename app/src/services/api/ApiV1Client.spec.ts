@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiV1Client, ApiV1Error, registerApiAuthRecovery } from './ApiV1Client'
+import { markUserActivity } from '@/lib/userActivity'
 
 describe('ApiV1Client', () => {
   beforeEach(() => {
@@ -130,5 +131,17 @@ describe('ApiV1Client', () => {
     expect(recovery).toHaveBeenCalledTimes(1)
     expect(expired).toHaveBeenCalledTimes(1)
     window.removeEventListener('edulog:auth-session-expired', expired)
+  })
+
+  it('marks requests made after a minute without interaction as background', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ data: [], meta: {}, request_id: 'r', trace_id: 't' }), { status: 200 }))
+    const now = Date.now()
+    markUserActivity(now)
+    await new ApiV1Client('/api').get('/students')
+    expect(new Headers((fetchMock.mock.calls[0][1] as RequestInit).headers).has('x-edulog-background')).toBe(false)
+    vi.spyOn(Date, 'now').mockReturnValue(now + 2 * 60 * 1000)
+    await new ApiV1Client('/api').get('/students')
+    expect(new Headers((fetchMock.mock.calls[1][1] as RequestInit).headers).get('x-edulog-background')).toBe('1')
+    vi.mocked(Date.now).mockRestore()
   })
 })

@@ -79,3 +79,6 @@ dd { color:var(--edulog-text-strong); text-align:right; overflow-wrap:anywhere; 
 .linkrow .count { display:inline-flex; align-items:center; justify-content:center; min-width:20px; height:20px; padding:0 6px; border-radius:var(--edulog-radius-pill); background:var(--edulog-status-warn-soft); color:var(--edulog-status-warn-text); font-size:var(--edulog-font-tag); font-weight:600; }
 .linkrow .chev { margin-left:auto; color:var(--edulog-text-muted); }
 @media (prefers-reduced-motion:reduce) { * { transition:none !important; } }
+.pair-code-box { border:1px solid var(--edulog-border, #cbd5e1); border-radius:10px; padding:10px 12px; }
+.pair-code-label { font-weight:600; }
+.pair-code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:28px; font-weight:700; letter-spacing:.15em; }

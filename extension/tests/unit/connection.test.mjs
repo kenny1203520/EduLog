@@ -46,9 +46,11 @@ test('pairing includes named installation metadata and blocks duplicate submissi
   assert.equal(get('device-name').disabled, true)
   assert.deepEqual({ ...requests[0].body, code_challenge: undefined }, { ...installation, device_name: 'Teaching laptop', code_challenge: undefined })
   assert.match(requests[0].body.code_challenge, /^[a-f0-9]{64}$/)
-  finish({ ok: true, json: async () => ({ data: { id: 'pair', authorize_url: 'http://localhost:5173/dashboard/settings?extension_pair=pair', expires_at: new Date(Date.now()+60000).toISOString() } }) })
+  finish({ ok: true, json: async () => ({ data: { id: 'pair', authorize_url: 'http://localhost:5173/dashboard/settings?extension_pair=pair', expires_at: new Date(Date.now()+60000).toISOString(), confirmation_code: '048213' } }) })
   await wait()
   assert.equal(get('connection-card').dataset.state, 'pending')
+  assert.equal(stored.edulogExtension.pending.confirmationCode, '048213')
+  assert.equal(get('pair-code').textContent, '048 213')
   assert.equal(opened[0].url, stored.edulogExtension.pending.authorizeUrl)
   assert.equal(get('device-name').disabled, false)
   dom.window.close()
@@ -119,7 +121,7 @@ function popup({ state, stored = { origin: 'http://localhost:5173', token: 'priv
 const visiblePrimaries = doc => [...doc.querySelectorAll('.btn-primary')].filter(button => !button.closest('[hidden]'))
 
 for (const state of ['not-connected', 'pending', 'pairing-expired', 'connected', 'expired', 'revoked', 'unavailable', 'forbidden']) test(`popup renders ${state}, independent UI preferences`, async () => {
-  const stored = { origin: 'http://localhost:5173', token: 'private-token', pending: state === 'pending' ? { expiresAt: new Date(Date.now() + 60000).toISOString(), authorizeUrl: 'http://localhost:5173/dashboard/settings?extension_pair=id' } : undefined }
+  const stored = { origin: 'http://localhost:5173', token: 'private-token', pending: state === 'pending' ? { expiresAt: new Date(Date.now() + 60000).toISOString(), confirmationCode: '305128', authorizeUrl: 'http://localhost:5173/dashboard/settings?extension_pair=id' } : undefined }
   const { dom, w, opened, get } = popup({ state, stored })
   await wait()
   assert.equal(get('connection-card').dataset.state, state)
@@ -143,6 +145,7 @@ for (const state of ['not-connected', 'pending', 'pairing-expired', 'connected',
     assert.equal(get('instance').value, stored.origin)
     assert.equal(stored.token, 'private-token')
   }
+  if (state === 'pending') assert.equal(get('pair-code').textContent, '305 128')
   if (state === 'pending') { get('open-approval').click(); await wait(); assert.equal(opened[0].url, stored.pending.authorizeUrl) }
   dom.window.close()
 })
