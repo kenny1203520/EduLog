@@ -1,0 +1,12 @@
+{
+  "$comment": "Advisories accepted by scripts/security/npm-audit.mjs. Add one only after checking that it cannot reach a shipped artifact, give the reason, and set an expiry no more than ~3 months out.",
+  "advisories": [
+    {
+      "id": "GHSA-fc5q-39xc-vjpf",
+      "package": "picomatch",
+      "dirs": ["app"],
+      "reason": "ReDoS in picomatch <=4.0.7 with no patched release yet. Reached only through build tooling (vite, vite-plugin-pwa, vue-router's unplugin entry) with repo-controlled globs; the app image ships static dist/ on nginx and vue-router's runtime entry does not include picomatch.",
+      "expires": "2027-02-18"
+    }
+  ]
+}
