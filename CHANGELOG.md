@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.0.0-alpha.11] - 2026-11-18
+## [2.0.0-alpha.11] - 2026-11-19
 
 ### Added
 - Discover configured GoTrue sign-in methods and manage custom OAuth/OIDC providers as disabled drafts.
@@ -18,8 +18,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Require MFA on Realtime connections and preserve AAL2 sessions when changing email or password.
 - Align MFA enrollment availability with verification settings and persist validated discovery URLs.
 
+### Security
+- Expire browser sessions after 8 idle hours or 30 days and require a six-digit confirmation code for extension pairing.
+- Harden rate limiting, content security policy, external links and database permissions.
+- Bind the pooler to loopback by default, update the Presidio image and add automated security scans.
+
+### Documentation
+- Add the November 2026 UI/UX and accessibility review.
+
 ### Deployment
-- Apply migrations 1000180 and 1000181 before enabling the new features.
+- Apply migrations through 1000183 before deploying the matching API, frontend and extension. Restart any pending pairing requests created before the upgrade.
 - Configure provider egress restrictions, callback URLs and delivery credentials as documented.
 - The release owner waived staging acceptance. Real provider and full-stack Storage/Realtime verification remain pending. See the release deployment notes.
 
