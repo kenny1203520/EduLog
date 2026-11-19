@@ -47,7 +47,7 @@ for path in / /index.html /dashboard/classrooms /sw.js; do
   grep -qi 'X-Content-Type-Options: nosniff' <<<"$headers"
 done
 asset="$(docker exec "$frontend" sh -c 'find /usr/share/nginx/html/assets -name "index-*.js" -print -quit')"
-test -n "$asset"
+[[ -n "$asset" ]]
 headers="$(docker exec "$frontend" wget -S -O /dev/null "http://127.0.0.1:4173/assets/${asset##*/}" 2>&1)"
 grep -qi 'Cache-Control: public, max-age=31536000, immutable' <<<"$headers"
 docker exec "$frontend" wget -q -O - http://127.0.0.1:4173/api/healthz | grep -q '"status":"ok"'

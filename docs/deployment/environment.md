@@ -47,6 +47,8 @@ The root `.env` key on the left becomes the container variable on the right.
 | `RATE_LIMIT_STORE` (`supabase`) | `RATE_LIMIT_STORE` | |
 | `EDULOG_API_BODY_LIMIT` (`1mb`) | `API_BODY_LIMIT` | `EDULOG_API_BODY_LIMIT` (converted to nginx units) |
 | `EDULOG_API_RATE_LIMIT_PER_MINUTE` (`120`) | `API_RATE_LIMIT_PER_MINUTE` | |
+| `EDULOG_API_AUTH_RATE_LIMIT_PER_MINUTE` (`10`) | `API_AUTH_RATE_LIMIT_PER_MINUTE` | |
+| `EDULOG_API_TRUST_PROXY_HOPS` (`1`; the TLS overlays use `EDULOG_API_TRUST_PROXY_HOPS_BEHIND_TLS_PROXY`, default `2`) | `API_TRUST_PROXY_HOPS` | |
 | `EDULOG_AI_SECRET_KEY` | `AI_SECRET_KEY` | |
 | `EDULOG_PRESIDIO_ANALYZER_URL` | `PRESIDIO_ANALYZER_URL` | |
 | `EDULOG_OPENAI_SIWC_CLIENT_ID` / `_SECRET` | `OPENAI_SIWC_CLIENT_ID` / `_SECRET` | |
@@ -94,6 +96,8 @@ Supabase uses more aliases for its own services. For example, `SERVICE_ROLE_KEY`
 | `API_ALLOWED_ORIGINS` | in production | | exact origins, no wildcards or paths |
 | `API_EXTENSION_ALLOWED_ORIGINS` | | | exact `chrome-extension://<32 a-p chars>` origins |
 | `API_RATE_LIMIT_PER_MINUTE` | | `120` | |
+| `API_AUTH_RATE_LIMIT_PER_MINUTE` | | `10` | login, password recovery and extension pairing; counted per client IP and per email |
+| `API_TRUST_PROXY_HOPS` | | `1` | reverse proxies whose `X-Forwarded-For` entry is trusted for the client IP; `0` only when clients reach the API directly |
 | `AI_SECRET_KEY` | | | 32 bytes as base64; AI credential storage is off without it |
 | `PRESIDIO_ANALYZER_URL` | | | de-identification is off without it |
 | `OPENAI_SIWC_CLIENT_ID`, `OPENAI_SIWC_CLIENT_SECRET` | | | Sign in with ChatGPT is hidden without them. OpenAI's endpoints are constants in code, not env |

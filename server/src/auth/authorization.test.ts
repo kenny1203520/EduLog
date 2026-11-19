@@ -119,6 +119,33 @@ describe('resource-aware authorization', () => {
     })
   })
 
+  describe('teacher deletion through class-level grants', () => {
+    const teacherId = '00000000-0000-4000-8000-0000000000aa'
+    const mine = '00000000-0000-4000-8000-0000000000b1'
+    const other = '00000000-0000-4000-8000-0000000000b2'
+    function teacherRequest(assignedSessions: string[]) {
+      // Only a class-level grant for `mine`; no platform-wide permission.
+      const rpc = vi.fn(async (_name: string, args: { p_class_session_id: string | null }) => ({ data: args.p_class_session_id === mine, error: null }))
+      const eq = vi.fn().mockResolvedValue({ data: assignedSessions.map(class_session_id => ({ class_session_id })), error: null })
+      const req = requestWithRpc(rpc)
+      ;(req.db as unknown as { from: unknown }).from = vi.fn(() => ({ select: () => ({ eq }) }))
+      return req
+    }
+
+    it('allows deleting a teacher who only teaches in the granted class session', async () => {
+      await expect(authorizeResource(teacherRequest([mine]), resources.teachers, 'teaching.teachers.delete', teacherId)).resolves.toBeUndefined()
+    })
+
+    it('refuses to delete a teacher who also teaches outside the granted class session', async () => {
+      await expect(authorizeResource(teacherRequest([mine, other]), resources.teachers, 'teaching.teachers.delete', teacherId))
+        .rejects.toMatchObject({ status: 403 })
+    })
+
+    it('still lets one granted class session authorize non-destructive actions', async () => {
+      await expect(authorizeResource(teacherRequest([mine, other]), resources.teachers, 'teaching.teachers.update', teacherId)).resolves.toBeUndefined()
+    })
+  })
+
   it('keeps the service-role teachers list at platform level', async () => {
     const rpc = vi.fn().mockResolvedValue({ data: true, error: null })
     await authorizeCollection(requestWithRpc(rpc), resources.teachers, 'teaching.teachers.list')

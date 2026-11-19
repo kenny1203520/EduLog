@@ -322,6 +322,14 @@ export async function authorizeResource(
     }
     const assignments = await req.db.from('class_session_teachers').select('class_session_id').eq('teacher_id', teacherId)
     if (assignments.error) throw mapDatabaseError(assignments.error)
+    if (permission === 'teaching.teachers.delete') {
+      // Deleting removes the teacher everywhere, so a class-level grant only
+      // suffices when it covers every class session the teacher is assigned to.
+      const sessionIds = [...new Set((assignments.data ?? []).map(assignment => rowId(assignment as Record<string, unknown>, 'class_session_id')).filter((value): value is string => Boolean(value)))]
+      if (!sessionIds.length) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
+      for (const sessionId of sessionIds) await apiPermission(req, permission, null, sessionId)
+      return
+    }
     for (const assignment of assignments.data ?? []) {
       try {
         await apiPermission(req, permission, null, rowId(assignment as Record<string, unknown>, 'class_session_id'))
