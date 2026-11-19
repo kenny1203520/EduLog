@@ -6,6 +6,7 @@ import { ApiError, sendError } from '../http/errors.js'
 import { assertUserActive, clearAccessTokenValidation, createAuthenticatedUserClient, createUserClient, refresh, safeUser, signIn, validateAccessToken, verifyCurrentPassword, type SupabaseClients } from '../infra/supabase.js'
 import type { ApiConfig } from '../config/config.js'
 import { measureRequestPhase, setAuditContext } from '../http/context.js'
+import { authAttemptRateLimit } from '../http/rateLimit.js'
 import { createPkcePair, enabledOAuthProviders, exchangeAuthCode, isValidProviderName, OAUTH_PROVIDER_MAX_LENGTH, requestPasswordRecovery, startOAuthAuthorization, verifyEmailLink, type EmailLinkType, type GoTrueSession } from './gotrue.js'
 import { deleteIdentity, readIdentityUser, startIdentityLink } from './gotrue.js'
 import { createOutboundOAuthRouter } from './outboundOAuth.js'
@@ -304,7 +305,7 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
     }
   })
   /** Always 204, so the answer never tells whether an account exists. */
-  router.post('/recover', async (req, res, next) => {
+  router.post('/recover', authAttemptRateLimit(config, clients.adminClient, 'auth-recover'), async (req, res, next) => {
     try {
       const input = recoverSchema.parse(req.body)
       await requestPasswordRecovery(config, input.email, config.EDULOG_WEB_BASE_URL).catch((error: unknown) => {
@@ -329,7 +330,7 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
       return res.json({ data: { changed: true }, meta: {}, request_id: req.requestId, trace_id: req.traceId })
     } catch (error) { next(error) }
   })
-  router.post('/login', async (req, res, next) => {
+  router.post('/login', authAttemptRateLimit(config, clients.adminClient, 'auth-login'), async (req, res, next) => {
     clearIdentityFlow(res)
     try {
       const input = credentialsSchema.parse(req.body)

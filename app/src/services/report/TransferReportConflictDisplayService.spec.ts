@@ -74,4 +74,11 @@ describe('TransferReportConflictDisplayService', () => {
         expect(TransferReportConflictDisplayService.formatField(report(), context, 'content', t))
             .toMatchObject({ kind: 'text', text: '未填寫' })
     })
+
+    it('shows a non-http(s) external link as text, never as an anchor', () => {
+        for (const link of ['javascript:alert(1)', 'data:text/html,<b>x</b>']) {
+            expect(TransferReportConflictDisplayService.formatField(report({ external_link: link }), context, 'external_link', t))
+                .toEqual({ kind: 'text', text: link })
+        }
+    })
 })

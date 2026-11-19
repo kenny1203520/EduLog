@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { optionalExternalLink } from './externalLink.js'
 
 export type ResourceDefinition = {
   route: string
@@ -143,10 +144,8 @@ const optionalEmail = z.preprocess(
   z.string().email().nullable().optional(),
 )
 const optionalDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional()
-const optionalUrl = z.preprocess(
-  (value) => typeof value === 'string' && value.trim() === '' ? null : value,
-  z.url().max(2048).nullable().optional(),
-)
+// Links render as anchors, so only http(s) URLs are accepted.
+const optionalUrl = optionalExternalLink
 const optionalTime = z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/).nullable().optional()
 const optionalDocument = z.record(z.string(), z.unknown()).nullable().optional()
 /**

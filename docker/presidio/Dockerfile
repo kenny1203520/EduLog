@@ -18,6 +18,20 @@ COPY configure_languages.py start.sh /app/conf-edulog/
 RUN chmod 0755 /app/conf-edulog/start.sh \
     && python /app/conf-edulog/configure_languages.py install \
     && install -d -o 1001 -m 0700 /app/conf-edulog/runtime
+# The upstream image ships Debian and Python packages with known HIGH/CRITICAL
+# CVEs. Apply Debian security updates, upgrade the vulnerable runtime Python
+# packages to their first fixed releases, and remove Poetry (only its
+# `poetry run` wrapper was used; start.sh runs gunicorn directly) together with
+# its build-only dependencies. Kept after the language install so that layer
+# stays cached. Re-check with trivy when bumping the base image.
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip uninstall -y poetry dulwich virtualenv \
+    && pip install --no-cache-dir --upgrade \
+        anyio==4.14.2 certifi==2026.10.18 cryptography==50.0.0 \
+        filelock==4.2.1 msgpack==1.2.3 urllib3==2.8.0 \
+    && pip check
 # Written by start.sh at container start into a directory only user 1001 can
 # write (not a shared location such as /tmp).
 ENV PRESIDIO_LANGUAGES=zh,en \

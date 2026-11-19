@@ -599,8 +599,8 @@ services:
     image: supabase/supavisor:2.9.13
     restart: unless-stopped
     ports:
-      - ${POSTGRES_PORT}:5432
-      - ${POOLER_PROXY_PORT_TRANSACTION}:6543
+      - ${EDULOG_POOLER_BIND_ADDRESS:-127.0.0.1}:${POSTGRES_PORT}:5432
+      - ${EDULOG_POOLER_BIND_ADDRESS:-127.0.0.1}:${POOLER_PROXY_PORT_TRANSACTION}:6543
     volumes:
       - ./supabase/volumes/pooler/pooler.exs:/etc/pooler/pooler.exs:ro,z
     healthcheck:
@@ -691,6 +691,8 @@ services:
       API_EXTENSION_ALLOWED_ORIGINS: ${API_EXTENSION_ALLOWED_ORIGINS:-}
       API_BODY_LIMIT: ${EDULOG_API_BODY_LIMIT:-1mb}
       API_RATE_LIMIT_PER_MINUTE: ${EDULOG_API_RATE_LIMIT_PER_MINUTE:-120}
+      API_AUTH_RATE_LIMIT_PER_MINUTE: ${EDULOG_API_AUTH_RATE_LIMIT_PER_MINUTE:-10}
+      API_TRUST_PROXY_HOPS: ${EDULOG_API_TRUST_PROXY_HOPS:-1}
       # AI report assistant. Server-only; never pass to the Vue container.
       AI_SECRET_KEY: ${EDULOG_AI_SECRET_KEY:-}
       PRESIDIO_ANALYZER_URL: ${EDULOG_PRESIDIO_ANALYZER_URL:-}
