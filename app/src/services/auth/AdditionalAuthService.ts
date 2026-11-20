@@ -17,7 +17,11 @@ export type AuthCapabilities = {
   unavailable: string[]
 }
 type RecoveryCodes = { remaining?: number; codes?: string[] }
-type Passkey = { id: string; friendly_name?: string; created_at: string }
+export type Passkey = { id: string; friendly_name?: string; created_at: string; last_used_at?: string | null }
+export type TotpEnrollment = { secret: string; qr_code?: string; uri?: string }
+export type EnrolledFactor = { id: string; totp?: TotpEnrollment }
+/** Why a passkey ceremony stopped: `cancelled` is silent, the rest need a message. */
+export type PasskeyFailure = 'cancelled' | 'exists' | 'configuration' | 'failed'
 type WebAuthnType = 'create' | 'request'
 type BrowserOptions = PublicKeyCredentialCreationOptionsJSON | PublicKeyCredentialRequestOptionsJSON
 type PasskeyOptions = { challenge_id: string; options: BrowserOptions }
@@ -29,6 +33,28 @@ const remove = async (path: string) => apiV1Client.delete(`/auth${path}`, {}, { 
 
 export function supportsWebAuthn() {
   return typeof PublicKeyCredential !== 'undefined' && Boolean(navigator.credentials)
+}
+
+/** Whether this browser can create a passkey; uses client capabilities where available. */
+export async function passkeySupport(): Promise<boolean> {
+  if (!supportsWebAuthn()) return false
+  const detect = (PublicKeyCredential as unknown as { getClientCapabilities?: () => Promise<Record<string, boolean>> }).getClientCapabilities
+  if (typeof detect !== 'function') return true
+  try {
+    const capabilities = await detect.call(PublicKeyCredential)
+    return capabilities.passkeyPlatformAuthenticator !== false || capabilities.hybridTransport === true
+  } catch {
+    return true
+  }
+}
+
+/** Maps a WebAuthn DOMException to a reason the UI can act on. */
+export function passkeyFailure(error: unknown): PasskeyFailure {
+  const name = (error as { name?: string } | null)?.name
+  if (name === 'NotAllowedError' || name === 'AbortError') return 'cancelled'
+  if (name === 'InvalidStateError') return 'exists'
+  if (name === 'SecurityError') return 'configuration'
+  return 'failed'
 }
 
 function decode(value: string) {
@@ -91,8 +117,11 @@ export const additionalAuth = {
     return command<{ redirect: string }>('/session/passkey/verify', { challenge_id, credential: await publicKeyCredential('request', options) })
   },
   factors: () => query<Factor[]>('/me/factors'),
-  enrollFactor: (factor_type: EnrollableFactor, phone: string) => command<{ id: string; totp?: { secret: string } }>('/me/factors',
-    { factor_type, ...(factor_type === 'phone' ? { phone } : {}) }),
+  enrollFactor: (factor_type: EnrollableFactor, options: { phone?: string; friendlyName?: string } = {}) => command<EnrolledFactor>('/me/factors', {
+    factor_type,
+    ...(factor_type === 'phone' && options.phone ? { phone: options.phone } : {}),
+    ...(options.friendlyName?.trim() ? { friendly_name: options.friendlyName.trim() } : {}),
+  }),
   removeFactor: (id: string) => remove(`/me/factors/${encodeURIComponent(id)}`),
   challengeFactor: (id: string) => command<FactorChallenge>(`/me/factors/${encodeURIComponent(id)}/challenge`),
   async verifyFactor(id: string, challenge: FactorChallenge, code = '') {

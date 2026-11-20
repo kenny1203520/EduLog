@@ -80,6 +80,10 @@ try {
   const factor = await request('/factors', {
     method: 'POST', token: access, body: { factor_type: 'totp', friendly_name: 'EduLog smoke test' },
   })
+  // The settings UI renders these as the enrollment QR code and mobile deep link.
+  // GoTrue returns raw SVG markup; the UI wraps it in a data URI.
+  assert.match(factor.totp.qr_code, /<svg[\s>]/)
+  assert.match(factor.totp.uri, /^otpauth:\/\/totp\//)
   const endpoint = '/factors/' + factor.id
   const challenge = await request(endpoint + '/challenge', { method: 'POST', token: access, body: {} })
   const verified = await request(endpoint + '/verify', {

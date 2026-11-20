@@ -33,5 +33,20 @@
   "grants_empty": "目前沒有應用程式擁有你的身分資料授權。",
   "revoke": "撤銷",
   "confirm_revoke": "確認撤銷",
-  "invalid_settings": "請輸入有效的應用程式名稱及至少一個 HTTPS 回呼網址。"
+  "invalid_settings": "請輸入有效的應用程式名稱及至少一個 HTTPS 回呼網址。",
+  "apps_description": "讓其他應用程式以「使用 EduLog 登入」驗證使用者身分。",
+  "admin_disabled_hint": "請在部署環境設定後重新建立 auth 與 API 容器：",
+  "server_not_ready": "GoTrue 尚未提供 OAuth 伺服器端點。請確認 auth 容器已用新設定重新建立，且已設定非對稱 JWT 簽章。",
+  "apps_empty_hint": "新增應用程式後，會取得 Client ID 與 Client Secret，讓對方設定「使用 EduLog 登入」。",
+  "type_public": "公開用戶端",
+  "type_confidential": "機密用戶端",
+  "register_title": "新增 OAuth 應用程式",
+  "register_description": "回呼網址必須完全符合應用程式送出的網址。",
+  "registered_title": "應用程式已建立",
+  "callbacks_hint": "只接受 https:// 開頭的網址，最多 10 個。",
+  "copy": "複製",
+  "copied": "已複製",
+  "secret_saved_confirm": "我已將 Client Secret 保存在安全的地方。",
+  "remove_title": "移除應用程式？",
+  "remove_message": "移除「{app}」後，它將無法再用 EduLog 登入，已核發的授權也會失效。"
 }

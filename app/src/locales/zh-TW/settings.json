@@ -1,6 +1,8 @@
 {
     "login_providers": {
         "title": "登入供應商",
+        "description": "管理使用者可用來登入 EduLog 的第三方帳號供應商。",
+        "enable_hint": "請在部署環境設定後重新啟動 API：",
         "builtin": "已啟用的內建供應商",
         "no_builtin": "目前未啟用內建 OAuth 供應商。",
         "enabled": "已啟用",
