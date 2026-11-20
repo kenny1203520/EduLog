@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, useId, useTemplateRef, watch } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, useId, useTemplateRef, watch } from 'vue'
 
 /**
  * Native modal <dialog>: the browser provides the top layer, focus trap,
@@ -14,11 +14,15 @@ const dialog = useTemplateRef<HTMLDialogElement>('dialog')
 const titleId = useId()
 const descriptionId = useId()
 
-function sync(open: boolean) {
+/** Opens the modal, then moves focus to the field marked `data-autofocus` (if any) instead of the close button. */
+async function sync(open: boolean) {
     const element = dialog.value
     if (!element) return
-    if (open && !element.open) element.showModal()
-    else if (!open && element.open) element.close()
+    if (open && !element.open) {
+        element.showModal()
+        await nextTick()
+        element.querySelector<HTMLElement>('[data-autofocus]')?.focus()
+    } else if (!open && element.open) element.close()
 }
 watch(() => props.open, sync, { flush: 'post' })
 onMounted(() => sync(props.open))

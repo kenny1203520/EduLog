@@ -108,7 +108,7 @@ onBeforeUnmount(discardUnverified)
         <form v-if="step === 'details'" class="space-y-4" @submit.prevent="start">
             <div>
                 <label :for="nameId" :class="ui.label">{{ $t('auth.authenticator_name') }}</label>
-                <input :id="nameId" v-model="name" autofocus maxlength="120" autocomplete="off" :placeholder="$t(`auth.authenticator_name_placeholder_${type}`)" :class="ui.input">
+                <input :id="nameId" v-model="name" data-autofocus maxlength="120" autocomplete="off" :placeholder="$t(`auth.authenticator_name_placeholder_${type}`)" :class="ui.input">
                 <p class="mt-1 text-xs text-gray-500">{{ $t('auth.authenticator_name_hint') }}</p>
             </div>
             <div v-if="type === 'phone'">

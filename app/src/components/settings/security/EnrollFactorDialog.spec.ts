@@ -40,6 +40,13 @@ beforeEach(() => {
 afterEach(() => { window.matchMedia = originalMatchMedia })
 
 describe('EnrollFactorDialog', () => {
+    it('focuses the name field rather than the close button when it opens', async () => {
+        const wrapper = render()
+        await flushPromises()
+        expect(document.activeElement).toBe(wrapper.get('input').element)
+        wrapper.unmount()
+    })
+
     it('wraps the raw SVG that GoTrue returns into an image data URI', async () => {
         const svg = '<?xml version="1.0"?>\n<svg width="231" height="231" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="3" height="3"/></svg>'
         service.enrollFactor.mockResolvedValue({ id: 'factor-1', totp: { secret: 'JBSWY3DPEHPK3PXP', qr_code: svg, uri: 'otpauth://totp/EduLog:demo' } })

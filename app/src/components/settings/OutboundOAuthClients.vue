@@ -163,7 +163,7 @@ async function remove() {
             <form v-if="!issued" class="space-y-4" @submit.prevent="register">
                 <div>
                     <label :for="nameId" :class="ui.label">{{ t('oauthServer.app_name') }}</label>
-                    <input :id="nameId" v-model="newName" type="text" autofocus required maxlength="120" :disabled="busy" autocomplete="off" :class="ui.input">
+                    <input :id="nameId" v-model="newName" type="text" data-autofocus required maxlength="120" :disabled="busy" autocomplete="off" :class="ui.input">
                 </div>
                 <div>
                     <label :for="callbacksId" :class="ui.label">{{ t('oauthServer.callbacks') }}</label>

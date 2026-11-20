@@ -64,7 +64,7 @@ async function verify() {
     <form class="space-y-3" :aria-busy="busy" @submit.prevent="verify">
         <div v-if="showInput" class="space-y-1.5">
             <label :for="inputId" class="block text-sm font-bold text-gray-700">{{ $t(recovery ? 'auth.recovery_code' : 'auth.verification_code') }}</label>
-            <input :id="inputId" ref="input" :value="code" required :autofocus="autofocus"
+            <input :id="inputId" ref="input" :value="code" required
                 :pattern="recovery ? undefined : '[0-9]{4,10}'" :inputmode="recovery ? 'text' : 'numeric'"
                 :maxlength="recovery ? 128 : 10" autocomplete="one-time-code" spellcheck="false" :disabled="busy"
                 :aria-invalid="error" :aria-describedby="error ? errorId : undefined"
