@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { safeExternalHref } from '@/utils/safeExternalHref'
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useToast } from "vue-toastification";
@@ -297,8 +298,8 @@ async function refreshData() {
                                     </svg>
                                     {{ $t("student.internal_courses.view_reports") }}
                                 </router-link>
-                                <a v-if="e.externalLink"
-                                    :href="e.externalLink"
+                                <a v-if="safeExternalHref(e.externalLink)"
+                                    :href="safeExternalHref(e.externalLink) || undefined"
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     class="inline-flex min-h-11 w-full justify-center whitespace-normal text-center leading-tight px-3 py-2 bg-white border border-blue-100 text-blue-600 text-sm font-black rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-all shadow-sm cursor-pointer active:scale-95 items-center gap-1.5">

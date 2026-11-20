@@ -9,7 +9,7 @@ import { holidayCreateSchema, holidayUpdateSchema } from '../routes/rest/holiday
 import { teacherAssignmentCreateSchema } from '../routes/rest/teacherAssignmentRouter.js'
 import { conflictBody, transferBody, repairBody, cancelBody } from '../routes/rest/transferRouter.js'
 import { permissionForResource } from '../auth/authorization.js'
-import { installationBody, pairStartBody, pairClaimBody, connectionNameBody } from '../routes/extension/extensionIntegrationRouter.js'
+import { installationBody, pairStartBody, pairClaimBody, pairApproveBody, connectionNameBody } from '../routes/extension/extensionIntegrationRouter.js'
 import { importBatch, importJob, pendingPush, sourceMapping, jobStatus, catalogQuery, catalogResolve, memoryConfirmation, fieldMappingResolve, fieldMappingConfirm } from '../routes/extension/extensionWorkspaceRouter.js'
 
 const errorResponses = {
@@ -134,7 +134,7 @@ export function buildOpenApi() {
   paths['/api/extension/pair-requests'] = { post: { operationId: 'extensionPairStart', parameters: [extensionOrigin], requestBody: extensionBody(pairStartBody), description: 'Installation metadata is optional for older clients; supply all five metadata fields together. A random installation UUID identifies a browser profile, not a physical device.', responses: { '201': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } }
   paths['/api/extension/pair-requests/{id}/claim'] = { post: { operationId: 'extensionPairClaim', parameters: [extensionId, extensionOrigin], requestBody: extensionBody(pairClaimBody), description: 'Atomically claims an approved request and replaces prior authorizations for the same user, extension origin and known installation. Plaintext token is returned once.', responses: extensionResponse } }
   paths['/api/extension/pair-requests/{id}/approval'] = { get: { operationId: 'extensionPairApproval', security: [{ cookieAuth: [] }], parameters: [extensionId], description: 'Includes approval status and claimed token ID so the UI can wait for claim. Approved and claimed requests are restricted to their approving user.', responses: extensionResponse } }
-  paths['/api/extension/pair-requests/{id}/approve'] = { post: { operationId: 'extensionPairApprove', security: [{ cookieAuth: [] }], parameters: [extensionId], requestBody: extensionBody(connectionNameBody.partial()), responses: extensionResponse } }
+  paths['/api/extension/pair-requests/{id}/approve'] = { post: { operationId: 'extensionPairApprove', security: [{ cookieAuth: [] }], parameters: [extensionId], description: 'Requires the six-digit confirmation code shown by the extension. A wrong code revokes the request; the extension must start a new one.', requestBody: extensionBody(pairApproveBody), responses: extensionResponse } }
   paths['/api/extension/tokens'] = { get: { operationId: 'extensionConnections', security: [{ cookieAuth: [] }], description: 'Current user active authorizations with installation label, browser/OS, connection ID and timestamps; no token hashes.', responses: extensionResponse } }
   paths['/api/extension/tokens/{id}'] = {
     patch: { operationId: 'extensionConnectionRename', security: [{ cookieAuth: [] }], parameters: [extensionId], requestBody: extensionBody(connectionNameBody), responses: extensionResponse },

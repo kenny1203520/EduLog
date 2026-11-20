@@ -3,6 +3,14 @@ import { apiV1Client, registerApiAuthRecovery } from '@/services/api/ApiV1Client
 export type BffUser = { id: string; email?: string | null; account_status?: 'active' | 'pending'; full_name?: string | null; nickname?: string | null; display_name?: string | null; user_metadata?: { full_name?: string; [key: string]: unknown }; [key: string]: unknown }
 export type BffSession = { user: BffUser }
 type AuthResult = { user: BffUser | null; session: BffSession | null; error: Error | null }
+/** Idle sign-out after this long without interaction; the server's value replaces it once known. */
+let idleTimeoutMs = 8 * 60 * 60 * 1000
+/** The idle timeout the server enforces on session refresh. */
+export function sessionIdleTimeoutMs() { return idleTimeoutMs }
+function acceptSessionMeta(meta: unknown) {
+    const seconds = (meta as { session?: { idle_timeout_seconds?: unknown } } | null | undefined)?.session?.idle_timeout_seconds
+    if (typeof seconds === 'number' && Number.isFinite(seconds) && seconds >= 600) idleTimeoutMs = seconds * 1000
+}
 type AuthSubscription = { data: { subscription: { unsubscribe: () => void } } }
 export class AuthService {
   private static instance: AuthService
@@ -16,12 +24,14 @@ export class AuthService {
   async login(email: string, password: string): Promise<AuthResult> {
     try {
       const result = await apiV1Client.post<BffUser>('/auth/login', { email, password })
+      acceptSessionMeta(result.meta)
       return { user: result.data ?? null, session: result.data ? { user: result.data } : null, error: null }
     } catch (error) { return { user: null, session: null, error: error instanceof Error ? error : new Error('Authentication request failed') } }
   }
   async refresh(): Promise<AuthResult> {
     try {
       const result = await apiV1Client.post<BffUser>('/auth/refresh', {})
+      acceptSessionMeta(result.meta)
       return { user: result.data ?? null, session: result.data ? { user: result.data } : null, error: null }
     } catch (error) { return { user: null, session: null, error: error instanceof Error ? error : new Error('Authentication request failed') } }
   }
@@ -32,6 +42,7 @@ export class AuthService {
   async getSession(): Promise<{ session: BffSession | null; error: Error | null }> {
     try {
       const result = await apiV1Client.get<BffUser>('/auth/me')
+      acceptSessionMeta(result.meta)
       return { session: result.data ? { user: result.data } : null, error: null }
     } catch (error) {
       const authError = error instanceof Error ? error : new Error('Authentication request failed')

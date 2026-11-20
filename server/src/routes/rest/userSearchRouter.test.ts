@@ -54,4 +54,28 @@ describe('user search directory', () => {
       last_sign_in_at: null,
     }])
   })
+
+  it('parses only_unlinked as the literal true or false', async () => {
+    const tables: string[] = []
+    const app = express()
+    app.use((req, _res, next) => {
+      const query = {
+        select() { return this }, ilike() { return this }, in: async () => ({ data: [], error: null }),
+        limit: async () => ({ data: [{ id: 'u1', email: 'a@example.test', display_name: null, account_status: 'active', disabled_at: null, disabled_reason: null, created_at: '2026-01-01T00:00:00Z' }], error: null }),
+        then(resolve: (value: unknown) => void) { resolve({ data: [], error: null }) },
+      }
+      Object.assign(req, { db: { rpc: vi.fn().mockResolvedValue({ data: true, error: null }) }, adminDb: { from: (table: string) => { tables.push(table); return query } }, user: { id: 'admin' }, requestId: 'r', traceId: 't' })
+      next()
+    })
+    app.use(createUserSearchRouter())
+    app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => res.status(422).json({ error: String(error) }))
+
+    expect((await request(app).get('/search?query=a&only_unlinked=false')).status).toBe(200)
+    expect(tables).not.toContain('teacher_records')
+    expect((await request(app).get('/search?query=a&only_unlinked=true')).status).toBe(200)
+    expect(tables).toContain('teacher_records')
+    for (const value of ['1', 'yes', 'FALSE', '']) {
+      expect((await request(app).get(`/search?query=a&only_unlinked=${value}`)).status).toBe(422)
+    }
+  })
 })

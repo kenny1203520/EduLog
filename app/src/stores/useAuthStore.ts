@@ -38,12 +38,12 @@ export const useAuthStore = defineStore('auth', () => {
   // Unsaved report drafts hold student data; they must not outlive the
   // person's session on a shared device. An expired session keeps them so the
   // same teacher can restore after signing in again.
-  function clearLocalDrafts() {
-    void localDraftStore.clearAll().catch((error) => console.warn('Local report drafts could not be cleared', error))
+  async function clearLocalDrafts() {
+    await localDraftStore.clearAll().catch((error) => console.warn('Local report drafts could not be cleared', error))
   }
 
   function markAccountDisabled() {
-    clearLocalDrafts()
+    void clearLocalDrafts()
     clearSession()
     accountDisabled.value = true
   }
@@ -87,11 +87,18 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  /**
+   * Signs out. Local drafts are cleared even when the logout request fails:
+   * the person chose to leave this device, so its drafts must not stay behind.
+   */
   async function signOut() {
-    const { error } = await authService.logout()
-    if (error) throw error
-    clearLocalDrafts()
-    clearSession()
+    try {
+      const { error } = await authService.logout()
+      if (error) throw error
+      clearSession()
+    } finally {
+      await clearLocalDrafts()
+    }
   }
 
   return {

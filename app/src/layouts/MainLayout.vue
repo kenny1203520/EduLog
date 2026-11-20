@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useCapabilityStore } from '@/stores/useCapabilityStore'
 import { useRouter } from 'vue-router'
@@ -9,6 +9,8 @@ import { useFeedback } from '@/composables/useFeedback'
 import { useAccountIdentity } from '@/composables/useAccountIdentity'
 import { inExtensionPanel } from '@/composables/useExtensionPanel'
 import { usePendingAccounts } from '@/composables/usePendingAccounts'
+import { useIdleSignOut } from '@/composables/useIdleSignOut'
+import { authService, sessionIdleTimeoutMs } from '@/services/auth/AuthService'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -56,6 +58,19 @@ onUnmounted(() => {
     window.removeEventListener('keydown', onAccountKeydown)
 })
 
+// Sign out after 8 hours without interaction, warning five minutes ahead so open reports can save.
+const idle = useIdleSignOut({
+    idleTimeoutMs: sessionIdleTimeoutMs,
+    keepAlive: () => authService.getSession(),
+    onExpire: async () => {
+        await auth.signOut().catch(() => undefined)
+        auth.clearSession()
+        await router.push({ path: '/login', query: { reason: 'idle' } })
+    },
+})
+const idleMinutes = computed(() => Math.floor(idle.secondsLeft.value / 60))
+const idleSeconds = computed(() => idle.secondsLeft.value % 60)
+
 async function handleLogout() {
     if (logoutBusy.value) return
     logoutBusy.value = true
@@ -73,6 +88,11 @@ async function handleLogout() {
 
 <template>
     <div class="flex h-dvh min-h-dvh overflow-hidden bg-gray-50">
+        <div v-if="idle.warning.value" class="fixed inset-x-3 top-3 z-50 mx-auto max-w-lg rounded-2xl border border-amber-300 bg-amber-50 p-4 text-amber-950 shadow-xl" role="alertdialog" aria-live="assertive" aria-labelledby="idle-warning-title" aria-describedby="idle-warning-body" data-testid="idle-warning">
+            <p id="idle-warning-title" class="font-bold">{{ $t('auth.idle_warning_title') }}</p>
+            <p id="idle-warning-body" class="mt-1 text-sm">{{ $t('auth.idle_warning_body', { minutes: idleMinutes, seconds: idleSeconds }) }}</p>
+            <button type="button" class="mt-3 min-h-11 rounded-xl bg-amber-700 px-4 py-2 text-sm font-bold text-white hover:bg-amber-800 focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-amber-700" @click="idle.staySignedIn()">{{ $t('auth.idle_stay') }}</button>
+        </div>
         <!-- Mobile Header -->
         <div v-if="!panel"
             class="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-100 z-30 flex items-center px-4 justify-between shadow-sm">

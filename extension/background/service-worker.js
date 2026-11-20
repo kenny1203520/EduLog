@@ -37,7 +37,8 @@ chrome.storage.onChanged?.addListener((changes, area) => {
 async function verifyIntegrationStatus() {
   const { edulogExtension } = await chrome.storage.local.get('edulogExtension')
   const metadata = { origin: edulogExtension?.origin || null, settingsUrl: validSettingsUrl(edulogExtension?.settingsUrl), lastVerifiedAt: edulogExtension?.lastVerifiedAt || null }
-  if (edulogExtension?.pending) return { ...metadata, status: new Date(edulogExtension.pending.expiresAt).getTime() > Date.now() ? 'pending' : 'pairing-expired' }
+  // A pending request saved before confirmation codes existed can no longer be approved.
+  if (edulogExtension?.pending) return { ...metadata, status: new Date(edulogExtension.pending.expiresAt).getTime() > Date.now() && /^\d{6}$/.test(edulogExtension.pending.confirmationCode ?? '') ? 'pending' : 'pairing-expired' }
   if (!edulogExtension?.origin || !edulogExtension?.token) return { ...metadata, status: 'not-connected' }
   if (!(new Date(edulogExtension.tokenExpiresAt).getTime() > Date.now())) return { ...metadata, status: 'expired' }
   try {

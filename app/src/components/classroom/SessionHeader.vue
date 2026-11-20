@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { safeExternalHref } from '@/utils/safeExternalHref'
 import RealtimeStatusBadge, { type RealtimeBadgeTone } from '@/components/ui/RealtimeStatusBadge.vue'
 import TimeZoneSelect from '@/components/ui/TimeZoneSelect.vue'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
@@ -77,7 +78,7 @@ const preferences = usePreferencesStore()
                             <span class="whitespace-nowrap text-[10px] font-black uppercase tracking-wide text-gray-400">{{ $t('classroom.session_time_zone') }}</span>
                             <span class="min-w-0 [overflow-wrap:anywhere]">{{ DateUtils.formatTimeZoneLabel(session.time_zone || preferences.timeZone, preferences.locale) }}</span>
                         </span>
-                        <a v-if="session.external_link" :href="session.external_link" target="_blank"
+                        <a v-if="safeExternalHref(session.external_link)" :href="safeExternalHref(session.external_link) || undefined" target="_blank"
                             rel="noopener noreferrer" :title="session.external_link"
                             class="inline-flex max-w-full items-center gap-1.5 whitespace-nowrap rounded-xl bg-emerald-50 px-3 py-2 text-emerald-700 ring-1 ring-emerald-100 transition hover:bg-emerald-100">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" fill="none"
@@ -87,7 +88,7 @@ const preferences = usePreferencesStore()
                             </svg>
                             {{ $t('classroom.external_link') }}
                         </a>
-                        <a v-if="session.classroom?.external_link" :href="session.classroom.external_link"
+                        <a v-if="safeExternalHref(session.classroom?.external_link)" :href="safeExternalHref(session.classroom?.external_link) || undefined"
                             target="_blank" rel="noopener noreferrer" :title="session.classroom.external_link"
                             class="inline-flex max-w-full items-center gap-1.5 whitespace-nowrap rounded-xl bg-blue-50 px-3 py-2 text-blue-700 ring-1 ring-blue-100 transition hover:bg-blue-100">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" fill="none"

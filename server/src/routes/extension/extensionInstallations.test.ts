@@ -37,8 +37,10 @@ beforeEach(() => { accountStatus.assertUserActive.mockResolvedValue('active') })
 describe('extension installations API', () => {
   it('accepts complete installation metadata and rejects partial identity', async () => {
     const { app, q } = setup()
-    expect((await request(app).post('/api/extension/pair-requests').set('Origin',origin).send({ code_challenge: 'a'.repeat(64), ...installation })).status).toBe(201)
-    expect(q.insert).toHaveBeenCalledWith({ extension_origin: origin, code_challenge: 'a'.repeat(64), ...installation })
+    const created = await request(app).post('/api/extension/pair-requests').set('Origin',origin).send({ code_challenge: 'a'.repeat(64), ...installation })
+    expect(created.status).toBe(201)
+    expect(created.body.data.confirmation_code).toMatch(/^\d{6}$/)
+    expect(q.insert).toHaveBeenCalledWith({ extension_origin: origin, code_challenge: 'a'.repeat(64), ...installation, confirmation_code: created.body.data.confirmation_code })
     expect((await request(app).post('/api/extension/pair-requests').set('Origin',origin).send({ code_challenge: 'a'.repeat(64), installation_id: installation.installation_id })).status).toBe(422)
   })
   it('issues credentials only through the atomic claim RPC with hashes', async () => {
@@ -87,5 +89,50 @@ describe('extension installations API', () => {
     expect(response.status).toBe(200)
     expect(rpc).toHaveBeenCalledWith('bind_web_extension_installation', { p_token_id: id, p_installation_id: installation.installation_id, p_device_name: installation.device_name, p_browser_name: installation.browser_name, p_platform_name: installation.platform_name, p_extension_version: '0.1.0' })
     expect((await request(app).patch('/api/extension/v1/installation').set('Authorization','Bearer ' + 'a'.repeat(64)).send({ ...installation, token_id: 'someone-else' })).status).toBe(422)
+  })
+})
+
+describe('extension pairing confirmation', () => {
+  const pending = { id, status: 'pending', user_id: null, extension_origin: origin, expires_at: '2099-01-01T00:00:00Z', confirmation_code: '042917' }
+  it('generates a fresh six-digit code for each pair request', async () => {
+    const codes = new Set<string>()
+    for (let i = 0; i < 5; i++) {
+      const { app } = setup()
+      const response = await request(app).post('/api/extension/pair-requests').set('Origin', origin).send({ code_challenge: 'a'.repeat(64) })
+      expect(response.body.data.confirmation_code).toMatch(/^\d{6}$/)
+      codes.add(response.body.data.confirmation_code)
+    }
+    expect(codes.size).toBeGreaterThan(1)
+  })
+  it('shows the code on the approval page only while the request is pending', async () => {
+    expect((await request(setup(pending).app).get('/api/extension/pair-requests/' + id + '/approval')).body.data.confirmation_code).toBe('042917')
+    const approved = await request(setup({ ...pending, status: 'approved', user_id: user }).app).get('/api/extension/pair-requests/' + id + '/approval')
+    expect(approved.body.data.confirmation_code).toBeNull()
+  })
+  it('requires the confirmation code to approve', async () => {
+    const { app, q } = setup(pending)
+    expect((await request(app).post('/api/extension/pair-requests/' + id + '/approve').send({ device_name: 'Office' })).status).toBe(422)
+    expect((await request(app).post('/api/extension/pair-requests/' + id + '/approve').send({ confirmation_code: '12345' })).status).toBe(422)
+    expect(q.update).not.toHaveBeenCalled()
+  })
+  it('approves a matching code bound to that code', async () => {
+    const { app, q } = setup(pending)
+    const response = await request(app).post('/api/extension/pair-requests/' + id + '/approve').send({ device_name: 'Office', confirmation_code: '042917' })
+    expect(response.status).toBe(200)
+    expect(q.update).toHaveBeenCalledWith({ user_id: user, status: 'approved', approved_at: expect.any(String), device_name: 'Office' })
+    expect(q.eq).toHaveBeenCalledWith('confirmation_code', '042917')
+  })
+  it('revokes the request on a wrong code so it cannot be guessed', async () => {
+    const { app, q } = setup(pending)
+    const response = await request(app).post('/api/extension/pair-requests/' + id + '/approve').send({ confirmation_code: '000000' })
+    expect(response.status).toBe(409)
+    expect(response.body.code).toBe('PAIRING_CODE_MISMATCH')
+    expect(q.update).toHaveBeenCalledWith({ status: 'revoked' })
+    expect(q.update).not.toHaveBeenCalledWith(expect.objectContaining({ status: 'approved' }))
+  })
+  it('refuses requests created before codes existed, and expired or used requests', async () => {
+    expect((await request(setup({ ...pending, confirmation_code: null }).app).post('/api/extension/pair-requests/' + id + '/approve').send({ confirmation_code: '042917' })).status).toBe(409)
+    expect((await request(setup({ ...pending, expires_at: '2000-01-01T00:00:00Z' }).app).post('/api/extension/pair-requests/' + id + '/approve').send({ confirmation_code: '042917' })).status).toBe(404)
+    expect((await request(setup({ ...pending, status: 'claimed' }).app).post('/api/extension/pair-requests/' + id + '/approve').send({ confirmation_code: '042917' })).status).toBe(404)
   })
 })

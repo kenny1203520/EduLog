@@ -1,0 +1,37 @@
+# gitleaks fingerprints for verified false positives (commit:file:rule:line).
+# Each entry was checked by hand; add new entries only after the same check.
+#
+# - .env.example / supabase/.env.example / supabase_docker/.env.example and the
+#   early app/src/lib/supabase.ts: Supabase self-hosting demo values published
+#   upstream (JWTs carry iss "supabase-demo"; SECRET_KEY_BASE and the S3
+#   protocol key are the upstream example defaults). Real deployments must
+#   regenerate them; see docs/deployment/environment.md.
+# - .github/workflows/api-service.yml: fixed CI-only cookie secret
+#   (0123456789abcdef...) used to validate compose overlays.
+# - server/src/routes/rest/aiMeRouter.test.ts, server/src/extensionIntegrationRouter.test.ts:
+#   test fixtures (fake OpenRouter key, fixed UUID).
+# - extension/history-workbench.js: minified UI code (`key=r.skipDecision...`),
+#   not a credential.
+296d10cb3597e5dbba3e3b01ed1f1bf4918ec93a:supabase/.env.example:generic-api-key:62
+38c742db8c697343d87d234ee97efcd320e64f1c:extension/history-workbench.js:generic-api-key:104
+49ed0b377e7871039b178b776a3caa3f149dcac4:app/src/lib/supabase.ts:jwt:4
+49ed0b377e7871039b178b776a3caa3f149dcac4:supabase_docker/.env.example:generic-api-key:12
+49ed0b377e7871039b178b776a3caa3f149dcac4:supabase_docker/.env.example:jwt:8
+49ed0b377e7871039b178b776a3caa3f149dcac4:supabase_docker/.env.example:jwt:9
+51a55873fa1f0dbabf1a2d392202f67e2bc42896:extension/history-workbench.js:generic-api-key:104
+5f7d65bd8fc2a019255b9468e3cbd202f3016d9a:server/src/routes/rest/aiMeRouter.test.ts:generic-api-key:89
+695a125ba549400b7af1b127c05cbc471f33873d:.github/workflows/api-service.yml:generic-api-key:78
+8c04be3ec8ca0e69bc03cbe9931b5174864f6a75:.github/workflows/api-service.yml:generic-api-key:46
+9ad59178f788d9709514f4563e124e7ff19b7438:server/src/extensionIntegrationRouter.test.ts:generic-api-key:66
+9eafac170cf1896d3479693fdfbd03bdd6fa0c25:.env.example:generic-api-key:48
+9eafac170cf1896d3479693fdfbd03bdd6fa0c25:.env.example:generic-api-key:62
+9eafac170cf1896d3479693fdfbd03bdd6fa0c25:.env.example:jwt:21
+9eafac170cf1896d3479693fdfbd03bdd6fa0c25:.env.example:jwt:22
+cac0f7ec7c3c47db2f23c503ccbffaf27de17f80:supabase/.env.example:generic-api-key:48
+cac0f7ec7c3c47db2f23c503ccbffaf27de17f80:supabase/.env.example:generic-api-key:62
+cac0f7ec7c3c47db2f23c503ccbffaf27de17f80:supabase/.env.example:jwt:21
+cac0f7ec7c3c47db2f23c503ccbffaf27de17f80:supabase/.env.example:jwt:22
+da66304bb4e68376d30ea0f7921f8c5ed22d529d:.env.example:generic-api-key:48
+da66304bb4e68376d30ea0f7921f8c5ed22d529d:.env.example:generic-api-key:62
+da66304bb4e68376d30ea0f7921f8c5ed22d529d:.env.example:jwt:21
+da66304bb4e68376d30ea0f7921f8c5ed22d529d:.env.example:jwt:22

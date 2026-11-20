@@ -76,12 +76,28 @@ onMounted(() => {
     // A failed OAuth sign-in or an expired email link comes back here.
     if (route.query.error === 'oauth') errorMsg.value = t('auth.error_oauth')
     else if (route.query.error === 'link') errorMsg.value = t('auth.error_link')
+    else if (route.query.reason === 'idle') errorMsg.value = t('auth.idle_signed_out')
     void loadProviders()
 })
 onUnmounted(() => {
     window.removeEventListener('online', onOnline)
     window.removeEventListener('offline', onOffline)
 })
+
+/**
+ * A fixed, translated message for a failed sign-in. The server's own message
+ * is never shown: it is English, may change, and must not hint at whether an
+ * account exists.
+ */
+function loginErrorMessage(error: unknown): string {
+    const code = (error as { code?: string; status?: number } | null)?.code
+    const status = (error as { status?: number } | null)?.status
+    if (code === 'MFA_REQUIRED') return ''
+    if (code === 'AUTH_INVALID' || status === 401) return t('auth.error_invalid_credentials')
+    if (code === 'ACCOUNT_DISABLED') return t('auth.account_disabled_message')
+    if (code === 'RATE_LIMITED' || status === 429) return t('errors.rate_limited')
+    return t('auth.error_unexpected')
+}
 
 async function handleLogin() {
     loading.value = true
@@ -90,19 +106,9 @@ async function handleLogin() {
     try {
         await authStore.signIn(email.value, password.value)
         await router.replace(getSafePostLoginTarget(route.query.redirect, router))
-    } catch (e: any) {
-        const message = e.message || ''
-        if (e.code === 'MFA_REQUIRED') {
-            authStore.mfaRequired = true
-        } else if (message.includes('Invalid login credentials')) {
-            errorMsg.value = t('auth.error_invalid_credentials')
-        } else if (message.includes('Email not confirmed')) {
-            errorMsg.value = t('auth.error_email_not_confirmed')
-        } else if (message.includes('User not found')) {
-            errorMsg.value = t('auth.error_user_not_found')
-        } else {
-            errorMsg.value = message || t('auth.error_unexpected')
-        }
+    } catch (e: unknown) {
+        errorMsg.value = loginErrorMessage(e)
+        if ((e as { code?: string } | null)?.code === 'MFA_REQUIRED') authStore.mfaRequired = true
     } finally {
         loading.value = false
     }

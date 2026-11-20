@@ -6,6 +6,7 @@ import { ApiError, sendError } from '../http/errors.js'
 import { assertUserActive, clearAccessTokenValidation, createAuthenticatedUserClient, createUserClient, refresh, safeUser, signIn, validateAccessToken, verifyCurrentPassword, type SupabaseClients } from '../infra/supabase.js'
 import type { ApiConfig } from '../config/config.js'
 import { measureRequestPhase, setAuditContext } from '../http/context.js'
+import { authAttemptRateLimit } from '../http/rateLimit.js'
 import { createPkcePair, enabledOAuthProviders, exchangeAuthCode, isValidProviderName, OAUTH_PROVIDER_MAX_LENGTH, requestPasswordRecovery, startOAuthAuthorization, verifyEmailLink, type EmailLinkType, type GoTrueSession } from './gotrue.js'
 import { deleteIdentity, readIdentityUser, startIdentityLink } from './gotrue.js'
 import { createOutboundOAuthRouter } from './outboundOAuth.js'
@@ -14,6 +15,7 @@ import { outboundConsentReturn } from './authReturn.js'
 import { authCapabilities } from './capabilities.js'
 import { clearIdentityFlow, identityCallback, identityReturn, readIdentityFlow, setIdentityFlow } from './identityFlow.js'
 import { createMailer, notifyPendingAccount, type Mailer } from '../mail/mailer.js'
+import { BACKGROUND_REQUEST_HEADER, SESSION_ABSOLUTE_MAX_MS, SESSION_IDLE_TIMEOUT_MS, sessionActivity, sessionIdOf, type SessionPolicyState } from './sessionPolicy.js'
 
 const accessCookie = 'edulog_access'
 const refreshCookie = 'edulog_refresh'
@@ -62,15 +64,37 @@ async function safeUserWithProfile(adminClient: SupabaseClients['adminClient'], 
   return { ...safeUser(user as never), full_name: fullName, nickname, display_name: nickname || fullName }
 }
 
+function clearSessionCookies(res: Response) {
+  res.clearCookie(accessCookie, { path: '/' }); res.clearCookie(refreshCookie, { path: '/' }); res.clearCookie(csrfCookie, { path: '/' })
+}
+
 function cookieOptions(config: ApiConfig) {
   return { httpOnly: true, secure: config.COOKIE_SECURE, sameSite: 'lax' as const, path: '/', maxAge: 60 * 60 * 1000 }
 }
 
-function setSession(res: Response, config: ApiConfig, session: { access_token: string; refresh_token: string; expires_in?: number }) {
+/**
+ * Sets the session cookies. The refresh cookie never outlives the session's
+ * absolute cap; a refresh re-sets it with the time that remains, not a fresh 30 days.
+ */
+function setSession(res: Response, config: ApiConfig, session: { access_token: string; refresh_token: string; expires_in?: number }, absoluteExpiresAt?: string) {
   const options = { ...cookieOptions(config), maxAge: Math.max(60, session.expires_in ?? 3600) * 1000 }
+  const remaining = absoluteExpiresAt ? Math.max(1000, Date.parse(absoluteExpiresAt) - Date.now()) : SESSION_ABSOLUTE_MAX_MS
+  const sessionMaxAge = Math.min(SESSION_ABSOLUTE_MAX_MS, remaining)
   res.cookie(accessCookie, session.access_token, options)
-  res.cookie(refreshCookie, session.refresh_token, { ...options, httpOnly: true, maxAge: 30 * 24 * 60 * 60 * 1000 })
-  res.cookie(csrfCookie, crypto.randomBytes(24).toString('hex'), { ...options, httpOnly: false, maxAge: 30 * 24 * 60 * 60 * 1000 })
+  res.cookie(refreshCookie, session.refresh_token, { ...options, httpOnly: true, maxAge: sessionMaxAge })
+  res.cookie(csrfCookie, crypto.randomBytes(24).toString('hex'), { ...options, httpOnly: false, maxAge: sessionMaxAge })
+}
+
+/** Session timing the web app uses to warn before an idle sign-out. */
+function sessionMeta(state?: SessionPolicyState) {
+  return { session: { idle_timeout_seconds: SESSION_IDLE_TIMEOUT_MS / 1000, absolute_expires_at: state?.absoluteExpiresAt ?? null } }
+}
+
+/** Starts the idle and absolute clocks for a new sign-in. Failure must not block sign-in; refresh adopts untracked sessions. */
+async function trackSessionStart(req: Request, admin: SupabaseClients['adminClient'], accessToken: string, userId: string) {
+  const sessionId = sessionIdOf(accessToken)
+  if (!sessionId) return
+  await sessionActivity(admin).start(sessionId, userId).catch(() => req.log.warn({ event: 'session_activity_unavailable' }, 'session_activity_unavailable'))
 }
 
 export function requireAuth(clients: SupabaseClients, config: ApiConfig, options: { allowPending?: boolean; allowLowerAssurance?: boolean } = {}) {
@@ -86,6 +110,9 @@ export function requireAuth(clients: SupabaseClients, config: ApiConfig, options
       req.accessToken = token
       req.db = createUserClient(config, token)
       req.adminDb = clients.adminClient
+      // Requests the user caused keep the session alive; background polling does not.
+      const sessionId = req.header(BACKGROUND_REQUEST_HEADER) === '1' ? null : sessionIdOf(token)
+      if (sessionId) void sessionActivity(clients.adminClient).touch(sessionId, user.id).catch(() => req.log.warn({ event: 'session_activity_unavailable' }, 'session_activity_unavailable'))
       next()
     } catch (error) {
       const mapped = error instanceof ApiError ? error
@@ -138,6 +165,7 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
     if (!userId) throw new Error('AUTH_INVALID')
     const status = await assertUserActive(clients.adminClient, userId, { allowPending: true })
     setSession(res, config, session)
+    await trackSessionStart(req, clients.adminClient, session.access_token, userId)
     clearIdentityFlow(res)
     if (status === 'pending') void notifyPendingAccount(clients.adminClient, mailer, config.EDULOG_WEB_BASE_URL, userId, req.log)
     return status
@@ -304,7 +332,7 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
     }
   })
   /** Always 204, so the answer never tells whether an account exists. */
-  router.post('/recover', async (req, res, next) => {
+  router.post('/recover', authAttemptRateLimit(config, clients.adminClient, 'auth-recover'), async (req, res, next) => {
     try {
       const input = recoverSchema.parse(req.body)
       await requestPasswordRecovery(config, input.email, config.EDULOG_WEB_BASE_URL).catch((error: unknown) => {
@@ -329,7 +357,7 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
       return res.json({ data: { changed: true }, meta: {}, request_id: req.requestId, trace_id: req.traceId })
     } catch (error) { next(error) }
   })
-  router.post('/login', async (req, res, next) => {
+  router.post('/login', authAttemptRateLimit(config, clients.adminClient, 'auth-login'), async (req, res, next) => {
     clearIdentityFlow(res)
     try {
       const input = credentialsSchema.parse(req.body)
@@ -337,8 +365,9 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
       const status = await assertUserActive(clients.adminClient, result.user.id, { allowPending: true })
       setSession(res, config, result.session)
       await ensureSessionAssurance(config, result.session.access_token, result.user)
+      await trackSessionStart(req, clients.adminClient, result.session.access_token, result.user.id)
       if (status === 'pending') void notifyPendingAccount(clients.adminClient, mailer, config.EDULOG_WEB_BASE_URL, result.user.id, req.log)
-      res.json({ data: { ...await safeUserWithProfile(clients.adminClient, result.user), account_status: status }, meta: {}, request_id: req.requestId, trace_id: req.traceId })
+      res.json({ data: { ...await safeUserWithProfile(clients.adminClient, result.user), account_status: status }, meta: sessionMeta(), request_id: req.requestId, trace_id: req.traceId })
     } catch (error) {
       if (error instanceof Error && error.message === 'AUTH_DISABLED') return next(new ApiError(403, 'ACCOUNT_DISABLED', 'This account is disabled'))
       next(error instanceof Error && error.message === 'AUTH_INVALID' ? new ApiError(401, 'AUTH_INVALID', 'Authentication is invalid') : error)
@@ -350,9 +379,18 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
       if (!token) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
       const result = await refresh(config, token)
       const status = await assertUserActive(clients.adminClient, result.user.id, { allowPending: true })
-      setSession(res, config, result.session)
+      // Idle and absolute limits are enforced here, before new tokens reach the browser.
+      const sessionId = sessionIdOf(result.session.access_token)
+      const policy = sessionId ? await sessionActivity(clients.adminClient).check(sessionId, result.user.id) : undefined
+      if (sessionId && policy && !policy.ok) {
+        await clients.adminClient.auth.admin.signOut(result.session.access_token, 'local').catch(() => undefined)
+        await sessionActivity(clients.adminClient).end(sessionId).catch(() => undefined)
+        clearSessionCookies(res)
+        throw new ApiError(401, 'SESSION_EXPIRED', policy.reason === 'idle' ? 'The session ended after a period of inactivity' : 'The session reached its maximum age', undefined, undefined, undefined, { reason: policy.reason })
+      }
+      setSession(res, config, result.session, policy?.absoluteExpiresAt)
       await ensureSessionAssurance(config, result.session.access_token, result.user)
-      res.json({ data: { ...await safeUserWithProfile(clients.adminClient, result.user), account_status: status }, meta: {}, request_id: req.requestId, trace_id: req.traceId })
+      res.json({ data: { ...await safeUserWithProfile(clients.adminClient, result.user), account_status: status }, meta: sessionMeta(policy), request_id: req.requestId, trace_id: req.traceId })
     } catch (error) { next(error instanceof ApiError ? error : new ApiError(401, 'AUTH_INVALID', 'Authentication is invalid')) }
   })
   router.post('/logout', async (req, res, next) => {
@@ -360,8 +398,10 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
     try {
       const token = req.cookies?.[accessCookie]
       if (token) await clients.adminClient.auth.admin.signOut(token).catch(() => undefined)
+      const sessionId = sessionIdOf(token)
+      if (sessionId) await sessionActivity(clients.adminClient).end(sessionId).catch(() => undefined)
       clearAccessTokenValidation(token)
-      res.clearCookie(accessCookie, { path: '/' }); res.clearCookie(refreshCookie, { path: '/' }); res.clearCookie(csrfCookie, { path: '/' })
+      clearSessionCookies(res)
       res.status(204).end()
     } catch (error) { next(error) }
   })
@@ -374,7 +414,7 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig, ma
   router.get('/me', requireAuth(clients, config, { allowPending: true }), async (req, res) => {
     const status = req.accountStatus ?? 'active'
     if (status === 'pending') void notifyPendingAccount(clients.adminClient, mailer, config.EDULOG_WEB_BASE_URL, req.user!.id, req.log)
-    res.json({ data: { ...await safeUserWithProfile(clients.adminClient, req.user!), account_status: status }, meta: {}, request_id: req.requestId, trace_id: req.traceId })
+    res.json({ data: { ...await safeUserWithProfile(clients.adminClient, req.user!), account_status: status }, meta: sessionMeta(), request_id: req.requestId, trace_id: req.traceId })
   })
   router.post('/me/email', requireAuth(clients, config), async (req, res, next) => {
     try {

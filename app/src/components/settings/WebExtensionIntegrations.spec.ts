@@ -20,7 +20,7 @@ async function start(query: Record<string, string> = {}) {
 beforeEach(() => {
   vi.useFakeTimers(); vi.clearAllMocks(); rows = [token]; status = 'pending'
   Object.defineProperty(document, 'hidden', { configurable: true, value: false })
-  mocks.get.mockImplementation(async (path: string) => ({ data: path === '/extension/tokens' ? rows : { id: 'pair', status, device_name: 'Office browser', expires_at: '2099-01-01T00:00:00Z', extension_origin: token.extension_origin, token_id: 'new-token' } }))
+  mocks.get.mockImplementation(async (path: string) => ({ data: path === '/extension/tokens' ? rows : { id: 'pair', status, confirmation_code: status === 'pending' ? '048213' : null, device_name: 'Office browser', expires_at: '2099-01-01T00:00:00Z', extension_origin: token.extension_origin, token_id: 'new-token' } }))
   mocks.post.mockResolvedValue({}); mocks.patch.mockResolvedValue({}); mocks.delete.mockResolvedValue({})
   mocks.replace.mockImplementation(async ({ query }) => { mocks.route.query = query })
   HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', '') }
@@ -30,8 +30,9 @@ afterEach(() => { wrapper?.unmount(); document.body.innerHTML = ''; vi.useRealTi
 describe('browser installation connection management', () => {
   it('waits for claim and adds the connection without page reload', async () => {
     const w = await start({ extension_pair: 'pair' })
+    await w.get('input[type=checkbox]').setValue(true)
     await w.get('form').trigger('submit'); await flushPromises()
-    expect(mocks.post).toHaveBeenCalledWith('/extension/pair-requests/pair/approve', { device_name: 'Office browser' })
+    expect(mocks.post).toHaveBeenCalledWith('/extension/pair-requests/pair/approve', { device_name: 'Office browser', confirmation_code: '048213' })
     expect(mocks.route.query.extension_pair).toBe('pair')
     status = 'claimed'; rows = [token, { ...token, id: 'new-token', device_name: 'Office browser' }]
     await vi.advanceTimersByTimeAsync(2000); await flushPromises()
@@ -81,5 +82,29 @@ describe('browser installation connection management', () => {
     Object.defineProperty(document, 'hidden', { configurable: true, value: false })
     document.dispatchEvent(new Event('visibilitychange')); await flushPromises()
     expect(mocks.get.mock.calls.length).toBeGreaterThan(count)
+  })
+  it('shows the confirmation code and a warning, and approves only after the user confirms the match', async () => {
+    const w = await start({ extension_pair: 'pair' })
+    expect(w.get('[data-testid="pair-confirmation-code"]').text()).toBe('048 213')
+    expect(w.text()).toContain(settings.extension.code_warning)
+    expect(w.get('button[type=submit]').attributes()).toHaveProperty('disabled')
+    await w.get('form').trigger('submit'); await flushPromises()
+    expect(mocks.post).not.toHaveBeenCalled()
+    await w.get('input[type=checkbox]').setValue(true)
+    expect(w.get('button[type=submit]').attributes()).not.toHaveProperty('disabled')
+  })
+  it('explains that a mismatched code cancelled the request', async () => {
+    const w = await start({ extension_pair: 'pair' })
+    mocks.post.mockRejectedValueOnce(Object.assign(new Error('mismatch'), { code: 'PAIRING_CODE_MISMATCH', status: 409 }))
+    await w.get('input[type=checkbox]').setValue(true)
+    await w.get('form').trigger('submit'); await flushPromises()
+    expect(w.get('[role="alert"]').text()).toBe(settings.extension.code_mismatch)
+    expect(w.find('form').exists()).toBe(false)
+  })
+  it('refuses to offer approval for a request without a confirmation code', async () => {
+    mocks.get.mockImplementation(async (path: string) => ({ data: path === '/extension/tokens' ? rows : { id: 'pair', status: 'pending', confirmation_code: null, expires_at: '2099-01-01T00:00:00Z', extension_origin: token.extension_origin } }))
+    const w = await start({ extension_pair: 'pair' })
+    expect(w.text()).toContain(settings.extension.code_missing)
+    expect(w.find('form').exists()).toBe(false)
   })
 })

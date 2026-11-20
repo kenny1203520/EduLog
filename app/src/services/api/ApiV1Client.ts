@@ -1,3 +1,4 @@
+import { isBackgroundActivity } from '@/lib/userActivity'
 export type ApiMeta = Record<string, unknown> | null
 export type ApiEnvelope<T> = { data: T; meta?: ApiMeta; request_id: string; trace_id: string }
 export type ApiErrorBody = { error: { code: string; message: string; request_id: string; trace_id: string; fields?: Record<string, string[]>; details?: { reason?: string } } }
@@ -62,6 +63,8 @@ export class ApiV1Client {
   private async requestAttempt<T>(path: string, options: ApiRequestOptions, allowAuthRecovery: boolean, preservedIdempotencyKey?: string, allowCsrfRetry = true): Promise<ApiEnvelope<T>> {
     const method = (options.method ?? 'GET').toUpperCase(); const requestId = createRequestId(); const headers = new Headers(options.headers)
     headers.set('Accept', 'application/json'); headers.set('X-Request-Id', requestId); headers.set('traceparent', createTraceparent())
+    // Requests made while nobody is using the page must not keep an idle session alive.
+    if (isBackgroundActivity()) headers.set('X-EduLog-Background', '1')
     if (!this.sameOrigin) throw new ApiV1Error(503, { error: { code: 'EXTERNAL_API_DISABLED', message: 'External browser API access is disabled', request_id: requestId, trace_id: '' } })
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && typeof navigator !== 'undefined' && navigator.onLine === false) {
       // Do not queue or pretend to save private business data while offline.

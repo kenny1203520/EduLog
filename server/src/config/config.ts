@@ -69,6 +69,8 @@ const ConfigSchema = z.object({
   // Defaults to SUPABASE_URL when unset.
   SUPABASE_REALTIME_URL: optional(z.url()),
   COOKIE_SECRET: z.string().min(32),
+  // Only checked: production refuses Supabase's published default when Compose passes it through.
+  REALTIME_DB_ENC_KEY: optional(z.string().min(1)),
   COOKIE_SECURE: z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
   AUTH_MANUAL_LINKING_ENABLED: z.enum(['true', 'false']).default('false').transform(value => value === 'true'),
   AUTH_CUSTOM_OAUTH_DISCOVERY_ENABLED: z.enum(['true', 'false']).default('false').transform(value => value === 'true'),
@@ -91,6 +93,14 @@ const ConfigSchema = z.object({
   API_ALLOWED_ORIGINS: originList('API_ALLOWED_ORIGINS', webOrigin),
   API_EXTENSION_ALLOWED_ORIGINS: originList('API_EXTENSION_ALLOWED_ORIGINS', extensionOrigin),
   API_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(120),
+  // Credential and pairing endpoints get a much smaller per-IP and per-email
+  // allowance than the general API limit.
+  API_AUTH_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(10),
+  // Number of reverse proxies in front of the API whose X-Forwarded-For entry
+  // is trusted. The bundled frontend nginx is one hop; an extra TLS proxy
+  // (supabase/docker-compose.caddy.yml or .nginx.yml) makes two. Use 0 only
+  // when clients connect to the API directly.
+  API_TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(1),
   // AES-256-GCM key for AI provider credentials stored in ai_credentials:
   // 32 random bytes, base64 (`openssl rand -base64 32`). Optional so existing
   // deployments boot; AI credential storage stays unavailable until it is set.
@@ -149,5 +159,38 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
   if (config.NODE_ENV === 'production' && new URL(config.EDULOG_WEB_BASE_URL).protocol !== 'https:') {
     throw new Error('Production requires EDULOG_WEB_BASE_URL to use HTTPS')
   }
+  if (config.NODE_ENV === 'production') {
+    const problems = insecureProductionSettings(config)
+    if (problems.length > 0) throw new Error(`Production refuses insecure settings: ${problems.join(', ')}`)
+  }
   return { ...config, corsOrigins: resolveAllowedOrigins(config) }
+}
+
+/** The JWT secret shipped in Supabase's self-hosting example. */
+const DEMO_JWT_SECRET = 'your-super-secret-jwt-token-with-at-least-32-characters-long'
+/** The Realtime encryption key shipped in Supabase's self-hosting example. */
+const DEMO_REALTIME_DB_ENC_KEY = 'supabaserealtime'
+
+/** True for a key signed for Supabase's public demo project (issuer "supabase-demo"). */
+export function isSupabaseDemoKey(key: string): boolean {
+  const payload = key.split('.')[1]
+  if (!payload) return false
+  try {
+    const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as { iss?: unknown }
+    return claims.iss === 'supabase-demo'
+  } catch { return false }
+}
+
+/**
+ * Settings that are fine for a local stack but unsafe in production. Only the
+ * variable names are reported, never their values.
+ */
+export function insecureProductionSettings(config: Pick<ParsedConfig, 'SUPABASE_ANON_KEY' | 'SUPABASE_SERVICE_ROLE_KEY' | 'SUPABASE_JWT_SECRET' | 'REALTIME_DB_ENC_KEY' | 'COOKIE_SECURE'>): string[] {
+  const problems: string[] = []
+  if (isSupabaseDemoKey(config.SUPABASE_ANON_KEY)) problems.push('SUPABASE_ANON_KEY is the Supabase demo key')
+  if (isSupabaseDemoKey(config.SUPABASE_SERVICE_ROLE_KEY)) problems.push('SUPABASE_SERVICE_ROLE_KEY is the Supabase demo key')
+  if (config.SUPABASE_JWT_SECRET === DEMO_JWT_SECRET) problems.push('SUPABASE_JWT_SECRET is the Supabase example secret')
+  if (config.REALTIME_DB_ENC_KEY === DEMO_REALTIME_DB_ENC_KEY) problems.push('REALTIME_DB_ENC_KEY is the Supabase example key')
+  if (!config.COOKIE_SECURE) problems.push('COOKIE_SECURE must be true')
+  return problems
 }

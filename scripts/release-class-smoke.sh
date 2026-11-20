@@ -108,7 +108,7 @@ run api -e SUPABASE_URL=http://gateway:8000 -e SUPABASE_ANON_KEY="$(token anon)"
   -e SUPABASE_SERVICE_ROLE_KEY="$(token service_role)" -e SUPABASE_JWT_SECRET="$secret" \
   -e COOKIE_SECRET=release-smoke-cookie-secret-at-least-32-characters \
   -e EDULOG_WEB_BASE_URL=https://edulog.example.test -e API_ALLOWED_ORIGINS=https://edulog.example.test \
-  -e RATE_LIMIT_STORE=supabase "$api_image"
+  -e COOKIE_SECURE=true -e RATE_LIMIT_STORE=supabase "$api_image"
 run frontend "$frontend_image"
 for attempt in {1..45}; do
   if docker exec "$network-frontend" wget -q -O /dev/null http://127.0.0.1:4173/api/healthz; then break; fi

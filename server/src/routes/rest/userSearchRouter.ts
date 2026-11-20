@@ -3,7 +3,8 @@ import { z } from 'zod'
 import { ApiError } from '../../http/errors.js'
 import { requireAuthorizationDecision } from '../../auth/authorization.js'
 
-const searchSchema = z.object({ query: z.string().trim().min(1).max(200), only_unlinked: z.coerce.boolean().optional() }).strict()
+// only_unlinked is the literal 'true' or 'false'; z.coerce.boolean() would read 'false' as true.
+const searchSchema = z.object({ query: z.string().trim().min(1).max(200), only_unlinked: z.enum(['true', 'false']).optional().transform(value => value === 'true') }).strict()
 
 export function createUserSearchRouter() {
   const router = Router()

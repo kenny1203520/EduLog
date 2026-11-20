@@ -29,6 +29,10 @@ test('the web app base comes only from a plain settings URL', () => {
   assert.equal(frontendBase(['https://', 'user:', 'pw@', 'web.example/dashboard/settings'].join('')), null)
   assert.equal(frontendBase('javascript:alert(1)//dashboard/settings'), null)
   assert.equal(frontendBase('https://web.example/elsewhere'), null)
+  assert.equal(frontendBase('http://web.example/dashboard/settings'), null, 'plain http only for local development')
+  assert.equal(frontendBase('http://localhost:5173/dashboard/settings'), 'http://localhost:5173')
+  assert.equal(frontendBase('http://127.0.0.1:8080/edulog/dashboard/settings'), 'http://127.0.0.1:8080/edulog')
+  assert.equal(frontendBase('http://[::1]:5173/dashboard/settings'), 'http://[::1]:5173')
 })
 
 test('opening calls sidePanel.open synchronously, for that tab only, showing loading first', () => {

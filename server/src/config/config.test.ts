@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
-import { loadConfig } from './config.js'
+import { insecureProductionSettings, isSupabaseDemoKey, loadConfig } from './config.js'
 
 const requiredEnv = {
   SUPABASE_URL: 'http://supabase.test',
@@ -22,7 +22,7 @@ describe('EduLog web base URL configuration', () => {
   })
 
   it('accepts an explicit HTTPS frontend origin in production', () => {
-    expect(loadConfig({ ...requiredEnv, NODE_ENV: 'production', RATE_LIMIT_STORE: 'supabase', EDULOG_WEB_BASE_URL: 'https://edulog.example.test' }).EDULOG_WEB_BASE_URL)
+    expect(loadConfig({ ...requiredEnv, NODE_ENV: 'production', RATE_LIMIT_STORE: 'supabase', COOKIE_SECURE: 'true', EDULOG_WEB_BASE_URL: 'https://edulog.example.test' }).EDULOG_WEB_BASE_URL)
       .toBe('https://edulog.example.test')
   })
 
@@ -32,12 +32,12 @@ describe('EduLog web base URL configuration', () => {
   })
 
   it('rejects explicit HTTP frontend URLs in production', () => {
-    expect(() => loadConfig({ ...requiredEnv, NODE_ENV: 'production', RATE_LIMIT_STORE: 'supabase', EDULOG_WEB_BASE_URL: 'http://edulog.example.test' }))
+    expect(() => loadConfig({ ...requiredEnv, NODE_ENV: 'production', RATE_LIMIT_STORE: 'supabase', COOKIE_SECURE: 'true', EDULOG_WEB_BASE_URL: 'http://edulog.example.test' }))
       .toThrow(/Invalid API configuration: EDULOG_WEB_BASE_URL/)
   })
 
   it('rejects a missing frontend URL in production', () => {
-    expect(() => loadConfig({ ...requiredEnv, NODE_ENV: 'production', RATE_LIMIT_STORE: 'supabase' }))
+    expect(() => loadConfig({ ...requiredEnv, NODE_ENV: 'production', RATE_LIMIT_STORE: 'supabase', COOKIE_SECURE: 'true' }))
       .toThrow(/Invalid API configuration: EDULOG_WEB_BASE_URL/)
   })
 
@@ -129,7 +129,43 @@ describe('CORS origin configuration', () => {
   })
 
   it('fails at startup when production has no explicit origin allowlist', () => {
-    expect(() => loadConfig({ ...base, NODE_ENV: 'production', RATE_LIMIT_STORE: 'supabase', EDULOG_WEB_BASE_URL: 'https://edulog.example.test', API_ALLOWED_ORIGINS: '' }))
+    expect(() => loadConfig({ ...base, NODE_ENV: 'production', RATE_LIMIT_STORE: 'supabase', COOKIE_SECURE: 'true', EDULOG_WEB_BASE_URL: 'https://edulog.example.test', API_ALLOWED_ORIGINS: '' }))
       .toThrow(/explicit API_ALLOWED_ORIGINS/)
+  })
+})
+
+describe('production refuses example secrets', () => {
+  const demoJwt = (role: string) => ['eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9', Buffer.from(JSON.stringify({ role, iss: 'supabase-demo', iat: 1641769200, exp: 1799535600 })).toString('base64url'), 'signature'].join('.')
+  const production = { ...requiredEnv, NODE_ENV: 'production', RATE_LIMIT_STORE: 'supabase', EDULOG_WEB_BASE_URL: 'https://edulog.example.test', COOKIE_SECURE: 'true' }
+
+  it('starts with project-specific secrets and secure cookies', () => {
+    expect(() => loadConfig(production)).not.toThrow()
+  })
+  it.each([
+    ['the demo anon key', { SUPABASE_ANON_KEY: demoJwt('anon') }, 'SUPABASE_ANON_KEY'],
+    ['the demo service-role key', { SUPABASE_SERVICE_ROLE_KEY: demoJwt('service_role') }, 'SUPABASE_SERVICE_ROLE_KEY'],
+    ['the example JWT secret', { SUPABASE_JWT_SECRET: 'your-super-secret-jwt-token-with-at-least-32-characters-long' }, 'SUPABASE_JWT_SECRET'],
+    ['the example Realtime key', { REALTIME_DB_ENC_KEY: 'supabaserealtime' }, 'REALTIME_DB_ENC_KEY'],
+    ['insecure cookies', { COOKIE_SECURE: 'false' }, 'COOKIE_SECURE'],
+  ])('refuses %s', (_label, override, name) => {
+    expect(() => loadConfig({ ...production, ...override })).toThrow(new RegExp(`Production refuses insecure settings: .*${name}`))
+  })
+  it('refuses COOKIE_SECURE left unset in production', () => {
+    const { COOKIE_SECURE: _secure, ...unset } = production
+    expect(() => loadConfig(unset)).toThrow(/COOKIE_SECURE must be true/)
+  })
+  it('never echoes secret values', () => {
+    try { loadConfig({ ...production, SUPABASE_SERVICE_ROLE_KEY: demoJwt('service_role') }) } catch (error) {
+      expect(String(error)).not.toContain('supabase-demo')
+      expect(String(error)).not.toContain('eyJ')
+    }
+  })
+  it('allows the local demo stack outside production', () => {
+    expect(() => loadConfig({ ...production, NODE_ENV: 'development', SUPABASE_ANON_KEY: demoJwt('anon'), COOKIE_SECURE: 'false' })).not.toThrow()
+  })
+  it('recognizes only the demo issuer', () => {
+    expect(isSupabaseDemoKey(demoJwt('anon'))).toBe(true)
+    expect(isSupabaseDemoKey('anon-test-key')).toBe(false)
+    expect(insecureProductionSettings({ SUPABASE_ANON_KEY: 'x', SUPABASE_SERVICE_ROLE_KEY: 'y', SUPABASE_JWT_SECRET: undefined, REALTIME_DB_ENC_KEY: undefined, COOKIE_SECURE: true })).toEqual([])
   })
 })

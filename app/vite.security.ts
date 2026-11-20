@@ -8,13 +8,17 @@ export type ViteAllowedHosts = string[] | true | undefined
 // (enforced by DockerRuntime.contract.spec.ts).
 export const DEFAULT_HSTS_HEADER = 'max-age=31536000; includeSubDomains; preload'
 
+// The browser only talks to its own origin: API calls go to /api, realtime
+// collaboration opens a WebSocket to the same host (/api/realtime), and images
+// are bundled, data: or blob: URLs. CSP Level 3 'self' also covers ws:/wss: on
+// the same host, so no scheme-wide https:/wss: source is needed.
 export const DEFAULT_CSP_HEADER = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https: http://localhost:* http://127.0.0.1:*",
+  "img-src 'self' data: blob:",
   "font-src 'self' data:",
-  "connect-src 'self' https: wss: http://localhost:* ws://localhost:* http://127.0.0.1:* ws://127.0.0.1:*",
+  "connect-src 'self'",
   "manifest-src 'self'",
   "object-src 'none'",
   "base-uri 'self'",
