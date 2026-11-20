@@ -40,6 +40,19 @@ beforeEach(() => {
 afterEach(() => { window.matchMedia = originalMatchMedia })
 
 describe('EnrollFactorDialog', () => {
+    it('wraps the raw SVG that GoTrue returns into an image data URI', async () => {
+        const svg = '<?xml version="1.0"?>\n<svg width="231" height="231" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="3" height="3"/></svg>'
+        service.enrollFactor.mockResolvedValue({ id: 'factor-1', totp: { secret: 'JBSWY3DPEHPK3PXP', qr_code: svg, uri: 'otpauth://totp/EduLog:demo' } })
+        const wrapper = render()
+        await startEnrollment(wrapper)
+
+        const src = wrapper.get('img').attributes('src')!
+        expect(src.startsWith('data:image/svg+xml;charset=utf-8,')).toBe(true)
+        expect(decodeURIComponent(src.split(',').slice(1).join(','))).toBe(svg)
+        expect(wrapper.find('svg[width="231"]').exists()).toBe(false)
+        wrapper.unmount()
+    })
+
     it('offers the otpauth deep link on touch devices only', async () => {
         window.matchMedia = vi.fn().mockReturnValue({ matches: true }) as unknown as typeof window.matchMedia
         const touch = render()

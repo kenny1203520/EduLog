@@ -37,6 +37,12 @@ const touch = typeof window !== 'undefined' && typeof window.matchMedia === 'fun
 const steps: Step[] = ['details', 'verify', 'done']
 const stepIndex = computed(() => steps.indexOf(step.value))
 const factorLabel = computed(() => t(`auth.factor_${props.type}`))
+/** GoTrue returns raw SVG markup; wrap it as a data URI so it renders through <img> (never as live markup). */
+const qrSource = computed(() => {
+    const value = totp.value?.qr_code?.trim()
+    if (!value) return ''
+    return value.startsWith('data:') ? value : `data:image/svg+xml;charset=utf-8,${encodeURIComponent(value)}`
+})
 const groupedSecret = computed(() => totp.value?.secret.match(/.{1,4}/g)?.join(' ') ?? '')
 const canClose = computed(() => !codes.value.length || codesSaved.value)
 
@@ -120,7 +126,7 @@ onBeforeUnmount(discardUnverified)
             <template v-if="totp">
                 <div class="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
                     <div class="shrink-0 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
-                        <img v-if="totp.qr_code" :src="totp.qr_code" :alt="$t('auth.qr_alt')" width="176" height="176" class="h-44 w-44">
+                        <img v-if="qrSource" :src="qrSource" :alt="$t('auth.qr_alt')" width="176" height="176" class="h-44 w-44">
                         <div v-else class="flex h-44 w-44 items-center justify-center text-gray-300"><MethodIcon name="qr" /></div>
                     </div>
                     <div class="min-w-0 flex-1 space-y-3 text-sm text-gray-700">
