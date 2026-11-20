@@ -1,6 +1,8 @@
 {
     "login_providers": {
         "title": "Login providers",
+        "description": "Manage the third-party accounts people can use to sign in to EduLog.",
+        "enable_hint": "Set this in the deployment environment and restart the API:",
         "builtin": "Enabled built-in providers",
         "no_builtin": "No built-in OAuth providers are enabled.",
         "enabled": "Enabled",

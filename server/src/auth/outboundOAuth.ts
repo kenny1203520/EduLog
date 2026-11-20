@@ -23,7 +23,8 @@ const consent = z.object({ action: z.enum(['approve', 'deny']) }).strict()
 const clientSummary = z.object({
   client_id: uuid,
   client_name: z.string(),
-  redirect_uris: z.array(z.string()),
+  // GoTrue (Go) serialises an empty slice as null.
+  redirect_uris: z.array(z.string()).nullable().transform(value => value ?? []),
   client_type: z.enum(['public', 'confidential']),
 })
 const clientRegistration = clientSummary.extend({ client_secret: z.string().min(1) })
@@ -36,9 +37,9 @@ const consentDetails = z.object({
 })
 const grants = z.array(z.object({
   client: consentDetails.shape.client,
-  scopes: z.array(z.string()),
+  scopes: z.array(z.string()).nullable().transform(value => value ?? []),
   granted_at: z.string(),
-}))
+})).nullable().transform(value => value ?? [])
 
 function input<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value)
@@ -96,7 +97,7 @@ export function createOutboundOAuthRouter(config: ApiConfig, activeAccount: Requ
     await requireManagement(req)
     const page = input(z.coerce.number().int().min(1).max(1000).default(1), req.query.page)
     const data = await callGoTrue(config, `/admin/oauth/clients?page=${page}&per_page=50`,
-      z.object({ clients: z.array(clientSummary) }), config.SUPABASE_SERVICE_ROLE_KEY)
+      z.object({ clients: z.array(clientSummary).nullable().transform(value => value ?? []) }), config.SUPABASE_SERVICE_ROLE_KEY)
     sendData(req, res, data)
   })
   router.post('/clients', rateLimit(limitOptions), async (req, res) => {

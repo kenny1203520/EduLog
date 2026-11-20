@@ -33,5 +33,20 @@
   "grants_empty": "No applications have access to your identity.",
   "revoke": "Revoke",
   "confirm_revoke": "Confirm revocation",
-  "invalid_settings": "Enter a valid app name and at least one HTTPS callback URL."
+  "invalid_settings": "Enter a valid app name and at least one HTTPS callback URL.",
+  "apps_description": "Let other applications use \"Sign in with EduLog\" to verify people.",
+  "admin_disabled_hint": "Set this in the deployment environment and recreate the auth and API containers:",
+  "server_not_ready": "GoTrue is not serving OAuth endpoints yet. Recreate the auth container with the new settings and configure asymmetric JWT signing.",
+  "apps_empty_hint": "Adding an application issues a Client ID and Client Secret for its \"Sign in with EduLog\" setup.",
+  "type_public": "Public client",
+  "type_confidential": "Confidential client",
+  "register_title": "Add OAuth application",
+  "register_description": "Callback URLs must match exactly what the application sends.",
+  "registered_title": "Application created",
+  "callbacks_hint": "Only https:// URLs, up to 10.",
+  "copy": "Copy",
+  "copied": "Copied",
+  "secret_saved_confirm": "I have stored the Client Secret somewhere safe.",
+  "remove_title": "Remove application?",
+  "remove_message": "After removing \"{app}\" it can no longer sign people in with EduLog and its grants stop working."
 }
