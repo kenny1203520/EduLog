@@ -22,7 +22,7 @@ test.afterEach(async () => {
   assert.deepEqual(pendingJsdomErrors.splice(0), [], 'unexpected asynchronous JSDOM error')
 })
 
-test('pairing includes named installation metadata and blocks duplicate submission', async () => {
+test('pairing sends the automatic installation name and blocks duplicate submission', async () => {
   const dom = trackedDom(read('../../popup/popup.html'), { url: 'https://extension.example/popup/popup.html', runScripts: 'outside-only' })
   const w = dom.window, stored = {}, requests = [], opened = []
   const installation = { installation_id: '11111111-1111-4111-8111-111111111111', device_name: 'Chrome · Windows', browser_name: 'Chrome', platform_name: 'Windows', extension_version: '0.1.0' }
@@ -38,13 +38,13 @@ test('pairing includes named installation metadata and blocks duplicate submissi
   for (const file of ['shared/runtime-bridge.js','shared/connection-ui.js','popup/popup.js']) w.eval(read(`../../${file}`))
   await wait()
   const get = id => w.document.getElementById(id)
-  get('instance').value = 'http://localhost:5173'; get('device-name').value = 'Teaching laptop'
+  get('instance').value = 'http://localhost:5173'
   get('server-form').dispatchEvent(new w.Event('submit', { cancelable: true }))
   await waitFor(() => requests.length === 1)
   get('server-form').dispatchEvent(new w.Event('submit', { cancelable: true }))
   assert.equal(requests.length, 1)
-  assert.equal(get('device-name').disabled, true)
-  assert.deepEqual({ ...requests[0].body, code_challenge: undefined }, { ...installation, device_name: 'Teaching laptop', code_challenge: undefined })
+  assert.equal(get('instance').disabled, true)
+  assert.deepEqual({ ...requests[0].body, code_challenge: undefined }, { ...installation, code_challenge: undefined })
   assert.match(requests[0].body.code_challenge, /^[a-f0-9]{64}$/)
   finish({ ok: true, json: async () => ({ data: { id: 'pair', authorize_url: 'http://localhost:5173/dashboard/settings?extension_pair=pair', expires_at: new Date(Date.now()+60000).toISOString(), confirmation_code: '048213' } }) })
   await wait()
@@ -52,7 +52,37 @@ test('pairing includes named installation metadata and blocks duplicate submissi
   assert.equal(stored.edulogExtension.pending.confirmationCode, '048213')
   assert.equal(get('pair-code').textContent, '048 213')
   assert.equal(opened[0].url, stored.edulogExtension.pending.authorizeUrl)
-  assert.equal(get('device-name').disabled, false)
+  assert.equal(get('instance').disabled, false)
+  dom.window.close()
+})
+
+test('an invalid server URL is reported under the field without a request', async () => {
+  const dom = trackedDom(read('../../popup/popup.html'), { url: 'https://extension.example/popup/popup.html', runScripts: 'outside-only' })
+  const w = dom.window, requests = []
+  w.chrome = {
+    storage: { local: { get: async () => ({}), set: async () => {} } },
+    runtime: { sendMessage: async data => data.type === 'get-edulog-installation' ? { installation_id: '11111111-1111-4111-8111-111111111111', device_name: 'Chrome · Windows', browser_name: 'Chrome', platform_name: 'Windows', extension_version: '0.1.0' } : data.type === 'get-ui-preferences' ? { enabled: true } : { status: 'not-connected' } },
+    permissions: { request: async () => assert.fail('No permission request for an invalid URL') }, tabs: { create: async () => {} },
+  }
+  w.fetch = async url => { requests.push(url) }
+  for (const file of ['shared/runtime-bridge.js','shared/connection-ui.js','popup/popup.js']) w.eval(read(`../../${file}`))
+  await wait()
+  const get = id => w.document.getElementById(id)
+  assert.equal(get('instance').getAttribute('aria-invalid'), 'false')
+  assert.equal(get('instance').hasAttribute('aria-describedby'), false)
+  get('instance').value = 'edulog'
+  get('server-form').dispatchEvent(new w.Event('submit', { cancelable: true }))
+  await wait()
+  assert.equal(requests.length, 0)
+  assert.equal(get('instance-error').hidden, false)
+  assert.match(get('instance-error').textContent, /完整網址/)
+  assert.equal(get('instance').getAttribute('aria-invalid'), 'true')
+  assert.equal(get('instance').getAttribute('aria-describedby'), 'instance-error')
+  get('instance').value = 'https://edulog.example.com'
+  get('instance').dispatchEvent(new w.Event('input'))
+  assert.equal(get('instance-error').hidden, true)
+  assert.equal(get('instance').getAttribute('aria-invalid'), 'false')
+  assert.equal(get('instance').hasAttribute('aria-describedby'), false)
   dom.window.close()
 })
 
@@ -134,6 +164,7 @@ for (const state of ['not-connected', 'pending', 'pairing-expired', 'connected',
   assert.equal(get('server-form').hidden, !['not-connected', 'expired', 'revoked', 'pairing-expired'].includes(state))
   assert.equal(get('state-badge').dataset.tone, { connected: 'ok', pending: 'warn', 'pairing-expired': 'warn', expired: 'warn', revoked: 'warn', unavailable: 'danger', forbidden: 'danger', 'not-connected': 'neutral' }[state])
   assert.equal(get('retry').hidden, !['unavailable', 'forbidden'].includes(state))
+  assert.equal(get('server-section').hidden, false, 'a stored origin keeps the server details visible')
   assert.equal(w.document.body.textContent.includes('private-token'), false)
   assert.ok(visiblePrimaries(w.document).length <= 1, 'at most one primary button is visible')
   if (state === 'not-connected') assert.equal(get('pair-label').textContent, '連接 EduLog')
