@@ -2,14 +2,14 @@
   // [chip, headline, detail, tone]. Tones follow MASTER §2: ok / warn / danger / neutral.
   const states = {
     checking: ['驗證中', '正在驗證連線', '請稍候…', 'neutral'],
-    'not-connected': ['未連線', '尚未連接 EduLog', '連接後即可同步班級、預填報告。', 'neutral'],
-    pending: ['等待核准', '等待 EduLog 核准', '請在 EduLog 核准連線，再回來完成配對。', 'warn'],
-    'pairing-expired': ['未連線', '配對已逾時', '請重新建立配對請求。', 'warn'],
+    'not-connected': ['未連線', '尚未連接 EduLog', '輸入 EduLog 網址即可連線。', 'neutral'],
+    pending: ['等待核准', '等待 EduLog 核准', '在 EduLog 核准後回到這裡完成配對。', 'warn'],
+    'pairing-expired': ['未連線', '配對已逾時', '請重新連接。', 'warn'],
     connected: ['已連線', 'EduLog 已連線', '連線已驗證。', 'ok'],
-    expired: ['連線已過期', '連線已過期', '請重新連接 EduLog。清晰主題仍可使用。', 'warn'],
-    revoked: ['授權已撤銷', '授權已撤銷', '請重新連接 EduLog。清晰主題仍可使用。', 'warn'],
-    forbidden: ['連線異常', '伺服器未允許此擴充套件', '請檢查伺服器的擴充套件來源設定，再重新驗證。', 'danger'],
-    unavailable: ['連線異常', '暫時無法驗證', '目前連線資料已保留，請確認伺服器可連線後重試。', 'danger'],
+    expired: ['連線已過期', '連線已過期', '請重新連接 EduLog。', 'warn'],
+    revoked: ['授權已撤銷', '授權已撤銷', '請重新連接 EduLog。', 'warn'],
+    forbidden: ['連線異常', '伺服器未允許此擴充套件', '請管理員檢查擴充套件來源設定。', 'danger'],
+    unavailable: ['連線異常', '暫時無法驗證', '請確認伺服器可連線後重試。', 'danger'],
     'context-invalidated': ['需要重新開啟', '擴充套件已更新', '請先儲存正在編輯的內容，再重新整理分頁。', 'warn'],
   }
   // UI wording goes through the shared phrasebook (zh-TW / zh-CN / en); data stays in params.
@@ -32,14 +32,14 @@
   // English for the same states, keyed as conn.<state>.<chip|label|detail> for extension-owned UI.
   const english = {
     checking: ['Checking', 'Checking connection', 'Please wait…'],
-    'not-connected': ['Not connected', 'Not connected to EduLog', 'Connect to sync classes and prefill reports.'],
-    pending: ['Awaiting approval', 'Waiting for EduLog approval', 'Approve the connection in EduLog, then finish pairing here.'],
-    'pairing-expired': ['Not connected', 'Pairing expired', 'Start a new pairing request.'],
+    'not-connected': ['Not connected', 'Not connected to EduLog', 'Enter your EduLog URL to connect.'],
+    pending: ['Awaiting approval', 'Waiting for EduLog approval', 'Approve in EduLog, then finish pairing here.'],
+    'pairing-expired': ['Not connected', 'Pairing expired', 'Connect again.'],
     connected: ['Connected', 'EduLog connected', 'Connection verified.'],
-    expired: ['Expired', 'Connection expired', 'Reconnect EduLog. The light theme still works.'],
-    revoked: ['Access revoked', 'Access revoked', 'Reconnect EduLog. The light theme still works.'],
-    forbidden: ['Connection error', 'Server blocks this extension', 'Check the server\'s extension origin setting, then verify again.'],
-    unavailable: ['Connection error', 'Can\'t verify right now', 'Your connection is kept. Check the server is reachable, then retry.'],
+    expired: ['Expired', 'Connection expired', 'Reconnect EduLog.'],
+    revoked: ['Access revoked', 'Access revoked', 'Reconnect EduLog.'],
+    forbidden: ['Connection error', 'Server blocks this extension', 'Ask your admin to check the extension origin setting.'],
+    unavailable: ['Connection error', 'Can\'t verify right now', 'Check the server is reachable, then retry.'],
     'context-invalidated': ['Reopen needed', 'Extension updated', 'Save your work, then reload the tab.'],
   }
   globalThis.edulogUi?.register({

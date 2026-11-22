@@ -15,14 +15,14 @@ let installation
 const installationReady = bridge.send({ type: 'get-edulog-installation' }).then(value => {
   if (!value?.installation_id) throw new Error('無法辨識瀏覽器安裝，請重新開啟擴充套件。')
   installation = value
-  if (!ui('device-name').value) ui('device-name').value = value.device_name
   return value
 })
 // The promise is awaited again at pairing; this catch prevents startup rejection.
 void installationReady.catch(error => notice(error.message, true))
 
 function normalizeInstance(value) {
-  const url = new URL(value.trim())
+  let url
+  try { url = new URL(value.trim()) } catch { throw new Error('請輸入完整網址，例如 https://edulog.example.com') }
   if (url.username || url.password || url.search || url.hash) throw new Error('請輸入不含帳密或參數的伺服器網址。')
   const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
   if (url.protocol !== 'https:' && !(local && url.protocol === 'http:')) throw new Error('正式伺服器必須使用 HTTPS。')
@@ -38,6 +38,13 @@ function browserUrl(value) {
 const readSettings = async () => (await bridge.call(() => chrome.storage.local.get(STORAGE_KEY)))[STORAGE_KEY] || {}
 const writeSettings = value => bridge.call(() => chrome.storage.local.set({ [STORAGE_KEY]: value }))
 function notice(text = '', error = false) { ui('status').textContent = text; ui('status').dataset.error = String(error) }
+// URL problems sit under the field; aria-describedby points at the message only while it is shown.
+function fieldError(text = '') {
+  const input = ui('instance'), message = ui('instance-error')
+  message.textContent = text; message.hidden = !text
+  input.setAttribute('aria-invalid', String(Boolean(text)))
+  if (text) input.setAttribute('aria-describedby', 'instance-error'); else input.removeAttribute('aria-describedby')
+}
 function diagnostic(value) {
   ui('diagnostics').hidden = !value
   ui('diagnostic-text').textContent = value ? [value.code, value.message, value.requestId ? `請求編號：${value.requestId}` : ''].filter(Boolean).join('\n') : ''
@@ -89,6 +96,7 @@ function render() {
   ui('retry').disabled = busy
   ui('change').hidden = editing || !settings.origin || !['connected', 'unavailable', 'forbidden', 'pending'].includes(state)
   ui('change').disabled = busy
+  ui('server-section').hidden = !connection.origin
   ui('device-row').hidden = !connection.deviceName
   ui('device-value').textContent = connection.deviceName || ''
   // Connected: one primary action for this tab, plus the workspace as a quiet link on class pages.
@@ -106,9 +114,7 @@ function render() {
   ui('pair-label').textContent = busy ? '處理中…' : editing ? '連接新的伺服器' : ['expired', 'revoked', 'pairing-expired'].includes(state) ? '重新連接 EduLog' : '連接 EduLog'
   ui('pair').disabled = busy || state === 'checking'
   ui('instance').disabled = busy
-  ui('device-name').disabled = busy
   ui('cancel').hidden = !editing; ui('cancel').disabled = busy
-  ui('change-hint').hidden = !editing
   ui('pending-card').hidden = state !== 'pending' || editing
   ui('open-approval').disabled = busy; ui('finish').disabled = busy
   clearTimeout(expirationTimer)
@@ -116,7 +122,7 @@ function render() {
     const expires = new Date(settings.pending.expiresAt)
     const code = String(settings.pending.confirmationCode || '')
     ui('pair-code').textContent = `${code.slice(0, 3)} ${code.slice(3)}`
-    ui('pending-detail').textContent = `配對有效至 ${expires.toLocaleString()}。核准後請按「完成核准配對」。`
+    ui('pending-detail').textContent = `${expires.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} 前有效`
     expirationTimer = setTimeout(() => { connection = { ...connection, status: 'pairing-expired' }; render() }, Math.max(0, expires.getTime() - Date.now()))
   }
 }
@@ -129,7 +135,6 @@ async function verify(force = false) {
     if (current !== generation) return
     if (result?.status === 'stale') { connection.status = 'unavailable'; render(); return }
     settings = stored
-    if (!editing && (result?.deviceName || stored.connection?.device_name)) ui('device-name').value = result?.deviceName || stored.connection.device_name
     connection = result?.status ? result : { status: 'unavailable', origin: stored.origin }
     if (!editing) ui('instance').value = settings.origin || ''
     diagnostic(connection.diagnostic)
@@ -151,19 +156,19 @@ async function verify(force = false) {
 }
 async function startPairing() {
   if (busy) return
+  let origin
+  try { origin = normalizeInstance(ui('instance').value) } catch (error) { fieldError(error.message); ui('instance').focus(); return }
+  fieldError()
   try {
-    const origin = normalizeInstance(ui('instance').value)
     // Preserve Chromium's permission-request user gesture before any await.
     const permission = bridge.call(() => chrome.permissions.request({ origins: [`${origin}/*`] }))
     busy = true; ++generation; notice(); diagnostic(null); render()
     if (!await permission) throw new Error('需要允許擴充套件連接此 EduLog 網址。')
     await installationReady
-    const deviceName = ui('device-name').value.trim()
-    if (!deviceName || deviceName.length > 80) { ui('device-name').closest('details').open = true; ui('device-name').focus(); throw new Error('請輸入 1–80 字的瀏覽器連線名稱。') }
     const old = await readSettings()
     const verifier = Array.from(crypto.getRandomValues(new Uint8Array(32)), byte => byte.toString(16).padStart(2, '0')).join('')
     const challenge = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))), byte => byte.toString(16).padStart(2, '0')).join('')
-    const response = await fetch(`${origin}/api/extension/pair-requests`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...installation, device_name: deviceName, code_challenge: challenge }), signal: AbortSignal.timeout(15000) })
+    const response = await fetch(`${origin}/api/extension/pair-requests`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...installation, code_challenge: challenge }), signal: AbortSignal.timeout(15000) })
     const body = await response.json().catch(() => null)
     if (!response.ok) throw apiError(body, response)
     const authorizeUrl = browserUrl(body.data.authorize_url)
@@ -211,7 +216,8 @@ ui('open-work').addEventListener('click', () => { void openWorkspace('work', ui(
 ui('open-settings-panel').addEventListener('click', () => showSettings(true))
 ui('close-settings').addEventListener('click', () => showSettings(false))
 ui('change').addEventListener('click', () => { editing = true; ui('instance').value = settings.origin || ''; notice(); showSettings(false); render(); ui('instance').focus() })
-ui('cancel').addEventListener('click', () => { editing = false; ui('instance').value = settings.origin || ''; ui('device-name').value = connection.deviceName || installation?.device_name || ''; notice(); render() })
+ui('cancel').addEventListener('click', () => { editing = false; ui('instance').value = settings.origin || ''; fieldError(); notice(); render() })
+ui('instance').addEventListener('input', () => { if (ui('instance').getAttribute('aria-invalid') === 'true') fieldError() })
 ui('open-approval').addEventListener('click', async () => {
   try {
     const pending = (await readSettings()).pending
@@ -231,7 +237,6 @@ const uiToggle = ui('ui-enabled')
 void bridge.send({ type: 'get-ui-preferences' }).then(prefs => {
   if (prefs?.error) throw new Error('無法讀取 UI 偏好。')
   uiToggle.checked = prefs?.enabled !== false
-  ui('ui-status').textContent = uiToggle.checked ? '已套用清晰主題，支援頁面會自動使用此風格。' : '目前使用原站主題。'
 }).catch(error => { ui('ui-status').textContent = error.message })
 uiToggle.addEventListener('change', async () => {
   uiToggle.disabled = true
@@ -239,7 +244,7 @@ uiToggle.addEventListener('change', async () => {
     const result = await bridge.send({ type: 'set-ui-preferences', enabled: uiToggle.checked })
     if (result?.error) throw new Error('設定未儲存，請再試一次。')
     uiToggle.checked = result?.enabled !== false
-    ui('ui-status').textContent = uiToggle.checked ? '已套用清晰主題，已同步開啟中的支援頁面。' : '已使用原站主題。'
+    ui('ui-status').textContent = ''
   } catch (error) { uiToggle.checked = !uiToggle.checked; ui('ui-status').textContent = error.message }
   finally { uiToggle.disabled = false }
 })

@@ -53,8 +53,10 @@ button, input, select { font:inherit; color:inherit; }
 .field > label:not(.switch), .lbl { font-size:var(--edulog-font-caption); font-weight:600; color:var(--edulog-text-secondary); }
 .hint { font-size:var(--edulog-font-caption); color:var(--edulog-text-muted); overflow-wrap:anywhere; }
 .input, select { width:100%; min-height:var(--edulog-control-height); padding:0 10px; border:1px solid var(--edulog-border-input); border-radius:var(--edulog-radius-sm); background:var(--edulog-surface); font-size:var(--edulog-font-body); }
-details.device > summary, #diagnostics > summary { display:flex; align-items:center; min-height:var(--edulog-control-height-sm); cursor:pointer; font-size:var(--edulog-font-caption); color:var(--edulog-text-muted); }
-details.device[open] > summary { margin-bottom:4px; }
+#diagnostics > summary { display:flex; align-items:center; min-height:var(--edulog-control-height-sm); cursor:pointer; font-size:var(--edulog-font-caption); color:var(--edulog-text-muted); }
+.input[aria-invalid="true"] { border-color:var(--edulog-status-danger); }
+.field-error { font-size:var(--edulog-font-caption); color:var(--edulog-status-danger-text); overflow-wrap:anywhere; }
+#ui-status:empty { display:none; }
 .switch { display:flex; gap:12px; align-items:center; justify-content:space-between; min-height:var(--edulog-touch-target); font-weight:500; cursor:pointer; }
 .switch small { display:block; font-size:var(--edulog-font-caption); font-weight:400; color:var(--edulog-text-muted); }
 .switch input { appearance:none; position:relative; flex:none; width:36px; height:20px; margin:0; border-radius:var(--edulog-radius-pill); background:var(--edulog-border-strong); cursor:pointer; transition:background var(--edulog-duration); }
