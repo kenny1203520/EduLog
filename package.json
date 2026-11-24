@@ -12,8 +12,8 @@
   },
   "homepage": "https://github.com/kenny1203520/EduLog#readme",
   "devDependencies": {
-    "@playwright/test": "^1.64.1",
-    "@types/node": "^26.6.5",
+    "@playwright/test": "^1.65.1",
+    "@types/node": "^26.6.6",
     "es-module-lexer": "2.3.2"
   }
 }
